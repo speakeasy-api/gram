@@ -27,8 +27,8 @@ vi.mock("@/lib/utils", async (importOriginal) => {
   };
 });
 
-vi.mock("@gram/client/react-query", () => ({
-  useCreateShadowMCPApprovalRequestMutation: () => ({
+vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
+  useRiskCreatePolicyBypassRequestMutation: () => ({
     mutateAsync: mocks.createApprovalRequest,
   }),
 }));
@@ -96,31 +96,35 @@ describe("ShadowMCPRequestAccessContent", () => {
       value: {
         // oxlint-disable-next-line typescript/no-misused-spread -- jsdom Location is plain enough for tests
         ...location,
-        pathname: "/shadow-mcp/request",
-        hash: "#request_token=smar1.secret-token",
+        pathname: "/risk-policy-bypass/request",
+        hash: "#request_token=rpbr1.secret-token",
         set href(value: string) {
           hrefSetter(value);
         },
         get href() {
-          return "https://app.example.test/shadow-mcp/request#request_token=smar1.secret-token";
+          return "https://app.example.test/risk-policy-bypass/request#request_token=rpbr1.secret-token";
         },
       },
     });
 
-    renderPage("/shadow-mcp/request#request_token=smar1.secret-token");
+    renderPage("/risk-policy-bypass/request#request_token=rpbr1.secret-token");
 
     await waitFor(() => {
-      expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBe(
-        "smar1.secret-token",
+      expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBe(
+        "rpbr1.secret-token",
       );
     });
-    expect(replaceState).toHaveBeenCalledWith(null, "", "/shadow-mcp/request");
+    expect(replaceState).toHaveBeenCalledWith(
+      null,
+      "",
+      "/risk-policy-bypass/request",
+    );
     await waitFor(() => {
       expect(hrefSetter).toHaveBeenCalledWith(
-        "/rpc/auth.login?redirect=%2Fshadow-mcp%2Frequest",
+        "/rpc/auth.login?redirect=%2Frisk-policy-bypass%2Frequest",
       );
     });
-    expect(hrefSetter.mock.calls[0]?.[0]).not.toContain("smar1.secret-token");
+    expect(hrefSetter.mock.calls[0]?.[0]).not.toContain("rpbr1.secret-token");
     expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
 
     Object.defineProperty(window, "location", {
@@ -133,30 +137,30 @@ describe("ShadowMCPRequestAccessContent", () => {
     window.history.replaceState(
       null,
       "",
-      "/shadow-mcp/request?request_token=smar1.query-token",
+      "/risk-policy-bypass/request?request_token=rpbr1.query-token",
     );
 
-    renderPage("/shadow-mcp/request?request_token=smar1.query-token");
+    renderPage("/risk-policy-bypass/request?request_token=rpbr1.query-token");
 
     expect(screen.getByText("Link expired")).toBeTruthy();
-    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBeNull();
+    expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBeNull();
     expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
   });
 
   it("submits the stored request token after authentication", async () => {
     sessionStorage.setItem(
-      "shadowMcpApprovalRequestToken",
-      "smar1.stored-token",
+      "riskPolicyBypassRequestToken",
+      "rpbr1.stored-token",
     );
     mocks.useSession.mockReturnValue({ session: "session_123" });
 
-    renderPage("/shadow-mcp/request");
+    renderPage("/risk-policy-bypass/request");
 
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalledWith({
         request: {
           createShadowMCPApprovalRequestForm: {
-            requestToken: "smar1.stored-token",
+            requestToken: "rpbr1.stored-token",
           },
         },
       });
@@ -165,21 +169,19 @@ describe("ShadowMCPRequestAccessContent", () => {
 
   it("shows success after submitting even after clearing the stored token", async () => {
     sessionStorage.setItem(
-      "shadowMcpApprovalRequestToken",
-      "smar1.stored-token",
+      "riskPolicyBypassRequestToken",
+      "rpbr1.stored-token",
     );
     mocks.useSession.mockReturnValue({ session: "session_123" });
 
-    renderPage("/shadow-mcp/request");
+    renderPage("/risk-policy-bypass/request");
 
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalled();
     });
 
     await waitFor(() => {
-      expect(
-        sessionStorage.getItem("shadowMcpApprovalRequestToken"),
-      ).toBeNull();
+      expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBeNull();
       expect(screen.getByText("Request sent")).toBeTruthy();
       expect(screen.getByText("You can close this page.")).toBeTruthy();
     });
@@ -187,33 +189,28 @@ describe("ShadowMCPRequestAccessContent", () => {
 
   it("shows success under StrictMode without double-submitting", async () => {
     sessionStorage.setItem(
-      "shadowMcpApprovalRequestToken",
-      "smar1.strict-token",
+      "riskPolicyBypassRequestToken",
+      "rpbr1.strict-token",
     );
     mocks.useSession.mockReturnValue({ session: "session_123" });
 
-    renderPageStrict("/shadow-mcp/request");
+    renderPageStrict("/risk-policy-bypass/request");
 
     await waitFor(() => {
-      expect(
-        sessionStorage.getItem("shadowMcpApprovalRequestToken"),
-      ).toBeNull();
+      expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBeNull();
       expect(screen.getByText("Request sent")).toBeTruthy();
     });
     expect(mocks.createApprovalRequest).toHaveBeenCalledOnce();
   });
 
   it("shows submit failure separately and retries the stored token", async () => {
-    sessionStorage.setItem(
-      "shadowMcpApprovalRequestToken",
-      "smar1.retry-token",
-    );
+    sessionStorage.setItem("riskPolicyBypassRequestToken", "rpbr1.retry-token");
     mocks.useSession.mockReturnValue({ session: "session_123" });
     mocks.createApprovalRequest
       .mockRejectedValueOnce(new Error("network failed"))
       .mockResolvedValueOnce({});
 
-    renderPage("/shadow-mcp/request");
+    renderPage("/risk-policy-bypass/request");
 
     await waitFor(() => {
       expect(screen.getByText("Request failed")).toBeTruthy();
@@ -223,8 +220,8 @@ describe("ShadowMCPRequestAccessContent", () => {
         "We could not send this request. Check your connection and try again.",
       ),
     ).toBeTruthy();
-    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBe(
-      "smar1.retry-token",
+    expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBe(
+      "rpbr1.retry-token",
     );
 
     fireEvent.click(screen.getByText("Try again"));
@@ -233,6 +230,6 @@ describe("ShadowMCPRequestAccessContent", () => {
       expect(screen.getByText("Request sent")).toBeTruthy();
     });
     expect(mocks.createApprovalRequest).toHaveBeenCalledTimes(2);
-    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBeNull();
+    expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBeNull();
   });
 });

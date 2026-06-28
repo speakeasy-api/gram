@@ -1,4 +1,9 @@
+import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import {
+  buildUserSessionResourceSlug,
+  DEFAULT_USER_SESSION_DURATION_HOURS,
+} from "@/lib/externalMcpUserSessions";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import { randomSlugSuffix } from "@/lib/slug";
 import type {
@@ -9,6 +14,9 @@ import {
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
   invalidateAllRemoteMcpServers,
+  invalidateAllRemoteSessionClients,
+  invalidateAllRemoteSessionIssuers,
+  invalidateAllUserSessionIssuers,
 } from "@gram/client/react-query/index.js";
 import {
   useMutation,
@@ -16,11 +24,67 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  autoConfigureRemoteMcpAuth,
+  type AutoConfigureAuthResult,
+  pointMcpServerAtUserSessionIssuer,
+} from "./autoConfigureAuth";
 
 type SdkClient = ReturnType<typeof useSdkClient>;
 
 const DEFAULT_ENDPOINT_FAILED_MESSAGE =
   "MCP server created, but the default endpoint failed. Add one from the server page.";
+
+const USER_SESSION_ISSUER_FAILED_MESSAGE =
+  "MCP server created, but its login issuer couldn't be set up. Configure authentication from the server's Authentication tab.";
+
+// Mint a remote-backed server's one permanent user_session_issuer and link it
+// while the server stays disabled, making it gateable. Best-effort: on failure
+// the server is left parked (disabled, no USI) with only a warning, since auth
+// can still be configured by hand. A half-built link (USI created but server
+// update failed) is rolled back so it doesn't leak an orphan issuer.
+async function linkUserSessionIssuer(
+  client: SdkClient,
+  mcpServer: McpServer,
+): Promise<McpServer> {
+  let createdUserSessionIssuerId: string | undefined;
+  try {
+    const userSessionIssuer = await client.userSessionIssuers.create({
+      createUserSessionIssuerForm: {
+        slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+        authnChallengeMode: "interactive",
+        sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
+      },
+    });
+    createdUserSessionIssuerId = userSessionIssuer.id;
+
+    return await pointMcpServerAtUserSessionIssuer(
+      client,
+      mcpServer,
+      userSessionIssuer.id,
+      "disabled",
+    );
+  } catch (error) {
+    if (createdUserSessionIssuerId) {
+      try {
+        await client.userSessionIssuers.delete({
+          id: createdUserSessionIssuerId,
+        });
+      } catch (cleanupError) {
+        console.info(
+          "Failed to clean up user session issuer after link failure.",
+          { userSessionIssuerId: createdUserSessionIssuerId, cleanupError },
+        );
+      }
+    }
+    console.info("Failed to link a user session issuer to the MCP server.", {
+      mcpServerId: mcpServer.id,
+      error,
+    });
+    toast.warning(USER_SESSION_ISSUER_FAILED_MESSAGE);
+    return mcpServer;
+  }
+}
 
 // Auto-provisions a default platform MCP endpoint for a freshly created
 // mcp_server backed by a remote source, so the user doesn't have to create one
@@ -60,6 +124,7 @@ export type CreateRemoteMcpSourceVariables = {
 export type CreateRemoteMcpSourceData = {
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
+  authAutoConfig: AutoConfigureAuthResult;
 };
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
@@ -68,6 +133,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceVariables
 > {
   const client = useSdkClient();
+  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
 
@@ -113,21 +179,60 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
+      // Link the server's permanent USI before auto-config so auto-config only
+      // has to attach a client under it.
+      const issuerLinkedMcpServer = await linkUserSessionIssuer(
+        client,
+        mcpServer,
+      );
+
+      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+        client,
+        authedFetch,
+        remoteMcpServer,
+        mcpServer: issuerLinkedMcpServer,
+      });
+      const configuredMcpServer =
+        authAutoConfig.status === "configured"
+          ? authAutoConfig.mcpServer
+          : issuerLinkedMcpServer;
+
       // Pre-stage a default endpoint so the user doesn't have to create one
       // before the server can serve. Best-effort: never rolls back the source.
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
 
-      return { remoteMcpServer, mcpServer };
+      return {
+        remoteMcpServer,
+        mcpServer: configuredMcpServer,
+        authAutoConfig,
+      };
     },
-    onSuccess: async () => {
+    onSuccess: async ({ authAutoConfig }) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
-      await Promise.all([
+      const invalidations = [
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-      ]);
+        // Every create links a fresh user_session_issuer, so its cache always
+        // goes stale regardless of whether auto-config attached a client.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+      ];
+      // The issuer/client caches only change when auto-configuration actually
+      // ran to completion; a skipped run leaves them untouched, so don't force
+      // those extra refetches on the common no-OAuth path.
+      if (authAutoConfig.status === "configured") {
+        invalidations.push(
+          invalidateAllRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllRemoteSessionClients(queryClient, {
+            refetchType: "all",
+          }),
+        );
+      }
+      await Promise.all(invalidations);
     },
   });
 }
@@ -160,6 +265,11 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
         },
       });
 
+      // Mirror the create flow: give the re-linked server its permanent USI so
+      // it behaves like a freshly-created one. Auto-config of the upstream
+      // client is intentionally left to the Authentication tab here.
+      await linkUserSessionIssuer(client, mcpServer);
+
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.
       await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
     },
@@ -167,6 +277,9 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        // Re-link now mints a fresh user_session_issuer too, so its cache goes
+        // stale just as it does on create.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

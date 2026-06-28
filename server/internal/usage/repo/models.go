@@ -3,3 +3,20 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type BillingMetadatum struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	TumMonthlyTokenLimit  pgtype.Int8
+	AlertEmail            pgtype.Text
+	BillingCycleAnchorDay int32
+	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
+	TunnelledMcpServerLimit pgtype.Int4
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}

@@ -11,30 +11,27 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Selector, Selector$inboundSchema } from "./selector.js";
 
 /**
- * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
- */
-export const ListRoleGrantEffect = {
-  Allow: "allow",
-  Deny: "deny",
-} as const;
-/**
- * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
- */
-export type ListRoleGrantEffect = ClosedEnum<typeof ListRoleGrantEffect>;
-
-/**
  * The scope slug this grant applies to.
  */
 export const ListRoleGrantScope = {
   OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
   ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
   McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
   McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
@@ -45,24 +42,29 @@ export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
 
 export const SubScopes = {
   OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
   ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
   McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
   McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
-  /**
-   * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-   */
-  effect: ListRoleGrantEffect;
   /**
    * The scope slug this grant applies to.
    */
@@ -76,11 +78,6 @@ export type ListRoleGrant = {
    */
   subScopes?: Array<SubScopes> | undefined;
 };
-
-/** @internal */
-export const ListRoleGrantEffect$inboundSchema: z.ZodMiniEnum<
-  typeof ListRoleGrantEffect
-> = z.enum(ListRoleGrantEffect);
 
 /** @internal */
 export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
@@ -98,7 +95,6 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    effect: z._default(ListRoleGrantEffect$inboundSchema, "allow"),
     scope: ListRoleGrantScope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),

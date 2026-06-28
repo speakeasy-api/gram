@@ -30,6 +30,7 @@ const CATEGORY_DEFAULT_SEVERITY: Record<RuleCategory, SeverityLevel> = {
   pii: "medium",
   government_ids: "medium",
   healthcare: "medium",
+  prompt_policy: "medium",
   prompt_injection: "medium",
   off_policy: "medium",
   shadow_mcp: "medium",
@@ -51,6 +52,8 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
     "Pattern + checksum detector for government-issued identifiers, validated against the issuer's format and check-digit rules.",
   healthcare:
     "Pattern detector for healthcare identifiers and clinical references in free-form text.",
+  prompt_policy:
+    "Natural-language guardrail evaluated by the policy judge against agent activity.",
   prompt_injection:
     "Hybrid detector that combines classifier scoring with regex and keyword heuristics to flag attempts to override the agent's instructions.",
   off_policy:
@@ -81,6 +84,10 @@ const SYNTHETIC_CATEGORY_RULES: Partial<
   prompt_injection: {
     id: "prompt_injection.default",
     title: "Prompt Injection",
+  },
+  prompt_policy: {
+    id: "llm_judge",
+    title: "LLM Judge",
   },
   shadow_mcp: {
     id: "shadow_mcp.default",
@@ -149,10 +156,24 @@ export type CustomDetectionRule = {
   dbId: string;
   title: string;
   description: string;
+  /** Legacy single regex pattern (read-only). Pre-CEL rules surface it via
+   *  effectiveDetectionExpr() as content.matchRegex("<regex>") so editing migrates
+   *  them forward to CEL on save. */
   regex: string;
+  /** CEL detection predicate. Empty for legacy regex-only rules. */
+  detectionExpr: string;
   severity: SeverityLevel;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Fields needed to create or fully edit a custom rule's matcher. */
+export type CustomRuleDraft = {
+  id: string;
+  title: string;
+  description: string;
+  detectionExpr: string;
+  severity: SeverityLevel;
 };
 
 function mapCustomDetectionRule(rule: {
@@ -161,6 +182,7 @@ function mapCustomDetectionRule(rule: {
   title: string;
   description: string;
   regex: string;
+  detectionExpr?: string | null;
   severity: string;
   createdAt: Date;
   updatedAt: Date;
@@ -171,10 +193,21 @@ function mapCustomDetectionRule(rule: {
     title: rule.title,
     description: rule.description,
     regex: rule.regex,
+    detectionExpr: rule.detectionExpr ?? "",
     severity: rule.severity as SeverityLevel,
     createdAt: rule.createdAt.toISOString(),
     updatedAt: rule.updatedAt.toISOString(),
   };
+}
+
+/** The CEL expression to seed the editor with: the rule's detection_expr when
+ *  set, otherwise a content.matchRegex("<regex>") translation of a legacy regex rule
+ *  (so editing migrates it forward to CEL on save), otherwise empty. */
+export function effectiveDetectionExpr(rule: CustomDetectionRule): string {
+  if (rule.detectionExpr.trim()) return rule.detectionExpr;
+  if (rule.regex.trim())
+    return `content.matchRegex(${JSON.stringify(rule.regex)})`;
+  return "";
 }
 
 function useDetectionRulesStoreImpl() {
@@ -202,23 +235,21 @@ function useDetectionRulesStoreImpl() {
     customRules,
     isLoading: rulesQuery.isLoading,
     error: rulesQuery.error,
-    addCustomRule: (
-      rule: Omit<CustomDetectionRule, "dbId" | "createdAt" | "updatedAt">,
-    ) =>
+    addCustomRule: (rule: CustomRuleDraft) =>
       createMutation.mutate({
         request: {
           createCustomDetectionRuleRequestBody: {
             ruleId: rule.id,
             title: rule.title,
             description: rule.description,
-            regex: rule.regex,
+            detectionExpr: rule.detectionExpr,
             severity: rule.severity,
           },
         },
       }),
     updateCustomRule: (
       id: string,
-      patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
+      patch: Partial<Omit<CustomRuleDraft, "id">>,
     ) => {
       const rule = customRules.find((r) => r.id === id);
       if (!rule) {
@@ -231,7 +262,8 @@ function useDetectionRulesStoreImpl() {
               id: rule.dbId,
               title: patch.title ?? rule.title,
               description: patch.description ?? rule.description,
-              regex: patch.regex ?? rule.regex,
+              detectionExpr:
+                patch.detectionExpr ?? effectiveDetectionExpr(rule),
               severity: patch.severity ?? rule.severity,
             },
           },
@@ -278,15 +310,28 @@ export function validateCustomRuleId(
   return null;
 }
 
-/** Validate a proposed regex pattern. Tries to compile and surface a human
- *  message if the engine rejects it. */
-export function validateRegex(pattern: string): string | null {
-  const trimmed = pattern.trim();
-  if (!trimmed) return "Regex is required";
-  try {
-    new RegExp(trimmed);
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : "Invalid regex";
-  }
+/** Example detection CEL snippets offered beneath the rule editor field. */
+export const DETECTION_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  {
+    label: "Secret in content",
+    expr: 'content.matchRegex("sk-[A-Za-z0-9]{32}")',
+  },
+  {
+    label: "Password in prompt",
+    expr: 'prompt.matchText("password")',
+  },
+  {
+    label: "Destructive shell",
+    expr: 'tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("rm -rf"))',
+  },
+  {
+    label: "Tool error output",
+    expr: 'tool_result.matchText("error")',
+  },
+];
+
+/** List-row summary of a rule's matcher: its effective CEL expression. The
+ *  allow/deny polarity is not a rule property — it is configured per policy. */
+export function ruleSummary(rule: CustomDetectionRule): string {
+  return effectiveDetectionExpr(rule) || "No matcher configured";
 }

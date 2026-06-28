@@ -90,6 +90,26 @@ func ToNullUUID(id uuid.UUID) uuid.NullUUID {
 	return uuid.NullUUID{UUID: id, Valid: true}
 }
 
+// StringToNullUUID parses a string into a uuid.NullUUID. A blank or
+// unparseable value yields an invalid NullUUID rather than an error, for
+// callers that treat a missing or malformed id as simply absent.
+func StringToNullUUID(s string) uuid.NullUUID {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
+// NilableToNullUUID converts a UUID into a uuid.NullUUID, treating the zero
+// value (uuid.Nil) as absent — i.e. an invalid NullUUID.
+func NilableToNullUUID(id uuid.UUID) uuid.NullUUID {
+	if id == uuid.Nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 // FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
 // not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {
@@ -151,6 +171,18 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	}
 
 	return pgtype.Text{String: *t, Valid: *t != ""}
+}
+
+// PtrToPGTextTrimmed converts a string pointer to a pgtype.Text, trimming
+// surrounding whitespace and setting Valid to true only if the trimmed result
+// is not empty. A nil pointer or a whitespace-only value yields an invalid
+// (NULL) Text.
+func PtrToPGTextTrimmed(t *string) pgtype.Text {
+	if t == nil {
+		return pgtype.Text{Valid: false, String: ""}
+	}
+
+	return ToPGTextEmpty(strings.TrimSpace(*t))
 }
 
 // ToPGTimestamptz converts a time.Time to a pgtype.Timestamptz with Valid set

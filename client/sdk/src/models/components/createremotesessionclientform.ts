@@ -52,9 +52,9 @@ export type CreateRemoteSessionClientForm = {
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | undefined;
   /**
-   * The user_session_issuer this client is paired with.
+   * The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
    */
-  userSessionIssuerId: string;
+  userSessionIssuerIds?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -70,7 +70,7 @@ export type CreateRemoteSessionClientForm$Outbound = {
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
-  user_session_issuer_id: string;
+  user_session_issuer_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -87,7 +87,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     tokenEndpointAuthMethod: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
-    userSessionIssuerId: z.string(),
+    userSessionIssuerIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -95,7 +95,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       clientSecret: "client_secret",
       remoteSessionIssuerId: "remote_session_issuer_id",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
-      userSessionIssuerId: "user_session_issuer_id",
+      userSessionIssuerIds: "user_session_issuer_ids",
     });
   }),
 );

@@ -14,14 +14,16 @@ import {
 /**
  * Grouping dimension for results
  */
-export const GroupBy = {
+export const SearchUsersPayloadGroupBy = {
   Employee: "employee",
   Role: "role",
 } as const;
 /**
  * Grouping dimension for results
  */
-export type GroupBy = ClosedEnum<typeof GroupBy>;
+export type SearchUsersPayloadGroupBy = ClosedEnum<
+  typeof SearchUsersPayloadGroupBy
+>;
 
 /**
  * Sort order
@@ -64,7 +66,7 @@ export type SearchUsersPayload = {
   /**
    * Grouping dimension for results
    */
-  groupBy?: GroupBy | undefined;
+  groupBy?: SearchUsersPayloadGroupBy | undefined;
   /**
    * Number of items to return (1-1000)
    */
@@ -80,9 +82,9 @@ export type SearchUsersPayload = {
 };
 
 /** @internal */
-export const GroupBy$outboundSchema: z.ZodMiniEnum<typeof GroupBy> = z.enum(
-  GroupBy,
-);
+export const SearchUsersPayloadGroupBy$outboundSchema: z.ZodMiniEnum<
+  typeof SearchUsersPayloadGroupBy
+> = z.enum(SearchUsersPayloadGroupBy);
 
 /** @internal */
 export const SearchUsersPayloadSort$outboundSchema: z.ZodMiniEnum<
@@ -112,7 +114,7 @@ export const SearchUsersPayload$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     filter: SearchUsersFilter$outboundSchema,
-    groupBy: z._default(GroupBy$outboundSchema, "employee"),
+    groupBy: z._default(SearchUsersPayloadGroupBy$outboundSchema, "employee"),
     limit: z._default(z.int(), 50),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
     userType: SearchUsersPayloadUserType$outboundSchema,

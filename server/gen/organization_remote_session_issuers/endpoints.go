@@ -16,11 +16,25 @@ import (
 
 // Endpoints wraps the "organizationRemoteSessionIssuers" service endpoints.
 type Endpoints struct {
-	CreateOrganizationRemoteSessionIssuer goa.Endpoint
-	UpdateOrganizationRemoteSessionIssuer goa.Endpoint
-	ListOrganizationRemoteSessionIssuers  goa.Endpoint
-	GetOrganizationRemoteSessionIssuer    goa.Endpoint
-	DeleteOrganizationRemoteSessionIssuer goa.Endpoint
+	CreateIssuer              goa.Endpoint
+	ListIssuers               goa.Endpoint
+	GetIssuer                 goa.Endpoint
+	GetIssuerDeletePreflight  goa.Endpoint
+	UpdateIssuer              goa.Endpoint
+	DeleteIssuer              goa.Endpoint
+	MoveIssuer                goa.Endpoint
+	ListClients               goa.Endpoint
+	GetClient                 goa.Endpoint
+	GetClientDeletePreflight  goa.Endpoint
+	ListClientMcpServers      goa.Endpoint
+	ListClientSessions        goa.Endpoint
+	CreateClient              goa.Endpoint
+	UpdateClient              goa.Endpoint
+	DeleteClient              goa.Endpoint
+	RemoveClientFromMcpServer goa.Endpoint
+	RevokeSession             goa.Endpoint
+	RefreshSession            goa.Endpoint
+	RevokeAllClientSessions   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizationRemoteSessionIssuers"
@@ -29,30 +43,57 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateOrganizationRemoteSessionIssuer: NewCreateOrganizationRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateOrganizationRemoteSessionIssuer: NewUpdateOrganizationRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		ListOrganizationRemoteSessionIssuers:  NewListOrganizationRemoteSessionIssuersEndpoint(s, a.APIKeyAuth),
-		GetOrganizationRemoteSessionIssuer:    NewGetOrganizationRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteOrganizationRemoteSessionIssuer: NewDeleteOrganizationRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
+		CreateIssuer:              NewCreateIssuerEndpoint(s, a.APIKeyAuth),
+		ListIssuers:               NewListIssuersEndpoint(s, a.APIKeyAuth),
+		GetIssuer:                 NewGetIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:              NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteIssuer:              NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
+		MoveIssuer:                NewMoveIssuerEndpoint(s, a.APIKeyAuth),
+		ListClients:               NewListClientsEndpoint(s, a.APIKeyAuth),
+		GetClient:                 NewGetClientEndpoint(s, a.APIKeyAuth),
+		GetClientDeletePreflight:  NewGetClientDeletePreflightEndpoint(s, a.APIKeyAuth),
+		ListClientMcpServers:      NewListClientMcpServersEndpoint(s, a.APIKeyAuth),
+		ListClientSessions:        NewListClientSessionsEndpoint(s, a.APIKeyAuth),
+		CreateClient:              NewCreateClientEndpoint(s, a.APIKeyAuth),
+		UpdateClient:              NewUpdateClientEndpoint(s, a.APIKeyAuth),
+		DeleteClient:              NewDeleteClientEndpoint(s, a.APIKeyAuth),
+		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerEndpoint(s, a.APIKeyAuth),
+		RevokeSession:             NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		RefreshSession:            NewRefreshSessionEndpoint(s, a.APIKeyAuth),
+		RevokeAllClientSessions:   NewRevokeAllClientSessionsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the
 // "organizationRemoteSessionIssuers" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.CreateOrganizationRemoteSessionIssuer = m(e.CreateOrganizationRemoteSessionIssuer)
-	e.UpdateOrganizationRemoteSessionIssuer = m(e.UpdateOrganizationRemoteSessionIssuer)
-	e.ListOrganizationRemoteSessionIssuers = m(e.ListOrganizationRemoteSessionIssuers)
-	e.GetOrganizationRemoteSessionIssuer = m(e.GetOrganizationRemoteSessionIssuer)
-	e.DeleteOrganizationRemoteSessionIssuer = m(e.DeleteOrganizationRemoteSessionIssuer)
+	e.CreateIssuer = m(e.CreateIssuer)
+	e.ListIssuers = m(e.ListIssuers)
+	e.GetIssuer = m(e.GetIssuer)
+	e.GetIssuerDeletePreflight = m(e.GetIssuerDeletePreflight)
+	e.UpdateIssuer = m(e.UpdateIssuer)
+	e.DeleteIssuer = m(e.DeleteIssuer)
+	e.MoveIssuer = m(e.MoveIssuer)
+	e.ListClients = m(e.ListClients)
+	e.GetClient = m(e.GetClient)
+	e.GetClientDeletePreflight = m(e.GetClientDeletePreflight)
+	e.ListClientMcpServers = m(e.ListClientMcpServers)
+	e.ListClientSessions = m(e.ListClientSessions)
+	e.CreateClient = m(e.CreateClient)
+	e.UpdateClient = m(e.UpdateClient)
+	e.DeleteClient = m(e.DeleteClient)
+	e.RemoveClientFromMcpServer = m(e.RemoveClientFromMcpServer)
+	e.RevokeSession = m(e.RevokeSession)
+	e.RefreshSession = m(e.RefreshSession)
+	e.RevokeAllClientSessions = m(e.RevokeAllClientSessions)
 }
 
-// NewCreateOrganizationRemoteSessionIssuerEndpoint returns an endpoint
-// function that calls the method "createOrganizationRemoteSessionIssuer" of
-// service "organizationRemoteSessionIssuers".
-func NewCreateOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewCreateIssuerEndpoint returns an endpoint function that calls the method
+// "createIssuer" of service "organizationRemoteSessionIssuers".
+func NewCreateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CreateOrganizationRemoteSessionIssuerPayload)
+		p := req.(*CreateIssuerPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -79,16 +120,15 @@ func NewCreateOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn se
 		if err != nil {
 			return nil, err
 		}
-		return s.CreateOrganizationRemoteSessionIssuer(ctx, p)
+		return s.CreateIssuer(ctx, p)
 	}
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerEndpoint returns an endpoint
-// function that calls the method "updateOrganizationRemoteSessionIssuer" of
-// service "organizationRemoteSessionIssuers".
-func NewUpdateOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListIssuersEndpoint returns an endpoint function that calls the method
+// "listIssuers" of service "organizationRemoteSessionIssuers".
+func NewListIssuersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpdateOrganizationRemoteSessionIssuerPayload)
+		p := req.(*ListIssuersPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -115,16 +155,51 @@ func NewUpdateOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn se
 		if err != nil {
 			return nil, err
 		}
-		return s.UpdateOrganizationRemoteSessionIssuer(ctx, p)
+		return s.ListIssuers(ctx, p)
 	}
 }
 
-// NewListOrganizationRemoteSessionIssuersEndpoint returns an endpoint function
-// that calls the method "listOrganizationRemoteSessionIssuers" of service
+// NewGetIssuerEndpoint returns an endpoint function that calls the method
+// "getIssuer" of service "organizationRemoteSessionIssuers".
+func NewGetIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetIssuer(ctx, p)
+	}
+}
+
+// NewGetIssuerDeletePreflightEndpoint returns an endpoint function that calls
+// the method "getIssuerDeletePreflight" of service
 // "organizationRemoteSessionIssuers".
-func NewListOrganizationRemoteSessionIssuersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewGetIssuerDeletePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListOrganizationRemoteSessionIssuersPayload)
+		p := req.(*GetIssuerDeletePreflightPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -151,16 +226,191 @@ func NewListOrganizationRemoteSessionIssuersEndpoint(s Service, authAPIKeyFn sec
 		if err != nil {
 			return nil, err
 		}
-		return s.ListOrganizationRemoteSessionIssuers(ctx, p)
+		return s.GetIssuerDeletePreflight(ctx, p)
 	}
 }
 
-// NewGetOrganizationRemoteSessionIssuerEndpoint returns an endpoint function
-// that calls the method "getOrganizationRemoteSessionIssuer" of service
+// NewUpdateIssuerEndpoint returns an endpoint function that calls the method
+// "updateIssuer" of service "organizationRemoteSessionIssuers".
+func NewUpdateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateIssuer(ctx, p)
+	}
+}
+
+// NewDeleteIssuerEndpoint returns an endpoint function that calls the method
+// "deleteIssuer" of service "organizationRemoteSessionIssuers".
+func NewDeleteIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteIssuer(ctx, p)
+	}
+}
+
+// NewMoveIssuerEndpoint returns an endpoint function that calls the method
+// "moveIssuer" of service "organizationRemoteSessionIssuers".
+func NewMoveIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MoveIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.MoveIssuer(ctx, p)
+	}
+}
+
+// NewListClientsEndpoint returns an endpoint function that calls the method
+// "listClients" of service "organizationRemoteSessionIssuers".
+func NewListClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListClients(ctx, p)
+	}
+}
+
+// NewGetClientEndpoint returns an endpoint function that calls the method
+// "getClient" of service "organizationRemoteSessionIssuers".
+func NewGetClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetClient(ctx, p)
+	}
+}
+
+// NewGetClientDeletePreflightEndpoint returns an endpoint function that calls
+// the method "getClientDeletePreflight" of service
 // "organizationRemoteSessionIssuers".
-func NewGetOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewGetClientDeletePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetOrganizationRemoteSessionIssuerPayload)
+		p := req.(*GetClientDeletePreflightPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -187,16 +437,15 @@ func NewGetOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn secur
 		if err != nil {
 			return nil, err
 		}
-		return s.GetOrganizationRemoteSessionIssuer(ctx, p)
+		return s.GetClientDeletePreflight(ctx, p)
 	}
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerEndpoint returns an endpoint
-// function that calls the method "deleteOrganizationRemoteSessionIssuer" of
-// service "organizationRemoteSessionIssuers".
-func NewDeleteOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListClientMcpServersEndpoint returns an endpoint function that calls the
+// method "listClientMcpServers" of service "organizationRemoteSessionIssuers".
+func NewListClientMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeleteOrganizationRemoteSessionIssuerPayload)
+		p := req.(*ListClientMcpServersPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -223,6 +472,288 @@ func NewDeleteOrganizationRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn se
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.DeleteOrganizationRemoteSessionIssuer(ctx, p)
+		return s.ListClientMcpServers(ctx, p)
+	}
+}
+
+// NewListClientSessionsEndpoint returns an endpoint function that calls the
+// method "listClientSessions" of service "organizationRemoteSessionIssuers".
+func NewListClientSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListClientSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListClientSessions(ctx, p)
+	}
+}
+
+// NewCreateClientEndpoint returns an endpoint function that calls the method
+// "createClient" of service "organizationRemoteSessionIssuers".
+func NewCreateClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateClient(ctx, p)
+	}
+}
+
+// NewUpdateClientEndpoint returns an endpoint function that calls the method
+// "updateClient" of service "organizationRemoteSessionIssuers".
+func NewUpdateClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateClient(ctx, p)
+	}
+}
+
+// NewDeleteClientEndpoint returns an endpoint function that calls the method
+// "deleteClient" of service "organizationRemoteSessionIssuers".
+func NewDeleteClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteClient(ctx, p)
+	}
+}
+
+// NewRemoveClientFromMcpServerEndpoint returns an endpoint function that calls
+// the method "removeClientFromMcpServer" of service
+// "organizationRemoteSessionIssuers".
+func NewRemoveClientFromMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RemoveClientFromMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RemoveClientFromMcpServer(ctx, p)
+	}
+}
+
+// NewRevokeSessionEndpoint returns an endpoint function that calls the method
+// "revokeSession" of service "organizationRemoteSessionIssuers".
+func NewRevokeSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeSession(ctx, p)
+	}
+}
+
+// NewRefreshSessionEndpoint returns an endpoint function that calls the method
+// "refreshSession" of service "organizationRemoteSessionIssuers".
+func NewRefreshSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshSession(ctx, p)
+	}
+}
+
+// NewRevokeAllClientSessionsEndpoint returns an endpoint function that calls
+// the method "revokeAllClientSessions" of service
+// "organizationRemoteSessionIssuers".
+func NewRevokeAllClientSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeAllClientSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RevokeAllClientSessions(ctx, p)
 	}
 }

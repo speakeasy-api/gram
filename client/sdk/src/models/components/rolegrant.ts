@@ -15,30 +15,27 @@ import {
 } from "./selector.js";
 
 /**
- * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
- */
-export const Effect = {
-  Allow: "allow",
-  Deny: "deny",
-} as const;
-/**
- * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
- */
-export type Effect = ClosedEnum<typeof Effect>;
-
-/**
  * The scope slug this grant applies to.
  */
 export const Scope = {
   OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
   ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
   McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
   McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
@@ -48,10 +45,6 @@ export const Scope = {
 export type Scope = ClosedEnum<typeof Scope>;
 
 export type RoleGrant = {
-  /**
-   * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-   */
-  effect?: Effect | undefined;
   /**
    * The scope slug this grant applies to.
    */
@@ -63,14 +56,6 @@ export type RoleGrant = {
 };
 
 /** @internal */
-export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
-  Effect,
-);
-/** @internal */
-export const Effect$outboundSchema: z.ZodMiniEnum<typeof Effect> =
-  Effect$inboundSchema;
-
-/** @internal */
 export const Scope$inboundSchema: z.ZodMiniEnum<typeof Scope> = z.enum(Scope);
 /** @internal */
 export const Scope$outboundSchema: z.ZodMiniEnum<typeof Scope> =
@@ -79,13 +64,11 @@ export const Scope$outboundSchema: z.ZodMiniEnum<typeof Scope> =
 /** @internal */
 export const RoleGrant$inboundSchema: z.ZodMiniType<RoleGrant, unknown> = z
   .object({
-    effect: z._default(Effect$inboundSchema, "allow"),
     scope: Scope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
   });
 /** @internal */
 export type RoleGrant$Outbound = {
-  effect: string;
   scope: string;
   selectors?: Array<Selector$Outbound> | undefined;
 };
@@ -95,7 +78,6 @@ export const RoleGrant$outboundSchema: z.ZodMiniType<
   RoleGrant$Outbound,
   RoleGrant
 > = z.object({
-  effect: z._default(Effect$outboundSchema, "allow"),
   scope: Scope$outboundSchema,
   selectors: z.optional(z.array(Selector$outboundSchema)),
 });

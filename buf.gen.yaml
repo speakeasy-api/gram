@@ -3,5 +3,9 @@ plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.11
     out: infra/gen
     opt: paths=source_relative
+  - remote: buf.build/protocolbuffers/python:v35.0
+    out: infra/gen_py
+  - remote: buf.build/protocolbuffers/pyi:v35.0
+    out: infra/gen_py
 inputs:
   - directory: infra/proto

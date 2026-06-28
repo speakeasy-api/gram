@@ -21,6 +21,18 @@ func requireFileBytes(t *testing.T, path string) []byte {
 	return data
 }
 
+// TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
+// generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
+// hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
+// be identical so local-dev and generated plugins share one transport.
+func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
+	t.Parallel()
+	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
+	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
+	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
+		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
+}
+
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -84,8 +96,8 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		".agents/plugins/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
 		"engineering-tools/.mcp.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
-		"engineering-tools-cursor/mcp.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
 	}
@@ -144,7 +156,7 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["gram-server"]
@@ -203,7 +215,7 @@ func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["oauth-server"]
@@ -582,8 +594,10 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
-	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+	require.NotNil(t, cursorManifest.Metadata)
+	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
 
 func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
@@ -610,6 +624,36 @@ func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
 	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
+func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
+
+	// Non-default project: the name is scoped by the project slug so it doesn't
+	// collide with the org's other projects.
+	scoped, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:          "Acme",
+		ServerURL:        "https://app.getgram.ai",
+		ProjectSlug:      "sales",
+		IsDefaultProject: false,
+	})
+	require.NoError(t, err)
+	var scopedManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(scoped[".claude-plugin/marketplace.json"], &scopedManifest))
+	require.Equal(t, "acme-sales-speakeasy", scopedManifest.Name)
+
+	// Default project keeps the bare org-derived name even with a slug set.
+	def, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:          "Acme",
+		ServerURL:        "https://app.getgram.ai",
+		ProjectSlug:      "sales",
+		IsDefaultProject: true,
+	})
+	require.NoError(t, err)
+	var defManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(def[".claude-plugin/marketplace.json"], &defManifest))
+	require.Equal(t, "acme-speakeasy", defManifest.Name)
+}
+
 func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	t.Parallel()
 	// Claude's hook endpoint accepts Gram-Key + Gram-Project as optional
@@ -631,6 +675,33 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.Contains(t, script, `--config "$auth_config"`)
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
+}
+
+// The Claude hook.sh PreToolUse path must close the DNO-286 race rather than
+// merely narrow it: when the per-session inventory file is absent (the first
+// action of a new session is a tool call, before the async SessionStart write
+// lands) it sources the shared gatherer and gathers inline instead of
+// forwarding a payload the server cannot enforce against.
+func TestRenderHookScriptClaudeGathersInventoryInlineOnFileMiss(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	// Sources the shared gatherer (guarded — cursor ships none).
+	require.Contains(t, script, `[ -f "$script_dir/mcp_gather.sh" ] && . "$script_dir/mcp_gather.sh"`)
+	// The replay block signals exit 3 when there is no file and no caller
+	// inventory, and the shell branches to an inline gather with a tighter cap.
+	require.Contains(t, script, "raise SystemExit(3)")
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload" 5)`)
+	require.Contains(t, script, "type gram_gather_mcp_inventory >/dev/null 2>&1")
+	// Caller-supplied inventory is detected by presence (mirroring the server),
+	// not truthiness, so an explicit empty cowork list is not re-gathered.
+	require.Contains(t, script, "cw_val is not None")
+	require.Contains(t, script, "isinstance(cc_val, str)")
 }
 
 func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
@@ -685,6 +756,7 @@ func TestRenderHookScriptUsesDeviceAgentIdentityWhenAvailable(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
 if [ "$1" = "identity" ]; then
   printf '{"identity":{"email":"agent@example.com"}}'
@@ -703,6 +775,9 @@ printf '{}\n200'
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_CAPTURE_PAYLOAD="+capturePath,
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -713,6 +788,49 @@ printf '{}\n200'
 	require.Equal(t, "agent@example.com", posted["user_email"])
 	require.NotContains(t, postedPayload, `cursor@example.com`)
 	require.Equal(t, 1, strings.Count(postedPayload, `"user_email"`), "identity enrichment must replace user_email, not append a duplicate key")
+}
+
+// Cursor blocks via the JSON body on stdout, not the exit code. When the Gram
+// server is unreachable, errors, or returns a 3xx (an unfollowed redirect
+// carries no decision body), there is no decision to relay, so the hook must
+// fail CLOSED — emit a synthetic deny — rather than allow the call and silently
+// bypass blocking policies.
+func TestRenderCursorHookFailsClosedOnNon2xx(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	// status is what the fake curl reports; a 3xx must fail closed just like a
+	// 5xx, since curl does not follow redirects and the body is not a decision.
+	for _, status := range []string{"500", "302"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			hookPath := filepath.Join(dir, "hook.sh")
+			require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(
+				"#!/usr/bin/env bash\nprintf 'not a decision\\n"+status+"'\n"), 0o755))
+
+			cmd := exec.Command("bash", hookPath)
+			cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution"}`)
+			cmd.Env = append(os.Environ(),
+				"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+			)
+			output, err := cmd.Output()
+			require.NoError(t, err, "hook must exit 0 so Cursor reads the stdout decision")
+
+			var decision map[string]any
+			require.NoError(t, json.Unmarshal(output, &decision), "stdout must be a single valid JSON object: %q", string(output))
+			require.Equal(t, "deny", decision["permission"], "must fail closed on HTTP %s", status)
+			require.NotEmpty(t, decision["user_message"], "deny must carry a human-readable reason")
+		})
+	}
 }
 
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
@@ -730,6 +848,7 @@ func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
 cat > "$GRAM_CAPTURE_PAYLOAD"
 printf '{}\n200'
@@ -768,6 +887,9 @@ exit 1
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
 	output, err := cmd.CombinedOutput()
@@ -790,7 +912,7 @@ func TestGenerateObservabilityPluginsIncludeIdentityHelper(t *testing.T) {
 
 	for _, path := range []string{
 		ClaudeObservabilitySlug(cfg) + "/hooks/identity.sh",
-		CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
+		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/identity.sh",
 	} {
 		require.NotNil(t, files[path], "observability identity helper missing: %s", path)
@@ -877,6 +999,54 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 	}
 }
 
+// With observability mode off (the default) the blocking events keep their
+// synchronous flag so Claude waits for the deny/allow decision.
+func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
+		matchers, ok := parsed.Hooks[event]
+		require.True(t, ok, "%s must be registered", event)
+		require.NotNil(t, matchers[0].Hooks[0].Async)
+		require.False(t, *matchers[0].Hooks[0].Async, "%s must be blocking when observability mode is off", event)
+	}
+}
+
+// With observability mode on, every hook event is emitted async so the plugin
+// can only observe and report — no hook can deny or delay a tool call.
+func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:           "Acme",
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	require.NotEmpty(t, parsed.Hooks)
+	for event, matchers := range parsed.Hooks {
+		require.NotNil(t, matchers[0].Hooks[0].Async, "event %q must carry an async flag", event)
+		require.True(t, *matchers[0].Hooks[0].Async, "event %q must be async in observability mode", event)
+	}
+}
+
 // mcp_inventory.sh enriches the payload with MCP inventory and posts to the
 // Claude hooks endpoint. It must carry the same Gram-Key + Gram-Project
 // headers the regular hook script uses, otherwise server-side org/project
@@ -896,6 +1066,25 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
+	// The actual gathering now lives in the shared mcp_gather.sh, sourced here
+	// and reused by hook.sh's PreToolUse inline-gather fallback.
+	require.Contains(t, script, `. "$script_dir/mcp_gather.sh"`)
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload")`)
+	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
+	// regardless of HTTP outcome to keep the hook latency invisible.
+	require.Contains(t, script, "exit 0")
+	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+}
+
+// The shared gatherer is sourced by both mcp_inventory.sh (async, SessionStart/
+// ConfigChange) and hook.sh (inline, PreToolUse on a missing per-session file).
+// It must detect both execution environments, stamp the live-gather freshness
+// marker the server keys off, and persist the per-session file safely.
+func TestRenderSharedMCPInventoryGatherScript(t *testing.T) {
+	t.Parallel()
+	script := string(renderSharedMCPInventoryGatherScript())
+
+	require.Contains(t, script, "gram_gather_mcp_inventory()", "must define the shared function")
 	// Server-side parsers key off these field names — see
 	// server/internal/hooks/claude_hooks.go and mcp_cowork_parser.go.
 	require.Contains(t, script, "mcp_inventory_claude_code")
@@ -903,10 +1092,15 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	// Cowork detection hinges on CLAUDE_PROJECT_DIR and local_<rid>.json.
 	require.Contains(t, script, "CLAUDE_PROJECT_DIR")
 	require.Contains(t, script, "local_run_json")
-	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
-	// regardless of HTTP outcome to keep the hook latency invisible.
-	require.Contains(t, script, "exit 0")
-	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+	// Freshness marker distinguishes a live gather (authoritative) from a replay.
+	require.Contains(t, script, `ad["mcp_inventory_fresh"] = True`)
+	// It must NOT write the freshness marker into the persisted fragment, or a
+	// later replay of that file would masquerade as freshly gathered.
+	require.Contains(t, script, `frag["mcp_inventory_claude_code"] = cc`)
+	require.NotContains(t, script, `frag["mcp_inventory_fresh"]`)
+	// The /tmp squatting guard must survive the refactor.
+	require.Contains(t, script, "gram_safe_dir")
+	require.Contains(t, script, "tempfile.mkstemp")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
@@ -987,6 +1181,96 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
 }
 
+// runCodexInstallScript executes the generated install script under an
+// isolated HOME containing a stub codex at ~/.local/bin (off PATH), so binary
+// probing never reaches a real install on the host. The stub appends its
+// arguments to the returned call log.
+func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (home string, callLog string) {
+	t.Helper()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
+	home = t.TempDir()
+	callLog = filepath.Join(home, "codex-calls.log")
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + callLog + "\"\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".local", "bin", "codex"), []byte(stub), 0o755))
+
+	if existingConfig != "" {
+		require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(existingConfig), 0o644))
+	}
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = []string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "install script failed: %s", out)
+
+	return home, callLog
+}
+
+// SessionStart enriches the payload with the user's configured MCP server
+// inventory (shadow MCP visibility). The collection must be gated on a real
+// JSON field check of hook_event_name so the blocking PreToolUse path never
+// pays for a codex CLI invocation.
+func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
+	require.Contains(t, script, `[codex_bin, "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
+	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
+	require.Contains(t, script, `find_codex() if data.get("hook_event_name") == "SessionStart" else None`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, `/Applications/Codex.app/Contents/Resources/codex`, "binary resolution must cover desktop-app-only installs where codex is not on PATH")
+	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
+	require.Contains(t, script, `additional["mcp_inventory_codex"] = slim`, "hook.sh must ship the sanitized projection — raw transport objects carry env vars and HTTP headers with credentials")
+	require.Contains(t, script, `redact_args(transport.get("args"))`, "stdio launch args must pass through credential redaction before upload")
+}
+
+// The hook scripts embed python inside bash single-quoted heredocs, where a
+// stray apostrophe in a comment is enough to break the whole script.
+// Substring assertions cannot catch that — run bash -n over every generated
+// shell script.
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
+	t.Parallel()
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateObservabilityPluginPackage(cfg, platform)
+		require.NoError(t, err)
+		for name, content := range files {
+			if !strings.HasSuffix(name, ".sh") {
+				continue
+			}
+			path := filepath.Join(t.TempDir(), filepath.Base(name))
+			require.NoError(t, os.WriteFile(path, content, 0o755))
+			out, err := exec.Command(bashPath, "-n", path).CombinedOutput()
+			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
+		}
+	}
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
@@ -994,11 +1278,6 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 // and silently stops running telemetry until the user re-approves them.
 func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	t.Parallel()
-
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
@@ -1015,34 +1294,78 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	home := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
-	existing := "features.hooks = true\n\n" +
-		"[hooks.state.\"" + target.StateKey + "\"]\n" +
+	existing := "[hooks.state.\"" + target.StateKey + "\"]\n" +
 		"enabled = true\n" +
 		"trusted_hash = \"" + staleHash + "\"\n"
-	configPath := filepath.Join(home, ".codex", "config.toml")
-	require.NoError(t, os.WriteFile(configPath, []byte(existing), 0o644))
+	home, _ := runCodexInstallScript(t, script, existing)
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
-	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
-
-	cmd := exec.Command(bashPath, scriptPath)
-	// Exclude any installed `codex` binary so only the config.toml patch runs.
-	cmd.Env = []string{
-		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
-	}
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "install script failed: %s", out)
-
-	patched, err := os.ReadFile(configPath)
-	require.NoError(t, err)
+	patched := requireFileBytes(t, filepath.Join(home, ".codex", "config.toml"))
 	patchedStr := string(patched)
 
 	require.NotContains(t, patchedStr, staleHash, "stale trusted_hash must be replaced")
 	require.Contains(t, patchedStr, target.TrustedHash, "trusted_hash must be refreshed to the current command's hash")
 	require.Equal(t, 1, strings.Count(patchedStr, "[hooks.state.\""+target.StateKey+"\"]"), "refresh must not duplicate the entry")
+}
+
+// Desktop-only and MDM-deployed machines run without codex on PATH. The
+// install script must probe well-known install locations and use the binary
+// it finds there instead of skipping marketplace registration.
+func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	_, callLog := runCodexInstallScript(t, script, "")
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "plugin marketplace add https://example.com/gram-marketplace")
+	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
+}
+
+// Root-level dotted keys (features.hooks = true) implicitly define the
+// [features] table and make Codex reject the whole config with a duplicate-key
+// error when an explicit [features] table is also present — which is the
+// default, since js_repl lives there. The flags must be written inside the
+// table, and dotted keys left behind by earlier script versions removed.
+func TestGenerateCodexInstallScriptWritesFeatureFlagsInFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := "features.hooks = true\n" +
+		"features.plugin_hooks = true\n\n" +
+		"[features]\n" +
+		"js_repl = true\n"
+	home, _ := runCodexInstallScript(t, script, existing)
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "root-level dotted feature keys must be removed")
+	require.Equal(t, 1, strings.Count(patched, "[features]"), "the existing [features] table must be reused")
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"), "hooks flag must live in the [features] table")
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"), "plugin_hooks flag must live in the [features] table")
+	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
+}
+
+func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "feature flags must not be written as root-level dotted keys")
+	require.Equal(t, 1, strings.Count(patched, "[features]"))
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"))
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"))
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
@@ -1121,10 +1444,10 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 	// the supplied version.
 	manifestPaths := []string{
 		"engineering-tools/.claude-plugin/plugin.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"acme-observability/.claude-plugin/plugin.json",
-		"acme-observability-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
 		"acme-observability-codex/.codex-plugin/plugin.json",
 	}
 	for _, p := range manifestPaths {

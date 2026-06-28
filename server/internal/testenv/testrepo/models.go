@@ -112,8 +112,11 @@ type RiskResult struct {
 	EndPos              pgtype.Int4
 	Confidence          pgtype.Float8
 	Tags                []string
+	Spans               []byte
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 }

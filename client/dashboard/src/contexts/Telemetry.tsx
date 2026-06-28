@@ -1,14 +1,21 @@
 import type { PostHog } from "posthog-js";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useReducer } from "react";
 import type { User } from "./Auth";
 
 export type Telemetry = Pick<
   PostHog,
-  "isFeatureEnabled" | "capture" | "identify" | "register" | "reset" | "group"
+  | "isFeatureEnabled"
+  | "onFeatureFlags"
+  | "capture"
+  | "identify"
+  | "register"
+  | "reset"
+  | "group"
 >;
 
 export const nullTelemetry: Telemetry = {
   isFeatureEnabled: () => false,
+  onFeatureFlags: () => () => {},
   capture: () => ({ uuid: "", event: "", properties: {} }),
   identify: () => {},
   register: () => {},
@@ -43,6 +50,7 @@ export const testTelemetry: Telemetry = {
     console.log("POSTHOG IS_FEATURE_ENABLED", feature);
     return true;
   },
+  onFeatureFlags: () => () => {},
   reset: () => {
     console.log("POSTHOG RESET");
   },
@@ -52,7 +60,32 @@ export const TelemetryContext = createContext<Telemetry>(
   import.meta.env.DEV ? devTelemetry : nullTelemetry,
 );
 
-export const useTelemetry = (): Telemetry => useContext(TelemetryContext);
+/**
+ * Access telemetry, re-rendering the consumer when PostHog feature flags
+ * resolve or change.
+ *
+ * `telemetry.isFeatureEnabled(...)` reads whatever flags PostHog has loaded
+ * *so far*. PostHog fetches flags asynchronously after init (and reloads them
+ * on `group()`/`identify()`), so a component that reads a flag during render
+ * would otherwise be stuck on the pre-load value — most notably opt-in gates
+ * (`?? false`) staying hidden forever even once the flag turns on. Subscribing
+ * to `onFeatureFlags` here makes every `isFeatureEnabled` call site reactive,
+ * so there's a single way to read a flag and it just works.
+ */
+export const useTelemetry = (): Telemetry => {
+  const telemetry = useContext(TelemetryContext);
+  const [, onFlagsChanged] = useReducer((version: number) => version + 1, 0);
+
+  useEffect(() => {
+    // onFeatureFlags fires once flags are loaded (immediately if already
+    // loaded when we subscribe) and again on any reload. Returns an
+    // unsubscribe fn. Bumping local state re-renders this consumer so its
+    // isFeatureEnabled reads re-evaluate against the latest flags.
+    return telemetry.onFeatureFlags(() => onFlagsChanged());
+  }, [telemetry]);
+
+  return telemetry;
+};
 
 export function useIdentifyUserForTelemetry(user: User | undefined): void {
   const telemetry = useTelemetry();
@@ -136,7 +169,6 @@ export function useRegisterChatTelemetry({
     if (!chatId) return;
     if (!chatUrl) return;
 
-    telemetry.group("chat_id", chatId, {});
     telemetry.register({
       chat_id: chatId,
       chat_url: chatUrl,
@@ -168,7 +200,6 @@ export function useRegisterToolsetTelemetry({
 
   useEffect(() => {
     if (!toolsetSlug) return;
-    telemetry.group("toolset_slug", toolsetSlug, {});
     telemetry.register({
       toolset_slug: toolsetSlug,
     });
@@ -191,10 +222,11 @@ export function useRegisterProjectForTelemetry({
     if (!projectSlug) return;
     if (!organizationSlug) return;
 
-    // Register the super properties for this workspace to be sent with every event
-    telemetry.group("project_id", projectId, {});
-    telemetry.group("project_slug", projectSlug, {});
-    telemetry.group("organization_slug", organizationSlug, {});
+    // PostHog caps a project at 5 group types; "organization" and "slug" are the
+    // only org/project slots that exist, so we register just those two. Other
+    // group types (project_id, project_slug, chat_id, toolset_slug, …) are
+    // dropped at ingestion; their values still ship as register() properties.
+    telemetry.group("organization", organizationSlug, {});
     telemetry.group("slug", `${organizationSlug}/${projectSlug}`, {});
 
     telemetry.register({

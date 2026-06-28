@@ -39,6 +39,16 @@ type Service interface {
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
+	// Generic, org-scoped analytics query over pre-aggregated usage metrics.
+	// Returns both a grouped table and a per-group hourly timeseries for the same
+	// slice of data, supporting arbitrary allowlisted group-by dimensions and
+	// filters (e.g. group by department_name, then drill in by filtering
+	// department_name and grouping by role).
+	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
+	// Org-scoped list of individual chat sessions for a slice of usage, filtered
+	// by the same allowlisted dimensions as telemetry.query. Returns per-session
+	// cost, token, and tool metrics with cursor pagination.
+	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -46,6 +56,12 @@ type Service interface {
 	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
 	// Get aggregated hooks metrics grouped by server
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
+	// Get target-aware MCP and tool usage metrics
+	GetToolUsageSummary(context.Context, *GetToolUsageSummaryPayload) (res *GetToolUsageSummaryResult, err error)
+	// List target-aware MCP and tool usage traces
+	ListToolUsageTraces(context.Context, *ListToolUsageTracesPayload) (res *ListToolUsageTracesResult, err error)
+	// Get filter options for target-aware MCP and tool usage metrics
+	GetToolUsageFilterOptions(context.Context, *GetToolUsageFilterOptionsPayload) (res *GetToolUsageFilterOptionsResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -72,7 +88,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
+var MethodNames = [19]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -259,6 +275,9 @@ type GetObservabilityOverviewPayload struct {
 	ToolsetSlug *string
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -317,6 +336,73 @@ type GetProjectOverviewResult struct {
 	Comparison *ProjectOverviewSummary
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode string
+}
+
+// GetToolUsageFilterOptionsPayload is the payload type of the telemetry
+// service getToolUsageFilterOptions method.
+type GetToolUsageFilterOptionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Filter option types to include. Empty means all option types.
+	OptionTypes []ToolUsageFilterOptionType
+}
+
+// GetToolUsageFilterOptionsResult is the result type of the telemetry service
+// getToolUsageFilterOptions method.
+type GetToolUsageFilterOptionsResult struct {
+	// Hosted MCP servers with usage in the selected time range
+	HostedServers []*ToolUsageHostedServerFilterOption
+	// Shadow MCP servers with usage in the selected time range
+	ShadowServers []*ToolUsageShadowServerFilterOption
+	// User identities with usage in the selected time range
+	Users []*ToolUsageUserFilterOption
+}
+
+// GetToolUsageSummaryPayload is the payload type of the telemetry service
+// getToolUsageSummary method.
+type GetToolUsageSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+}
+
+// GetToolUsageSummaryResult is the result type of the telemetry service
+// getToolUsageSummary method.
+type GetToolUsageSummaryResult struct {
+	// Overall usage totals for the selected filters and time range
+	Totals *ToolUsageTotals
+	// Top usage targets for the selected filters and time range
+	Targets []*ToolUsageTargetSummary
+	// Top user identities for the selected filters and time range
+	Users []*ToolUsageUserSummary
+	// Time-series usage buckets grouped by target
+	TargetTimeSeries []*ToolUsageTargetTimeSeriesPoint
+	// Time-series usage buckets grouped by user identity
+	UserTimeSeries []*ToolUsageUserTimeSeriesPoint
+	// Cross-dimensional usage rows grouped by target and user identity
+	UsersByTarget []*ToolUsageUsersByTargetRow
+	// Per-tool usage rows grouped by target
+	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
 }
 
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
@@ -527,6 +613,77 @@ type ListHooksTracesResult struct {
 	NextCursor *string
 }
 
+// ListSessionsPayload is the payload type of the telemetry service
+// listSessions method.
+type ListSessionsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Measure used to rank sessions. Defaults to total_cost.
+	SortBy string
+	// Number of sessions to return (1-1000)
+	Limit int
+	// Opaque cursor for pagination
+	Cursor *string
+}
+
+// ListSessionsResult is the result type of the telemetry service listSessions
+// method.
+type ListSessionsResult struct {
+	// List of chat session summaries
+	Sessions []*SessionSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
+// ListToolUsageTracesPayload is the payload type of the telemetry service
+// listToolUsageTraces method.
+type ListToolUsageTracesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Free-text attribute search string from the q URL param. Matches useful
+	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// instance ID.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
+	// Cursor for pagination
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of traces to return
+	Limit int
+}
+
+// ListToolUsageTracesResult is the result type of the telemetry service
+// listToolUsageTraces method.
+type ListToolUsageTracesResult struct {
+	// Target-aware tool usage trace rows
+	Traces []*ToolUsageTraceSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
 // A single filter condition for a log search query.
 type LogFilter struct {
 	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
@@ -661,6 +818,103 @@ type ProjectSummary struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
+}
+
+// A single filter predicate on an allowlisted dimension
+type QueryFilter struct {
+	// Dimension to filter on
+	Dimension string
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string
+}
+
+// Aggregated measure values for a group or time bucket
+type QueryMeasures struct {
+	// Total cost in USD
+	TotalCost float64
+	// Sum of input tokens
+	TotalInputTokens int64
+	// Sum of output tokens
+	TotalOutputTokens int64
+	// Sum of all tokens
+	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of distinct chat sessions
+	TotalChats int64
+}
+
+// QueryPayload is the payload type of the telemetry service query method.
+type QueryPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional dimension to break results down by. When omitted, a single
+	// aggregate row/series for the whole slice is returned.
+	GroupBy *string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Optional timeseries bucket size in seconds. Defaults to an interval derived
+	// from the time range and is floored to 3600 (the source data is bucketed
+	// hourly).
+	GranularitySeconds *int64
+	// When group_by is set, keep at most this many groups (ranked by sort_by); the
+	// remainder are rolled into an 'Other' group. Defaults to 10.
+	TopN int
+	// Measure used to rank groups for top_n. Defaults to total_cost.
+	SortBy string
+}
+
+// A single time bucket within a series
+type QueryPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Aggregated measures for this bucket
+	Measures *QueryMeasures
+}
+
+// QueryResult is the result type of the telemetry service query method.
+type QueryResult struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy string
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds int64
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRow
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeries
+}
+
+// One row of the grouped table: measures aggregated over the full time range
+// for a single group value.
+type QueryRow struct {
+	// The dimension value for this row. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Aggregated measures for this group
+	Measures *QueryMeasures
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string
+}
+
+// A gap-filled timeseries for a single group value (one line on the chart).
+type QuerySeries struct {
+	// The dimension value for this series. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Time buckets in ascending order, gap-filled with zeros.
+	Points []*QueryPoint
 }
 
 // Aggregated usage summary for a role
@@ -891,6 +1145,42 @@ type ServiceInfo struct {
 	Version *string
 }
 
+// Org-scoped summary information for a chat session
+type SessionSummary struct {
+	// Chat session ID
+	GramChatID string
+	// Project ID that emitted this chat session
+	ProjectID string
+	// User email associated with this chat session
+	UserEmail *string
+	// Client or agent surface associated with this chat session
+	HookSource *string
+	// LLM model used in this chat session
+	Model *string
+	// Chat title, when the session resolves to a named chat
+	Title *string
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string
+	// Chat session duration in seconds
+	DurationSeconds float64
+	// Number of LLM completion messages in this chat session
+	MessageCount int64
+	// Number of tool calls in this chat session
+	ToolCallCount int64
+	// Total input tokens used
+	TotalInputTokens int64
+	// Total output tokens used
+	TotalOutputTokens int64
+	// Total tokens used
+	TotalTokens int64
+	// Total cost in USD
+	TotalCost float64
+	// Chat session status
+	Status string
+}
+
 // Per-(skill, user) aggregated counts
 type SkillBreakdownRow struct {
 	// Skill name
@@ -1030,6 +1320,250 @@ type ToolUsage struct {
 	FailureCount int64
 }
 
+// Tool usage filter option type
+type ToolUsageFilterOptionType string
+
+// Hosted MCP server filter option with usage in the selected time window
+type ToolUsageHostedServerFilterOption struct {
+	// Hosted MCP toolset slug
+	ToolsetSlug string
+	// Hosted MCP toolset display name
+	ToolsetName string
+	// Number of tool usage events observed for the hosted MCP server
+	EventCount int64
+}
+
+// Shadow MCP server filter option with usage in the selected time window
+type ToolUsageShadowServerFilterOption struct {
+	// Observed Shadow MCP server name
+	ServerName string
+	// Number of tool usage events observed for the Shadow MCP server
+	EventCount int64
+}
+
+// Tool usage aggregation target kind
+type ToolUsageTargetKind string
+
+// Aggregated tool usage metrics for one target
+type ToolUsageTargetSummary struct {
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Total number of tool usage events for the target
+	EventCount int64
+	// Number of distinct tools observed for the target
+	UniqueTools int64
+	// Number of successful tool usage events for the target
+	SuccessCount int64
+	// Number of failed tool usage events for the target
+	FailureCount int64
+	// Fraction of completed tool usage events for the target that failed
+	FailureRate float64
+}
+
+// A time-series bucket for one tool usage target
+type ToolUsageTargetTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
+	BucketStartNs string
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Number of tool usage events in the bucket
+	EventCount int64
+	// Number of failed tool usage events in the bucket
+	FailureCount int64
+}
+
+// Aggregated tool usage metrics for one target and tool
+type ToolUsageTargetToolBreakdownRow struct {
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Observed tool name
+	ToolName string
+	// Total number of tool usage events for the target and tool
+	EventCount int64
+	// Number of successful tool usage events for the target and tool
+	SuccessCount int64
+	// Number of failed tool usage events for the target and tool
+	FailureCount int64
+	// Fraction of completed tool usage events for the target and tool that failed
+	FailureRate float64
+}
+
+// Tool usage target type
+type ToolUsageTargetType string
+
+// Target-aware MCP and tool usage totals
+type ToolUsageTotals struct {
+	// Total number of tool usage events
+	EventCount int64
+	// Number of successful tool usage events
+	SuccessCount int64
+	// Number of failed tool usage events
+	FailureCount int64
+	// Fraction of completed tool usage events that failed
+	FailureRate float64
+	// Number of distinct tools observed
+	UniqueTools int64
+	// Number of distinct user identities observed
+	UniqueUsers int64
+	// Number of distinct usage targets observed
+	UniqueTargets int64
+}
+
+// Descriptor used by the dashboard to fetch child logs for a trace row
+type ToolUsageTraceLogGroup struct {
+	// Lookup strategy
+	Kind ToolUsageTraceLogGroupKind
+	// Lookup value
+	Value string
+}
+
+// Child-log lookup strategy for a tool usage trace row
+type ToolUsageTraceLogGroupKind string
+
+// A single target-aware tool usage trace row
+type ToolUsageTraceSummary struct {
+	// Stable row identity for React keys and expansion state
+	ID string
+	// Real OTel trace ID when the grouped logs have one
+	TraceID *string
+	// How the frontend should fetch child logs for this row
+	LogGroup *ToolUsageTraceLogGroup
+	// Earliest log timestamp in Unix nanoseconds as a string for JavaScript
+	// integer safety
+	StartTimeUnixNano string
+	// Number of logs in the trace
+	LogCount uint64
+	// Gram URN associated with the trace
+	GramUrn string
+	// Tool name shown in the row
+	ToolName string
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters
+	TargetID string
+	// User-facing target label
+	TargetLabel string
+	// Stable user identity value
+	UserKey string
+	// User-facing user identity label
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Hook plugin source when the row came from hook telemetry
+	HookSource *string
+	// Telemetry event source
+	EventSource string
+	// HTTP status code when available
+	HTTPStatusCode *int32
+	// Hook execution status when the row came from hook telemetry
+	HookStatus *string
+	// Hook block reason when hook_status is blocked
+	BlockReason *string
+}
+
+// Typed user identity filter
+type ToolUsageUserFilter struct {
+	// Type of user identity represented by the filter key
+	Kind ToolUsageUserKind
+	// User identity value to include
+	Key string
+}
+
+// Tool usage user filter option with usage in the selected time window
+type ToolUsageUserFilterOption struct {
+	// Stable user identity value used by filters
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the option
+	UserKind ToolUsageUserKind
+	// Number of tool usage events observed for the user identity
+	EventCount int64
+}
+
+// Tool usage user identity kind
+type ToolUsageUserKind string
+
+// Aggregated tool usage metrics for one user identity
+type ToolUsageUserSummary struct {
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Total number of tool usage events for the user identity
+	EventCount int64
+	// Number of distinct tools observed for the user identity
+	UniqueTools int64
+	// Number of successful tool usage events for the user identity
+	SuccessCount int64
+	// Number of failed tool usage events for the user identity
+	FailureCount int64
+	// Fraction of completed tool usage events for the user identity that failed
+	FailureRate float64
+}
+
+// A time-series bucket for one tool usage user identity
+type ToolUsageUserTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
+	BucketStartNs string
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Number of tool usage events in the bucket
+	EventCount int64
+	// Number of failed tool usage events in the bucket
+	FailureCount int64
+}
+
+// Aggregated tool usage metrics for one target and user identity
+type ToolUsageUsersByTargetRow struct {
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Total number of tool usage events for the target and user identity
+	EventCount int64
+	// Number of failed tool usage events for the target and user identity
+	FailureCount int64
+}
+
 // Top MCP server by tool call count
 type TopServer struct {
 	// MCP server name
@@ -1052,6 +1586,8 @@ type TopUser struct {
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string
+	// User email associated with this usage, when present
+	UserEmail string
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds

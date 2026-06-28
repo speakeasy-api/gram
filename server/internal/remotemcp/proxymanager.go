@@ -24,10 +24,10 @@ import (
 // PostHog event capture.
 //
 // One factory is constructed at server startup and reused across requests.
-// The interceptors that hold no per-request state (usage limits/tracking,
-// PostHog initialize emitter) are constructed once on the factory; the
-// rest are instantiated per-call in [ProxyManager.Build] so the closure
-// over the remote-server id stays request-scoped.
+// The interceptors that hold no per-request state (usage limits/tracking)
+// are constructed once on the factory; the rest are instantiated per-call in
+// [ProxyManager.Build] so the closure over the per-server correlation ids
+// stays request-scoped.
 type ProxyManager struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
@@ -44,7 +44,6 @@ type ProxyManager struct {
 	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
-	initializePostHogEventInterceptor     *InitializePostHogEventInterceptor
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -80,7 +79,6 @@ func NewProxyManager(
 		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
-		initializePostHogEventInterceptor:     NewInitializePostHogEventInterceptor(posthogClient, logger),
 	}
 }
 
@@ -98,9 +96,17 @@ func NewProxyManager(
 // private servers only since public servers bypass server-level RBAC.
 // projectID is forwarded to the per-tool authz interceptor as a dimension
 // so project-scoped grants can match.
+//
+// mcpServerID is the mcp_servers row id (NOT the remote_mcp_servers id on
+// server). It is the RBAC ResourceID for the per-tool `mcp:connect` checks
+// so they resolve grants against the same mcp_servers row that the handler's
+// upfront server-level `mcp:connect` check uses, keeping per-tool and
+// server-level authorization consistent for the same caller. server.ID still
+// drives telemetry/logging dimensions, which are keyed by remote_mcp_servers.
 func (f *ProxyManager) Build(
 	logger *slog.Logger,
 	server *remotemcprepo.RemoteMcpServer,
+	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
 	visibility string,
 	projectID string,
@@ -118,12 +124,19 @@ func (f *ProxyManager) Build(
 
 	serverID := server.ID.String()
 
+	// Telemetry interceptors are keyed by both correlation ids: the
+	// remote_mcp_servers id (the upstream) and the fronting mcp_servers id
+	// (the server users manage). server.ID still drives the synthetic tool
+	// URN and the remote-server slog/metric dimension; mcpServerID lets the
+	// same activity be sliced from the fronting-server perspective.
+	identity := proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}
+
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
 	// A fresh instance per Build makes that field's lifetime match the
 	// proxy's, so a stale timestamp from a failure path (request fires,
 	// response doesn't) is reclaimed when the proxy is dropped.
-	clickHouseLogInterceptor := NewToolsCallClickHouseLogInterceptor(f.telemLogger, serverID, logger)
+	clickHouseLogInterceptor := NewToolsCallClickHouseLogInterceptor(f.telemLogger, identity, logger)
 
 	// Counter records every attempted tools/call, including those later
 	// rejected by limits or per-tool authz. This mirrors /mcp, where
@@ -148,14 +161,14 @@ func (f *ProxyManager) Build(
 	// is Redis-cached (15-minute TTL) so the hot-path cost when the
 	// policy is disabled is a single cache GET.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, serverID, logger),
+		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
 		NewToolsCallShadowMCPValidateAndStripInterceptor(f.shadowmcpClient, serverID, projectID, logger),
 		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, serverID, projectID, logger),
+			NewToolsCallAuthzInterceptor(f.authz, mcpServerID, projectID, logger),
 		)
 	}
 
@@ -167,7 +180,7 @@ func (f *ProxyManager) Build(
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, serverID, projectID, logger),
+			NewToolsListMCPConnectFilterInterceptor(f.authz, mcpServerID, projectID, logger),
 		)
 	}
 	toolsListRespInterceptors = append(toolsListRespInterceptors,
@@ -187,13 +200,13 @@ func (f *ProxyManager) Build(
 		StreamingTimeout:        proxy.DefaultStreamingTimeout,
 		Metrics:                 f.proxyMetrics,
 		MaxBufferedBodyBytes:    proxy.DefaultMaxBufferedBodyBytes,
-		ServerID:                serverID,
+		Identity:                identity,
 		RemoteURL:               server.Url,
 		Headers:                 configured,
 		AuthorizationOverride:   upstreamAuth,
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
-			f.initializePostHogEventInterceptor,
+			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
 		RemoteMessageInterceptors:    nil,
 		ToolsCallRequestInterceptors: toolsCallReqInterceptors,
@@ -202,7 +215,7 @@ func (f *ProxyManager) Build(
 			clickHouseLogInterceptor,
 		},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
-			NewToolsListPostHogEventInterceptor(f.posthog, serverID, logger),
+			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
 		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{

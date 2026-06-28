@@ -13,14 +13,22 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CreateOrganizationRemoteSessionIssuerRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP request body.
-type CreateOrganizationRemoteSessionIssuerRequestBody struct {
+// CreateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// request body.
+type CreateIssuerRequestBody struct {
+	// Owning project id; the project must belong to the caller's organization.
+	// Omit to create an organization-level issuer.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Project-unique slug.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -44,16 +52,20 @@ type CreateOrganizationRemoteSessionIssuerRequestBody struct {
 	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP request body.
-type UpdateOrganizationRemoteSessionIssuerRequestBody struct {
+// UpdateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// request body.
+type UpdateIssuerRequestBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Rename the slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Set the logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -70,10 +82,98 @@ type UpdateOrganizationRemoteSessionIssuerRequestBody struct {
 	Passthrough                       *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type CreateOrganizationRemoteSessionIssuerResponseBody struct {
+// MoveIssuerRequestBody is the type of the "organizationRemoteSessionIssuers"
+// service "moveIssuer" endpoint HTTP request body.
+type MoveIssuerRequestBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Target owning project id; the project must belong to the caller's
+	// organization. Omit to make the issuer organization-level.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
+// CreateClientRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// request body.
+type CreateClientRequestBody struct {
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project;
+	// required when the issuer is organization-level.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// Optional client_secret supplied by the caller. Gram encrypts before
+	// persisting; the plaintext is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// UpdateClientRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// request body.
+type UpdateClientRequestBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
+	// is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Replace the explicit upstream OAuth scopes for this client.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Replace the upstream OAuth audience sent for this client.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// RemoveClientFromMcpServerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP request body.
+type RemoveClientFromMcpServerRequestBody struct {
+	// The remote_session_client id.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// The mcp_server id to detach from.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
+// RevokeSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// request body.
+type RevokeSessionRequestBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
+// RefreshSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// request body.
+type RefreshSessionRequestBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
+// RevokeAllClientSessionsRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP request body.
+type RevokeAllClientSessionsRequestBody struct {
+	// The remote_session_client id.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+}
+
+// CreateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body.
+type CreateIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level issuers.
@@ -84,6 +184,10 @@ type CreateOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -104,53 +208,18 @@ type CreateOrganizationRemoteSessionIssuerResponseBody struct {
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type UpdateOrganizationRemoteSessionIssuerResponseBody struct {
-	// The remote_session_issuer id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id. Empty for organization-level issuers.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Project-unique slug.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Issuer URL; matches the iss claim.
-	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
-	// Upstream authorization endpoint.
-	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
-	// Upstream token endpoint.
-	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
-	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
-	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
-	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	// When true, may unlock OIDC-aware behaviour.
-	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
-	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough *bool   `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// ListOrganizationRemoteSessionIssuersResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body.
-type ListOrganizationRemoteSessionIssuersResponseBody struct {
-	Items []*RemoteSessionIssuerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+// ListIssuersResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body.
+type ListIssuersResponseBody struct {
+	Items []*OrganizationRemoteSessionIssuerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type GetOrganizationRemoteSessionIssuerResponseBody struct {
+// GetIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "getIssuer" endpoint HTTP response body.
+type GetIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level issuers.
@@ -161,6 +230,10 @@ type GetOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -181,11 +254,266 @@ type GetOrganizationRemoteSessionIssuerResponseBody struct {
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// GetIssuerDeletePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body.
+type GetIssuerDeletePreflightResponseBody struct {
+	// Number of non-deleted remote_session_clients registered with this issuer.
+	ClientCount *int `form:"client_count,omitempty" json:"client_count,omitempty" xml:"client_count,omitempty"`
+	// Display names of MCP servers attached to this issuer's clients.
+	McpServerNames []string `form:"mcp_server_names,omitempty" json:"mcp_server_names,omitempty" xml:"mcp_server_names,omitempty"`
+}
+
+// UpdateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body.
+type UpdateIssuerResponseBody struct {
+	// The remote_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level issuers.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Project-unique slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Issuer URL; matches the iss claim.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough *bool   `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "moveIssuer" endpoint HTTP response body.
+type MoveIssuerResponseBody struct {
+	// The remote_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level issuers.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Project-unique slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Issuer URL; matches the iss claim.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough *bool   `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListClientsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body.
+type ListClientsResponseBody struct {
+	Items []*OrganizationRemoteSessionClientResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetClientResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "getClient" endpoint HTTP response body.
+type GetClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// GetClientDeletePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body.
+type GetClientDeletePreflightResponseBody struct {
+	// Number of non-deleted remote_sessions minted against this client.
+	SessionCount *int `form:"session_count,omitempty" json:"session_count,omitempty" xml:"session_count,omitempty"`
+	// Display names of MCP servers this client is attached to.
+	McpServerNames []string `form:"mcp_server_names,omitempty" json:"mcp_server_names,omitempty" xml:"mcp_server_names,omitempty"`
+}
+
+// ListClientMcpServersResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body.
+type ListClientMcpServersResponseBody struct {
+	Items []*OrganizationMcpServerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
+// ListClientSessionsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body.
+type ListClientSessionsResponseBody struct {
+	Items []*RemoteSessionResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CreateClientResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body.
+type CreateClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateClientResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body.
+type UpdateClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// RefreshSessionResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body.
+type RefreshSessionResponseBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// RevokeAllClientSessionsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body.
+type RevokeAllClientSessionsResponseBody struct {
+	// Number of remote_sessions revoked.
+	RevokedCount *int `form:"revoked_count,omitempty" json:"revoked_count,omitempty" xml:"revoked_count,omitempty"`
+}
+
+// CreateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -201,11 +529,10 @@ type CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type CreateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// CreateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -221,11 +548,10 @@ type CreateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type CreateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// CreateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -241,11 +567,10 @@ type CreateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type CreateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// CreateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type CreateIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -261,11 +586,10 @@ type CreateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type CreateOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// CreateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type CreateIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -281,11 +605,10 @@ type CreateOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// CreateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -301,11 +624,10 @@ type CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type CreateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// CreateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type CreateIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -321,11 +643,10 @@ type CreateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// CreateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -341,11 +662,10 @@ type CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// CreateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -361,11 +681,10 @@ type CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// CreateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -381,11 +700,10 @@ type CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// ListIssuersUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListIssuersUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -401,11 +719,10 @@ type UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// ListIssuersForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "forbidden" error.
+type ListIssuersForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -421,11 +738,10 @@ type UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// ListIssuersBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "bad_request" error.
+type ListIssuersBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,11 +757,10 @@ type UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// ListIssuersNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "not_found" error.
+type ListIssuersNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -461,11 +776,10 @@ type UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type UpdateOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// ListIssuersConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "conflict" error.
+type ListIssuersConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -481,11 +795,10 @@ type UpdateOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// ListIssuersUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListIssuersUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -501,11 +814,10 @@ type UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type UpdateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// ListIssuersInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "invalid" error.
+type ListIssuersInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -521,11 +833,10 @@ type UpdateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// ListIssuersInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListIssuersInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -541,11 +852,10 @@ type UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// ListIssuersUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unexpected" error.
+type ListIssuersUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -561,11 +871,10 @@ type UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// ListIssuersGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListIssuersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -581,11 +890,10 @@ type UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unauthorized" error.
-type ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody struct {
+// GetIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -601,11 +909,10 @@ type ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "forbidden" error.
-type ListOrganizationRemoteSessionIssuersForbiddenResponseBody struct {
+// GetIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type GetIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -621,11 +928,10 @@ type ListOrganizationRemoteSessionIssuersForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "bad_request" error.
-type ListOrganizationRemoteSessionIssuersBadRequestResponseBody struct {
+// GetIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type GetIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -641,11 +947,10 @@ type ListOrganizationRemoteSessionIssuersBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "not_found" error.
-type ListOrganizationRemoteSessionIssuersNotFoundResponseBody struct {
+// GetIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type GetIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -661,11 +966,10 @@ type ListOrganizationRemoteSessionIssuersNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "conflict" error.
-type ListOrganizationRemoteSessionIssuersConflictResponseBody struct {
+// GetIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type GetIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -681,11 +985,10 @@ type ListOrganizationRemoteSessionIssuersConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody struct {
+// GetIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -701,11 +1004,10 @@ type ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "invalid" error.
-type ListOrganizationRemoteSessionIssuersInvalidResponseBody struct {
+// GetIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type GetIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -721,11 +1023,10 @@ type ListOrganizationRemoteSessionIssuersInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody struct {
+// GetIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -741,11 +1042,10 @@ type ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unexpected" error.
-type ListOrganizationRemoteSessionIssuersUnexpectedResponseBody struct {
+// GetIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type GetIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -761,11 +1061,10 @@ type ListOrganizationRemoteSessionIssuersUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "gateway_error" error.
-type ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody struct {
+// GetIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -781,11 +1080,10 @@ type ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// GetIssuerDeletePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetIssuerDeletePreflightUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -801,11 +1099,10 @@ type GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type GetOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// GetIssuerDeletePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "forbidden" error.
+type GetIssuerDeletePreflightForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -821,11 +1118,10 @@ type GetOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type GetOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// GetIssuerDeletePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "bad_request" error.
+type GetIssuerDeletePreflightBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -841,11 +1137,10 @@ type GetOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type GetOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// GetIssuerDeletePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "not_found" error.
+type GetIssuerDeletePreflightNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -861,11 +1156,10 @@ type GetOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type GetOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// GetIssuerDeletePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "conflict" error.
+type GetIssuerDeletePreflightConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -881,11 +1175,10 @@ type GetOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// GetIssuerDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetIssuerDeletePreflightUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -901,11 +1194,10 @@ type GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type GetOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// GetIssuerDeletePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "invalid" error.
+type GetIssuerDeletePreflightInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -921,11 +1213,10 @@ type GetOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// GetIssuerDeletePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetIssuerDeletePreflightInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -941,11 +1232,10 @@ type GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type GetOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// GetIssuerDeletePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unexpected" error.
+type GetIssuerDeletePreflightUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -961,11 +1251,10 @@ type GetOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// GetIssuerDeletePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetIssuerDeletePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -981,11 +1270,10 @@ type GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// UpdateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1001,11 +1289,10 @@ type DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// UpdateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1021,11 +1308,10 @@ type DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// UpdateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1041,11 +1327,10 @@ type DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// UpdateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1061,11 +1346,10 @@ type DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type DeleteOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// UpdateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1081,11 +1365,10 @@ type DeleteOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// UpdateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1101,11 +1384,10 @@ type DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type DeleteOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// UpdateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1121,11 +1403,10 @@ type DeleteOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// UpdateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1141,11 +1422,10 @@ type DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// UpdateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1161,11 +1441,10 @@ type DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// UpdateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1179,6 +1458,2678 @@ type DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type MoveIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type MoveIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type MoveIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type MoveIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type MoveIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type MoveIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type MoveIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type MoveIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type MoveIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MoveIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type MoveIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "forbidden" error.
+type ListClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "bad_request" error.
+type ListClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "not_found" error.
+type ListClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "conflict" error.
+type ListClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "invalid" error.
+type ListClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unexpected" error.
+type ListClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "forbidden" error.
+type GetClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "bad_request" error.
+type GetClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "not_found" error.
+type GetClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "conflict" error.
+type GetClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "invalid" error.
+type GetClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unexpected" error.
+type GetClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetClientDeletePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "forbidden" error.
+type GetClientDeletePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "bad_request" error.
+type GetClientDeletePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "not_found" error.
+type GetClientDeletePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "conflict" error.
+type GetClientDeletePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetClientDeletePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "invalid" error.
+type GetClientDeletePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetClientDeletePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unexpected" error.
+type GetClientDeletePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDeletePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetClientDeletePreflightGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unauthorized" error.
+type ListClientMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "forbidden" error.
+type ListClientMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "bad_request" error.
+type ListClientMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "not_found" error.
+type ListClientMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "conflict" error.
+type ListClientMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unsupported_media" error.
+type ListClientMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "invalid" error.
+type ListClientMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "invariant_violation" error.
+type ListClientMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unexpected" error.
+type ListClientMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientMcpServersGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "gateway_error" error.
+type ListClientMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unauthorized" error.
+type ListClientSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "forbidden" error.
+type ListClientSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "bad_request" error.
+type ListClientSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "not_found" error.
+type ListClientSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "conflict" error.
+type ListClientSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unsupported_media" error.
+type ListClientSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "invalid" error.
+type ListClientSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "invariant_violation" error.
+type ListClientSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unexpected" error.
+type ListClientSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListClientSessionsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "gateway_error" error.
+type ListClientSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unauthorized" error.
+type RemoveClientFromMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "forbidden" error.
+type RemoveClientFromMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "bad_request" error.
+type RemoveClientFromMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "not_found" error.
+type RemoveClientFromMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "conflict" error.
+type RemoveClientFromMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RemoveClientFromMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "invalid" error.
+type RemoveClientFromMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RemoveClientFromMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unexpected" error.
+type RemoveClientFromMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemoveClientFromMcpServerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "gateway_error" error.
+type RemoveClientFromMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RevokeSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RevokeSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RevokeSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "not_found" error.
+type RevokeSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "conflict" error.
+type RevokeSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RevokeSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "invalid" error.
+type RevokeSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RevokeSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RevokeSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RevokeSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RefreshSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unauthorized" error.
+type RevokeAllClientSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "forbidden" error.
+type RevokeAllClientSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "bad_request" error.
+type RevokeAllClientSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "not_found" error.
+type RevokeAllClientSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "conflict" error.
+type RevokeAllClientSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RevokeAllClientSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "invalid" error.
+type RevokeAllClientSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RevokeAllClientSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unexpected" error.
+type RevokeAllClientSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeAllClientSessionsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "gateway_error" error.
+type RevokeAllClientSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// OrganizationRemoteSessionIssuerResponseBody is used to define fields on
+// response body types.
+type OrganizationRemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Number of non-deleted remote_session_clients registered with this issuer.
+	ClientCount *int `form:"client_count,omitempty" json:"client_count,omitempty" xml:"client_count,omitempty"`
+	// The owning project's name. Empty for organizational (project_id NULL)
+	// issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 }
 
 // RemoteSessionIssuerResponseBody is used to define fields on response body
@@ -1194,6 +4145,10 @@ type RemoteSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1214,13 +4169,107 @@ type RemoteSessionIssuerResponseBody struct {
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewCreateOrganizationRemoteSessionIssuerRequestBody builds the HTTP request
-// body from the payload of the "createOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerRequestBody(p *organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload) *CreateOrganizationRemoteSessionIssuerRequestBody {
-	body := &CreateOrganizationRemoteSessionIssuerRequestBody{
+// OrganizationRemoteSessionClientResponseBody is used to define fields on
+// response body types.
+type OrganizationRemoteSessionClientResponseBody struct {
+	// The remote_session_client record.
+	Client *RemoteSessionClientResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Number of non-deleted MCP servers attached to this client (via
+	// user_session_issuers).
+	McpServerCount *int `form:"mcp_server_count,omitempty" json:"mcp_server_count,omitempty" xml:"mcp_server_count,omitempty"`
+	// Number of non-deleted (active) remote_sessions minted against this client.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
+}
+
+// RemoteSessionClientResponseBody is used to define fields on response body
+// types.
+type RemoteSessionClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// OrganizationMcpServerResponseBody is used to define fields on response body
+// types.
+type OrganizationMcpServerResponseBody struct {
+	// The mcp_server id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning project's slug, for linking to the MCP server in its project.
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The MCP server name; empty when unset (display falls back to the URL).
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The remote MCP server URL; empty for non-remote (toolset-backed) servers.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+}
+
+// RemoteSessionResponseBody is used to define fields on response body types.
+type RemoteSessionResponseBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// NewCreateIssuerRequestBody builds the HTTP request body from the payload of
+// the "createIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewCreateIssuerRequestBody(p *organizationremotesessionissuers.CreateIssuerPayload) *CreateIssuerRequestBody {
+	body := &CreateIssuerRequestBody{
+		ProjectID:             p.ProjectID,
 		Slug:                  p.Slug,
 		Issuer:                p.Issuer,
+		Name:                  p.Name,
+		LogoAssetID:           p.LogoAssetID,
 		AuthorizationEndpoint: p.AuthorizationEndpoint,
 		TokenEndpoint:         p.TokenEndpoint,
 		RegistrationEndpoint:  p.RegistrationEndpoint,
@@ -1255,14 +4304,16 @@ func NewCreateOrganizationRemoteSessionIssuerRequestBody(p *organizationremotese
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerRequestBody builds the HTTP request
-// body from the payload of the "updateOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerRequestBody(p *organizationremotesessionissuers.UpdateOrganizationRemoteSessionIssuerPayload) *UpdateOrganizationRemoteSessionIssuerRequestBody {
-	body := &UpdateOrganizationRemoteSessionIssuerRequestBody{
+// NewUpdateIssuerRequestBody builds the HTTP request body from the payload of
+// the "updateIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewUpdateIssuerRequestBody(p *organizationremotesessionissuers.UpdateIssuerPayload) *UpdateIssuerRequestBody {
+	body := &UpdateIssuerRequestBody{
 		ID:                    p.ID,
 		Slug:                  p.Slug,
 		Issuer:                p.Issuer,
+		Name:                  p.Name,
+		LogoAssetID:           p.LogoAssetID,
 		AuthorizationEndpoint: p.AuthorizationEndpoint,
 		TokenEndpoint:         p.TokenEndpoint,
 		RegistrationEndpoint:  p.RegistrationEndpoint,
@@ -1297,17 +4348,109 @@ func NewUpdateOrganizationRemoteSessionIssuerRequestBody(p *organizationremotese
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerRemoteSessionIssuerOK builds a
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint result from a HTTP "OK"
-// response.
-func NewCreateOrganizationRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateOrganizationRemoteSessionIssuerResponseBody) *types.RemoteSessionIssuer {
+// NewMoveIssuerRequestBody builds the HTTP request body from the payload of
+// the "moveIssuer" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerRequestBody(p *organizationremotesessionissuers.MoveIssuerPayload) *MoveIssuerRequestBody {
+	body := &MoveIssuerRequestBody{
+		ID:        p.ID,
+		ProjectID: p.ProjectID,
+	}
+	return body
+}
+
+// NewCreateClientRequestBody builds the HTTP request body from the payload of
+// the "createClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewCreateClientRequestBody(p *organizationremotesessionissuers.CreateClientPayload) *CreateClientRequestBody {
+	body := &CreateClientRequestBody{
+		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
+		ProjectID:               p.ProjectID,
+		ClientID:                p.ClientID,
+		ClientSecret:            p.ClientSecret,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewUpdateClientRequestBody builds the HTTP request body from the payload of
+// the "updateClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewUpdateClientRequestBody(p *organizationremotesessionissuers.UpdateClientPayload) *UpdateClientRequestBody {
+	body := &UpdateClientRequestBody{
+		ID:                      p.ID,
+		ClientSecret:            p.ClientSecret,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerRequestBody builds the HTTP request body from
+// the payload of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerRequestBody(p *organizationremotesessionissuers.RemoveClientFromMcpServerPayload) *RemoveClientFromMcpServerRequestBody {
+	body := &RemoveClientFromMcpServerRequestBody{
+		ClientID:    p.ClientID,
+		McpServerID: p.McpServerID,
+	}
+	return body
+}
+
+// NewRevokeSessionRequestBody builds the HTTP request body from the payload of
+// the "revokeSession" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewRevokeSessionRequestBody(p *organizationremotesessionissuers.RevokeSessionPayload) *RevokeSessionRequestBody {
+	body := &RevokeSessionRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewRefreshSessionRequestBody builds the HTTP request body from the payload
+// of the "refreshSession" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewRefreshSessionRequestBody(p *organizationremotesessionissuers.RefreshSessionPayload) *RefreshSessionRequestBody {
+	body := &RefreshSessionRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsRequestBody builds the HTTP request body from the
+// payload of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsRequestBody(p *organizationremotesessionissuers.RevokeAllClientSessionsPayload) *RevokeAllClientSessionsRequestBody {
+	body := &RevokeAllClientSessionsRequestBody{
+		ClientID: p.ClientID,
+	}
+	return body
+}
+
+// NewCreateIssuerRemoteSessionIssuerOK builds a
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint result
+// from a HTTP "OK" response.
+func NewCreateIssuerRemoteSessionIssuerOK(body *CreateIssuerResponseBody) *types.RemoteSessionIssuer {
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
 		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -1345,10 +4488,9 @@ func NewCreateOrganizationRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateO
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerUnauthorized builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint unauthorized error.
-func NewCreateOrganizationRemoteSessionIssuerUnauthorized(body *CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
+// NewCreateIssuerUnauthorized builds a organizationRemoteSessionIssuers
+// service createIssuer endpoint unauthorized error.
+func NewCreateIssuerUnauthorized(body *CreateIssuerUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1361,10 +4503,9 @@ func NewCreateOrganizationRemoteSessionIssuerUnauthorized(body *CreateOrganizati
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerForbidden builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint forbidden error.
-func NewCreateOrganizationRemoteSessionIssuerForbidden(body *CreateOrganizationRemoteSessionIssuerForbiddenResponseBody) *goa.ServiceError {
+// NewCreateIssuerForbidden builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint forbidden error.
+func NewCreateIssuerForbidden(body *CreateIssuerForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1377,10 +4518,9 @@ func NewCreateOrganizationRemoteSessionIssuerForbidden(body *CreateOrganizationR
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerBadRequest builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint bad_request error.
-func NewCreateOrganizationRemoteSessionIssuerBadRequest(body *CreateOrganizationRemoteSessionIssuerBadRequestResponseBody) *goa.ServiceError {
+// NewCreateIssuerBadRequest builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint bad_request error.
+func NewCreateIssuerBadRequest(body *CreateIssuerBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1393,10 +4533,9 @@ func NewCreateOrganizationRemoteSessionIssuerBadRequest(body *CreateOrganization
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerNotFound builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint not_found error.
-func NewCreateOrganizationRemoteSessionIssuerNotFound(body *CreateOrganizationRemoteSessionIssuerNotFoundResponseBody) *goa.ServiceError {
+// NewCreateIssuerNotFound builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint not_found error.
+func NewCreateIssuerNotFound(body *CreateIssuerNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1409,10 +4548,9 @@ func NewCreateOrganizationRemoteSessionIssuerNotFound(body *CreateOrganizationRe
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerConflict builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint conflict error.
-func NewCreateOrganizationRemoteSessionIssuerConflict(body *CreateOrganizationRemoteSessionIssuerConflictResponseBody) *goa.ServiceError {
+// NewCreateIssuerConflict builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint conflict error.
+func NewCreateIssuerConflict(body *CreateIssuerConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1425,10 +4563,9 @@ func NewCreateOrganizationRemoteSessionIssuerConflict(body *CreateOrganizationRe
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerUnsupportedMedia builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint unsupported_media error.
-func NewCreateOrganizationRemoteSessionIssuerUnsupportedMedia(body *CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewCreateIssuerUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service createIssuer endpoint unsupported_media error.
+func NewCreateIssuerUnsupportedMedia(body *CreateIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1441,10 +4578,9 @@ func NewCreateOrganizationRemoteSessionIssuerUnsupportedMedia(body *CreateOrgani
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerInvalid builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint invalid error.
-func NewCreateOrganizationRemoteSessionIssuerInvalid(body *CreateOrganizationRemoteSessionIssuerInvalidResponseBody) *goa.ServiceError {
+// NewCreateIssuerInvalid builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint invalid error.
+func NewCreateIssuerInvalid(body *CreateIssuerInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1457,10 +4593,9 @@ func NewCreateOrganizationRemoteSessionIssuerInvalid(body *CreateOrganizationRem
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerInvariantViolation builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint invariant_violation error.
-func NewCreateOrganizationRemoteSessionIssuerInvariantViolation(body *CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
+// NewCreateIssuerInvariantViolation builds a organizationRemoteSessionIssuers
+// service createIssuer endpoint invariant_violation error.
+func NewCreateIssuerInvariantViolation(body *CreateIssuerInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1473,10 +4608,9 @@ func NewCreateOrganizationRemoteSessionIssuerInvariantViolation(body *CreateOrga
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerUnexpected builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint unexpected error.
-func NewCreateOrganizationRemoteSessionIssuerUnexpected(body *CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
+// NewCreateIssuerUnexpected builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint unexpected error.
+func NewCreateIssuerUnexpected(body *CreateIssuerUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1489,10 +4623,9 @@ func NewCreateOrganizationRemoteSessionIssuerUnexpected(body *CreateOrganization
 	return v
 }
 
-// NewCreateOrganizationRemoteSessionIssuerGatewayError builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint gateway_error error.
-func NewCreateOrganizationRemoteSessionIssuerGatewayError(body *CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
+// NewCreateIssuerGatewayError builds a organizationRemoteSessionIssuers
+// service createIssuer endpoint gateway_error error.
+func NewCreateIssuerGatewayError(body *CreateIssuerGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1505,238 +4638,28 @@ func NewCreateOrganizationRemoteSessionIssuerGatewayError(body *CreateOrganizati
 	return v
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerRemoteSessionIssuerOK builds a
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint result from a HTTP "OK"
-// response.
-func NewUpdateOrganizationRemoteSessionIssuerRemoteSessionIssuerOK(body *UpdateOrganizationRemoteSessionIssuerResponseBody) *types.RemoteSessionIssuer {
-	v := &types.RemoteSessionIssuer{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		OrganizationID:        *body.OrganizationID,
-		Slug:                  *body.Slug,
-		Issuer:                *body.Issuer,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  *body.Oidc,
-		Passthrough:           *body.Passthrough,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
-	}
-	if body.ScopesSupported != nil {
-		v.ScopesSupported = make([]string, len(body.ScopesSupported))
-		for i, val := range body.ScopesSupported {
-			v.ScopesSupported[i] = val
-		}
-	}
-	if body.GrantTypesSupported != nil {
-		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
-		for i, val := range body.GrantTypesSupported {
-			v.GrantTypesSupported[i] = val
-		}
-	}
-	if body.ResponseTypesSupported != nil {
-		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
-		for i, val := range body.ResponseTypesSupported {
-			v.ResponseTypesSupported[i] = val
-		}
-	}
-	if body.TokenEndpointAuthMethodsSupported != nil {
-		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
-		for i, val := range body.TokenEndpointAuthMethodsSupported {
-			v.TokenEndpointAuthMethodsSupported[i] = val
-		}
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerUnauthorized builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint unauthorized error.
-func NewUpdateOrganizationRemoteSessionIssuerUnauthorized(body *UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerForbidden builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint forbidden error.
-func NewUpdateOrganizationRemoteSessionIssuerForbidden(body *UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerBadRequest builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint bad_request error.
-func NewUpdateOrganizationRemoteSessionIssuerBadRequest(body *UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerNotFound builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint not_found error.
-func NewUpdateOrganizationRemoteSessionIssuerNotFound(body *UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerConflict builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint conflict error.
-func NewUpdateOrganizationRemoteSessionIssuerConflict(body *UpdateOrganizationRemoteSessionIssuerConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerUnsupportedMedia builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint unsupported_media error.
-func NewUpdateOrganizationRemoteSessionIssuerUnsupportedMedia(body *UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerInvalid builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint invalid error.
-func NewUpdateOrganizationRemoteSessionIssuerInvalid(body *UpdateOrganizationRemoteSessionIssuerInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerInvariantViolation builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint invariant_violation error.
-func NewUpdateOrganizationRemoteSessionIssuerInvariantViolation(body *UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerUnexpected builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint unexpected error.
-func NewUpdateOrganizationRemoteSessionIssuerUnexpected(body *UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerGatewayError builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint gateway_error error.
-func NewUpdateOrganizationRemoteSessionIssuerGatewayError(body *UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListOrganizationRemoteSessionIssuersListRemoteSessionIssuersResultOK
-// builds a "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint result from a HTTP "OK"
-// response.
-func NewListOrganizationRemoteSessionIssuersListRemoteSessionIssuersResultOK(body *ListOrganizationRemoteSessionIssuersResponseBody) *organizationremotesessionissuers.ListRemoteSessionIssuersResult {
-	v := &organizationremotesessionissuers.ListRemoteSessionIssuersResult{
+// NewListIssuersListOrganizationRemoteSessionIssuersResultOK builds a
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint result
+// from a HTTP "OK" response.
+func NewListIssuersListOrganizationRemoteSessionIssuersResultOK(body *ListIssuersResponseBody) *organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersResult {
+	v := &organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Items = make([]*types.RemoteSessionIssuer, len(body.Items))
+	v.Items = make([]*organizationremotesessionissuers.OrganizationRemoteSessionIssuer, len(body.Items))
 	for i, val := range body.Items {
 		if val == nil {
 			v.Items[i] = nil
 			continue
 		}
-		v.Items[i] = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(val)
+		v.Items[i] = unmarshalOrganizationRemoteSessionIssuerResponseBodyToOrganizationremotesessionissuersOrganizationRemoteSessionIssuer(val)
 	}
 
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersUnauthorized builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint unauthorized error.
-func NewListOrganizationRemoteSessionIssuersUnauthorized(body *ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody) *goa.ServiceError {
+// NewListIssuersUnauthorized builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint unauthorized error.
+func NewListIssuersUnauthorized(body *ListIssuersUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1749,10 +4672,9 @@ func NewListOrganizationRemoteSessionIssuersUnauthorized(body *ListOrganizationR
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersForbidden builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint forbidden error.
-func NewListOrganizationRemoteSessionIssuersForbidden(body *ListOrganizationRemoteSessionIssuersForbiddenResponseBody) *goa.ServiceError {
+// NewListIssuersForbidden builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint forbidden error.
+func NewListIssuersForbidden(body *ListIssuersForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1765,10 +4687,9 @@ func NewListOrganizationRemoteSessionIssuersForbidden(body *ListOrganizationRemo
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersBadRequest builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint bad_request error.
-func NewListOrganizationRemoteSessionIssuersBadRequest(body *ListOrganizationRemoteSessionIssuersBadRequestResponseBody) *goa.ServiceError {
+// NewListIssuersBadRequest builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint bad_request error.
+func NewListIssuersBadRequest(body *ListIssuersBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1781,10 +4702,9 @@ func NewListOrganizationRemoteSessionIssuersBadRequest(body *ListOrganizationRem
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersNotFound builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint not_found error.
-func NewListOrganizationRemoteSessionIssuersNotFound(body *ListOrganizationRemoteSessionIssuersNotFoundResponseBody) *goa.ServiceError {
+// NewListIssuersNotFound builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint not_found error.
+func NewListIssuersNotFound(body *ListIssuersNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1797,10 +4717,9 @@ func NewListOrganizationRemoteSessionIssuersNotFound(body *ListOrganizationRemot
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersConflict builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint conflict error.
-func NewListOrganizationRemoteSessionIssuersConflict(body *ListOrganizationRemoteSessionIssuersConflictResponseBody) *goa.ServiceError {
+// NewListIssuersConflict builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint conflict error.
+func NewListIssuersConflict(body *ListIssuersConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1813,10 +4732,9 @@ func NewListOrganizationRemoteSessionIssuersConflict(body *ListOrganizationRemot
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersUnsupportedMedia builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint unsupported_media error.
-func NewListOrganizationRemoteSessionIssuersUnsupportedMedia(body *ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListIssuersUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service listIssuers endpoint unsupported_media error.
+func NewListIssuersUnsupportedMedia(body *ListIssuersUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1829,10 +4747,9 @@ func NewListOrganizationRemoteSessionIssuersUnsupportedMedia(body *ListOrganizat
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersInvalid builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint invalid error.
-func NewListOrganizationRemoteSessionIssuersInvalid(body *ListOrganizationRemoteSessionIssuersInvalidResponseBody) *goa.ServiceError {
+// NewListIssuersInvalid builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint invalid error.
+func NewListIssuersInvalid(body *ListIssuersInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1845,10 +4762,9 @@ func NewListOrganizationRemoteSessionIssuersInvalid(body *ListOrganizationRemote
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersInvariantViolation builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint invariant_violation error.
-func NewListOrganizationRemoteSessionIssuersInvariantViolation(body *ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody) *goa.ServiceError {
+// NewListIssuersInvariantViolation builds a organizationRemoteSessionIssuers
+// service listIssuers endpoint invariant_violation error.
+func NewListIssuersInvariantViolation(body *ListIssuersInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1861,10 +4777,9 @@ func NewListOrganizationRemoteSessionIssuersInvariantViolation(body *ListOrganiz
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersUnexpected builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint unexpected error.
-func NewListOrganizationRemoteSessionIssuersUnexpected(body *ListOrganizationRemoteSessionIssuersUnexpectedResponseBody) *goa.ServiceError {
+// NewListIssuersUnexpected builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint unexpected error.
+func NewListIssuersUnexpected(body *ListIssuersUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1877,10 +4792,9 @@ func NewListOrganizationRemoteSessionIssuersUnexpected(body *ListOrganizationRem
 	return v
 }
 
-// NewListOrganizationRemoteSessionIssuersGatewayError builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint gateway_error error.
-func NewListOrganizationRemoteSessionIssuersGatewayError(body *ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody) *goa.ServiceError {
+// NewListIssuersGatewayError builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint gateway_error error.
+func NewListIssuersGatewayError(body *ListIssuersGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1893,17 +4807,18 @@ func NewListOrganizationRemoteSessionIssuersGatewayError(body *ListOrganizationR
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerRemoteSessionIssuerOK builds a
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint result from a HTTP "OK"
-// response.
-func NewGetOrganizationRemoteSessionIssuerRemoteSessionIssuerOK(body *GetOrganizationRemoteSessionIssuerResponseBody) *types.RemoteSessionIssuer {
+// NewGetIssuerRemoteSessionIssuerOK builds a
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint result from
+// a HTTP "OK" response.
+func NewGetIssuerRemoteSessionIssuerOK(body *GetIssuerResponseBody) *types.RemoteSessionIssuer {
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
 		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -1941,10 +4856,9 @@ func NewGetOrganizationRemoteSessionIssuerRemoteSessionIssuerOK(body *GetOrganiz
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerUnauthorized builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint unauthorized error.
-func NewGetOrganizationRemoteSessionIssuerUnauthorized(body *GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetIssuerUnauthorized builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint unauthorized error.
+func NewGetIssuerUnauthorized(body *GetIssuerUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1957,10 +4871,9 @@ func NewGetOrganizationRemoteSessionIssuerUnauthorized(body *GetOrganizationRemo
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerForbidden builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint forbidden error.
-func NewGetOrganizationRemoteSessionIssuerForbidden(body *GetOrganizationRemoteSessionIssuerForbiddenResponseBody) *goa.ServiceError {
+// NewGetIssuerForbidden builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint forbidden error.
+func NewGetIssuerForbidden(body *GetIssuerForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1973,10 +4886,9 @@ func NewGetOrganizationRemoteSessionIssuerForbidden(body *GetOrganizationRemoteS
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerBadRequest builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint bad_request error.
-func NewGetOrganizationRemoteSessionIssuerBadRequest(body *GetOrganizationRemoteSessionIssuerBadRequestResponseBody) *goa.ServiceError {
+// NewGetIssuerBadRequest builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint bad_request error.
+func NewGetIssuerBadRequest(body *GetIssuerBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1989,10 +4901,9 @@ func NewGetOrganizationRemoteSessionIssuerBadRequest(body *GetOrganizationRemote
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerNotFound builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint not_found error.
-func NewGetOrganizationRemoteSessionIssuerNotFound(body *GetOrganizationRemoteSessionIssuerNotFoundResponseBody) *goa.ServiceError {
+// NewGetIssuerNotFound builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint not_found error.
+func NewGetIssuerNotFound(body *GetIssuerNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2005,10 +4916,9 @@ func NewGetOrganizationRemoteSessionIssuerNotFound(body *GetOrganizationRemoteSe
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerConflict builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint conflict error.
-func NewGetOrganizationRemoteSessionIssuerConflict(body *GetOrganizationRemoteSessionIssuerConflictResponseBody) *goa.ServiceError {
+// NewGetIssuerConflict builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint conflict error.
+func NewGetIssuerConflict(body *GetIssuerConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2021,10 +4931,9 @@ func NewGetOrganizationRemoteSessionIssuerConflict(body *GetOrganizationRemoteSe
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerUnsupportedMedia builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint unsupported_media error.
-func NewGetOrganizationRemoteSessionIssuerUnsupportedMedia(body *GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetIssuerUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service getIssuer endpoint unsupported_media error.
+func NewGetIssuerUnsupportedMedia(body *GetIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2037,10 +4946,9 @@ func NewGetOrganizationRemoteSessionIssuerUnsupportedMedia(body *GetOrganization
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerInvalid builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint invalid error.
-func NewGetOrganizationRemoteSessionIssuerInvalid(body *GetOrganizationRemoteSessionIssuerInvalidResponseBody) *goa.ServiceError {
+// NewGetIssuerInvalid builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint invalid error.
+func NewGetIssuerInvalid(body *GetIssuerInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2053,10 +4961,9 @@ func NewGetOrganizationRemoteSessionIssuerInvalid(body *GetOrganizationRemoteSes
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerInvariantViolation builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint invariant_violation error.
-func NewGetOrganizationRemoteSessionIssuerInvariantViolation(body *GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetIssuerInvariantViolation builds a organizationRemoteSessionIssuers
+// service getIssuer endpoint invariant_violation error.
+func NewGetIssuerInvariantViolation(body *GetIssuerInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2069,10 +4976,9 @@ func NewGetOrganizationRemoteSessionIssuerInvariantViolation(body *GetOrganizati
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerUnexpected builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint unexpected error.
-func NewGetOrganizationRemoteSessionIssuerUnexpected(body *GetOrganizationRemoteSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
+// NewGetIssuerUnexpected builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint unexpected error.
+func NewGetIssuerUnexpected(body *GetIssuerUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2085,10 +4991,9 @@ func NewGetOrganizationRemoteSessionIssuerUnexpected(body *GetOrganizationRemote
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerGatewayError builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint gateway_error error.
-func NewGetOrganizationRemoteSessionIssuerGatewayError(body *GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetIssuerGatewayError builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint gateway_error error.
+func NewGetIssuerGatewayError(body *GetIssuerGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2101,10 +5006,25 @@ func NewGetOrganizationRemoteSessionIssuerGatewayError(body *GetOrganizationRemo
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnauthorized builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint unauthorized error.
-func NewDeleteOrganizationRemoteSessionIssuerUnauthorized(body *DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightOrganizationIssuerDeletePreflightOK builds a
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint result from a HTTP "OK" response.
+func NewGetIssuerDeletePreflightOrganizationIssuerDeletePreflightOK(body *GetIssuerDeletePreflightResponseBody) *organizationremotesessionissuers.OrganizationIssuerDeletePreflight {
+	v := &organizationremotesessionissuers.OrganizationIssuerDeletePreflight{
+		ClientCount: *body.ClientCount,
+	}
+	v.McpServerNames = make([]string, len(body.McpServerNames))
+	for i, val := range body.McpServerNames {
+		v.McpServerNames[i] = val
+	}
+
+	return v
+}
+
+// NewGetIssuerDeletePreflightUnauthorized builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// unauthorized error.
+func NewGetIssuerDeletePreflightUnauthorized(body *GetIssuerDeletePreflightUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2117,10 +5037,10 @@ func NewDeleteOrganizationRemoteSessionIssuerUnauthorized(body *DeleteOrganizati
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerForbidden builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint forbidden error.
-func NewDeleteOrganizationRemoteSessionIssuerForbidden(body *DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightForbidden builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// forbidden error.
+func NewGetIssuerDeletePreflightForbidden(body *GetIssuerDeletePreflightForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2133,10 +5053,10 @@ func NewDeleteOrganizationRemoteSessionIssuerForbidden(body *DeleteOrganizationR
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerBadRequest builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint bad_request error.
-func NewDeleteOrganizationRemoteSessionIssuerBadRequest(body *DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightBadRequest builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// bad_request error.
+func NewGetIssuerDeletePreflightBadRequest(body *GetIssuerDeletePreflightBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2149,10 +5069,10 @@ func NewDeleteOrganizationRemoteSessionIssuerBadRequest(body *DeleteOrganization
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerNotFound builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint not_found error.
-func NewDeleteOrganizationRemoteSessionIssuerNotFound(body *DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightNotFound builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// not_found error.
+func NewGetIssuerDeletePreflightNotFound(body *GetIssuerDeletePreflightNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2165,10 +5085,10 @@ func NewDeleteOrganizationRemoteSessionIssuerNotFound(body *DeleteOrganizationRe
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerConflict builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint conflict error.
-func NewDeleteOrganizationRemoteSessionIssuerConflict(body *DeleteOrganizationRemoteSessionIssuerConflictResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightConflict builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// conflict error.
+func NewGetIssuerDeletePreflightConflict(body *GetIssuerDeletePreflightConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2181,10 +5101,10 @@ func NewDeleteOrganizationRemoteSessionIssuerConflict(body *DeleteOrganizationRe
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnsupportedMedia builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint unsupported_media error.
-func NewDeleteOrganizationRemoteSessionIssuerUnsupportedMedia(body *DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// unsupported_media error.
+func NewGetIssuerDeletePreflightUnsupportedMedia(body *GetIssuerDeletePreflightUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2197,10 +5117,9 @@ func NewDeleteOrganizationRemoteSessionIssuerUnsupportedMedia(body *DeleteOrgani
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerInvalid builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint invalid error.
-func NewDeleteOrganizationRemoteSessionIssuerInvalid(body *DeleteOrganizationRemoteSessionIssuerInvalidResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightInvalid builds a organizationRemoteSessionIssuers
+// service getIssuerDeletePreflight endpoint invalid error.
+func NewGetIssuerDeletePreflightInvalid(body *GetIssuerDeletePreflightInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2213,10 +5132,10 @@ func NewDeleteOrganizationRemoteSessionIssuerInvalid(body *DeleteOrganizationRem
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerInvariantViolation builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint invariant_violation error.
-func NewDeleteOrganizationRemoteSessionIssuerInvariantViolation(body *DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightInvariantViolation builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// invariant_violation error.
+func NewGetIssuerDeletePreflightInvariantViolation(body *GetIssuerDeletePreflightInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2229,10 +5148,10 @@ func NewDeleteOrganizationRemoteSessionIssuerInvariantViolation(body *DeleteOrga
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnexpected builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint unexpected error.
-func NewDeleteOrganizationRemoteSessionIssuerUnexpected(body *DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightUnexpected builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// unexpected error.
+func NewGetIssuerDeletePreflightUnexpected(body *GetIssuerDeletePreflightUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2245,10 +5164,10 @@ func NewDeleteOrganizationRemoteSessionIssuerUnexpected(body *DeleteOrganization
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerGatewayError builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint gateway_error error.
-func NewDeleteOrganizationRemoteSessionIssuerGatewayError(body *DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetIssuerDeletePreflightGatewayError builds a
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight endpoint
+// gateway_error error.
+func NewGetIssuerDeletePreflightGatewayError(body *GetIssuerDeletePreflightGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2261,9 +5180,2585 @@ func NewDeleteOrganizationRemoteSessionIssuerGatewayError(body *DeleteOrganizati
 	return v
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerResponseBody runs the
-// validations defined on CreateOrganizationRemoteSessionIssuerResponseBody
-func ValidateCreateOrganizationRemoteSessionIssuerResponseBody(body *CreateOrganizationRemoteSessionIssuerResponseBody) (err error) {
+// NewUpdateIssuerRemoteSessionIssuerOK builds a
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint result
+// from a HTTP "OK" response.
+func NewUpdateIssuerRemoteSessionIssuerOK(body *UpdateIssuerResponseBody) *types.RemoteSessionIssuer {
+	v := &types.RemoteSessionIssuer{
+		ID:                    *body.ID,
+		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
+		Slug:                  *body.Slug,
+		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
+		AuthorizationEndpoint: body.AuthorizationEndpoint,
+		TokenEndpoint:         body.TokenEndpoint,
+		RegistrationEndpoint:  body.RegistrationEndpoint,
+		JwksURI:               body.JwksURI,
+		Oidc:                  *body.Oidc,
+		Passthrough:           *body.Passthrough,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.GrantTypesSupported != nil {
+		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
+		for i, val := range body.GrantTypesSupported {
+			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.ResponseTypesSupported != nil {
+		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
+		for i, val := range body.ResponseTypesSupported {
+			v.ResponseTypesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnauthorized builds a organizationRemoteSessionIssuers
+// service updateIssuer endpoint unauthorized error.
+func NewUpdateIssuerUnauthorized(body *UpdateIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerForbidden builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint forbidden error.
+func NewUpdateIssuerForbidden(body *UpdateIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerBadRequest builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint bad_request error.
+func NewUpdateIssuerBadRequest(body *UpdateIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerNotFound builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint not_found error.
+func NewUpdateIssuerNotFound(body *UpdateIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerConflict builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint conflict error.
+func NewUpdateIssuerConflict(body *UpdateIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service updateIssuer endpoint unsupported_media error.
+func NewUpdateIssuerUnsupportedMedia(body *UpdateIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerInvalid builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint invalid error.
+func NewUpdateIssuerInvalid(body *UpdateIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerInvariantViolation builds a organizationRemoteSessionIssuers
+// service updateIssuer endpoint invariant_violation error.
+func NewUpdateIssuerInvariantViolation(body *UpdateIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnexpected builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint unexpected error.
+func NewUpdateIssuerUnexpected(body *UpdateIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerGatewayError builds a organizationRemoteSessionIssuers
+// service updateIssuer endpoint gateway_error error.
+func NewUpdateIssuerGatewayError(body *UpdateIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerUnauthorized builds a organizationRemoteSessionIssuers
+// service deleteIssuer endpoint unauthorized error.
+func NewDeleteIssuerUnauthorized(body *DeleteIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerForbidden builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint forbidden error.
+func NewDeleteIssuerForbidden(body *DeleteIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerBadRequest builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint bad_request error.
+func NewDeleteIssuerBadRequest(body *DeleteIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerNotFound builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint not_found error.
+func NewDeleteIssuerNotFound(body *DeleteIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerConflict builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint conflict error.
+func NewDeleteIssuerConflict(body *DeleteIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service deleteIssuer endpoint unsupported_media error.
+func NewDeleteIssuerUnsupportedMedia(body *DeleteIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerInvalid builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint invalid error.
+func NewDeleteIssuerInvalid(body *DeleteIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerInvariantViolation builds a organizationRemoteSessionIssuers
+// service deleteIssuer endpoint invariant_violation error.
+func NewDeleteIssuerInvariantViolation(body *DeleteIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerUnexpected builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint unexpected error.
+func NewDeleteIssuerUnexpected(body *DeleteIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuerGatewayError builds a organizationRemoteSessionIssuers
+// service deleteIssuer endpoint gateway_error error.
+func NewDeleteIssuerGatewayError(body *DeleteIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerRemoteSessionIssuerOK builds a
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint result from
+// a HTTP "OK" response.
+func NewMoveIssuerRemoteSessionIssuerOK(body *MoveIssuerResponseBody) *types.RemoteSessionIssuer {
+	v := &types.RemoteSessionIssuer{
+		ID:                    *body.ID,
+		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
+		Slug:                  *body.Slug,
+		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
+		AuthorizationEndpoint: body.AuthorizationEndpoint,
+		TokenEndpoint:         body.TokenEndpoint,
+		RegistrationEndpoint:  body.RegistrationEndpoint,
+		JwksURI:               body.JwksURI,
+		Oidc:                  *body.Oidc,
+		Passthrough:           *body.Passthrough,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.GrantTypesSupported != nil {
+		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
+		for i, val := range body.GrantTypesSupported {
+			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.ResponseTypesSupported != nil {
+		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
+		for i, val := range body.ResponseTypesSupported {
+			v.ResponseTypesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewMoveIssuerUnauthorized builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint unauthorized error.
+func NewMoveIssuerUnauthorized(body *MoveIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerForbidden builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint forbidden error.
+func NewMoveIssuerForbidden(body *MoveIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerBadRequest builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint bad_request error.
+func NewMoveIssuerBadRequest(body *MoveIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerNotFound builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint not_found error.
+func NewMoveIssuerNotFound(body *MoveIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerConflict builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint conflict error.
+func NewMoveIssuerConflict(body *MoveIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service moveIssuer endpoint unsupported_media error.
+func NewMoveIssuerUnsupportedMedia(body *MoveIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerInvalid builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint invalid error.
+func NewMoveIssuerInvalid(body *MoveIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerInvariantViolation builds a organizationRemoteSessionIssuers
+// service moveIssuer endpoint invariant_violation error.
+func NewMoveIssuerInvariantViolation(body *MoveIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerUnexpected builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint unexpected error.
+func NewMoveIssuerUnexpected(body *MoveIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMoveIssuerGatewayError builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint gateway_error error.
+func NewMoveIssuerGatewayError(body *MoveIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsListOrganizationRemoteSessionClientsResultOK builds a
+// "organizationRemoteSessionIssuers" service "listClients" endpoint result
+// from a HTTP "OK" response.
+func NewListClientsListOrganizationRemoteSessionClientsResultOK(body *ListClientsResponseBody) *organizationremotesessionissuers.ListOrganizationRemoteSessionClientsResult {
+	v := &organizationremotesessionissuers.ListOrganizationRemoteSessionClientsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*organizationremotesessionissuers.OrganizationRemoteSessionClient, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalOrganizationRemoteSessionClientResponseBodyToOrganizationremotesessionissuersOrganizationRemoteSessionClient(val)
+	}
+
+	return v
+}
+
+// NewListClientsUnauthorized builds a organizationRemoteSessionIssuers service
+// listClients endpoint unauthorized error.
+func NewListClientsUnauthorized(body *ListClientsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsForbidden builds a organizationRemoteSessionIssuers service
+// listClients endpoint forbidden error.
+func NewListClientsForbidden(body *ListClientsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsBadRequest builds a organizationRemoteSessionIssuers service
+// listClients endpoint bad_request error.
+func NewListClientsBadRequest(body *ListClientsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsNotFound builds a organizationRemoteSessionIssuers service
+// listClients endpoint not_found error.
+func NewListClientsNotFound(body *ListClientsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsConflict builds a organizationRemoteSessionIssuers service
+// listClients endpoint conflict error.
+func NewListClientsConflict(body *ListClientsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service listClients endpoint unsupported_media error.
+func NewListClientsUnsupportedMedia(body *ListClientsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsInvalid builds a organizationRemoteSessionIssuers service
+// listClients endpoint invalid error.
+func NewListClientsInvalid(body *ListClientsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsInvariantViolation builds a organizationRemoteSessionIssuers
+// service listClients endpoint invariant_violation error.
+func NewListClientsInvariantViolation(body *ListClientsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsUnexpected builds a organizationRemoteSessionIssuers service
+// listClients endpoint unexpected error.
+func NewListClientsUnexpected(body *ListClientsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientsGatewayError builds a organizationRemoteSessionIssuers service
+// listClients endpoint gateway_error error.
+func NewListClientsGatewayError(body *ListClientsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionIssuers" service "getClient" endpoint result from
+// a HTTP "OK" response.
+func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewGetClientUnauthorized builds a organizationRemoteSessionIssuers service
+// getClient endpoint unauthorized error.
+func NewGetClientUnauthorized(body *GetClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientForbidden builds a organizationRemoteSessionIssuers service
+// getClient endpoint forbidden error.
+func NewGetClientForbidden(body *GetClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientBadRequest builds a organizationRemoteSessionIssuers service
+// getClient endpoint bad_request error.
+func NewGetClientBadRequest(body *GetClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientNotFound builds a organizationRemoteSessionIssuers service
+// getClient endpoint not_found error.
+func NewGetClientNotFound(body *GetClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientConflict builds a organizationRemoteSessionIssuers service
+// getClient endpoint conflict error.
+func NewGetClientConflict(body *GetClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service getClient endpoint unsupported_media error.
+func NewGetClientUnsupportedMedia(body *GetClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientInvalid builds a organizationRemoteSessionIssuers service
+// getClient endpoint invalid error.
+func NewGetClientInvalid(body *GetClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientInvariantViolation builds a organizationRemoteSessionIssuers
+// service getClient endpoint invariant_violation error.
+func NewGetClientInvariantViolation(body *GetClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientUnexpected builds a organizationRemoteSessionIssuers service
+// getClient endpoint unexpected error.
+func NewGetClientUnexpected(body *GetClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientGatewayError builds a organizationRemoteSessionIssuers service
+// getClient endpoint gateway_error error.
+func NewGetClientGatewayError(body *GetClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightOrganizationClientDeletePreflightOK builds a
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint result from a HTTP "OK" response.
+func NewGetClientDeletePreflightOrganizationClientDeletePreflightOK(body *GetClientDeletePreflightResponseBody) *organizationremotesessionissuers.OrganizationClientDeletePreflight {
+	v := &organizationremotesessionissuers.OrganizationClientDeletePreflight{
+		SessionCount: *body.SessionCount,
+	}
+	v.McpServerNames = make([]string, len(body.McpServerNames))
+	for i, val := range body.McpServerNames {
+		v.McpServerNames[i] = val
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightUnauthorized builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// unauthorized error.
+func NewGetClientDeletePreflightUnauthorized(body *GetClientDeletePreflightUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightForbidden builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// forbidden error.
+func NewGetClientDeletePreflightForbidden(body *GetClientDeletePreflightForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightBadRequest builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// bad_request error.
+func NewGetClientDeletePreflightBadRequest(body *GetClientDeletePreflightBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightNotFound builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// not_found error.
+func NewGetClientDeletePreflightNotFound(body *GetClientDeletePreflightNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightConflict builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// conflict error.
+func NewGetClientDeletePreflightConflict(body *GetClientDeletePreflightConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// unsupported_media error.
+func NewGetClientDeletePreflightUnsupportedMedia(body *GetClientDeletePreflightUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightInvalid builds a organizationRemoteSessionIssuers
+// service getClientDeletePreflight endpoint invalid error.
+func NewGetClientDeletePreflightInvalid(body *GetClientDeletePreflightInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightInvariantViolation builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// invariant_violation error.
+func NewGetClientDeletePreflightInvariantViolation(body *GetClientDeletePreflightInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightUnexpected builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// unexpected error.
+func NewGetClientDeletePreflightUnexpected(body *GetClientDeletePreflightUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDeletePreflightGatewayError builds a
+// organizationRemoteSessionIssuers service getClientDeletePreflight endpoint
+// gateway_error error.
+func NewGetClientDeletePreflightGatewayError(body *GetClientDeletePreflightGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersListOrganizationMcpServersResultOK builds a
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// result from a HTTP "OK" response.
+func NewListClientMcpServersListOrganizationMcpServersResultOK(body *ListClientMcpServersResponseBody) *organizationremotesessionissuers.ListOrganizationMcpServersResult {
+	v := &organizationremotesessionissuers.ListOrganizationMcpServersResult{}
+	v.Items = make([]*organizationremotesessionissuers.OrganizationMcpServer, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalOrganizationMcpServerResponseBodyToOrganizationremotesessionissuersOrganizationMcpServer(val)
+	}
+
+	return v
+}
+
+// NewListClientMcpServersUnauthorized builds a
+// organizationRemoteSessionIssuers service listClientMcpServers endpoint
+// unauthorized error.
+func NewListClientMcpServersUnauthorized(body *ListClientMcpServersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersForbidden builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint forbidden error.
+func NewListClientMcpServersForbidden(body *ListClientMcpServersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersBadRequest builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint bad_request error.
+func NewListClientMcpServersBadRequest(body *ListClientMcpServersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersNotFound builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint not_found error.
+func NewListClientMcpServersNotFound(body *ListClientMcpServersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersConflict builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint conflict error.
+func NewListClientMcpServersConflict(body *ListClientMcpServersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service listClientMcpServers endpoint
+// unsupported_media error.
+func NewListClientMcpServersUnsupportedMedia(body *ListClientMcpServersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersInvalid builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint invalid error.
+func NewListClientMcpServersInvalid(body *ListClientMcpServersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersInvariantViolation builds a
+// organizationRemoteSessionIssuers service listClientMcpServers endpoint
+// invariant_violation error.
+func NewListClientMcpServersInvariantViolation(body *ListClientMcpServersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersUnexpected builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint unexpected error.
+func NewListClientMcpServersUnexpected(body *ListClientMcpServersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientMcpServersGatewayError builds a
+// organizationRemoteSessionIssuers service listClientMcpServers endpoint
+// gateway_error error.
+func NewListClientMcpServersGatewayError(body *ListClientMcpServersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsListOrganizationRemoteSessionsResultOK builds a
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// result from a HTTP "OK" response.
+func NewListClientSessionsListOrganizationRemoteSessionsResultOK(body *ListClientSessionsResponseBody) *organizationremotesessionissuers.ListOrganizationRemoteSessionsResult {
+	v := &organizationremotesessionissuers.ListOrganizationRemoteSessionsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*types.RemoteSession, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalRemoteSessionResponseBodyToTypesRemoteSession(val)
+	}
+
+	return v
+}
+
+// NewListClientSessionsUnauthorized builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint unauthorized error.
+func NewListClientSessionsUnauthorized(body *ListClientSessionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsForbidden builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint forbidden error.
+func NewListClientSessionsForbidden(body *ListClientSessionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsBadRequest builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint bad_request error.
+func NewListClientSessionsBadRequest(body *ListClientSessionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsNotFound builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint not_found error.
+func NewListClientSessionsNotFound(body *ListClientSessionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsConflict builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint conflict error.
+func NewListClientSessionsConflict(body *ListClientSessionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service listClientSessions endpoint
+// unsupported_media error.
+func NewListClientSessionsUnsupportedMedia(body *ListClientSessionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsInvalid builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint invalid error.
+func NewListClientSessionsInvalid(body *ListClientSessionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsInvariantViolation builds a
+// organizationRemoteSessionIssuers service listClientSessions endpoint
+// invariant_violation error.
+func NewListClientSessionsInvariantViolation(body *ListClientSessionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsUnexpected builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint unexpected error.
+func NewListClientSessionsUnexpected(body *ListClientSessionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListClientSessionsGatewayError builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint gateway_error error.
+func NewListClientSessionsGatewayError(body *ListClientSessionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionIssuers" service "createClient" endpoint result
+// from a HTTP "OK" response.
+func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewCreateClientUnauthorized builds a organizationRemoteSessionIssuers
+// service createClient endpoint unauthorized error.
+func NewCreateClientUnauthorized(body *CreateClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientForbidden builds a organizationRemoteSessionIssuers service
+// createClient endpoint forbidden error.
+func NewCreateClientForbidden(body *CreateClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientBadRequest builds a organizationRemoteSessionIssuers service
+// createClient endpoint bad_request error.
+func NewCreateClientBadRequest(body *CreateClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientNotFound builds a organizationRemoteSessionIssuers service
+// createClient endpoint not_found error.
+func NewCreateClientNotFound(body *CreateClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientConflict builds a organizationRemoteSessionIssuers service
+// createClient endpoint conflict error.
+func NewCreateClientConflict(body *CreateClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service createClient endpoint unsupported_media error.
+func NewCreateClientUnsupportedMedia(body *CreateClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientInvalid builds a organizationRemoteSessionIssuers service
+// createClient endpoint invalid error.
+func NewCreateClientInvalid(body *CreateClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientInvariantViolation builds a organizationRemoteSessionIssuers
+// service createClient endpoint invariant_violation error.
+func NewCreateClientInvariantViolation(body *CreateClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientUnexpected builds a organizationRemoteSessionIssuers service
+// createClient endpoint unexpected error.
+func NewCreateClientUnexpected(body *CreateClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateClientGatewayError builds a organizationRemoteSessionIssuers
+// service createClient endpoint gateway_error error.
+func NewCreateClientGatewayError(body *CreateClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint result
+// from a HTTP "OK" response.
+func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewUpdateClientUnauthorized builds a organizationRemoteSessionIssuers
+// service updateClient endpoint unauthorized error.
+func NewUpdateClientUnauthorized(body *UpdateClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientForbidden builds a organizationRemoteSessionIssuers service
+// updateClient endpoint forbidden error.
+func NewUpdateClientForbidden(body *UpdateClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientBadRequest builds a organizationRemoteSessionIssuers service
+// updateClient endpoint bad_request error.
+func NewUpdateClientBadRequest(body *UpdateClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientNotFound builds a organizationRemoteSessionIssuers service
+// updateClient endpoint not_found error.
+func NewUpdateClientNotFound(body *UpdateClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientConflict builds a organizationRemoteSessionIssuers service
+// updateClient endpoint conflict error.
+func NewUpdateClientConflict(body *UpdateClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service updateClient endpoint unsupported_media error.
+func NewUpdateClientUnsupportedMedia(body *UpdateClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientInvalid builds a organizationRemoteSessionIssuers service
+// updateClient endpoint invalid error.
+func NewUpdateClientInvalid(body *UpdateClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientInvariantViolation builds a organizationRemoteSessionIssuers
+// service updateClient endpoint invariant_violation error.
+func NewUpdateClientInvariantViolation(body *UpdateClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientUnexpected builds a organizationRemoteSessionIssuers service
+// updateClient endpoint unexpected error.
+func NewUpdateClientUnexpected(body *UpdateClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateClientGatewayError builds a organizationRemoteSessionIssuers
+// service updateClient endpoint gateway_error error.
+func NewUpdateClientGatewayError(body *UpdateClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientUnauthorized builds a organizationRemoteSessionIssuers
+// service deleteClient endpoint unauthorized error.
+func NewDeleteClientUnauthorized(body *DeleteClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientForbidden builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint forbidden error.
+func NewDeleteClientForbidden(body *DeleteClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientBadRequest builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint bad_request error.
+func NewDeleteClientBadRequest(body *DeleteClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientNotFound builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint not_found error.
+func NewDeleteClientNotFound(body *DeleteClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientConflict builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint conflict error.
+func NewDeleteClientConflict(body *DeleteClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service deleteClient endpoint unsupported_media error.
+func NewDeleteClientUnsupportedMedia(body *DeleteClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientInvalid builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint invalid error.
+func NewDeleteClientInvalid(body *DeleteClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientInvariantViolation builds a organizationRemoteSessionIssuers
+// service deleteClient endpoint invariant_violation error.
+func NewDeleteClientInvariantViolation(body *DeleteClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientUnexpected builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint unexpected error.
+func NewDeleteClientUnexpected(body *DeleteClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteClientGatewayError builds a organizationRemoteSessionIssuers
+// service deleteClient endpoint gateway_error error.
+func NewDeleteClientGatewayError(body *DeleteClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerUnauthorized builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// unauthorized error.
+func NewRemoveClientFromMcpServerUnauthorized(body *RemoveClientFromMcpServerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerForbidden builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// forbidden error.
+func NewRemoveClientFromMcpServerForbidden(body *RemoveClientFromMcpServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerBadRequest builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// bad_request error.
+func NewRemoveClientFromMcpServerBadRequest(body *RemoveClientFromMcpServerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerNotFound builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// not_found error.
+func NewRemoveClientFromMcpServerNotFound(body *RemoveClientFromMcpServerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerConflict builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// conflict error.
+func NewRemoveClientFromMcpServerConflict(body *RemoveClientFromMcpServerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// unsupported_media error.
+func NewRemoveClientFromMcpServerUnsupportedMedia(body *RemoveClientFromMcpServerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerInvalid builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// invalid error.
+func NewRemoveClientFromMcpServerInvalid(body *RemoveClientFromMcpServerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerInvariantViolation builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// invariant_violation error.
+func NewRemoveClientFromMcpServerInvariantViolation(body *RemoveClientFromMcpServerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerUnexpected builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// unexpected error.
+func NewRemoveClientFromMcpServerUnexpected(body *RemoveClientFromMcpServerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerGatewayError builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// gateway_error error.
+func NewRemoveClientFromMcpServerGatewayError(body *RemoveClientFromMcpServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionUnauthorized builds a organizationRemoteSessionIssuers
+// service revokeSession endpoint unauthorized error.
+func NewRevokeSessionUnauthorized(body *RevokeSessionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionForbidden builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint forbidden error.
+func NewRevokeSessionForbidden(body *RevokeSessionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionBadRequest builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint bad_request error.
+func NewRevokeSessionBadRequest(body *RevokeSessionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionNotFound builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint not_found error.
+func NewRevokeSessionNotFound(body *RevokeSessionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionConflict builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint conflict error.
+func NewRevokeSessionConflict(body *RevokeSessionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service revokeSession endpoint unsupported_media error.
+func NewRevokeSessionUnsupportedMedia(body *RevokeSessionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionInvalid builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint invalid error.
+func NewRevokeSessionInvalid(body *RevokeSessionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionInvariantViolation builds a organizationRemoteSessionIssuers
+// service revokeSession endpoint invariant_violation error.
+func NewRevokeSessionInvariantViolation(body *RevokeSessionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionUnexpected builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint unexpected error.
+func NewRevokeSessionUnexpected(body *RevokeSessionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeSessionGatewayError builds a organizationRemoteSessionIssuers
+// service revokeSession endpoint gateway_error error.
+func NewRevokeSessionGatewayError(body *RevokeSessionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionRemoteSessionOK builds a "organizationRemoteSessionIssuers"
+// service "refreshSession" endpoint result from a HTTP "OK" response.
+func NewRefreshSessionRemoteSessionOK(body *RefreshSessionResponseBody) *types.RemoteSession {
+	v := &types.RemoteSession{
+		ID:                    *body.ID,
+		SubjectUrn:            *body.SubjectUrn,
+		SubjectDisplayName:    body.SubjectDisplayName,
+		SubjectEmail:          body.SubjectEmail,
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		RemoteSessionClientID: *body.RemoteSessionClientID,
+		AccessExpiresAt:       *body.AccessExpiresAt,
+		RefreshExpiresAt:      body.RefreshExpiresAt,
+		HasRefreshToken:       *body.HasRefreshToken,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnauthorized builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unauthorized error.
+func NewRefreshSessionUnauthorized(body *RefreshSessionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionForbidden builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint forbidden error.
+func NewRefreshSessionForbidden(body *RefreshSessionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionBadRequest builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint bad_request error.
+func NewRefreshSessionBadRequest(body *RefreshSessionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionNotFound builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint not_found error.
+func NewRefreshSessionNotFound(body *RefreshSessionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionConflict builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint conflict error.
+func NewRefreshSessionConflict(body *RefreshSessionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unsupported_media error.
+func NewRefreshSessionUnsupportedMedia(body *RefreshSessionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionInvalid builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint invalid error.
+func NewRefreshSessionInvalid(body *RefreshSessionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionInvariantViolation builds a
+// organizationRemoteSessionIssuers service refreshSession endpoint
+// invariant_violation error.
+func NewRefreshSessionInvariantViolation(body *RefreshSessionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnexpected builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unexpected error.
+func NewRefreshSessionUnexpected(body *RefreshSessionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionGatewayError builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint gateway_error error.
+func NewRefreshSessionGatewayError(body *RefreshSessionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsRevokeAllRemoteSessionsResultOK builds a
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint result from a HTTP "OK" response.
+func NewRevokeAllClientSessionsRevokeAllRemoteSessionsResultOK(body *RevokeAllClientSessionsResponseBody) *organizationremotesessionissuers.RevokeAllRemoteSessionsResult {
+	v := &organizationremotesessionissuers.RevokeAllRemoteSessionsResult{
+		RevokedCount: *body.RevokedCount,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsUnauthorized builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// unauthorized error.
+func NewRevokeAllClientSessionsUnauthorized(body *RevokeAllClientSessionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsForbidden builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// forbidden error.
+func NewRevokeAllClientSessionsForbidden(body *RevokeAllClientSessionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsBadRequest builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// bad_request error.
+func NewRevokeAllClientSessionsBadRequest(body *RevokeAllClientSessionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsNotFound builds a organizationRemoteSessionIssuers
+// service revokeAllClientSessions endpoint not_found error.
+func NewRevokeAllClientSessionsNotFound(body *RevokeAllClientSessionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsConflict builds a organizationRemoteSessionIssuers
+// service revokeAllClientSessions endpoint conflict error.
+func NewRevokeAllClientSessionsConflict(body *RevokeAllClientSessionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// unsupported_media error.
+func NewRevokeAllClientSessionsUnsupportedMedia(body *RevokeAllClientSessionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsInvalid builds a organizationRemoteSessionIssuers
+// service revokeAllClientSessions endpoint invalid error.
+func NewRevokeAllClientSessionsInvalid(body *RevokeAllClientSessionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsInvariantViolation builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// invariant_violation error.
+func NewRevokeAllClientSessionsInvariantViolation(body *RevokeAllClientSessionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsUnexpected builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// unexpected error.
+func NewRevokeAllClientSessionsUnexpected(body *RevokeAllClientSessionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeAllClientSessionsGatewayError builds a
+// organizationRemoteSessionIssuers service revokeAllClientSessions endpoint
+// gateway_error error.
+func NewRevokeAllClientSessionsGatewayError(body *RevokeAllClientSessionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// ValidateCreateIssuerResponseBody runs the validations defined on
+// CreateIssuerResponseBody
+func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -2294,47 +7789,8 @@ func ValidateCreateOrganizationRemoteSessionIssuerResponseBody(body *CreateOrgan
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateUpdateOrganizationRemoteSessionIssuerResponseBody runs the
-// validations defined on UpdateOrganizationRemoteSessionIssuerResponseBody
-func ValidateUpdateOrganizationRemoteSessionIssuerResponseBody(body *UpdateOrganizationRemoteSessionIssuerResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.Issuer == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
-	}
-	if body.Oidc == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
-	}
-	if body.Passthrough == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2345,15 +7801,15 @@ func ValidateUpdateOrganizationRemoteSessionIssuerResponseBody(body *UpdateOrgan
 	return
 }
 
-// ValidateListOrganizationRemoteSessionIssuersResponseBody runs the
-// validations defined on ListOrganizationRemoteSessionIssuersResponseBody
-func ValidateListOrganizationRemoteSessionIssuersResponseBody(body *ListOrganizationRemoteSessionIssuersResponseBody) (err error) {
+// ValidateListIssuersResponseBody runs the validations defined on
+// ListIssuersResponseBody
+func ValidateListIssuersResponseBody(body *ListIssuersResponseBody) (err error) {
 	if body.Items == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
 	}
 	for _, e := range body.Items {
 		if e != nil {
-			if err2 := ValidateRemoteSessionIssuerResponseBody(e); err2 != nil {
+			if err2 := ValidateOrganizationRemoteSessionIssuerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2361,9 +7817,9 @@ func ValidateListOrganizationRemoteSessionIssuersResponseBody(body *ListOrganiza
 	return
 }
 
-// ValidateGetOrganizationRemoteSessionIssuerResponseBody runs the validations
-// defined on GetOrganizationRemoteSessionIssuerResponseBody
-func ValidateGetOrganizationRemoteSessionIssuerResponseBody(body *GetOrganizationRemoteSessionIssuerResponseBody) (err error) {
+// ValidateGetIssuerResponseBody runs the validations defined on
+// GetIssuerResponseBody
+func ValidateGetIssuerResponseBody(body *GetIssuerResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -2394,6 +7850,9 @@ func ValidateGetOrganizationRemoteSessionIssuerResponseBody(body *GetOrganizatio
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2403,10 +7862,411 @@ func ValidateGetOrganizationRemoteSessionIssuerResponseBody(body *GetOrganizatio
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody runs
-// the validations defined on
-// createOrganizationRemoteSessionIssuer_unauthorized_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body *CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody) (err error) {
+// ValidateGetIssuerDeletePreflightResponseBody runs the validations defined on
+// GetIssuerDeletePreflightResponseBody
+func ValidateGetIssuerDeletePreflightResponseBody(body *GetIssuerDeletePreflightResponseBody) (err error) {
+	if body.ClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_count", "body"))
+	}
+	if body.McpServerNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_names", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerResponseBody runs the validations defined on
+// UpdateIssuerResponseBody
+func ValidateUpdateIssuerResponseBody(body *UpdateIssuerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.Oidc == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
+	}
+	if body.Passthrough == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMoveIssuerResponseBody runs the validations defined on
+// MoveIssuerResponseBody
+func ValidateMoveIssuerResponseBody(body *MoveIssuerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.Oidc == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
+	}
+	if body.Passthrough == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListClientsResponseBody runs the validations defined on
+// ListClientsResponseBody
+func ValidateListClientsResponseBody(body *ListClientsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateOrganizationRemoteSessionClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetClientResponseBody runs the validations defined on
+// GetClientResponseBody
+func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightResponseBody runs the validations defined on
+// GetClientDeletePreflightResponseBody
+func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflightResponseBody) (err error) {
+	if body.SessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_count", "body"))
+	}
+	if body.McpServerNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_names", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersResponseBody runs the validations defined on
+// ListClientMcpServersResponseBody
+func ValidateListClientMcpServersResponseBody(body *ListClientMcpServersResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateOrganizationMcpServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListClientSessionsResponseBody runs the validations defined on
+// ListClientSessionsResponseBody
+func ValidateListClientSessionsResponseBody(body *ListClientSessionsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateRemoteSessionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateClientResponseBody runs the validations defined on
+// CreateClientResponseBody
+func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateClientResponseBody runs the validations defined on
+// UpdateClientResponseBody
+func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRefreshSessionResponseBody runs the validations defined on
+// RefreshSessionResponseBody
+func ValidateRefreshSessionResponseBody(body *RefreshSessionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.AccessExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AccessExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.access_expires_at", *body.AccessExpiresAt, goa.FormatDateTime))
+	}
+	if body.RefreshExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsResponseBody runs the validations defined on
+// RevokeAllClientSessionsResponseBody
+func ValidateRevokeAllClientSessionsResponseBody(body *RevokeAllClientSessionsResponseBody) (err error) {
+	if body.RevokedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_count", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerUnauthorizedResponseBody runs the validations defined on
+// createIssuer_unauthorized_response_body
+func ValidateCreateIssuerUnauthorizedResponseBody(body *CreateIssuerUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2428,10 +8288,826 @@ func ValidateCreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body 
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerForbiddenResponseBody runs the
+// ValidateCreateIssuerForbiddenResponseBody runs the validations defined on
+// createIssuer_forbidden_response_body
+func ValidateCreateIssuerForbiddenResponseBody(body *CreateIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerBadRequestResponseBody runs the validations defined on
+// createIssuer_bad_request_response_body
+func ValidateCreateIssuerBadRequestResponseBody(body *CreateIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerNotFoundResponseBody runs the validations defined on
+// createIssuer_not_found_response_body
+func ValidateCreateIssuerNotFoundResponseBody(body *CreateIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerConflictResponseBody runs the validations defined on
+// createIssuer_conflict_response_body
+func ValidateCreateIssuerConflictResponseBody(body *CreateIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerUnsupportedMediaResponseBody runs the validations
+// defined on createIssuer_unsupported_media_response_body
+func ValidateCreateIssuerUnsupportedMediaResponseBody(body *CreateIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerInvalidResponseBody runs the validations defined on
+// createIssuer_invalid_response_body
+func ValidateCreateIssuerInvalidResponseBody(body *CreateIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerInvariantViolationResponseBody runs the validations
+// defined on createIssuer_invariant_violation_response_body
+func ValidateCreateIssuerInvariantViolationResponseBody(body *CreateIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerUnexpectedResponseBody runs the validations defined on
+// createIssuer_unexpected_response_body
+func ValidateCreateIssuerUnexpectedResponseBody(body *CreateIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateIssuerGatewayErrorResponseBody runs the validations defined on
+// createIssuer_gateway_error_response_body
+func ValidateCreateIssuerGatewayErrorResponseBody(body *CreateIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersUnauthorizedResponseBody runs the validations defined on
+// listIssuers_unauthorized_response_body
+func ValidateListIssuersUnauthorizedResponseBody(body *ListIssuersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersForbiddenResponseBody runs the validations defined on
+// listIssuers_forbidden_response_body
+func ValidateListIssuersForbiddenResponseBody(body *ListIssuersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersBadRequestResponseBody runs the validations defined on
+// listIssuers_bad_request_response_body
+func ValidateListIssuersBadRequestResponseBody(body *ListIssuersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersNotFoundResponseBody runs the validations defined on
+// listIssuers_not_found_response_body
+func ValidateListIssuersNotFoundResponseBody(body *ListIssuersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersConflictResponseBody runs the validations defined on
+// listIssuers_conflict_response_body
+func ValidateListIssuersConflictResponseBody(body *ListIssuersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersUnsupportedMediaResponseBody runs the validations defined
+// on listIssuers_unsupported_media_response_body
+func ValidateListIssuersUnsupportedMediaResponseBody(body *ListIssuersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersInvalidResponseBody runs the validations defined on
+// listIssuers_invalid_response_body
+func ValidateListIssuersInvalidResponseBody(body *ListIssuersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersInvariantViolationResponseBody runs the validations
+// defined on listIssuers_invariant_violation_response_body
+func ValidateListIssuersInvariantViolationResponseBody(body *ListIssuersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersUnexpectedResponseBody runs the validations defined on
+// listIssuers_unexpected_response_body
+func ValidateListIssuersUnexpectedResponseBody(body *ListIssuersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuersGatewayErrorResponseBody runs the validations defined on
+// listIssuers_gateway_error_response_body
+func ValidateListIssuersGatewayErrorResponseBody(body *ListIssuersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerUnauthorizedResponseBody runs the validations defined on
+// getIssuer_unauthorized_response_body
+func ValidateGetIssuerUnauthorizedResponseBody(body *GetIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerForbiddenResponseBody runs the validations defined on
+// getIssuer_forbidden_response_body
+func ValidateGetIssuerForbiddenResponseBody(body *GetIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerBadRequestResponseBody runs the validations defined on
+// getIssuer_bad_request_response_body
+func ValidateGetIssuerBadRequestResponseBody(body *GetIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerNotFoundResponseBody runs the validations defined on
+// getIssuer_not_found_response_body
+func ValidateGetIssuerNotFoundResponseBody(body *GetIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerConflictResponseBody runs the validations defined on
+// getIssuer_conflict_response_body
+func ValidateGetIssuerConflictResponseBody(body *GetIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerUnsupportedMediaResponseBody runs the validations defined
+// on getIssuer_unsupported_media_response_body
+func ValidateGetIssuerUnsupportedMediaResponseBody(body *GetIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerInvalidResponseBody runs the validations defined on
+// getIssuer_invalid_response_body
+func ValidateGetIssuerInvalidResponseBody(body *GetIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerInvariantViolationResponseBody runs the validations defined
+// on getIssuer_invariant_violation_response_body
+func ValidateGetIssuerInvariantViolationResponseBody(body *GetIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerUnexpectedResponseBody runs the validations defined on
+// getIssuer_unexpected_response_body
+func ValidateGetIssuerUnexpectedResponseBody(body *GetIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerGatewayErrorResponseBody runs the validations defined on
+// getIssuer_gateway_error_response_body
+func ValidateGetIssuerGatewayErrorResponseBody(body *GetIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightUnauthorizedResponseBody runs the
+// validations defined on getIssuerDeletePreflight_unauthorized_response_body
+func ValidateGetIssuerDeletePreflightUnauthorizedResponseBody(body *GetIssuerDeletePreflightUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightForbiddenResponseBody runs the validations
+// defined on getIssuerDeletePreflight_forbidden_response_body
+func ValidateGetIssuerDeletePreflightForbiddenResponseBody(body *GetIssuerDeletePreflightForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightBadRequestResponseBody runs the validations
+// defined on getIssuerDeletePreflight_bad_request_response_body
+func ValidateGetIssuerDeletePreflightBadRequestResponseBody(body *GetIssuerDeletePreflightBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightNotFoundResponseBody runs the validations
+// defined on getIssuerDeletePreflight_not_found_response_body
+func ValidateGetIssuerDeletePreflightNotFoundResponseBody(body *GetIssuerDeletePreflightNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightConflictResponseBody runs the validations
+// defined on getIssuerDeletePreflight_conflict_response_body
+func ValidateGetIssuerDeletePreflightConflictResponseBody(body *GetIssuerDeletePreflightConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightUnsupportedMediaResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_forbidden_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerForbiddenResponseBody(body *CreateOrganizationRemoteSessionIssuerForbiddenResponseBody) (err error) {
+// getIssuerDeletePreflight_unsupported_media_response_body
+func ValidateGetIssuerDeletePreflightUnsupportedMediaResponseBody(body *GetIssuerDeletePreflightUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2453,10 +9129,34 @@ func ValidateCreateOrganizationRemoteSessionIssuerForbiddenResponseBody(body *Cr
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerBadRequestResponseBody runs the
+// ValidateGetIssuerDeletePreflightInvalidResponseBody runs the validations
+// defined on getIssuerDeletePreflight_invalid_response_body
+func ValidateGetIssuerDeletePreflightInvalidResponseBody(body *GetIssuerDeletePreflightInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightInvariantViolationResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_bad_request_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerBadRequestResponseBody(body *CreateOrganizationRemoteSessionIssuerBadRequestResponseBody) (err error) {
+// getIssuerDeletePreflight_invariant_violation_response_body
+func ValidateGetIssuerDeletePreflightInvariantViolationResponseBody(body *GetIssuerDeletePreflightInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2478,10 +9178,1378 @@ func ValidateCreateOrganizationRemoteSessionIssuerBadRequestResponseBody(body *C
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerNotFoundResponseBody runs the
+// ValidateGetIssuerDeletePreflightUnexpectedResponseBody runs the validations
+// defined on getIssuerDeletePreflight_unexpected_response_body
+func ValidateGetIssuerDeletePreflightUnexpectedResponseBody(body *GetIssuerDeletePreflightUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetIssuerDeletePreflightGatewayErrorResponseBody runs the
+// validations defined on getIssuerDeletePreflight_gateway_error_response_body
+func ValidateGetIssuerDeletePreflightGatewayErrorResponseBody(body *GetIssuerDeletePreflightGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerUnauthorizedResponseBody runs the validations defined on
+// updateIssuer_unauthorized_response_body
+func ValidateUpdateIssuerUnauthorizedResponseBody(body *UpdateIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerForbiddenResponseBody runs the validations defined on
+// updateIssuer_forbidden_response_body
+func ValidateUpdateIssuerForbiddenResponseBody(body *UpdateIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerBadRequestResponseBody runs the validations defined on
+// updateIssuer_bad_request_response_body
+func ValidateUpdateIssuerBadRequestResponseBody(body *UpdateIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerNotFoundResponseBody runs the validations defined on
+// updateIssuer_not_found_response_body
+func ValidateUpdateIssuerNotFoundResponseBody(body *UpdateIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerConflictResponseBody runs the validations defined on
+// updateIssuer_conflict_response_body
+func ValidateUpdateIssuerConflictResponseBody(body *UpdateIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerUnsupportedMediaResponseBody runs the validations
+// defined on updateIssuer_unsupported_media_response_body
+func ValidateUpdateIssuerUnsupportedMediaResponseBody(body *UpdateIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerInvalidResponseBody runs the validations defined on
+// updateIssuer_invalid_response_body
+func ValidateUpdateIssuerInvalidResponseBody(body *UpdateIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerInvariantViolationResponseBody runs the validations
+// defined on updateIssuer_invariant_violation_response_body
+func ValidateUpdateIssuerInvariantViolationResponseBody(body *UpdateIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerUnexpectedResponseBody runs the validations defined on
+// updateIssuer_unexpected_response_body
+func ValidateUpdateIssuerUnexpectedResponseBody(body *UpdateIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerGatewayErrorResponseBody runs the validations defined on
+// updateIssuer_gateway_error_response_body
+func ValidateUpdateIssuerGatewayErrorResponseBody(body *UpdateIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerUnauthorizedResponseBody runs the validations defined on
+// deleteIssuer_unauthorized_response_body
+func ValidateDeleteIssuerUnauthorizedResponseBody(body *DeleteIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerForbiddenResponseBody runs the validations defined on
+// deleteIssuer_forbidden_response_body
+func ValidateDeleteIssuerForbiddenResponseBody(body *DeleteIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerBadRequestResponseBody runs the validations defined on
+// deleteIssuer_bad_request_response_body
+func ValidateDeleteIssuerBadRequestResponseBody(body *DeleteIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerNotFoundResponseBody runs the validations defined on
+// deleteIssuer_not_found_response_body
+func ValidateDeleteIssuerNotFoundResponseBody(body *DeleteIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerConflictResponseBody runs the validations defined on
+// deleteIssuer_conflict_response_body
+func ValidateDeleteIssuerConflictResponseBody(body *DeleteIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerUnsupportedMediaResponseBody runs the validations
+// defined on deleteIssuer_unsupported_media_response_body
+func ValidateDeleteIssuerUnsupportedMediaResponseBody(body *DeleteIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerInvalidResponseBody runs the validations defined on
+// deleteIssuer_invalid_response_body
+func ValidateDeleteIssuerInvalidResponseBody(body *DeleteIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerInvariantViolationResponseBody runs the validations
+// defined on deleteIssuer_invariant_violation_response_body
+func ValidateDeleteIssuerInvariantViolationResponseBody(body *DeleteIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerUnexpectedResponseBody runs the validations defined on
+// deleteIssuer_unexpected_response_body
+func ValidateDeleteIssuerUnexpectedResponseBody(body *DeleteIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuerGatewayErrorResponseBody runs the validations defined on
+// deleteIssuer_gateway_error_response_body
+func ValidateDeleteIssuerGatewayErrorResponseBody(body *DeleteIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerUnauthorizedResponseBody runs the validations defined on
+// moveIssuer_unauthorized_response_body
+func ValidateMoveIssuerUnauthorizedResponseBody(body *MoveIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerForbiddenResponseBody runs the validations defined on
+// moveIssuer_forbidden_response_body
+func ValidateMoveIssuerForbiddenResponseBody(body *MoveIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerBadRequestResponseBody runs the validations defined on
+// moveIssuer_bad_request_response_body
+func ValidateMoveIssuerBadRequestResponseBody(body *MoveIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerNotFoundResponseBody runs the validations defined on
+// moveIssuer_not_found_response_body
+func ValidateMoveIssuerNotFoundResponseBody(body *MoveIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerConflictResponseBody runs the validations defined on
+// moveIssuer_conflict_response_body
+func ValidateMoveIssuerConflictResponseBody(body *MoveIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerUnsupportedMediaResponseBody runs the validations defined
+// on moveIssuer_unsupported_media_response_body
+func ValidateMoveIssuerUnsupportedMediaResponseBody(body *MoveIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerInvalidResponseBody runs the validations defined on
+// moveIssuer_invalid_response_body
+func ValidateMoveIssuerInvalidResponseBody(body *MoveIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerInvariantViolationResponseBody runs the validations
+// defined on moveIssuer_invariant_violation_response_body
+func ValidateMoveIssuerInvariantViolationResponseBody(body *MoveIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerUnexpectedResponseBody runs the validations defined on
+// moveIssuer_unexpected_response_body
+func ValidateMoveIssuerUnexpectedResponseBody(body *MoveIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMoveIssuerGatewayErrorResponseBody runs the validations defined on
+// moveIssuer_gateway_error_response_body
+func ValidateMoveIssuerGatewayErrorResponseBody(body *MoveIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsUnauthorizedResponseBody runs the validations defined on
+// listClients_unauthorized_response_body
+func ValidateListClientsUnauthorizedResponseBody(body *ListClientsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsForbiddenResponseBody runs the validations defined on
+// listClients_forbidden_response_body
+func ValidateListClientsForbiddenResponseBody(body *ListClientsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsBadRequestResponseBody runs the validations defined on
+// listClients_bad_request_response_body
+func ValidateListClientsBadRequestResponseBody(body *ListClientsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsNotFoundResponseBody runs the validations defined on
+// listClients_not_found_response_body
+func ValidateListClientsNotFoundResponseBody(body *ListClientsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsConflictResponseBody runs the validations defined on
+// listClients_conflict_response_body
+func ValidateListClientsConflictResponseBody(body *ListClientsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsUnsupportedMediaResponseBody runs the validations defined
+// on listClients_unsupported_media_response_body
+func ValidateListClientsUnsupportedMediaResponseBody(body *ListClientsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsInvalidResponseBody runs the validations defined on
+// listClients_invalid_response_body
+func ValidateListClientsInvalidResponseBody(body *ListClientsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsInvariantViolationResponseBody runs the validations
+// defined on listClients_invariant_violation_response_body
+func ValidateListClientsInvariantViolationResponseBody(body *ListClientsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsUnexpectedResponseBody runs the validations defined on
+// listClients_unexpected_response_body
+func ValidateListClientsUnexpectedResponseBody(body *ListClientsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientsGatewayErrorResponseBody runs the validations defined on
+// listClients_gateway_error_response_body
+func ValidateListClientsGatewayErrorResponseBody(body *ListClientsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientUnauthorizedResponseBody runs the validations defined on
+// getClient_unauthorized_response_body
+func ValidateGetClientUnauthorizedResponseBody(body *GetClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientForbiddenResponseBody runs the validations defined on
+// getClient_forbidden_response_body
+func ValidateGetClientForbiddenResponseBody(body *GetClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientBadRequestResponseBody runs the validations defined on
+// getClient_bad_request_response_body
+func ValidateGetClientBadRequestResponseBody(body *GetClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientNotFoundResponseBody runs the validations defined on
+// getClient_not_found_response_body
+func ValidateGetClientNotFoundResponseBody(body *GetClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientConflictResponseBody runs the validations defined on
+// getClient_conflict_response_body
+func ValidateGetClientConflictResponseBody(body *GetClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientUnsupportedMediaResponseBody runs the validations defined
+// on getClient_unsupported_media_response_body
+func ValidateGetClientUnsupportedMediaResponseBody(body *GetClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientInvalidResponseBody runs the validations defined on
+// getClient_invalid_response_body
+func ValidateGetClientInvalidResponseBody(body *GetClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientInvariantViolationResponseBody runs the validations defined
+// on getClient_invariant_violation_response_body
+func ValidateGetClientInvariantViolationResponseBody(body *GetClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientUnexpectedResponseBody runs the validations defined on
+// getClient_unexpected_response_body
+func ValidateGetClientUnexpectedResponseBody(body *GetClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientGatewayErrorResponseBody runs the validations defined on
+// getClient_gateway_error_response_body
+func ValidateGetClientGatewayErrorResponseBody(body *GetClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightUnauthorizedResponseBody runs the
+// validations defined on getClientDeletePreflight_unauthorized_response_body
+func ValidateGetClientDeletePreflightUnauthorizedResponseBody(body *GetClientDeletePreflightUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightForbiddenResponseBody runs the validations
+// defined on getClientDeletePreflight_forbidden_response_body
+func ValidateGetClientDeletePreflightForbiddenResponseBody(body *GetClientDeletePreflightForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightBadRequestResponseBody runs the validations
+// defined on getClientDeletePreflight_bad_request_response_body
+func ValidateGetClientDeletePreflightBadRequestResponseBody(body *GetClientDeletePreflightBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightNotFoundResponseBody runs the validations
+// defined on getClientDeletePreflight_not_found_response_body
+func ValidateGetClientDeletePreflightNotFoundResponseBody(body *GetClientDeletePreflightNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightConflictResponseBody runs the validations
+// defined on getClientDeletePreflight_conflict_response_body
+func ValidateGetClientDeletePreflightConflictResponseBody(body *GetClientDeletePreflightConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightUnsupportedMediaResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_not_found_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerNotFoundResponseBody(body *CreateOrganizationRemoteSessionIssuerNotFoundResponseBody) (err error) {
+// getClientDeletePreflight_unsupported_media_response_body
+func ValidateGetClientDeletePreflightUnsupportedMediaResponseBody(body *GetClientDeletePreflightUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2503,10 +10571,34 @@ func ValidateCreateOrganizationRemoteSessionIssuerNotFoundResponseBody(body *Cre
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerConflictResponseBody runs the
+// ValidateGetClientDeletePreflightInvalidResponseBody runs the validations
+// defined on getClientDeletePreflight_invalid_response_body
+func ValidateGetClientDeletePreflightInvalidResponseBody(body *GetClientDeletePreflightInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDeletePreflightInvariantViolationResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_conflict_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerConflictResponseBody(body *CreateOrganizationRemoteSessionIssuerConflictResponseBody) (err error) {
+// getClientDeletePreflight_invariant_violation_response_body
+func ValidateGetClientDeletePreflightInvariantViolationResponseBody(body *GetClientDeletePreflightInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2528,10 +10620,9 @@ func ValidateCreateOrganizationRemoteSessionIssuerConflictResponseBody(body *Cre
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody
-// runs the validations defined on
-// createOrganizationRemoteSessionIssuer_unsupported_media_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(body *CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) (err error) {
+// ValidateGetClientDeletePreflightUnexpectedResponseBody runs the validations
+// defined on getClientDeletePreflight_unexpected_response_body
+func ValidateGetClientDeletePreflightUnexpectedResponseBody(body *GetClientDeletePreflightUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2553,10 +10644,1354 @@ func ValidateCreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(b
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerInvalidResponseBody runs the
+// ValidateGetClientDeletePreflightGatewayErrorResponseBody runs the
+// validations defined on getClientDeletePreflight_gateway_error_response_body
+func ValidateGetClientDeletePreflightGatewayErrorResponseBody(body *GetClientDeletePreflightGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersUnauthorizedResponseBody runs the validations
+// defined on listClientMcpServers_unauthorized_response_body
+func ValidateListClientMcpServersUnauthorizedResponseBody(body *ListClientMcpServersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersForbiddenResponseBody runs the validations
+// defined on listClientMcpServers_forbidden_response_body
+func ValidateListClientMcpServersForbiddenResponseBody(body *ListClientMcpServersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersBadRequestResponseBody runs the validations
+// defined on listClientMcpServers_bad_request_response_body
+func ValidateListClientMcpServersBadRequestResponseBody(body *ListClientMcpServersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersNotFoundResponseBody runs the validations
+// defined on listClientMcpServers_not_found_response_body
+func ValidateListClientMcpServersNotFoundResponseBody(body *ListClientMcpServersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersConflictResponseBody runs the validations
+// defined on listClientMcpServers_conflict_response_body
+func ValidateListClientMcpServersConflictResponseBody(body *ListClientMcpServersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersUnsupportedMediaResponseBody runs the
+// validations defined on listClientMcpServers_unsupported_media_response_body
+func ValidateListClientMcpServersUnsupportedMediaResponseBody(body *ListClientMcpServersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersInvalidResponseBody runs the validations defined
+// on listClientMcpServers_invalid_response_body
+func ValidateListClientMcpServersInvalidResponseBody(body *ListClientMcpServersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersInvariantViolationResponseBody runs the
+// validations defined on listClientMcpServers_invariant_violation_response_body
+func ValidateListClientMcpServersInvariantViolationResponseBody(body *ListClientMcpServersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersUnexpectedResponseBody runs the validations
+// defined on listClientMcpServers_unexpected_response_body
+func ValidateListClientMcpServersUnexpectedResponseBody(body *ListClientMcpServersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientMcpServersGatewayErrorResponseBody runs the validations
+// defined on listClientMcpServers_gateway_error_response_body
+func ValidateListClientMcpServersGatewayErrorResponseBody(body *ListClientMcpServersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsUnauthorizedResponseBody runs the validations
+// defined on listClientSessions_unauthorized_response_body
+func ValidateListClientSessionsUnauthorizedResponseBody(body *ListClientSessionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsForbiddenResponseBody runs the validations defined
+// on listClientSessions_forbidden_response_body
+func ValidateListClientSessionsForbiddenResponseBody(body *ListClientSessionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsBadRequestResponseBody runs the validations
+// defined on listClientSessions_bad_request_response_body
+func ValidateListClientSessionsBadRequestResponseBody(body *ListClientSessionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsNotFoundResponseBody runs the validations defined
+// on listClientSessions_not_found_response_body
+func ValidateListClientSessionsNotFoundResponseBody(body *ListClientSessionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsConflictResponseBody runs the validations defined
+// on listClientSessions_conflict_response_body
+func ValidateListClientSessionsConflictResponseBody(body *ListClientSessionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsUnsupportedMediaResponseBody runs the validations
+// defined on listClientSessions_unsupported_media_response_body
+func ValidateListClientSessionsUnsupportedMediaResponseBody(body *ListClientSessionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsInvalidResponseBody runs the validations defined
+// on listClientSessions_invalid_response_body
+func ValidateListClientSessionsInvalidResponseBody(body *ListClientSessionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsInvariantViolationResponseBody runs the
+// validations defined on listClientSessions_invariant_violation_response_body
+func ValidateListClientSessionsInvariantViolationResponseBody(body *ListClientSessionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsUnexpectedResponseBody runs the validations
+// defined on listClientSessions_unexpected_response_body
+func ValidateListClientSessionsUnexpectedResponseBody(body *ListClientSessionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListClientSessionsGatewayErrorResponseBody runs the validations
+// defined on listClientSessions_gateway_error_response_body
+func ValidateListClientSessionsGatewayErrorResponseBody(body *ListClientSessionsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientUnauthorizedResponseBody runs the validations defined on
+// createClient_unauthorized_response_body
+func ValidateCreateClientUnauthorizedResponseBody(body *CreateClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientForbiddenResponseBody runs the validations defined on
+// createClient_forbidden_response_body
+func ValidateCreateClientForbiddenResponseBody(body *CreateClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientBadRequestResponseBody runs the validations defined on
+// createClient_bad_request_response_body
+func ValidateCreateClientBadRequestResponseBody(body *CreateClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientNotFoundResponseBody runs the validations defined on
+// createClient_not_found_response_body
+func ValidateCreateClientNotFoundResponseBody(body *CreateClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientConflictResponseBody runs the validations defined on
+// createClient_conflict_response_body
+func ValidateCreateClientConflictResponseBody(body *CreateClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientUnsupportedMediaResponseBody runs the validations
+// defined on createClient_unsupported_media_response_body
+func ValidateCreateClientUnsupportedMediaResponseBody(body *CreateClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientInvalidResponseBody runs the validations defined on
+// createClient_invalid_response_body
+func ValidateCreateClientInvalidResponseBody(body *CreateClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientInvariantViolationResponseBody runs the validations
+// defined on createClient_invariant_violation_response_body
+func ValidateCreateClientInvariantViolationResponseBody(body *CreateClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientUnexpectedResponseBody runs the validations defined on
+// createClient_unexpected_response_body
+func ValidateCreateClientUnexpectedResponseBody(body *CreateClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateClientGatewayErrorResponseBody runs the validations defined on
+// createClient_gateway_error_response_body
+func ValidateCreateClientGatewayErrorResponseBody(body *CreateClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientUnauthorizedResponseBody runs the validations defined on
+// updateClient_unauthorized_response_body
+func ValidateUpdateClientUnauthorizedResponseBody(body *UpdateClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientForbiddenResponseBody runs the validations defined on
+// updateClient_forbidden_response_body
+func ValidateUpdateClientForbiddenResponseBody(body *UpdateClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientBadRequestResponseBody runs the validations defined on
+// updateClient_bad_request_response_body
+func ValidateUpdateClientBadRequestResponseBody(body *UpdateClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientNotFoundResponseBody runs the validations defined on
+// updateClient_not_found_response_body
+func ValidateUpdateClientNotFoundResponseBody(body *UpdateClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientConflictResponseBody runs the validations defined on
+// updateClient_conflict_response_body
+func ValidateUpdateClientConflictResponseBody(body *UpdateClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientUnsupportedMediaResponseBody runs the validations
+// defined on updateClient_unsupported_media_response_body
+func ValidateUpdateClientUnsupportedMediaResponseBody(body *UpdateClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientInvalidResponseBody runs the validations defined on
+// updateClient_invalid_response_body
+func ValidateUpdateClientInvalidResponseBody(body *UpdateClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientInvariantViolationResponseBody runs the validations
+// defined on updateClient_invariant_violation_response_body
+func ValidateUpdateClientInvariantViolationResponseBody(body *UpdateClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientUnexpectedResponseBody runs the validations defined on
+// updateClient_unexpected_response_body
+func ValidateUpdateClientUnexpectedResponseBody(body *UpdateClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateClientGatewayErrorResponseBody runs the validations defined on
+// updateClient_gateway_error_response_body
+func ValidateUpdateClientGatewayErrorResponseBody(body *UpdateClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientUnauthorizedResponseBody runs the validations defined on
+// deleteClient_unauthorized_response_body
+func ValidateDeleteClientUnauthorizedResponseBody(body *DeleteClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientForbiddenResponseBody runs the validations defined on
+// deleteClient_forbidden_response_body
+func ValidateDeleteClientForbiddenResponseBody(body *DeleteClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientBadRequestResponseBody runs the validations defined on
+// deleteClient_bad_request_response_body
+func ValidateDeleteClientBadRequestResponseBody(body *DeleteClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientNotFoundResponseBody runs the validations defined on
+// deleteClient_not_found_response_body
+func ValidateDeleteClientNotFoundResponseBody(body *DeleteClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientConflictResponseBody runs the validations defined on
+// deleteClient_conflict_response_body
+func ValidateDeleteClientConflictResponseBody(body *DeleteClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientUnsupportedMediaResponseBody runs the validations
+// defined on deleteClient_unsupported_media_response_body
+func ValidateDeleteClientUnsupportedMediaResponseBody(body *DeleteClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientInvalidResponseBody runs the validations defined on
+// deleteClient_invalid_response_body
+func ValidateDeleteClientInvalidResponseBody(body *DeleteClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientInvariantViolationResponseBody runs the validations
+// defined on deleteClient_invariant_violation_response_body
+func ValidateDeleteClientInvariantViolationResponseBody(body *DeleteClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientUnexpectedResponseBody runs the validations defined on
+// deleteClient_unexpected_response_body
+func ValidateDeleteClientUnexpectedResponseBody(body *DeleteClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteClientGatewayErrorResponseBody runs the validations defined on
+// deleteClient_gateway_error_response_body
+func ValidateDeleteClientGatewayErrorResponseBody(body *DeleteClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerUnauthorizedResponseBody runs the
+// validations defined on removeClientFromMcpServer_unauthorized_response_body
+func ValidateRemoveClientFromMcpServerUnauthorizedResponseBody(body *RemoveClientFromMcpServerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerForbiddenResponseBody runs the validations
+// defined on removeClientFromMcpServer_forbidden_response_body
+func ValidateRemoveClientFromMcpServerForbiddenResponseBody(body *RemoveClientFromMcpServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerBadRequestResponseBody runs the validations
+// defined on removeClientFromMcpServer_bad_request_response_body
+func ValidateRemoveClientFromMcpServerBadRequestResponseBody(body *RemoveClientFromMcpServerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerNotFoundResponseBody runs the validations
+// defined on removeClientFromMcpServer_not_found_response_body
+func ValidateRemoveClientFromMcpServerNotFoundResponseBody(body *RemoveClientFromMcpServerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerConflictResponseBody runs the validations
+// defined on removeClientFromMcpServer_conflict_response_body
+func ValidateRemoveClientFromMcpServerConflictResponseBody(body *RemoveClientFromMcpServerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerUnsupportedMediaResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_invalid_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerInvalidResponseBody(body *CreateOrganizationRemoteSessionIssuerInvalidResponseBody) (err error) {
+// removeClientFromMcpServer_unsupported_media_response_body
+func ValidateRemoveClientFromMcpServerUnsupportedMediaResponseBody(body *RemoveClientFromMcpServerUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2578,10 +12013,9 @@ func ValidateCreateOrganizationRemoteSessionIssuerInvalidResponseBody(body *Crea
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// runs the validations defined on
-// createOrganizationRemoteSessionIssuer_invariant_violation_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody(body *CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody) (err error) {
+// ValidateRemoveClientFromMcpServerInvalidResponseBody runs the validations
+// defined on removeClientFromMcpServer_invalid_response_body
+func ValidateRemoveClientFromMcpServerInvalidResponseBody(body *RemoveClientFromMcpServerInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2603,10 +12037,10 @@ func ValidateCreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody runs the
+// ValidateRemoveClientFromMcpServerInvariantViolationResponseBody runs the
 // validations defined on
-// createOrganizationRemoteSessionIssuer_unexpected_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody(body *CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody) (err error) {
+// removeClientFromMcpServer_invariant_violation_response_body
+func ValidateRemoveClientFromMcpServerInvariantViolationResponseBody(body *RemoveClientFromMcpServerInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2628,10 +12062,9 @@ func ValidateCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody(body *C
 	return
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody runs
-// the validations defined on
-// createOrganizationRemoteSessionIssuer_gateway_error_response_body
-func ValidateCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(body *CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody) (err error) {
+// ValidateRemoveClientFromMcpServerUnexpectedResponseBody runs the validations
+// defined on removeClientFromMcpServer_unexpected_response_body
+func ValidateRemoveClientFromMcpServerUnexpectedResponseBody(body *RemoveClientFromMcpServerUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2653,10 +12086,9 @@ func ValidateCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(body 
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody runs
-// the validations defined on
-// updateOrganizationRemoteSessionIssuer_unauthorized_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body *UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody) (err error) {
+// ValidateRemoveClientFromMcpServerGatewayErrorResponseBody runs the
+// validations defined on removeClientFromMcpServer_gateway_error_response_body
+func ValidateRemoveClientFromMcpServerGatewayErrorResponseBody(body *RemoveClientFromMcpServerGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2678,10 +12110,610 @@ func ValidateUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body 
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody runs the
+// ValidateRevokeSessionUnauthorizedResponseBody runs the validations defined
+// on revokeSession_unauthorized_response_body
+func ValidateRevokeSessionUnauthorizedResponseBody(body *RevokeSessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionForbiddenResponseBody runs the validations defined on
+// revokeSession_forbidden_response_body
+func ValidateRevokeSessionForbiddenResponseBody(body *RevokeSessionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionBadRequestResponseBody runs the validations defined on
+// revokeSession_bad_request_response_body
+func ValidateRevokeSessionBadRequestResponseBody(body *RevokeSessionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionNotFoundResponseBody runs the validations defined on
+// revokeSession_not_found_response_body
+func ValidateRevokeSessionNotFoundResponseBody(body *RevokeSessionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionConflictResponseBody runs the validations defined on
+// revokeSession_conflict_response_body
+func ValidateRevokeSessionConflictResponseBody(body *RevokeSessionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionUnsupportedMediaResponseBody runs the validations
+// defined on revokeSession_unsupported_media_response_body
+func ValidateRevokeSessionUnsupportedMediaResponseBody(body *RevokeSessionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionInvalidResponseBody runs the validations defined on
+// revokeSession_invalid_response_body
+func ValidateRevokeSessionInvalidResponseBody(body *RevokeSessionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionInvariantViolationResponseBody runs the validations
+// defined on revokeSession_invariant_violation_response_body
+func ValidateRevokeSessionInvariantViolationResponseBody(body *RevokeSessionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionUnexpectedResponseBody runs the validations defined on
+// revokeSession_unexpected_response_body
+func ValidateRevokeSessionUnexpectedResponseBody(body *RevokeSessionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeSessionGatewayErrorResponseBody runs the validations defined
+// on revokeSession_gateway_error_response_body
+func ValidateRevokeSessionGatewayErrorResponseBody(body *RevokeSessionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnauthorizedResponseBody runs the validations defined
+// on refreshSession_unauthorized_response_body
+func ValidateRefreshSessionUnauthorizedResponseBody(body *RefreshSessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionForbiddenResponseBody runs the validations defined on
+// refreshSession_forbidden_response_body
+func ValidateRefreshSessionForbiddenResponseBody(body *RefreshSessionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionBadRequestResponseBody runs the validations defined on
+// refreshSession_bad_request_response_body
+func ValidateRefreshSessionBadRequestResponseBody(body *RefreshSessionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionNotFoundResponseBody runs the validations defined on
+// refreshSession_not_found_response_body
+func ValidateRefreshSessionNotFoundResponseBody(body *RefreshSessionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionConflictResponseBody runs the validations defined on
+// refreshSession_conflict_response_body
+func ValidateRefreshSessionConflictResponseBody(body *RefreshSessionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnsupportedMediaResponseBody runs the validations
+// defined on refreshSession_unsupported_media_response_body
+func ValidateRefreshSessionUnsupportedMediaResponseBody(body *RefreshSessionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionInvalidResponseBody runs the validations defined on
+// refreshSession_invalid_response_body
+func ValidateRefreshSessionInvalidResponseBody(body *RefreshSessionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionInvariantViolationResponseBody runs the validations
+// defined on refreshSession_invariant_violation_response_body
+func ValidateRefreshSessionInvariantViolationResponseBody(body *RefreshSessionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnexpectedResponseBody runs the validations defined on
+// refreshSession_unexpected_response_body
+func ValidateRefreshSessionUnexpectedResponseBody(body *RefreshSessionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionGatewayErrorResponseBody runs the validations defined
+// on refreshSession_gateway_error_response_body
+func ValidateRefreshSessionGatewayErrorResponseBody(body *RefreshSessionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsUnauthorizedResponseBody runs the validations
+// defined on revokeAllClientSessions_unauthorized_response_body
+func ValidateRevokeAllClientSessionsUnauthorizedResponseBody(body *RevokeAllClientSessionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsForbiddenResponseBody runs the validations
+// defined on revokeAllClientSessions_forbidden_response_body
+func ValidateRevokeAllClientSessionsForbiddenResponseBody(body *RevokeAllClientSessionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsBadRequestResponseBody runs the validations
+// defined on revokeAllClientSessions_bad_request_response_body
+func ValidateRevokeAllClientSessionsBadRequestResponseBody(body *RevokeAllClientSessionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsNotFoundResponseBody runs the validations
+// defined on revokeAllClientSessions_not_found_response_body
+func ValidateRevokeAllClientSessionsNotFoundResponseBody(body *RevokeAllClientSessionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsConflictResponseBody runs the validations
+// defined on revokeAllClientSessions_conflict_response_body
+func ValidateRevokeAllClientSessionsConflictResponseBody(body *RevokeAllClientSessionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsUnsupportedMediaResponseBody runs the
 // validations defined on
-// updateOrganizationRemoteSessionIssuer_forbidden_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody(body *UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody) (err error) {
+// revokeAllClientSessions_unsupported_media_response_body
+func ValidateRevokeAllClientSessionsUnsupportedMediaResponseBody(body *RevokeAllClientSessionsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2703,10 +12735,34 @@ func ValidateUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody(body *Up
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody runs the
+// ValidateRevokeAllClientSessionsInvalidResponseBody runs the validations
+// defined on revokeAllClientSessions_invalid_response_body
+func ValidateRevokeAllClientSessionsInvalidResponseBody(body *RevokeAllClientSessionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsInvariantViolationResponseBody runs the
 // validations defined on
-// updateOrganizationRemoteSessionIssuer_bad_request_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody(body *UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody) (err error) {
+// revokeAllClientSessions_invariant_violation_response_body
+func ValidateRevokeAllClientSessionsInvariantViolationResponseBody(body *RevokeAllClientSessionsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2728,10 +12784,9 @@ func ValidateUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody(body *U
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerNotFoundResponseBody runs the
-// validations defined on
-// updateOrganizationRemoteSessionIssuer_not_found_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerNotFoundResponseBody(body *UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody) (err error) {
+// ValidateRevokeAllClientSessionsUnexpectedResponseBody runs the validations
+// defined on revokeAllClientSessions_unexpected_response_body
+func ValidateRevokeAllClientSessionsUnexpectedResponseBody(body *RevokeAllClientSessionsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2753,10 +12808,9 @@ func ValidateUpdateOrganizationRemoteSessionIssuerNotFoundResponseBody(body *Upd
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerConflictResponseBody runs the
-// validations defined on
-// updateOrganizationRemoteSessionIssuer_conflict_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerConflictResponseBody(body *UpdateOrganizationRemoteSessionIssuerConflictResponseBody) (err error) {
+// ValidateRevokeAllClientSessionsGatewayErrorResponseBody runs the validations
+// defined on revokeAllClientSessions_gateway_error_response_body
+func ValidateRevokeAllClientSessionsGatewayErrorResponseBody(body *RevokeAllClientSessionsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2778,877 +12832,19 @@ func ValidateUpdateOrganizationRemoteSessionIssuerConflictResponseBody(body *Upd
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody
-// runs the validations defined on
-// updateOrganizationRemoteSessionIssuer_unsupported_media_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(body *UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateOrganizationRemoteSessionIssuerInvalidResponseBody runs the
-// validations defined on
-// updateOrganizationRemoteSessionIssuer_invalid_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerInvalidResponseBody(body *UpdateOrganizationRemoteSessionIssuerInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// runs the validations defined on
-// updateOrganizationRemoteSessionIssuer_invariant_violation_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody(body *UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody runs the
-// validations defined on
-// updateOrganizationRemoteSessionIssuer_unexpected_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody(body *UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody runs
-// the validations defined on
-// updateOrganizationRemoteSessionIssuer_gateway_error_response_body
-func ValidateUpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(body *UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersUnauthorizedResponseBody runs
-// the validations defined on
-// listOrganizationRemoteSessionIssuers_unauthorized_response_body
-func ValidateListOrganizationRemoteSessionIssuersUnauthorizedResponseBody(body *ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersForbiddenResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_forbidden_response_body
-func ValidateListOrganizationRemoteSessionIssuersForbiddenResponseBody(body *ListOrganizationRemoteSessionIssuersForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersBadRequestResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_bad_request_response_body
-func ValidateListOrganizationRemoteSessionIssuersBadRequestResponseBody(body *ListOrganizationRemoteSessionIssuersBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersNotFoundResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_not_found_response_body
-func ValidateListOrganizationRemoteSessionIssuersNotFoundResponseBody(body *ListOrganizationRemoteSessionIssuersNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersConflictResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_conflict_response_body
-func ValidateListOrganizationRemoteSessionIssuersConflictResponseBody(body *ListOrganizationRemoteSessionIssuersConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody
-// runs the validations defined on
-// listOrganizationRemoteSessionIssuers_unsupported_media_response_body
-func ValidateListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody(body *ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersInvalidResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_invalid_response_body
-func ValidateListOrganizationRemoteSessionIssuersInvalidResponseBody(body *ListOrganizationRemoteSessionIssuersInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersInvariantViolationResponseBody
-// runs the validations defined on
-// listOrganizationRemoteSessionIssuers_invariant_violation_response_body
-func ValidateListOrganizationRemoteSessionIssuersInvariantViolationResponseBody(body *ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersUnexpectedResponseBody runs the
-// validations defined on
-// listOrganizationRemoteSessionIssuers_unexpected_response_body
-func ValidateListOrganizationRemoteSessionIssuersUnexpectedResponseBody(body *ListOrganizationRemoteSessionIssuersUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOrganizationRemoteSessionIssuersGatewayErrorResponseBody runs
-// the validations defined on
-// listOrganizationRemoteSessionIssuers_gateway_error_response_body
-func ValidateListOrganizationRemoteSessionIssuersGatewayErrorResponseBody(body *ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerUnauthorizedResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_unauthorized_response_body
-func ValidateGetOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body *GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerForbiddenResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_forbidden_response_body
-func ValidateGetOrganizationRemoteSessionIssuerForbiddenResponseBody(body *GetOrganizationRemoteSessionIssuerForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerBadRequestResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_bad_request_response_body
-func ValidateGetOrganizationRemoteSessionIssuerBadRequestResponseBody(body *GetOrganizationRemoteSessionIssuerBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerNotFoundResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_not_found_response_body
-func ValidateGetOrganizationRemoteSessionIssuerNotFoundResponseBody(body *GetOrganizationRemoteSessionIssuerNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerConflictResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_conflict_response_body
-func ValidateGetOrganizationRemoteSessionIssuerConflictResponseBody(body *GetOrganizationRemoteSessionIssuerConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody runs
-// the validations defined on
-// getOrganizationRemoteSessionIssuer_unsupported_media_response_body
-func ValidateGetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(body *GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerInvalidResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_invalid_response_body
-func ValidateGetOrganizationRemoteSessionIssuerInvalidResponseBody(body *GetOrganizationRemoteSessionIssuerInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// runs the validations defined on
-// getOrganizationRemoteSessionIssuer_invariant_violation_response_body
-func ValidateGetOrganizationRemoteSessionIssuerInvariantViolationResponseBody(body *GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerUnexpectedResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_unexpected_response_body
-func ValidateGetOrganizationRemoteSessionIssuerUnexpectedResponseBody(body *GetOrganizationRemoteSessionIssuerUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOrganizationRemoteSessionIssuerGatewayErrorResponseBody runs the
-// validations defined on
-// getOrganizationRemoteSessionIssuer_gateway_error_response_body
-func ValidateGetOrganizationRemoteSessionIssuerGatewayErrorResponseBody(body *GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody runs
-// the validations defined on
-// deleteOrganizationRemoteSessionIssuer_unauthorized_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody(body *DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerForbiddenResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_forbidden_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerForbiddenResponseBody(body *DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerBadRequestResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_bad_request_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerBadRequestResponseBody(body *DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerNotFoundResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_not_found_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerNotFoundResponseBody(body *DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerConflictResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_conflict_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerConflictResponseBody(body *DeleteOrganizationRemoteSessionIssuerConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody
-// runs the validations defined on
-// deleteOrganizationRemoteSessionIssuer_unsupported_media_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(body *DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerInvalidResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_invalid_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerInvalidResponseBody(body *DeleteOrganizationRemoteSessionIssuerInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// runs the validations defined on
-// deleteOrganizationRemoteSessionIssuer_invariant_violation_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody(body *DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody runs the
-// validations defined on
-// deleteOrganizationRemoteSessionIssuer_unexpected_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody(body *DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody runs
-// the validations defined on
-// deleteOrganizationRemoteSessionIssuer_gateway_error_response_body
-func ValidateDeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody(body *DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+// ValidateOrganizationRemoteSessionIssuerResponseBody runs the validations
+// defined on OrganizationRemoteSessionIssuerResponseBody
+func ValidateOrganizationRemoteSessionIssuerResponseBody(body *OrganizationRemoteSessionIssuerResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.ClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_count", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -3685,6 +12881,160 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOrganizationRemoteSessionClientResponseBody runs the validations
+// defined on OrganizationRemoteSessionClientResponseBody
+func ValidateOrganizationRemoteSessionClientResponseBody(body *OrganizationRemoteSessionClientResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.McpServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_count", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
+	}
+	if body.Client != nil {
+		if err2 := ValidateRemoteSessionClientResponseBody(body.Client); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateRemoteSessionClientResponseBody runs the validations defined on
+// RemoteSessionClientResponseBody
+func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOrganizationMcpServerResponseBody runs the validations defined on
+// OrganizationMcpServerResponseBody
+func ValidateOrganizationMcpServerResponseBody(body *OrganizationMcpServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRemoteSessionResponseBody runs the validations defined on
+// RemoteSessionResponseBody
+func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.AccessExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AccessExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.access_expires_at", *body.AccessExpiresAt, goa.FormatDateTime))
+	}
+	if body.RefreshExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -117,6 +118,10 @@ type ChallengeManager struct {
 	policy    *guardian.Policy
 	cache     cache.TypedCacheObject[RemoteLoginState]
 	serverURL *url.URL
+	// authorizeInterceptors adapt the outgoing upstream authorize request to
+	// per-provider, non-standard requirements (e.g. Google's offline access).
+	// Injected here rather than via a package-global registry.
+	authorizeInterceptors []interceptors.AuthorizeInterceptor
 }
 
 func NewChallengeManager(
@@ -139,6 +144,9 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		serverURL: serverURL,
+		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
+			interceptors.NewGoogle(logger),
+		},
 	}
 }
 
@@ -206,31 +214,48 @@ func (m *ChallengeManager) ListClients(
 	return out, nil
 }
 
-// ConnectedClientIDs returns the set of remote_session_client_ids that
-// have an active remote_sessions row for `subject` under the given
-// `userSessionIssuerID`. Single round-trip; the caller (consent
-// renderer) then does O(1) membership checks per card. Returns an empty
-// set for zero subjects so anonymous-pre-stamp renders are no-ops.
-func (m *ChallengeManager) ConnectedClientIDs(
+// RemoteSessionStatus is the usability of a subject's stored remote_session
+// for a single client, as surfaced to the consent renderer. A client with no
+// non-deleted remote_session is absent from the map entirely (disconnected);
+// only present rows carry a status.
+type RemoteSessionStatus string
+
+const (
+	// RemoteSessionActive: the access token is unexpired, or a refresh token
+	// exists to renew it — the runtime gate will accept it.
+	RemoteSessionActive RemoteSessionStatus = "active"
+	// RemoteSessionExpired: the row exists but the access token has expired
+	// with no refresh token, so the runtime gate rejects it
+	// (ErrNoValidToken). The user must re-link to recover.
+	RemoteSessionExpired RemoteSessionStatus = "expired"
+)
+
+// RemoteSessionStatuses returns, per remote_session_client_id, the usability
+// status of `subject`'s remote_session under the given `userSessionIssuerID`.
+// Clients with no non-deleted session are omitted (disconnected). Single
+// round-trip; the caller (consent renderer) then does O(1) lookups per card.
+// Returns an empty map for zero subjects so anonymous-pre-stamp renders are
+// no-ops.
+func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
 	userSessionIssuerID uuid.UUID,
-) (map[uuid.UUID]struct{}, error) {
+) (map[uuid.UUID]RemoteSessionStatus, error) {
 	if subject.IsZero() {
-		return map[uuid.UUID]struct{}{}, nil
+		return map[uuid.UUID]RemoteSessionStatus{}, nil
 	}
-	ids, err := remotesessions_repo.New(m.db).ListConnectedClientIDsForSubject(ctx, remotesessions_repo.ListConnectedClientIDsForSubjectParams{
+	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesForSubject(ctx, remotesessions_repo.ListRemoteSessionStatusesForSubjectParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list connected client ids: %w", err)
+		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	set := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		set[id] = struct{}{}
+	statuses := make(map[uuid.UUID]RemoteSessionStatus, len(rows))
+	for _, row := range rows {
+		statuses[row.RemoteSessionClientID] = RemoteSessionStatus(row.Status)
 	}
-	return set, nil
+	return statuses, nil
 }
 
 // BuildAuthorizationUrl mints a RemoteLoginState (with PKCE S256) for the
@@ -319,6 +344,11 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
 	}
+	for _, ic := range m.authorizeInterceptors {
+		if ic.Match(client.IssuerURL) {
+			ic.ModifyAuthorize(ctx, q)
+		}
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -337,19 +367,18 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	q := r.URL.Query()
 	if errCode := q.Get("error"); errCode != "" {
-		logger.WarnContext(ctx, "remote authn challenge returned error",
+		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
 			attr.SlogOAuthError(errCode),
 			attr.SlogOAuthErrorDescription(q.Get("error_description")),
 		)
-		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode)
 	}
 	stateID := q.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 	code := q.Get("code")
 	if code == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Single-use state: GETDEL so a duplicate callback can't double-exchange
@@ -357,20 +386,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// depth keeps the failure mode obvious.
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
 		mcpSlug = routeMcpSlug
 	}
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").LogError(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 	if state.McpSlug != "" && state.McpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	logger = logger.With(
@@ -383,7 +412,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// upstream authorization code on a request that can't produce a
 	// remote_sessions row anyway.
 	if state.Subject == nil || state.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
 	}
 
 	queries := remotesessions_repo.New(m.db)
@@ -392,45 +421,48 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		ProjectID: conv.ToNullUUID(state.ProjectID),
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
+	client := clientRow.RemoteSessionClient
 
 	var clientSecret string
-	if clientRow.ClientSecretEncrypted.Valid {
-		decoded, derr := m.enc.Decrypt(clientRow.ClientSecretEncrypted.String)
+	if client.ClientSecretEncrypted.Valid {
+		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
-			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
+	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	audience := conv.FromPGTextOrEmpty[string](client.Audience)
+	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt access token").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
 	}
 	var refreshEnc *string
 	if tok.RefreshToken != "" {
 		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
 		}
 		refreshEnc = &v
 	}
 
-	// expires_in is OPTIONAL per RFC 6749 §5.1. Fall back to a 1h default
-	// so we always have a positive access_expires_at to compare against —
-	// silent-refresh logic in a later milestone will treat the row as
-	// "needs refresh" if the upstream didn't tell us.
-	accessExpires := time.Now().Add(1 * time.Hour)
+	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
+	// store NULL — "no known expiry" — rather than fabricating a deadline the
+	// provider never asserted. validateAndRefresh then decides what NULL means
+	// from the refresh token: non-expiring when none was issued (e.g. Slack
+	// non-rotating xoxp), or an hourly app-layer refresh cadence when one was.
+	var accessExpires *time.Time
 	if tok.ExpiresIn > 0 {
-		accessExpires = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		v := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		accessExpires = &v
 	}
 	var refreshExpires *time.Time
 	if tok.RefreshExpiresIn > 0 {
@@ -447,12 +479,12 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
 		AccessTokenEncrypted:  accessEnc,
-		AccessExpiresAt:       conv.ToPGTimestamptz(accessExpires),
+		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
 		RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
 		RefreshExpiresAt:      conv.PtrToPGTimestamptz(refreshExpires),
 		Scopes:                scopes,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "store remote session").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
 	routeBase := state.RouteBase
@@ -484,25 +516,6 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 // /mcp/remote_login_callback by reading the JSON state envelope.
 func (m *ChallengeManager) legacyCallbackURL() string {
 	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
-}
-
-// tokenResponse is the slice of the upstream /token reply we care about.
-// RFC 6749 fields plus the optional refresh_expires_in some providers
-// (e.g. Keycloak) include.
-type tokenResponse struct {
-	AccessToken      string `json:"access_token"`
-	RefreshToken     string `json:"refresh_token"`
-	TokenType        string `json:"token_type"`
-	ExpiresIn        int    `json:"expires_in"`
-	RefreshExpiresIn int    `json:"refresh_expires_in"`
-	Scope            string `json:"scope"`
-}
-
-func (t tokenResponse) Scopes() []string {
-	if t.Scope == "" {
-		return nil
-	}
-	return strings.Split(t.Scope, " ")
 }
 
 func (m *ChallengeManager) exchangeCode(

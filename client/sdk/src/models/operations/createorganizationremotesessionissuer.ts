@@ -20,7 +20,7 @@ export type CreateOrganizationRemoteSessionIssuerRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  createRemoteSessionIssuerForm: components.CreateRemoteSessionIssuerForm;
+  createIssuerRequestBody: components.CreateIssuerRequestBody;
 };
 
 /** @internal */
@@ -62,8 +62,7 @@ export function createOrganizationRemoteSessionIssuerSecurityToJSON(
 export type CreateOrganizationRemoteSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  CreateRemoteSessionIssuerForm:
-    components.CreateRemoteSessionIssuerForm$Outbound;
+  CreateIssuerRequestBody: components.CreateIssuerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -75,14 +74,14 @@ export const CreateOrganizationRemoteSessionIssuerRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
-      createRemoteSessionIssuerForm:
-        components.CreateRemoteSessionIssuerForm$outboundSchema,
+      createIssuerRequestBody:
+        components.CreateIssuerRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-        createRemoteSessionIssuerForm: "CreateRemoteSessionIssuerForm",
+        createIssuerRequestBody: "CreateIssuerRequestBody",
       });
     }),
   );

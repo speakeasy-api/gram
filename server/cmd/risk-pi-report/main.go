@@ -2,25 +2,34 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/pijudge"
+	"github.com/speakeasy-api/gram/server/internal/riskjudge"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
 	defaultCorpusDir = "server/internal/background/activities/risk_analysis/testdata/prompt_injection"
 	defaultOutFile   = "server/risk_accuracy_metrics.json"
-	httpBatchSize    = 50
 )
 
 type labeledCase struct {
@@ -102,20 +111,32 @@ type envelope struct {
 	Summary   accuracySummary `json:"summary"`
 }
 
-type detectRequest struct {
-	Texts []string `json:"texts"`
-}
-
-type detectResponse struct {
-	Results []risk_analysis.ClassifierResult `json:"results"`
-}
-
 type options struct {
-	corpusDir     string
-	outFile       string
-	classifierURL string
-	checkFloors   bool
+	corpusDir        string
+	outFile          string
+	checkFloors      bool
+	judge            bool
+	judgeModel       string
+	judgeConcurrency int
 }
+
+const (
+	// defaultJudgeModel mirrors pijudge's stage-1 default (Haiku 4.5): the model
+	// the production L1 engine runs. The bench drives the same model so its
+	// accuracy numbers reflect what ships.
+	defaultJudgeModel = "anthropic/claude-haiku-4.5"
+	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
+	// rows; 8 keeps it brisk without tripping provider rate limits.
+	defaultJudgeConcurrency = 8
+	// judgeTimeout bounds a single judge completion call in the bench. Generous
+	// vs prod's 10s — accuracy matters more than latency here.
+	judgeTimeout = 30 * time.Second
+	// benchOrgID/benchProjectID label the judge calls. The judge needs an
+	// org/project for the request shape; these are inert identifiers (the
+	// dev-key provisioner ignores the org, projectID must parse as a UUID).
+	benchOrgID     = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	benchProjectID = "00000000-0000-0000-0000-000000000001"
+)
 
 func main() {
 	opts := parseFlags()
@@ -127,17 +148,20 @@ func main() {
 
 func parseFlags() options {
 	opts := options{
-		corpusDir:     "",
-		outFile:       "",
-		classifierURL: "",
-		checkFloors:   false,
+		corpusDir:        "",
+		outFile:          "",
+		checkFloors:      false,
+		judge:            false,
+		judgeModel:       "",
+		judgeConcurrency: 0,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
-	flag.StringVar(&opts.classifierURL, "classifier-url", strings.TrimSpace(os.Getenv("PI_CLASSIFIER_URL")), "base URL for the L1 classifier sidecar")
 	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if L0 metrics violate floors.json")
+	flag.BoolVar(&opts.judge, "judge", false, "also evaluate the L1 LLM judge (needs OPENROUTER_DEV_KEY)")
+	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the L1 judge (must be allowlisted)")
+	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent judge calls")
 	flag.Parse()
-	opts.classifierURL = strings.TrimRight(strings.TrimSpace(opts.classifierURL), "/")
 	return opts
 }
 
@@ -158,25 +182,12 @@ func run(ctx context.Context, opts options) error {
 	l0 := summarizeFindings("l0_default", corpus, l0Findings)
 	modes := []modeSummary{l0}
 
-	if opts.classifierURL == "" {
-		modes = append(modes,
-			skippedMode("l1_opt_in", "classifier URL is not set"),
-		)
-	} else if err := healthcheck(ctx, opts.classifierURL); err != nil {
-		modes = append(modes,
-			skippedMode("l1_opt_in", err.Error()),
-		)
-	} else {
-		l1OptInFindings, err := scanL1OptIn(ctx, corpus, l0Findings, opts.classifierURL)
+	if opts.judge {
+		judgeMode, err := scanJudgeMode(ctx, opts, corpus, l0Findings)
 		if err != nil {
 			return err
 		}
-		l1OptIn := summarizeFindings("l1_opt_in", corpus, l1OptInFindings)
-		l1OptIn.NewFalsePositives = changedExamples(corpus, l0Findings, l1OptInFindings, "benign", 10)
-		l1OptIn.RecoveredTruePositive = changedExamples(corpus, l0Findings, l1OptInFindings, "malicious", 10)
-		modes = append(modes,
-			l1OptIn,
-		)
+		modes = append(modes, judgeMode)
 	}
 
 	summary := accuracySummary{
@@ -288,103 +299,179 @@ func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Findin
 	return out, nil
 }
 
-func scanL1OptIn(ctx context.Context, corpus []labeledCase, l0Findings [][]risk_analysis.Finding, baseURL string) ([][]risk_analysis.Finding, error) {
-	texts := make([]string, len(corpus))
-	for i, c := range corpus {
-		texts[i] = c.Text
+// scanJudgeMode evaluates the L1 LLM judge over the corpus and folds its
+// findings on top of L0 — the "L0 + L1" operational mode an opted-in org runs.
+// It calls GetObjectCompletion directly (the same request pijudge builds, minus
+// the engine's per-org rate limiter and fail-open), so the numbers reflect the
+// model's raw accuracy on every case rather than a throttled subset. Returns a
+// skipped mode when no OpenRouter key is configured, so CI and keyless dev runs
+// still produce the L0 report.
+func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) (modeSummary, error) {
+	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
+	if apiKey == "" || apiKey == "unset" {
+		return skippedMode("l1_opt_in", "OPENROUTER_DEV_KEY not set"), nil
 	}
 
-	results, err := classify(ctx, baseURL, texts)
-	if err != nil {
-		return nil, err
-	}
-	if len(results) != len(corpus) {
-		return nil, fmt.Errorf("classifier returned %d results for %d corpus rows", len(results), len(corpus))
-	}
+	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
+	findings := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus, l0Findings)
 
+	mode := summarizeFindings("l1_opt_in", corpus, findings)
+	mode.NewFalsePositives = changedExamples(corpus, l0Findings, findings, "benign", 10)
+	mode.RecoveredTruePositive = changedExamples(corpus, l0Findings, findings, "malicious", 10)
+	return mode, nil
+}
+
+// scanJudge runs the judge for every corpus row (bounded concurrency) and
+// appends an L1 finding wherever it flags an attack, on a clone of the L0
+// findings. A judge failure leaves the row with its L0 verdict — a stuck or
+// erroring model degrades to L0, matching the engine's fail-open posture.
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) [][]risk_analysis.Finding {
 	out := cloneFindings(l0Findings)
-	for i, r := range results {
-		if r.Label != risk_analysis.LabelInjection {
-			continue
-		}
-		out[i] = append(out[i], risk_analysis.Finding{
-			RuleID:           risk_analysis.RulePromptInjection,
-			Description:      "ML classifier flagged prompt injection",
-			Match:            corpus[i].Text,
-			StartPos:         0,
-			EndPos:           len(corpus[i].Text),
-			Source:           risk_analysis.SourcePromptInjection,
-			Confidence:       r.Score,
-			Tags:             []string{"ml", "layer-1"},
-			DeadLetterReason: "",
-		})
+	ruleID, description := risk_analysis.DescribePromptInjection()
+
+	sem := make(chan struct{}, opts.judgeConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var done int
+
+	for i := range corpus {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			text := corpus[i].Text
+			msg := risk_analysis.NewJudgeMessage(message.User, "", text)
+			isAttack, confidence, err := judgeOne(ctx, client, opts.judgeModel, msg)
+
+			mu.Lock()
+			defer mu.Unlock()
+			done++
+			if done%20 == 0 || done == len(corpus) {
+				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
+			}
+			if err != nil || !isAttack {
+				return
+			}
+			out[i] = append(out[i], risk_analysis.Finding{
+				RuleID:           ruleID,
+				Description:      description,
+				Match:            text,
+				StartPos:         0,
+				EndPos:           len(text),
+				Source:           risk_analysis.SourcePromptInjection,
+				Confidence:       confidence,
+				Tags:             []string{"llm-judge", "layer-1"},
+				DeadLetterReason: "",
+			})
+		}(i)
 	}
-	return out, nil
+	wg.Wait()
+	fmt.Fprintln(os.Stderr)
+	return out
 }
 
-func healthcheck(ctx context.Context, baseURL string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/health", nil)
+// judgeOne issues one GetObjectCompletion shaped exactly like pijudge's call:
+// the structured "message" payload (riskjudge.RenderMessage), pijudge's system
+// prompt and verdict schema, temperature 0. No copy of the prompt/schema to keep
+// in sync — it drives the production constants directly.
+func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg risk_analysis.JudgeMessage) (isAttack bool, confidence float64, err error) {
+	payload, err := json.Marshal(struct {
+		Message riskjudge.MessagePayload `json:"message"`
+	}{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
-		return fmt.Errorf("create classifier health request: %w", err)
+		return false, 0, fmt.Errorf("marshal judge payload: %w", err)
 	}
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+
+	strict := true
+	schema := or.ChatJSONSchemaConfig{
+		Name:        "prompt_attack_verdict",
+		Schema:      pijudge.VerdictSchema(),
+		Description: nil,
+		Strict:      optionalnullable.From(&strict),
+	}
+	temp := 0.0
+
+	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
+	defer cancel()
+
+	resp, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		OrgID:          benchOrgID,
+		ProjectID:      benchProjectID,
+		Model:          model,
+		SystemPrompt:   pijudge.SystemPrompt,
+		Prompt:         string(payload),
+		Temperature:    &temp,
+		UsageSource:    billing.ModelUsageSourceGram,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		JSONSchema:     &schema,
+	})
 	if err != nil {
-		return fmt.Errorf("classifier health failed: %w", err)
+		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("classifier health returned status %d", resp.StatusCode)
+	if resp == nil || resp.Message == nil {
+		return false, 0, fmt.Errorf("empty completion response")
 	}
-	return nil
+	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
+	if raw == "" {
+		return false, 0, fmt.Errorf("empty completion content")
+	}
+	var verdict struct {
+		IsAttack   bool    `json:"is_attack"`
+		Confidence float64 `json:"confidence"`
+	}
+	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
+		return false, 0, fmt.Errorf("parse judge response: %w", err)
+	}
+	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), nil
 }
 
-func classify(ctx context.Context, baseURL string, texts []string) ([]risk_analysis.ClassifierResult, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	results := make([]risk_analysis.ClassifierResult, 0, len(texts))
-	for start := 0; start < len(texts); start += httpBatchSize {
-		end := min(start+httpBatchSize, len(texts))
-		batch, err := detect(ctx, client, baseURL, texts[start:end])
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, batch...)
-	}
-	return results, nil
+// newOpenRouterClient builds the real production OpenRouter client with the
+// org-scoped concerns stubbed: a dev-key provisioner, and nil capture/usage/
+// title/telemetry strategies (all nil-guarded). Same construction as
+// riskjudgebench, so the bench runs under prod-equivalent conditions.
+func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
+	logger := slog.New(slog.DiscardHandler)
+	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	return openrouter.NewUnifiedClient(
+		logger,
+		policy,
+		&devProvisioner{apiKey: apiKey},
+		nil, // message capture  (nil-guarded)
+		nil, // usage tracking   (nil-guarded)
+		nil, // chat title gen   (nil-guarded)
+		nil, // telemetry logger (nil-guarded)
+	)
 }
 
-func detect(ctx context.Context, client *http.Client, baseURL string, texts []string) ([]risk_analysis.ClassifierResult, error) {
-	body, err := json.Marshal(detectRequest{Texts: texts})
-	if err != nil {
-		return nil, fmt.Errorf("marshal classifier request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/detect", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create classifier request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+// devProvisioner satisfies openrouter.Provisioner but skips the DB/billing path:
+// it hands back the dev key for every org. Only ProvisionAPIKey is exercised by
+// the GetObjectCompletion path; the rest are unreachable here.
+type devProvisioner struct{ apiKey string }
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("classifier request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("classifier returned status %d", resp.StatusCode)
-	}
-
-	var decoded detectResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, fmt.Errorf("decode classifier response: %w", err)
-	}
-	if len(decoded.Results) != len(texts) {
-		return nil, fmt.Errorf("classifier returned %d results for %d texts", len(decoded.Results), len(texts))
-	}
-	return decoded.Results, nil
+func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string) (string, error) {
+	return d.apiKey, nil
 }
+func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ *int) (int, error) {
+	return 0, fmt.Errorf("not implemented in bench")
+}
+func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string) (float64, int, error) {
+	return 0, 0, fmt.Errorf("not implemented in bench")
+}
+func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
+	return 0, nil, fmt.Errorf("not implemented in bench")
+}
+func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, currentLimit int64, _ *int64) (int64, error) {
+	return currentLimit, nil
+}
+func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*openrouter.ModelUsage, error) {
+	return nil, fmt.Errorf("not implemented in bench")
+}
+
+var _ openrouter.Provisioner = (*devProvisioner)(nil)
 
 func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_analysis.Finding) modeSummary {
 	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
@@ -461,6 +548,10 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_anal
 	}
 }
 
+// changedExamples lists rows of the given label that L0 missed (empty baseline)
+// but the candidate mode now flags — i.e. judge-recovered true positives
+// (label "malicious") or judge-introduced false positives (label "benign").
+// Sorted by confidence desc, capped at limit.
 func changedExamples(corpus []labeledCase, baseline, candidate [][]risk_analysis.Finding, label string, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
@@ -519,6 +610,15 @@ func skippedMode(name, reason string) modeSummary {
 		NewFalsePositives:     nil,
 		RecoveredTruePositive: nil,
 	}
+}
+
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func writeMetrics(path string, summary accuracySummary) error {

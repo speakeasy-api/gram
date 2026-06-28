@@ -4,10 +4,85 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStringToNullUUID_Valid(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	result := conv.StringToNullUUID("  " + id.String() + "  ")
+
+	require.True(t, result.Valid)
+	require.Equal(t, id, result.UUID)
+}
+
+func TestStringToNullUUID_EmptyIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, conv.StringToNullUUID("   ").Valid)
+}
+
+func TestStringToNullUUID_UnparseableIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, conv.StringToNullUUID("not-a-uuid").Valid)
+}
+
+func TestNilableToNullUUID_Valid(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	result := conv.NilableToNullUUID(id)
+
+	require.True(t, result.Valid)
+	require.Equal(t, id, result.UUID)
+}
+
+func TestNilableToNullUUID_NilIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, conv.NilableToNullUUID(uuid.Nil).Valid)
+}
+
+func TestPtrToPGTextTrimmed_Trims(t *testing.T) {
+	t.Parallel()
+
+	input := "  My IdP  "
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.True(t, result.Valid)
+	require.Equal(t, "My IdP", result.String)
+}
+
+func TestPtrToPGTextTrimmed_WhitespaceOnlyIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	input := "   "
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.False(t, result.Valid)
+}
+
+func TestPtrToPGTextTrimmed_EmptyIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	input := ""
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.False(t, result.Valid)
+}
+
+func TestPtrToPGTextTrimmed_NilIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	result := conv.PtrToPGTextTrimmed(nil)
+
+	require.False(t, result.Valid)
+}
 
 func TestFromPGInt4_Valid(t *testing.T) {
 	t.Parallel()

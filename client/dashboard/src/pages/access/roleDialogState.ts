@@ -35,6 +35,15 @@ export function effectiveGrantCount(grants: Record<string, RoleGrant>): number {
   ).length;
 }
 
+export function visiblePermissionCount(
+  grants: Array<{ scope?: string }>,
+): number {
+  return grants.filter(
+    (grant) =>
+      grant.scope !== undefined && !grant.scope.startsWith("risk_policy:"),
+  ).length;
+}
+
 /** Whether the selected members differ from the initial snapshot */
 export function membersHaveChanged(
   selected: Set<string>,
@@ -161,7 +170,7 @@ export function computeRuleTooltip(
   resourceType: ResourceType,
   projects: ProjectRef[],
 ): string {
-  const verb = effect === "allow" ? "Permits" : "Denies";
+  const verb = effect === "allow" ? "Permits" : "Excludes";
 
   if (selectors === null) {
     return resourceType === "project"

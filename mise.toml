@@ -20,7 +20,7 @@ melange = "0.40.4"
 nodejs = "24.16.0"
 "github:pnpm/pnpm" = "11.3.0"
 watchexec = "2.5.0"
-uv = "0.10.9"
+uv = "0.11.21"
 yq = "4.52.4"
 hk = "1.46.0"
 pkl = "0.31.0"
@@ -30,10 +30,16 @@ pkl = "0.31.0"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.69.0"
+ruff = "0.15.16"
+"github:ast-grep/ast-grep" = "0.43.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+###########################
+## Runtime configuration ##
+###########################
+PYTHONASYNCIODEBUG = "1" ## Enabled for local development only
 ############################
 ## Database configuration ##
 ############################
@@ -80,12 +86,6 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 ##############################
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
-
-###########################################
-## Prompt-injection ML classifier (L1)   ##
-###########################################
-PI_CLASSIFIER_PORT = "5051"
-PI_CLASSIFIER_URL = "http://127.0.0.1:{{env.PI_CLASSIFIER_PORT}}"
 
 ##########################################
 ## Gram server, admin and worker config ##
@@ -161,6 +161,11 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
 # GRAM_PLUGINS_GITHUB_ORG = ""
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
+GRAM_PYSTREAMS_CONTROL_PORT = "8089"
+GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
+## Raise on blocking code detected on the pystreams event loop (aiocop). On by
+## default locally; unset in production. Set to "" in mise.local.toml to disable.
+GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 
 ##########################
 ## Observability config ##
@@ -185,10 +190,12 @@ VITE_DEV_HOSTNAMES = "localhost,gram.local"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
-## flag settings. Check out flags.local.csv.example in the root of the repo for
+## flag settings. The server and worker run from the `server/` directory, and
+## the local flag loader rejects paths outside its current working directory, so
+## keep this CSV under `server/`. Check out server/flags.local.csv.example for
 ## an example of the format.
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
-# GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
+# GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/server/flags.csv"
 ## Set to 1 to disable air hot reload and run server/worker directly
 GRAM_DISABLE_AIR = 0
 PUBSUB_EMULATOR_PORT = "8088"
@@ -267,3 +274,11 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## Svix configuration ##
 ########################
 GRAM_SVIX_API_KEY = "unset"
+
+################
+## GCP config ##
+################
+## Typically this variable is omitted and the GCP SDK will detect project ID
+## from the environment. However, for local development, it can be set to a
+## static value.
+GRAM_GCP_PROJECT_ID = "local-dev-project"

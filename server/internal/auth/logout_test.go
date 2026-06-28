@@ -22,7 +22,7 @@ func TestService_Logout(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",

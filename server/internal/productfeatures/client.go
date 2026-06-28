@@ -61,7 +61,7 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 			err,
 			"failed to get organization feature flag %q",
 			string(feature),
-		).Log(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+		).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
 	}
 
 	cacheEntry := FeatureCache{

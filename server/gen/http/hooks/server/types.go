@@ -138,6 +138,8 @@ type CodexRequestBody struct {
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// Email of the authenticated Codex user, if available
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 	// Path to the conversation transcript file
 	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// The working directory when the event fired
@@ -154,6 +156,8 @@ type CodexRequestBody struct {
 	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
 	// The user's prompt text (UserPromptSubmit only)
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The final assistant message text for the turn (Stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -1178,6 +1182,10 @@ type OTELLogRecordRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string `form:"observedTimeUnixNano,omitempty" json:"observedTimeUnixNano,omitempty" xml:"observedTimeUnixNano,omitempty"`
+	// Trace ID
+	TraceID *string `form:"traceId,omitempty" json:"traceId,omitempty" xml:"traceId,omitempty"`
+	// Span ID
+	SpanID *string `form:"spanId,omitempty" json:"spanId,omitempty" xml:"spanId,omitempty"`
 	// Log body content
 	Body *OTELLogBodyRequestBody `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
 	// Log attributes
@@ -2000,7 +2008,7 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -2034,12 +2042,13 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v
 }
 
 // NewCursorPayload builds a hooks service cursor endpoint payload.
-func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CursorPayload {
+func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
 		HookEventName:    *body.HookEventName,
 		ConversationID:   body.ConversationID,
@@ -2081,28 +2090,39 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v
 }
 
 // NewCodexPayload builds a hooks service codex endpoint payload.
-func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CodexPayload {
+func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CodexPayload {
 	v := &hooks.CodexPayload{
-		HookEventName:  *body.HookEventName,
-		SessionID:      body.SessionID,
-		UserEmail:      body.UserEmail,
-		TranscriptPath: body.TranscriptPath,
-		Cwd:            body.Cwd,
-		Model:          body.Model,
-		ToolName:       body.ToolName,
-		ToolInput:      body.ToolInput,
-		ToolOutput:     body.ToolOutput,
-		PermissionType: body.PermissionType,
-		Prompt:         body.Prompt,
+		HookEventName:        *body.HookEventName,
+		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
+		TranscriptPath:       body.TranscriptPath,
+		Cwd:                  body.Cwd,
+		Model:                body.Model,
+		ToolName:             body.ToolName,
+		ToolInput:            body.ToolInput,
+		ToolOutput:           body.ToolOutput,
+		PermissionType:       body.PermissionType,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v
 }

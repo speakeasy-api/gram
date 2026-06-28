@@ -7,27 +7,97 @@
 
 package client
 
-// CreateOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createOrganizationRemoteSessionIssuer HTTP endpoint.
-func CreateOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.create"
+// CreateIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createIssuer HTTP endpoint.
+func CreateIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.createIssuer"
 }
 
-// UpdateOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateOrganizationRemoteSessionIssuer HTTP endpoint.
-func UpdateOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.update"
+// ListIssuersOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listIssuers HTTP endpoint.
+func ListIssuersOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.listIssuers"
 }
 
-// ListOrganizationRemoteSessionIssuersOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listOrganizationRemoteSessionIssuers HTTP endpoint.
-func ListOrganizationRemoteSessionIssuersOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.list"
+// GetIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getIssuer HTTP endpoint.
+func GetIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getIssuer"
 }
 
-// GetOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer HTTP endpoint.
-func GetOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.get"
+// GetIssuerDeletePreflightOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getIssuerDeletePreflight HTTP endpoint.
+func GetIssuerDeletePreflightOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getIssuerDeletePreflight"
 }
 
-// DeleteOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service deleteOrganizationRemoteSessionIssuer HTTP endpoint.
-func DeleteOrganizationRemoteSessionIssuerOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.delete"
+// UpdateIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateIssuer HTTP endpoint.
+func UpdateIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.updateIssuer"
+}
+
+// DeleteIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service deleteIssuer HTTP endpoint.
+func DeleteIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.deleteIssuer"
+}
+
+// MoveIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service moveIssuer HTTP endpoint.
+func MoveIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.moveIssuer"
+}
+
+// ListClientsOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listClients HTTP endpoint.
+func ListClientsOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.listClients"
+}
+
+// GetClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getClient HTTP endpoint.
+func GetClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getClient"
+}
+
+// GetClientDeletePreflightOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getClientDeletePreflight HTTP endpoint.
+func GetClientDeletePreflightOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getClientDeletePreflight"
+}
+
+// ListClientMcpServersOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listClientMcpServers HTTP endpoint.
+func ListClientMcpServersOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.listClientMcpServers"
+}
+
+// ListClientSessionsOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listClientSessions HTTP endpoint.
+func ListClientSessionsOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.listClientSessions"
+}
+
+// CreateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createClient HTTP endpoint.
+func CreateClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.createClient"
+}
+
+// UpdateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateClient HTTP endpoint.
+func UpdateClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.updateClient"
+}
+
+// DeleteClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service deleteClient HTTP endpoint.
+func DeleteClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.deleteClient"
+}
+
+// RemoveClientFromMcpServerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service removeClientFromMcpServer HTTP endpoint.
+func RemoveClientFromMcpServerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer"
+}
+
+// RevokeSessionOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service revokeSession HTTP endpoint.
+func RevokeSessionOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.revokeSession"
+}
+
+// RefreshSessionOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service refreshSession HTTP endpoint.
+func RefreshSessionOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.refreshSession"
+}
+
+// RevokeAllClientSessionsOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service revokeAllClientSessions HTTP endpoint.
+func RevokeAllClientSessionsOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.revokeAllClientSessions"
 }

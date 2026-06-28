@@ -231,7 +231,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
 	}
 	return ctx, nil
 }
@@ -360,7 +360,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
-	if inviteeEmail := strings.ToLower(strings.TrimSpace(userInfo.Email)); inviteeEmail != "" {
+	if inviteeEmail := conv.NormalizeEmail(userInfo.Email); inviteeEmail != "" {
 		if err := s.acceptPendingInvitationForMember(ctx, activeOrgID, inviteeEmail, userID, idpUser.Sub); err != nil {
 			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
 				attr.SlogError(err),
@@ -431,13 +431,13 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	nonce, err := generateNonce()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error generating login nonce").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating login nonce").LogError(ctx, s.logger)
 	}
 	// Store the nonce binding (cookie value set by middleware) so the
 	// callback can verify the same browser that started login finishes it.
 	binding := nonceBindingFromContext(ctx)
 	if err := s.nonceStore.Set(ctx, nonceKey(nonce), binding, nonceTTL); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").LogError(ctx, s.logger)
 	}
 
 	state := encodeStateParam(payload, nonce)
@@ -449,7 +449,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		ScopesSupported: nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
 	}
 
 	return &gen.LoginResult{
@@ -524,7 +524,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
 	}
 
 	selectedOrg := authCtx.ActiveOrganizationID
@@ -553,16 +553,16 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		WorkosID:    conv.PtrToPGText(selected.WorkosID),
 		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
 
 	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
 	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
 	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
 	return &gen.SwitchScopesResult{
@@ -579,7 +579,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
@@ -588,7 +588,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		UserID:               authCtx.UserID,
 		WorkOSSessionID:      "",
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
 	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
@@ -601,7 +601,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
 	}
 
 	// For admins overriding into a foreign org (one not in their own membership list),
@@ -724,13 +724,13 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(payload.OrgName))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").LogError(ctx, s.logger)
 	}
 
 	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
 	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").LogError(ctx, s.logger)
 	}
 
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
@@ -741,27 +741,27 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating organization").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
 	}
 
 	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: org.ID,
 		UserID:         conv.ToPGText(authCtx.UserID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").LogError(ctx, s.logger)
 	}
 
 	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
 	existingSession.ActiveOrganizationID = org.ID
 	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -859,7 +859,7 @@ func dispositionFromState(payload *gen.CallbackPayload) string {
 func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {
 	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing projects").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing projects").LogError(ctx, s.logger)
 	}
 
 	if len(projects) == 0 {
@@ -876,7 +876,7 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 			Description:    conv.ToPGText("Default project for organization"),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").LogError(ctx, s.logger)
 		}
 
 		projects = append(projects, project)
@@ -897,7 +897,7 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}
-		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").Log(ctx, s.logger)
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
 	}
 
 	return project, nil

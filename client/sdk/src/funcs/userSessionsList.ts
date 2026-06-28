@@ -112,8 +112,10 @@ async function $do(
   const path = pathToFunc("/rpc/userSessions.list")();
 
   const query = encodeFormQuery({
+    "client_id": payload?.client_id,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "status": payload?.status,
     "subject_urn": payload?.subject_urn,
     "user_session_issuer_id": payload?.user_session_issuer_id,
   });

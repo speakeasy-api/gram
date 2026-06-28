@@ -11,49 +11,53 @@ import (
 )
 
 type Chat struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type ChatMessage struct {
-	ID               uuid.UUID
-	Seq              int64
-	ChatID           uuid.UUID
-	ProjectID        uuid.NullUUID
-	Role             string
-	Content          string
-	ContentRaw       []byte
-	ContentAssetUrl  pgtype.Text
-	Model            pgtype.Text
-	MessageID        pgtype.Text
-	FinishReason     pgtype.Text
-	ToolCalls        []byte
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-	StorageError     pgtype.Text
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
-	Origin           pgtype.Text
-	UserAgent        pgtype.Text
-	IpAddress        pgtype.Text
-	Source           pgtype.Text
-	ToolCallID       pgtype.Text
-	ToolUrn          urn.Tool
-	ToolOutcome      pgtype.Text
-	ToolOutcomeNotes pgtype.Text
-	ContentHash      []byte
-	Generation       int32
-	CreatedAt        pgtype.Timestamptz
-	RiskAnalyzedAt   pgtype.Timestamptz
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           urn.Tool
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
 }
 
 type ChatResolution struct {

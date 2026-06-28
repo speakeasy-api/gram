@@ -75,7 +75,7 @@ func DescribeToolsetEntry(
 		"project id is set", pid != uuid.Nil,
 		"toolset slug is set", toolsetSlug != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").LogError(ctx, logger)
 	}
 
 	toolset, err := toolsetRepo.GetToolset(ctx, tsr.GetToolsetParams{
@@ -84,9 +84,9 @@ func DescribeToolsetEntry(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").LogError(ctx, logger)
 	}
 
 	// Get tool URNs and resource URNs from latest toolset version
@@ -120,7 +120,7 @@ func DescribeToolsetEntry(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").LogError(ctx, logger)
 		}
 
 		allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
@@ -128,7 +128,7 @@ func DescribeToolsetEntry(
 			ToolUrns:  toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").LogError(ctx, logger)
 		}
 
 		urnToVariedName := make(map[string]string)
@@ -176,7 +176,7 @@ func DescribeToolsetEntry(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools in toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools in toolset").LogError(ctx, logger)
 		}
 		for _, tool := range funcTools {
 			tools = append(tools, &types.ToolEntry{
@@ -190,7 +190,7 @@ func DescribeToolsetEntry(
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 		}
@@ -200,7 +200,7 @@ func DescribeToolsetEntry(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates").LogError(ctx, logger)
 		}
 
 		for _, pt := range promptTools {
@@ -247,7 +247,7 @@ func DescribeToolsetEntry(
 
 			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, externalMCPTool.HeaderDefinitions, externalMCPTool.Slug)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
 			}
 			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
 
@@ -255,7 +255,7 @@ func DescribeToolsetEntry(
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolset.ID, envQueries)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").LogError(ctx, logger)
 		}
 	}
 
@@ -267,7 +267,7 @@ func DescribeToolsetEntry(
 			Urns:      resourceUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources in toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources in toolset").LogError(ctx, logger)
 		}
 
 		resources = make([]*types.ResourceEntry, 0, len(functionResourceEntries))
@@ -282,7 +282,7 @@ func DescribeToolsetEntry(
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables, nil)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 		}
@@ -293,7 +293,7 @@ func DescribeToolsetEntry(
 		ToolsetID: toolset.ID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").LogError(ctx, logger)
 	}
 
 	promptTemplates := make([]*types.PromptTemplateEntry, 0, len(ptrows))
@@ -360,7 +360,7 @@ func DescribeToolset(
 		"project id is set", pid != uuid.Nil,
 		"toolset slug is set", toolsetSlug != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").LogError(ctx, logger)
 	}
 
 	toolset, err := toolsetRepo.GetToolset(ctx, tsr.GetToolsetParams{
@@ -369,9 +369,9 @@ func DescribeToolset(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").LogError(ctx, logger)
 	}
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
@@ -407,12 +407,12 @@ func DescribeToolset(
 
 	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, resourceUrns, toolsetCache, platformExtras...)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").LogError(ctx, logger)
 	}
 
 	err = ApplyVariations(ctx, logger, tx, pid, toolVariationsGroupID, toolsetTools.Tools)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").LogError(ctx, logger)
 	}
 
 	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
@@ -420,7 +420,7 @@ func DescribeToolset(
 		ToolsetID: toolset.ID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").LogError(ctx, logger)
 	}
 
 	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
@@ -461,12 +461,12 @@ func DescribeToolset(
 			ID:        toolset.ExternalOauthServerID.UUID,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").LogError(ctx, logger)
 		}
 		if len(externalOauthMetadata.Metadata) > 0 {
 			var metadata any
 			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").LogError(ctx, logger)
 			}
 
 			externalOAuthServer = &types.ExternalOAuthServer{
@@ -486,7 +486,7 @@ func DescribeToolset(
 			ID:        toolset.OauthProxyServerID.UUID,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").LogError(ctx, logger)
 		}
 		if err == nil {
 			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
@@ -494,7 +494,7 @@ func DescribeToolset(
 				OauthProxyServerID: oauthProxyServerData.ID,
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").LogError(ctx, logger)
 			}
 
 			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
@@ -540,7 +540,7 @@ func DescribeToolset(
 
 	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").LogError(ctx, logger)
 	}
 
 	oauth2AuthCodeSecurityCount := 0
@@ -582,7 +582,7 @@ func DescribeToolset(
 		case errors.Is(err, pgx.ErrNoRows):
 			// FK is dangling — treat as unlinked rather than erroring.
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load linked user session issuer").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load linked user session issuer").LogError(ctx, logger)
 		default:
 			id := usi.ID.String()
 			slug := types.Slug(usi.Slug)
@@ -726,7 +726,7 @@ func GetToolsetsSummary(
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "batch fetch tool entries").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "batch fetch tool entries").LogError(ctx, logger)
 	}
 
 	httpTools := <-httpToolsCh
@@ -928,7 +928,7 @@ func readToolsetTools(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").LogError(ctx, logger)
 		}
 
 		tools = make([]*types.Tool, 0, len(definitions))
@@ -1011,7 +1011,7 @@ func readToolsetTools(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").LogError(ctx, logger)
 		}
 
 		for _, pt := range promptTools {
@@ -1051,7 +1051,7 @@ func readToolsetTools(
 			Urns:      toolUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").LogError(ctx, logger)
 		}
 
 		for _, def := range functionDefinitions {
@@ -1059,7 +1059,7 @@ func readToolsetTools(
 			if def.FunctionToolDefinition.Meta != nil {
 				err = json.Unmarshal(def.FunctionToolDefinition.Meta, &meta)
 				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, logger)
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").LogError(ctx, logger)
 				}
 			}
 			functionTool := &types.FunctionToolDefinition{
@@ -1098,7 +1098,7 @@ func readToolsetTools(
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables, def.FunctionToolDefinition.AuthInput)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 
@@ -1109,7 +1109,7 @@ func readToolsetTools(
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolsetID, envQueries)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").LogError(ctx, logger)
 		}
 	}
 
@@ -1118,7 +1118,7 @@ func readToolsetTools(
 		externalmcpRepo := externalmcpR.New(tx)
 		externalMCPTools, err := externalmcpRepo.ListExternalMCPToolDefinitions(ctx, activeDeploymentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external mcp tools for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external mcp tools for toolset").LogError(ctx, logger)
 		}
 
 		for _, def := range externalMCPTools {
@@ -1166,7 +1166,7 @@ func readToolsetTools(
 
 			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, def.HeaderDefinitions, def.Slug)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
 			}
 			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
 
@@ -1182,7 +1182,7 @@ func readToolsetTools(
 			Urns:      resourceUrns,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function resources for toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function resources for toolset").LogError(ctx, logger)
 		}
 
 		for _, def := range functionResourceDefinitions {
@@ -1190,7 +1190,7 @@ func readToolsetTools(
 			if def.FunctionResourceDefinition.Meta != nil {
 				err = json.Unmarshal(def.FunctionResourceDefinition.Meta, &meta)
 				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, logger)
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").LogError(ctx, logger)
 				}
 			}
 			functionResource := &types.FunctionResourceDefinition{
@@ -1213,7 +1213,7 @@ func readToolsetTools(
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables, nil)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 
@@ -1259,7 +1259,7 @@ func getToolsetOrigin(
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").LogError(ctx, logger)
 	}
 
 	return &types.ToolsetOrigin{
@@ -1299,7 +1299,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		})
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to list tool variations").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to list tool variations").LogError(ctx, logger)
 	}
 
 	urnToVariation := make(map[string]types.ToolVariation, len(allVariations))

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	rsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -40,16 +41,16 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	if payload.Slug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
 	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
 	}
 	dur := time.Duration(payload.SessionDurationHours) * time.Hour
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -60,7 +61,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
@@ -72,11 +73,11 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		UserSessionIssuerURN: urn.NewUserSessionIssuer(row.ID),
 		Slug:                 row.Slug,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer creation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer creation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return userSessionIssuerView(row), nil
@@ -95,7 +96,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -103,7 +104,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
 		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
 		}
 		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
@@ -111,7 +112,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -123,9 +124,9 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
 	beforeView := userSessionIssuerView(existing)
@@ -139,9 +140,9 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update user session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update user session issuer").LogError(ctx, logger)
 	}
 
 	afterView := userSessionIssuerView(updated)
@@ -157,11 +158,11 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		UserSessionIssuerSnapshotBefore: beforeView,
 		UserSessionIssuerSnapshotAfter:  afterView,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer update").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer update").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return afterView, nil
@@ -181,7 +182,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionIssuersByProjectID(ctx, repo.ListUserSessionIssuersByProjectIDParams{
@@ -190,7 +191,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 		LimitValue: limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers").LogError(ctx, s.logger)
 	}
 
 	items := make([]*types.UserSessionIssuer, len(rows))
@@ -224,14 +225,14 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 	hasID := payload.ID != nil && *payload.ID != ""
 	hasSlug := payload.Slug != nil && *payload.Slug != ""
 	if hasID == hasSlug {
-		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of id or slug must be provided").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of id or slug must be provided").LogError(ctx, s.logger)
 	}
 
 	var row repo.UserSessionIssuer
 	if hasID {
 		id, err := uuid.Parse(*payload.ID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, s.logger)
 		}
 
 		row, err = repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
@@ -240,9 +241,9 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, s.logger)
 		}
 	} else {
 		var err error
@@ -252,9 +253,9 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, s.logger)
 		}
 	}
 
@@ -275,14 +276,14 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -294,9 +295,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, logger)
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
 	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
@@ -311,15 +312,15 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 			err,
 			"failed to delete remote session client attachments for user session issuer %s",
 			deleted.ID,
-		).Log(ctx, logger)
+		).LogError(ctx, logger)
 	}
 
 	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").LogError(ctx, logger)
 	}
 
 	if _, err := txRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete child user session consents").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete child user session consents").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
@@ -331,14 +332,99 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		UserSessionIssuerURN: urn.NewUserSessionIssuer(deleted.ID),
 		Slug:                 deleted.Slug,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log user session issuer deletion").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log user session issuer deletion").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil
+}
+
+// MigrateLegacyGramRegistrations lifts the legacy Redis dynamic-client
+// registrations of a gram-type oauth_proxy_provider onto the given
+// user_session_issuer, so migrated MCP clients skip re-registration and
+// re-auth. The registration-migration logic lives in remotesessions (next to
+// its custom-clone counterpart) and is reached through s.remoteSessions on the
+// handler's own transaction. One-off path removed with the legacy OAuth proxy.
+func (s *Service) MigrateLegacyGramRegistrations(ctx context.Context, payload *gen.MigrateLegacyGramRegistrationsPayload) (*gen.MigrateLegacyGramRegistrationsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	providerID, err := uuid.Parse(payload.OauthProxyProviderID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid oauth_proxy_provider_id").LogError(ctx, logger)
+	}
+	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	// Confirm the target issuer belongs to the caller's project before any
+	// registrations are migrated onto it.
+	if _, err := repo.New(dbtx).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+
+	// Only gram-type providers migrate via this path; custom providers carry a
+	// reusable upstream client and go through the remote-session clone instead.
+	// The provider lookup lives here (not in remotesessions) so the not-found /
+	// wrong-type conditions surface with their own HTTP codes.
+	rsRepo := rsrepo.New(dbtx)
+	provider, err := rsRepo.GetOAuthProxyProviderForClone(ctx, rsrepo.GetOAuthProxyProviderForCloneParams{
+		ID:        providerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "oauth proxy provider not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get oauth proxy provider").LogError(ctx, logger)
+	}
+	if provider.ProviderType != "gram" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only gram oauth_proxy_providers migrate via this path; provider_type=%q", provider.ProviderType).LogError(ctx, logger)
+	}
+
+	// The migration runs on this handler's transaction (passed via rsRepo) so
+	// the inserted user_session_clients commit atomically with this request.
+	migrated, err := s.remoteSessions.MigrateLegacyClientRegistrations(ctx, rsRepo, *authCtx.ProjectID, provider.OauthProxyServerID, issuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "migrate legacy gram client registrations").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "migrated legacy gram client registrations",
+		attr.SlogUserSessionIssuerID(issuerID.String()),
+		attr.SlogUserSessionClientMigratedCount(migrated),
+	)
+
+	return &gen.MigrateLegacyGramRegistrationsResult{
+		MigratedCount: int(migrated),
+	}, nil
 }
 
 func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {

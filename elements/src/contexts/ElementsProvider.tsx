@@ -190,6 +190,13 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // Ref to access ensureValidHeaders in async transport without stale closures
   const ensureValidHeadersRef = useRef(auth.ensureValidHeaders);
   ensureValidHeadersRef.current = auth.ensureValidHeaders;
+  // Stable async header resolution for the thread-list adapter: awaits the
+  // session fetch when auth hasn't settled yet, so the history runtime can
+  // mount before auth resolves.
+  const getValidHeaders = useCallback(
+    () => ensureValidHeadersRef.current(),
+    [],
+  );
   const toolApproval = useToolApproval();
 
   const [model, setModel] = useState<Model>(
@@ -431,7 +438,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
-          const rawModelMessages = convertToModelMessages(nonSystemMessages);
+          const rawModelMessages =
+            await convertToModelMessages(nonSystemMessages);
 
           // Auto-compact older turns if the estimated input is approaching
           // the model's context window. System prompt + last few turns are
@@ -581,12 +589,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     };
   }, [mcpHeaders, setCurrentChatId]);
   const configTransport = config.transport;
-  const transport = useMemo<ChatTransport<UIMessage>>(() => {
+  // Resolved separately from `defaultTransport` so that churn in the default
+  // transport's dependencies (MCP tool discovery settling, connection status,
+  // auth refresh) cannot change the transport identity while a custom
+  // transport is in use. Transport identity feeds the per-thread runtime hook
+  // (`useChatRuntimeHook` → `setRuntimeHook`), and an identity change there
+  // rebuilds the thread runtimes — wiping in-flight optimistic messages, e.g.
+  // a message sent right after a cold open while MCP tools are still loading.
+  const customTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
     if (typeof configTransport === "function") {
       return configTransport({ getChatId, adoptChatId });
     }
-    return configTransport ?? defaultTransport;
-  }, [configTransport, defaultTransport, getChatId, adoptChatId]);
+    return configTransport ?? null;
+  }, [configTransport, getChatId, adoptChatId]);
+  const transport = customTransport ?? defaultTransport;
 
   const historyEnabled = config.history?.enabled ?? false;
 
@@ -629,12 +645,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   // Render the appropriate runtime provider based on history config.
   // We use separate components to avoid conditional hook calls.
-  if (historyEnabled && !auth.isLoading) {
+  //
+  // The history branch must NOT wait for auth: gating it on `!auth.isLoading`
+  // would mount the without-history runtime first and swap it for the history
+  // one when auth settles — replacing the runtime and wiping any message sent
+  // into the first one (e.g. a prompt queued before a cold open). Instead the
+  // history runtime mounts immediately and its adapter awaits auth via
+  // `getHeaders` before issuing requests.
+  if (historyEnabled) {
     return (
       <ElementsProviderWithHistory
         transport={transport}
         apiUrl={apiUrl}
-        headers={auth.headers}
+        headers={auth.headers ?? {}}
+        getHeaders={getValidHeaders}
         contextValue={contextValue}
         runtimeRef={runtimeRef}
         frontendTools={frontendTools}
@@ -676,6 +700,7 @@ interface ElementsProviderWithHistoryProps {
   transport: ChatTransport<UIMessage>;
   apiUrl: string;
   headers: Record<string, string>;
+  getHeaders: () => Promise<Record<string, string>>;
   contextValue: React.ContextType<typeof ElementsContext>;
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
   frontendTools: Record<string, AssistantTool>;
@@ -712,6 +737,7 @@ const ElementsProviderWithHistory = ({
   transport,
   apiUrl,
   headers,
+  getHeaders,
   contextValue,
   runtimeRef,
   frontendTools,
@@ -724,6 +750,7 @@ const ElementsProviderWithHistory = ({
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
     headers,
+    getHeaders,
     localIdToUuidMap,
     threadListFilters: contextValue?.config.history?.threadListFilters,
     deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,

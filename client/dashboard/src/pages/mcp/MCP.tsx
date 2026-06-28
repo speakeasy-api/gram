@@ -7,24 +7,34 @@ import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
-import { SearchBar } from "@/components/ui/search-bar";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
-import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import {
   useMcpEndpoints,
   useMcpServers,
 } from "@gram/client/react-query/index.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
+import {
+  useFilterState as useMcpDimensionFilters,
+  type FilterValue,
+} from "@/components/filters";
+import {
+  hasActiveMcpFilters,
+  matchesMcpFilters,
+  mcpServerFacets,
+  MCP_FILTERS,
+  MCP_FILTER_OPTIONS,
+  toolsetFacets,
+} from "./mcp-filter-schema";
 
 const BUILT_IN_SERVERS = [
   {
@@ -59,18 +69,30 @@ function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
   // (toolset-backed) MCP servers also source from mcp_servers. Until then the
   // listing merges two parallel collections — toolsets (Hosted) and
   // mcp_servers (Remote-MCP-backed today) — in the same grid.
-  const { data: mcpServersResult, isLoading: isLoadingMcpServers } =
-    useMcpServers({}, undefined, { enabled: isRemoteMcpEnabled });
-  const { data: endpointsResult, isLoading: isLoadingEndpoints } =
-    useMcpEndpoints({}, undefined, { enabled: isRemoteMcpEnabled });
+  // These listing fetches are non-critical: degrade to the last good (or empty)
+  // data with an inline indicator instead of throwing to the page error
+  // boundary and replacing the whole screen. Key them by project so a tolerated
+  // failure can't leave another project's rows on screen after a switch.
+  const gramProject = useProjectSlugForRequests();
+  const {
+    data: mcpServersResult,
+    isLoading: isLoadingMcpServers,
+    isError: isMcpServersError,
+  } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const {
+    data: endpointsResult,
+    isLoading: isLoadingEndpoints,
+    isError: isEndpointsError,
+  } = useMcpEndpoints({ gramProject }, undefined, {
+    throwOnError: false,
+  });
   // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
   // cutover will introduce toolset-backed rows that today still render
   // through the existing Hosted MCPCard path via useToolsets().
@@ -93,18 +115,23 @@ function MCPOverview() {
   }, [endpointsResult]);
 
   const isLoading =
-    toolsets.isLoading ||
-    (isRemoteMcpEnabled && (isLoadingMcpServers || isLoadingEndpoints));
+    toolsets.isLoading || isLoadingMcpServers || isLoadingEndpoints;
+
+  const hasRefreshError =
+    toolsets.isError || isMcpServersError || isEndpointsError;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
   const [newMcpServerName, setNewMcpServerName] = useState("");
   const [search, setSearch] = useState("");
+  const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
   const filteredToolsets = useMemo(() => {
     const query = search.toLowerCase();
     return [...toolsets]
       .filter((toolset) => {
+        if (!matchesMcpFilters(toolsetFacets(toolset), mcpFilters.values))
+          return false;
         if (!query) return true;
         return (
           toolset.name.toLowerCase().includes(query) ||
@@ -112,12 +139,14 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search]);
+  }, [toolsets, search, mcpFilters.values]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
     return [...mcpServers]
       .filter((server) => {
+        if (!matchesMcpFilters(mcpServerFacets(server), mcpFilters.values))
+          return false;
         if (!query) return true;
         return (
           (server.name?.toLowerCase().includes(query) ?? false) ||
@@ -125,12 +154,16 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search]);
+  }, [mcpServers, search, mcpFilters.values]);
 
-  const showSearch = !isLoading && toolsets.length + mcpServers.length > 6;
+  // Show the filter bar once there's anything to filter. Filters can drive the
+  // result set to empty on their own, so the no-matches state must consider an
+  // active filter, not just a search query.
+  const hasItems = toolsets.length + mcpServers.length > 0;
+  const showFilters = !isLoading && hasItems;
   const showNoMatches =
     !isLoading &&
-    search !== "" &&
+    (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
     filteredToolsets.length === 0 &&
     filteredMcpServers.length === 0;
 
@@ -155,6 +188,17 @@ function MCPOverview() {
         <Button.Text>New MCP Server</Button.Text>
       </Button>
     </RequireScope>
+  );
+
+  const refreshErrorIndicator = (
+    <SimpleTooltip tooltip="We couldn't reach the server to refresh this list. Showing the most recently loaded data.">
+      <Badge variant="warning">
+        <Badge.LeftIcon>
+          <Icon name="triangle-alert" className="inline-block" />
+        </Badge.LeftIcon>
+        <Badge.Text>Couldn&apos;t refresh</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 
   const newMcpServerDialog = (
@@ -200,7 +244,12 @@ function MCPOverview() {
     </Page.Section>
   );
 
-  if (!isLoading && toolsets.length === 0 && mcpServers.length === 0) {
+  if (
+    !isLoading &&
+    !hasRefreshError &&
+    toolsets.length === 0 &&
+    mcpServers.length === 0
+  ) {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
@@ -214,9 +263,9 @@ function MCPOverview() {
     <>
       <Page.Section>
         <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
-        <Page.Section.CTA>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </Page.Section.CTA>
+        {hasRefreshError ? (
+          <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
+        ) : null}
         <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
           Sources exposed as MCP servers. These include all types of sources
@@ -224,17 +273,34 @@ function MCPOverview() {
           custom remote MCPs imported by URL.
         </Page.Section.Description>
         <Page.Section.Body>
-          {showSearch && (
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Search MCP servers..."
-              className="mb-4"
-            />
+          {showFilters && (
+            <Page.Toolbar className="mb-4">
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search MCP servers..."
+              />
+              <Page.Toolbar.Filters
+                schema={MCP_FILTERS}
+                values={mcpFilters.values}
+                optionsById={MCP_FILTER_OPTIONS}
+                onChange={
+                  mcpFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={mcpFilters.clearValue as (id: string) => void}
+                onClearAll={mcpFilters.clearAll}
+              />
+              <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+            </Page.Toolbar>
           )}
           {showNoMatches ? (
             <Type muted className="py-8 text-center">
-              No MCP servers matching &ldquo;{search}&rdquo;
+              {search !== ""
+                ? `No MCP servers matching “${search}”`
+                : "No MCP servers match your filters"}
             </Type>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

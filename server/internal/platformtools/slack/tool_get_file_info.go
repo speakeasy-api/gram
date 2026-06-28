@@ -62,7 +62,7 @@ func callGetFileInfo(ctx context.Context, client *apiClient, env toolconfig.Tool
 	setOptionalInt(request, "page", input.Page)
 	setOptionalInt(request, "count", input.Count)
 
-	body, err := client.call(ctx, "files.info", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "files.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

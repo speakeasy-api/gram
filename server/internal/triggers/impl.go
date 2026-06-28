@@ -113,7 +113,7 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 		}
 		view, err := buildTriggerView(item, s.app.WebhookURL(item))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 		}
 		result = append(result, view)
 	}
@@ -129,7 +129,7 @@ func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTrigge
 
 	triggerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
 	}
 
 	item, err := s.app.GetInstance(ctx, *authCtx.ProjectID, triggerID)
@@ -139,7 +139,7 @@ func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTrigge
 
 	view, err := buildTriggerView(item, s.app.WebhookURL(item))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -154,7 +154,7 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 	if payload.EnvironmentID != nil {
 		parsed, err := uuid.Parse(*payload.EnvironmentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid environment id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid environment id").LogError(ctx, s.logger)
 		}
 		envID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
@@ -188,7 +188,7 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 
 	view, err := buildTriggerView(item, s.app.WebhookURL(item))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -201,7 +201,7 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 
 	triggerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
 	}
 
 	existing, err := s.app.GetInstance(ctx, *authCtx.ProjectID, triggerID)
@@ -213,13 +213,13 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 	if payload.EnvironmentID != nil {
 		environmentID, err = uuid.Parse(*payload.EnvironmentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid environment id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid environment id").LogError(ctx, s.logger)
 		}
 	}
 
 	configMap, err := configJSONToMap(existing.ConfigJson)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "decode trigger config").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "decode trigger config").LogError(ctx, s.logger)
 	}
 	if payload.Config != nil {
 		configMap = payload.Config
@@ -227,7 +227,7 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 
 	beforeView, err := buildTriggerView(existing, s.app.WebhookURL(existing))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 	}
 
 	item, err := s.app.Update(ctx, bgtriggers.UpdateParams{
@@ -265,7 +265,7 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 
 	view, err := buildTriggerView(item, s.app.WebhookURL(item))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -278,7 +278,7 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 
 	triggerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
 	}
 
 	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
@@ -342,7 +342,7 @@ func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.Resume
 func (s *Service) setTriggerStatus(ctx context.Context, authCtx *contextvalues.AuthContext, id string, status string, hooks ...bgtriggers.InstanceDBHook) (*types.TriggerInstance, error) {
 	triggerID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
 	}
 
 	item, err := s.app.SetStatus(ctx, *authCtx.ProjectID, triggerID, status, hooks...)
@@ -352,7 +352,7 @@ func (s *Service) setTriggerStatus(ctx context.Context, authCtx *contextvalues.A
 
 	view, err := buildTriggerView(item, s.app.WebhookURL(item))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -365,12 +365,12 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	triggerID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "read request body").LogError(ctx, s.logger)
 	}
 
 	result, err := s.app.ProcessWebhook(ctx, triggerID, body, r.Header)
@@ -390,7 +390,7 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(statusCode)
 	if _, err := w.Write(responseBody); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write webhook response").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "write webhook response").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -464,11 +464,14 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// reached when the input fails validation.
 		public = fmt.Sprintf("%s: %s", message, err.Error())
 	case errors.Is(err, bgtriggers.ErrAuthFailed):
-		code = oops.CodeUnauthorized
+		// Webhook signature failures are client faults: a 401 on a public
+		// endpoint, commonly a single trigger with a stale or wrong signing
+		// secret whose sender keeps retrying.
+		return oops.E(oops.CodeUnauthorized, fmt.Errorf("trigger webhook authentication failed: %w", err), "%s", public).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows):
 		code = oops.CodeNotFound
 	}
-	return oops.E(code, err, "%s", public).Log(ctx, logger)
+	return oops.E(code, err, "%s", public).LogError(ctx, logger)
 }
 
 func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {

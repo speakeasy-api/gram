@@ -9,10 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Type = {
+export const ResourceEntryType = {
   Function: "function",
 } as const;
-export type Type = ClosedEnum<typeof Type>;
+export type ResourceEntryType = ClosedEnum<typeof ResourceEntryType>;
 
 export type ResourceEntry = {
   /**
@@ -27,7 +27,7 @@ export type ResourceEntry = {
    * The URN of the resource
    */
   resourceUrn: string;
-  type: Type;
+  type: ResourceEntryType;
   /**
    * The uri of the resource
    */
@@ -35,7 +35,9 @@ export type ResourceEntry = {
 };
 
 /** @internal */
-export const Type$inboundSchema: z.ZodMiniEnum<typeof Type> = z.enum(Type);
+export const ResourceEntryType$inboundSchema: z.ZodMiniEnum<
+  typeof ResourceEntryType
+> = z.enum(ResourceEntryType);
 
 /** @internal */
 export const ResourceEntry$inboundSchema: z.ZodMiniType<
@@ -46,7 +48,7 @@ export const ResourceEntry$inboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     resource_urn: z.string(),
-    type: Type$inboundSchema,
+    type: ResourceEntryType$inboundSchema,
     uri: z.string(),
   }),
   z.transform((v) => {

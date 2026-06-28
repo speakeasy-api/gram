@@ -75,7 +75,7 @@ func callOpenConversation(ctx context.Context, client *apiClient, env toolconfig
 	setOptionalBool(request, "return_im", input.ReturnIM)
 	setOptionalBool(request, "prevent_creation", input.PreventCreation)
 
-	body, err := client.call(ctx, "conversations.open", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.open", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

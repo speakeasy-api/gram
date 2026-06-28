@@ -57,8 +57,14 @@ type GenerateConfig struct {
 	// is omitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header (Claude's does not).
+	// requires it via the Gram-Project header (Claude's does not), and it scopes
+	// the default marketplace name for non-default projects.
 	ProjectSlug string
+	// IsDefaultProject reports whether this is the org's default project (its
+	// oldest, by id ASC). The default project keeps the bare org-derived
+	// marketplace name; non-default projects get a project-scoped one. Must be
+	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
+	IsDefaultProject bool
 	// Version is stamped into every plugin.json. Callers should bump this on
 	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
 	// the manifest as new and refresh installed copies. Empty falls back to
@@ -68,6 +74,12 @@ type GenerateConfig struct {
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
+	// ObservabilityMode makes the generated hook plugin fully non-blocking when
+	// set: every Claude hook event is emitted async so the plugin can only
+	// observe and report, never deny or delay a tool call. It is the low-risk
+	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
+	// server unavailability disrupting the user.
+	ObservabilityMode bool
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -81,13 +93,15 @@ type GenerateConfig struct {
 // Delegates to naming.MarketplaceName so the publish path and the device-agent
 // endpoint stay on the identical formula — the cross-surface contract that
 // package documents. A per-project override (resolveMarketplaceName) layers on
-// top of this default.
-func DefaultMarketplaceName(orgName string) string {
-	return naming.MarketplaceName(orgName)
+// top of this default. The default project keeps the bare org-derived name;
+// non-default projects are scoped by their slug so an org's projects don't
+// collide on a single marketplace identifier.
+func DefaultMarketplaceName(orgName, projectSlug string, isDefaultProject bool) string {
+	return naming.MarketplaceName(orgName, projectSlug, isDefaultProject)
 }
 
 func resolveMarketplaceName(cfg GenerateConfig) string {
-	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName))
+	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
 // pluginManifestVersion returns the version to stamp into generated
@@ -104,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "1"
+const pluginGeneratorVersion = "4"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -162,7 +176,16 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 // (including ConfigChange, which has no allow/deny decision to honor)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
-func claudeHookAsyncFlag(event string) *bool {
+//
+// When observabilityMode is set, every event is forced async so the plugin
+// can only observe and report — no hook can deny or delay a tool call. This
+// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
+// errors or brief server unavailability disrupting the user.
+func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
+	if observabilityMode {
+		t := true
+		return &t
+	}
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
@@ -207,6 +230,11 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// cursorPluginRoot is the subdirectory under which all Cursor plugins are
+// grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
+// so plugin sources can be referenced by bare name relative to this root.
+const cursorPluginRoot = "cursor-plugins"
+
 // GeneratePluginPackages produces the complete file map for a plugin distribution
 // repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
@@ -238,7 +266,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
-			Source:      "./" + cursorObservability,
+			Source:      cursorObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
@@ -272,7 +300,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		})
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        p.Slug + "-cursor",
-			Source:      "./" + p.Slug + "-cursor",
+			Source:      p.Slug + "-cursor",
 			Description: p.Description,
 		})
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
@@ -292,9 +320,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	marketplaceName := resolveMarketplaceName(cfg)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: claudePlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  claudePlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal claude marketplace.json: %w", err)
@@ -302,9 +331,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: cursorPlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
+		Plugins:  cursorPlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal cursor marketplace.json: %w", err)
@@ -443,7 +473,8 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
+	name := p.Slug + "-cursor"
+	return generateCursorPluginInDir(files, path.Join(cursorPluginRoot, name), name, p, cfg)
 }
 
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
@@ -588,7 +619,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			script = "mcp_inventory.sh"
 		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -598,8 +629,12 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
+	// Sourced by both mcp_inventory.sh (SessionStart/ConfigChange) and hook.sh
+	// (PreToolUse inline-gather fallback). Only the Claude plugin ships it.
+	files[path.Join(subdir, "hooks/mcp_gather.sh")] = renderSharedMCPInventoryGatherScript()
 
 	return nil
 }
@@ -608,26 +643,23 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 // for Cursor. Same shape as the Claude variant but uses Cursor's hook event
 // names + script destination URL.
 func generateCursorObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, CursorObservabilitySlug(cfg), cfg)
+	name := CursorObservabilitySlug(cfg)
+	return generateCursorObservabilityPluginInDir(files, path.Join(cursorPluginRoot, name), name, cfg)
 }
 
 // generateCursorObservabilityPluginFlat emits the same files at the root
 // (no subdir) for direct ZIP installation.
 func generateCursorObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, "", cfg)
+	return generateCursorObservabilityPluginInDir(files, "", CursorObservabilitySlug(cfg), cfg)
 }
 
-func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
-	name := subdir
-	if name == "" {
-		name = CursorObservabilitySlug(cfg)
-	}
+func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, name string, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -649,6 +681,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
 
 	return nil
@@ -740,6 +773,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
 	files[path.Join(subdir, "hooks/hook_async.sh")] = renderCodexAsyncHookScript()
 
@@ -775,10 +809,21 @@ func renderDeviceAgentIdentityScript() []byte {
 	return []byte(`#!/usr/bin/env bash
 # Generated by Speakeasy. Do not edit - overwritten on every publish.
 
+# Resolve the local user's email via a device agent and stamp it onto the hook
+# payload as user_email. Best-effort by design: every failure path leaves the
+# payload unchanged so a hook is never blocked on identity resolution. Set
+# GRAM_HOOKS_DEBUG=1 to surface why attribution was skipped — "my hooks show no
+# user_email" is a common support question and is otherwise invisible here.
+gram_hooks_identity_debug() {
+  if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+    printf 'gram-hooks(identity): %s\n' "$1" >&2
+  fi
+}
+
 gram_enrich_identity_payload() {
   local payload="$1"
   local email=""
-  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-device-agent,speakeasy-device-agent}"
+  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd}"
   local timeout_tenths="${GRAM_DEVICE_AGENT_TIMEOUT_TENTHS:-15}"
   local old_ifs="$IFS"
   local command output tmp pid elapsed prefix trimmed
@@ -789,11 +834,13 @@ gram_enrich_identity_payload() {
     command="${command#"${command%%[![:space:]]*}"}"
     command="${command%"${command##*[![:space:]]}"}"
     if [ -z "$command" ] || ! command -v "$command" >/dev/null 2>&1; then
+      [ -n "$command" ] && gram_hooks_identity_debug "device agent '$command' not found on PATH; trying next"
       IFS=,
       continue
     fi
 
     tmp="$(mktemp "${TMPDIR:-/tmp}/gram-device-agent-identity.XXXXXX")" || {
+      gram_hooks_identity_debug "mktemp failed while running device agent '$command'; trying next"
       IFS=,
       continue
     }
@@ -808,6 +855,7 @@ gram_enrich_identity_payload() {
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
       rm -f "$tmp"
+      gram_hooks_identity_debug "device agent '$command identity' timed out after ${timeout_tenths}00ms; killed and trying next"
       IFS=,
       continue
     fi
@@ -821,13 +869,16 @@ gram_enrich_identity_payload() {
       email="${BASH_REMATCH[2]}"
     fi
     if [ -n "$email" ]; then
+      gram_hooks_identity_debug "resolved user_email via '$command identity'"
       break
     fi
+    gram_hooks_identity_debug "device agent '$command identity' returned no parseable email; trying next"
     IFS=,
   done
   IFS="$old_ifs"
 
   if [ -z "$email" ]; then
+    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands]; sending payload without attribution (server may fall back to OTEL session metadata)"
     printf '%s' "$payload"
     return
   fi
@@ -847,6 +898,7 @@ gram_enrich_identity_payload() {
       fi
       ;;
     *)
+      gram_hooks_identity_debug "payload is not a JSON object; cannot stamp user_email, sending unchanged"
       printf '%s' "$payload"
       ;;
   esac
@@ -860,7 +912,130 @@ if [ -f "$script_dir/identity.sh" ]; then
   # shellcheck source=/dev/null
   . "$script_dir/identity.sh"
 fi
+# shellcheck source=/dev/null
+. "$script_dir/http.sh"
 `
+}
+
+// renderSharedHTTPScript emits hooks/http.sh: the retryable transport sourced
+// by every generated hook script. It must stay byte-for-byte identical to the
+// checked-in hooks/plugin-claude/hooks/http.sh so local-dev and generated
+// plugins behave the same. gram_http_post retries transient connection resets
+// and 5xx with backoff while reusing one Idempotency-Key across attempts, so
+// the server (which de-duplicates on that key) stores a redelivery once.
+func renderSharedHTTPScript() []byte {
+	return []byte(`# Shared retryable HTTP helper for Gram hook senders.
+#
+# Sourced (not executed) by every plugin's send/hook scripts so all plugins
+# share one transport with identical retry and idempotency behavior.
+#
+# Why retries are safe: the server de-duplicates on the per-invocation
+# Idempotency-Key header (see gram_http_post), so re-sending the same request
+# after a transient reset stores the event exactly once.
+#
+# Usage:
+#   . "$script_dir/http.sh"
+#   gram_http_post "$url" "$payload" max_time [extra curl args...]
+#   # then read $GRAM_HTTP_CODE (e.g. "200", "000") and $GRAM_HTTP_BODY.
+#
+# gram_http_post returns 0 once curl produced a definitive HTTP status (any
+# code, including 4xx/5xx — the caller decides allow/block from $GRAM_HTTP_CODE)
+# and non-zero only when every attempt failed to reach the server.
+
+GRAM_HTTP_MAX_ATTEMPTS="${GRAM_HTTP_MAX_ATTEMPTS:-4}"
+GRAM_HTTP_BACKOFF_BASE="${GRAM_HTTP_BACKOFF_BASE:-1}"
+
+# gram_new_idempotency_token emits one token per shell invocation, captured
+# once and reused across retries so every attempt of the same logical delivery
+# carries the same token.
+gram_new_idempotency_token() {
+  if [ -n "${GRAM_IDEMPOTENCY_TOKEN:-}" ]; then
+    printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
+    return 0
+  fi
+  if command -v uuidgen >/dev/null 2>&1; then
+    GRAM_IDEMPOTENCY_TOKEN=$(uuidgen | tr '[:upper:]' '[:lower:]')
+  elif [ -r /proc/sys/kernel/random/uuid ]; then
+    GRAM_IDEMPOTENCY_TOKEN=$(cat /proc/sys/kernel/random/uuid)
+  else
+    GRAM_IDEMPOTENCY_TOKEN="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
+  fi
+  printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
+}
+
+# _gram_http_is_transient returns 0 for a transient failure worth retrying: a
+# connection-level error (no response) or a 5xx. A clean 2xx/3xx/4xx is a
+# definitive answer and must NOT be retried.
+_gram_http_is_transient() {
+  local curl_exit="$1"
+  local http_code="$2"
+  case "$curl_exit" in
+    # 6 DNS, 7 connect, 28 timeout, 35 TLS handshake, 52 empty reply,
+    # 55 send error, 56 recv error (the connection-reset class).
+    6 | 7 | 28 | 35 | 52 | 55 | 56) return 0 ;;
+  esac
+  if [ "$curl_exit" -ne 0 ] && { [ -z "$http_code" ] || [ "$http_code" = "000" ]; }; then
+    return 0
+  fi
+  if [ "$http_code" -ge 500 ] 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+# gram_http_post POSTs $2 to $1 with a per-attempt timeout of $3 seconds,
+# retrying transient failures with backoff. Remaining args pass verbatim to
+# curl. It always adds Content-Type and the reused Idempotency-Key header.
+gram_http_post() {
+  local _url="$1"
+  local _payload="$2"
+  local _max_time="$3"
+  shift 3
+
+  local _token
+  _token=$(gram_new_idempotency_token)
+
+  local attempt=1
+  local response curl_exit
+  GRAM_HTTP_CODE="000"
+  GRAM_HTTP_BODY=""
+  while [ "$attempt" -le "$GRAM_HTTP_MAX_ATTEMPTS" ]; do
+    response=$(printf '%s' "$_payload" | curl -s -w "\n%{http_code}" -X POST \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: ${_token}" \
+      "$@" \
+      --data-binary @- \
+      --max-time "$_max_time" \
+      "$_url")
+    curl_exit=$?
+
+    GRAM_HTTP_CODE=$(printf '%s' "$response" | tail -1)
+    GRAM_HTTP_BODY=$(printf '%s' "$response" | sed '$d')
+
+    if ! _gram_http_is_transient "$curl_exit" "$GRAM_HTTP_CODE"; then
+      # Definitive: a 2xx/3xx/4xx (success) or a non-transient curl error
+      # (bad usage/URL — retrying won't help). Distinguish via the code.
+      if [ "$curl_exit" -eq 0 ]; then
+        return 0
+      fi
+      return 1
+    fi
+
+    if [ "$attempt" -lt "$GRAM_HTTP_MAX_ATTEMPTS" ]; then
+      sleep "$((GRAM_HTTP_BACKOFF_BASE * attempt))"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  # Exhausted retries. A real HTTP status (e.g. a persistent 5xx) → report
+  # success so the caller can act on the code; otherwise the server was
+  # unreachable.
+  if [ "$GRAM_HTTP_CODE" != "000" ] && [ -n "$GRAM_HTTP_CODE" ]; then
+    return 0
+  fi
+  return 1
+}
+`)
 }
 
 func renderCurlAuthConfigSnippet(cfg GenerateConfig, failureExit int) string {
@@ -878,7 +1053,12 @@ cleanup_auth_config() {
   fi
 }
 trap cleanup_auth_config EXIT
-auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit %d
+auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || {
+  # Say why instead of exiting with an empty reason — otherwise the assistant
+  # shows a blocked tool call with no explanation.
+  echo "Speakeasy hooks: could not create a temporary auth file (is ${TMPDIR:-/tmp} writable?)." >&2
+  exit %d
+}
 chmod 600 "$auth_config" || true
 cat >"$auth_config" <<'GRAM_HOOKS_CURL_CONFIG'
 %sGRAM_HOOKS_CURL_CONFIG
@@ -945,7 +1125,11 @@ if command -v python3 >/dev/null 2>&1; then
 import base64
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
+import urllib.parse
 
 payload = sys.stdin.read()
 try:
@@ -972,6 +1156,133 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
     if email:
         data["user_email"] = email
 
+# SessionStart only: collect the configured MCP server inventory so Gram can
+# apply shadow-MCP policy and visibility to servers it is not proxying. The
+# gate is a real JSON field check, so the blocking PreToolUse path never pays
+# for a codex invocation; SessionStart itself is routed through hook_async.sh
+# so the latency is invisible to Codex. The timeout caps wall time in case
+# the codex CLI misbehaves.
+#
+# Only the fields Gram consumes are shipped — the raw transport object also
+# carries env vars and HTTP headers, which often contain credentials and
+# must never leave the machine. Stdio launch args are kept for server
+# identity (e.g. npx package names) but credential-shaped values are
+# redacted: values following a secret-named flag (including the short -H
+# header alias), inline flag=value pairs, header-shaped values whose name
+# suggests credentials, and well-known token prefixes.
+secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential|header)", re.I)
+secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
+secret_header = re.compile(r"^(authorization|proxy-authorization|cookie|[a-z0-9_-]*(key|token|secret|auth)[a-z0-9_-]*)\s*:", re.I)
+
+def redact_args(args):
+    if not isinstance(args, list):
+        return None
+    out = []
+    redact_next = False
+    for a in args:
+        if not isinstance(a, str):
+            continue
+        if redact_next:
+            out.append("[REDACTED]")
+            redact_next = False
+        elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
+            out.append(a.split("=", 1)[0] + "=[REDACTED]")
+        elif a == "-H":
+            out.append(a)
+            redact_next = True
+        elif a.startswith("-H") and secret_header.match(a[2:]):
+            out.append("-H" + a[2:].split(":", 1)[0] + ": [REDACTED]")
+        elif a.startswith("-") and secret_flag.search(a):
+            out.append(a)
+            redact_next = True
+        elif secret_header.match(a):
+            out.append(a.split(":", 1)[0] + ": [REDACTED]")
+        elif secret_value.match(a):
+            out.append("[REDACTED]")
+        else:
+            out.append(a)
+    return out
+
+# URLs are their own credential channel: strip userinfo and the fragment
+# (OAuth-style #access_token=... never identifies a server) and redact
+# secret-named query parameters while preserving scheme/host/path, which
+# the server needs for provenance checks.
+def redact_url(url):
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        netloc = parts.netloc.rsplit("@", 1)[-1]
+        pairs = []
+        for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True):
+            if secret_flag.search(k):
+                v = "[REDACTED]"
+            pairs.append((k, v))
+        query = urllib.parse.urlencode(pairs)
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, ""))
+    except Exception:
+        return url
+
+# PATH lookup alone misses real installs: hooks fired by the Codex desktop
+# app inherit the minimal GUI environment, and desktop-only users never have
+# codex on PATH at all — the app references its bundled binary by absolute
+# path. Probe the managed-install and app-bundle locations directly; paths
+# absent on this platform simply fail the probe. NB: this comment is inside
+# a bash single-quoted heredoc — apostrophes here break the script.
+def find_codex():
+    found = shutil.which("codex")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
+    candidates = [
+        os.path.join(codex_home, "packages", "standalone", "current", "bin", "codex"),
+        os.path.join(home, ".local", "bin", "codex"),
+        "/usr/local/bin/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+codex_bin = find_codex() if data.get("hook_event_name") == "SessionStart" else None
+if codex_bin:
+    try:
+        out = subprocess.run(
+            [codex_bin, "mcp", "list", "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=15,
+        ).stdout
+        inventory = json.loads(out)
+    except Exception:
+        inventory = None
+    if isinstance(inventory, list):
+        slim = []
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            transport = item.get("transport")
+            if not isinstance(transport, dict):
+                transport = {}
+            slim.append({
+                "name": item.get("name"),
+                "enabled": item.get("enabled"),
+                "auth_status": item.get("auth_status"),
+                "transport": {
+                    "type": transport.get("type"),
+                    "url": redact_url(transport.get("url")),
+                    "command": transport.get("command"),
+                    "args": redact_args(transport.get("args")),
+                },
+            })
+        additional = data.get("additional_data")
+        if not isinstance(additional, dict):
+            additional = {}
+        additional["mcp_inventory_codex"] = slim
+        data["additional_data"] = additional
+
 print(json.dumps(data, separators=(",", ":")), end="")
 ' 2>/dev/null) || true
 fi
@@ -982,20 +1293,18 @@ if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# gram_http_post (http.sh) retries transient resets so a single reset no
+# longer blocks the tool call; the server still decides allow/block.
+gram_http_post "${server_url}/rpc/hooks.codex" "$payload" 10 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.codex")
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
   exit 0
 fi
 
@@ -1012,6 +1321,93 @@ fi
 
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
+	}
+
+	// Cursor reads the allow/deny decision from the JSON body on stdout (not the
+	// exit code), so unlike Claude/Codex it cannot signal a block via exit 2. On
+	// a server-unreachable or error response there is no body to relay, so we
+	// emit a synthetic deny — failing CLOSED so an outage cannot silently bypass
+	// blocking policies, matching the Claude hook's intent.
+	if platform == "cursor" {
+		return fmt.Appendf(nil, `#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
+# Key prefix: %s (correlate with the dashboard's API Keys page).
+
+# Send a Cursor hook event to Speakeasy. Cursor reads the allow/deny decision
+# from the JSON body on stdout; the server always responds 200 with
+# {permission, user_message, agent_message}. When the server is unreachable or
+# returns an error there is no decision to relay, so we fail CLOSED — emit a
+# deny — rather than let an outage silently bypass blocking policies.
+# Set GRAM_HOOKS_DEBUG=1 for stderr diagnostics.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+
+%s
+%s
+debug() {
+  if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+    printf 'gram-hooks(cursor): %%s\n' "$1" >&2
+  fi
+}
+
+# Minimal JSON string encoder (escape backslash then double quote) so a block
+# reason is always valid JSON without depending on python3/jq being present.
+json_string() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '"%%s"' "$s"
+}
+
+# Emit a deny body Cursor honors as a block, with a human-readable reason.
+emit_deny() {
+  printf '{"permission":"deny","user_message":%%s,"agent_message":%%s}' \
+    "$(json_string "$1")" "$(json_string "$1")"
+}
+
+payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
+response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
+  -H "Content-Type: application/json" \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  --data-binary @- \
+  --max-time 10 \
+  "${server_url}/rpc/hooks.cursor")
+
+http_code=$(echo "$response" | tail -1)
+body=$(echo "$response" | sed '$d')
+
+# Relay the server's decision verbatim so Cursor can honor allow/deny. Only a
+# real 2xx carries a decision; a 3xx (e.g. an unfollowed http->https redirect)
+# does not, so it falls through to the fail-closed branch below.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+  echo "$body"
+  exit 0
+fi
+
+# No decision available. curl returns 000 on connection failure/timeout/DNS;
+# any other non-2xx is a server-side error. Fail closed.
+if [ "$http_code" = "000" ]; then
+  reason="Speakeasy could not reach the Gram server at ${server_url}, so this action was blocked. Check your network connection or GRAM_HOOKS_SERVER_URL."
+else
+  reason="Speakeasy hook returned HTTP ${http_code}, so this action was blocked. Retry in a moment; if it persists, check the Gram service status."
+fi
+debug "request failed (http_code=${http_code}); failing closed. body=${body}"
+emit_deny "$reason"
+exit 0
 `, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
 	}
 
@@ -1036,28 +1432,109 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
+# PreToolUse only: make sure the payload carries the MCP inventory the server
+# enforces shadow-MCP policy against. Fast path: replay the per-session file
+# written by mcp_inventory.sh at SessionStart. If that file is not there yet —
+# e.g. the very first action of a new session is a tool call, before the async
+# SessionStart write has landed — gather the inventory inline (exit 3 below) so
+# enforcement never races the snapshot (DNO-286). Other events never touch the
+# file, keeping them cheap. Cursor ships no gatherer, so it skips the inline
+# path and the server falls back to its cache.
+if command -v python3 >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  [ -f "$script_dir/mcp_gather.sh" ] && . "$script_dir/mcp_gather.sh"
+  merged=$(printf '%%s' "$payload" | PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" python3 -c '
+import json, os, re, stat, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.stdout.write(raw)
+    raise SystemExit
+def gram_trusted(path):
+    # Only trust a regular file we own with no group/world access, inside a
+    # directory we own with no group/world access. In a shared /tmp a planted
+    # file or symlink could otherwise inject a forged inventory into the guard;
+    # lstat rejects symlinks (no following) on both the file and its directory.
+    try:
+        dst = os.lstat(os.path.dirname(path))
+        fst = os.lstat(path)
+    except OSError:
+        return False
+    uid = os.geteuid()
+    return (stat.S_ISDIR(dst.st_mode) and dst.st_uid == uid and not (dst.st_mode & 0o077)
+            and stat.S_ISREG(fst.st_mode) and fst.st_uid == uid and not (fst.st_mode & 0o077))
+if data.get("hook_event_name") == "PreToolUse":
+    ad = data.get("additional_data")
+    # Mirror the server-side presence test (parseMCPInventoryFromPayload): a
+    # non-empty claude_code string OR a non-null cowork value (an empty list is
+    # a valid "no servers" inventory) counts as caller-supplied. Truthiness
+    # would misread that empty list as missing and trigger a needless gather.
+    cc_val = ad.get("mcp_inventory_claude_code") if isinstance(ad, dict) else None
+    cw_val = ad.get("mcp_inventory_cowork") if isinstance(ad, dict) else None
+    has_inventory = (isinstance(cc_val, str) and cc_val != "") or cw_val is not None
+    sid = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("session_id") or ""))[:128]
+    fp = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks", "mcp-" + sid + ".json") if sid else ""
+    frag = None
+    if fp and gram_trusted(fp):
+        try:
+            with open(fp, encoding="utf-8") as rf:
+                frag = json.load(rf)
+        except Exception:
+            frag = None
+    if isinstance(frag, dict):
+        if not isinstance(ad, dict):
+            ad = {}
+        # Do not clobber an inventory the caller already supplied.
+        for k, v in frag.items():
+            ad.setdefault(k, v)
+        data["additional_data"] = ad
+    elif not has_inventory:
+        # No per-session file to replay and the caller supplied none. Signal the
+        # shell (exit 3) to gather the inventory inline rather than forward a
+        # payload the server cannot enforce against on a brand-new session.
+        raise SystemExit(3)
+sys.stdout.write(json.dumps(data))
+')
+  case $? in
+    3)
+      # First PreToolUse of the session before the SessionStart file exists:
+      # gather inline. The gatherer is shipped only with the Claude plugin
+      # (mcp_gather.sh); cursor has none, so this is a no-op there. Cap wall time
+      # tighter than the async SessionStart path since this blocks the tool call.
+      if type gram_gather_mcp_inventory >/dev/null 2>&1; then
+        enriched=$(gram_gather_mcp_inventory "$payload" 5)
+        [ -n "$enriched" ] && payload="$enriched"
+      fi
+      ;;
+    *)
+      [ -n "$merged" ] && payload="$merged"
+      ;;
+  esac
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# gram_http_post (http.sh) retries transient resets so a single reset no
+# longer blocks the tool call; the server still decides allow/block.
+gram_http_post "${server_url}/rpc/hooks.%s" "$payload" 10 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.%s")
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 echo "$body"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Speakeasy server cannot silently bypass blocking policies. A 3xx (e.g. an
+# unfollowed http->https redirect) carries no decision, so only 2xx is allow.
+# The 2>/dev/null guards keep a non-numeric code from leaking a shell error.
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   exit 0
 fi
 
@@ -1101,6 +1578,233 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ) >/dev/null 2>&1 &
 
 exit 0
+`)
+}
+
+// renderSharedMCPInventoryGatherScript emits hooks/mcp_gather.sh: the shared
+// MCP-inventory gatherer sourced (never executed directly) by two callers in
+// the Claude plugin:
+//   - mcp_inventory.sh gathers asynchronously on SessionStart/ConfigChange.
+//   - hook.sh gathers inline on PreToolUse, but only when the per-session
+//     inventory file written at SessionStart does not exist yet (e.g. the very
+//     first action of a brand-new session is a tool call, before the async
+//     SessionStart write has landed). This closes the DNO-286 race rather than
+//     merely narrowing it: PreToolUse no longer depends on the async snapshot
+//     being cached in time, because it can produce a current inventory itself.
+//
+// gram_gather_mcp_inventory detects the execution environment, collects the
+// active MCP server list, persists it to the per-session file the PreToolUse
+// replay path reads, and echoes the payload enriched under additional_data. It
+// stamps additional_data.mcp_inventory_fresh=true so the server treats a
+// live-gathered inventory as authoritative over its cache, while a later replay
+// of the file (which omits the flag) is correctly treated as non-fresh. It must
+// stay byte-for-byte identical to the checked-in
+// hooks/plugin-claude/hooks/mcp_gather.sh used in local development.
+func renderSharedMCPInventoryGatherScript() []byte {
+	return []byte(`#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
+#
+# Shared MCP-inventory gatherer. Sourced (never executed directly) by:
+#   - mcp_inventory.sh — SessionStart/ConfigChange, gathers asynchronously.
+#   - hook.sh          — PreToolUse, gathers inline ONLY when the per-session
+#                        inventory file written at SessionStart is not there yet
+#                        (e.g. the first action of a new session is a tool call,
+#                        before the async SessionStart write lands), so the
+#                        shadow-MCP guard never races that snapshot (DNO-286).
+#
+# gram_gather_mcp_inventory detects the execution environment, collects the
+# active MCP server list, persists it to the per-session file the PreToolUse
+# replay path reads, and echoes the payload enriched with the inventory under
+# additional_data. It also stamps additional_data.mcp_inventory_fresh=true so
+# the server knows this inventory was gathered live (and thus supersedes any
+# cached snapshot) rather than replayed from a possibly-stale file.
+#
+# Usage: enriched=$(gram_gather_mcp_inventory "$payload" [max_list_seconds])
+#   $1 = hook payload JSON
+#   $2 = wall-time cap for "claude mcp list" (default 15; PreToolUse passes a
+#        tighter cap since it blocks the tool call). Overridable per call via
+#        the GRAM_HOOKS_MCP_LIST_TIMEOUT environment variable.
+#
+# Set GRAM_HOOKS_DEBUG=1 to surface why an inventory came back empty.
+
+# Both callers (mcp_inventory.sh, hook.sh) already define debug() before
+# sourcing this file; define a self-contained fallback so the gatherer's
+# diagnostics still work if it is ever sourced on its own.
+if ! declare -f debug >/dev/null 2>&1; then
+  debug() {
+    if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+      printf 'gram-hooks(mcp-gather): %s\n' "$1" >&2
+    fi
+  }
+fi
+
+gram_gather_mcp_inventory() {
+  local payload="$1"
+  local list_timeout="${2:-${GRAM_HOOKS_MCP_LIST_TIMEOUT:-15}}"
+  local mcp_inventory_claude_code=""
+  local mcp_inventory_cowork="null"
+  local local_run_json="" candidate_local_dir candidate_local_json parent_dir sibling inv enriched
+
+  # Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
+  # .../local_<rid>/outputs; the config sits one directory up as
+  # .../local_<rid>.json and lists the remote MCP connectors with their
+  # connector UUIDs. That's the only spot on the host filesystem where the
+  # UUID <-> URL pairing exists, so when we find it we ship it verbatim.
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
+    candidate_local_json="${candidate_local_dir}.json"
+    if [ -f "$candidate_local_json" ]; then
+      local_run_json="$candidate_local_json"
+    else
+      # SessionStart often fires before cmux writes the per-run config file.
+      # Fall back to the most-recent sibling local_*.json — the
+      # remoteMcpServersConfig block is account/org-scoped and identical across
+      # runs in the same subid directory, so any sibling is good enough for the
+      # UUID <-> URL mapping we care about.
+      parent_dir=$(dirname "$candidate_local_dir")
+      if [ -d "$parent_dir" ]; then
+        sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
+        if [ -n "$sibling" ] && [ -f "$sibling" ]; then
+          local_run_json="$sibling"
+        fi
+      fi
+    fi
+  fi
+
+  if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
+    # Extract the connector UUID + URL pairs we care about. The "tools" array is
+    # dropped — it can be huge and we don't need it here. cmux's field naming has
+    # drifted across versions (snake_case vs camelCase, "uuid" vs "id" for the
+    # connector identifier) so we try multiple candidates per slot and keep the
+    # first non-null. This field becomes the mcp__<server>__tool prefix
+    # server-side, so getting it wrong silently shows users a UUID, not "Slack".
+    inv=$(jq -c '
+      [
+        (.remoteMcpServersConfig // [])[]
+        | {
+            connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
+            name:           (.name // .displayName // .display_name // null),
+            url:            (.url // .serverUrl // .server_url // null),
+            source:         "claude.ai"
+          }
+      ]
+    ' "$local_run_json" 2>/dev/null)
+    if [ -n "$inv" ]; then
+      mcp_inventory_cowork="$inv"
+    else
+      debug "jq found no remoteMcpServersConfig in $local_run_json (cowork inventory empty)"
+    fi
+  elif command -v claude >/dev/null 2>&1; then
+    # Claude Code: "claude mcp list" health-checks every server, which can take
+    # seconds for stdio servers. Hard-cap wall time so a misbehaving server
+    # can't keep this hook alive forever. macOS doesn't ship GNU timeout —
+    # prefer it, fall back to coreutils' gtimeout, then to no timeout at all
+    # rather than failing.
+    if command -v timeout >/dev/null 2>&1; then
+      mcp_inventory_claude_code=$(timeout "$list_timeout" claude mcp list 2>&1 || true)
+    elif command -v gtimeout >/dev/null 2>&1; then
+      mcp_inventory_claude_code=$(gtimeout "$list_timeout" claude mcp list 2>&1 || true)
+    else
+      mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
+    fi
+    [ -z "$mcp_inventory_claude_code" ] && debug "'claude mcp list' produced no output (timed out, errored, or no servers configured)"
+  else
+    debug "no MCP inventory source found: no cowork local_*.json reachable and no 'claude' binary on PATH"
+  fi
+
+  enriched=$(MCP_CC="$mcp_inventory_claude_code" \
+             MCP_CW="$mcp_inventory_cowork" \
+             PAYLOAD="$payload" \
+             PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" \
+             python3 -c '
+import json, os, re, stat, sys, tempfile, time
+try:
+    p = json.loads(os.environ["PAYLOAD"])
+except Exception:
+    sys.exit(1)
+ad = p.get("additional_data") or {}
+frag = {}
+cc = os.environ.get("MCP_CC", "")
+if cc:
+    ad["mcp_inventory_claude_code"] = cc
+    frag["mcp_inventory_claude_code"] = cc
+try:
+    cw = json.loads(os.environ.get("MCP_CW", "null"))
+except Exception:
+    cw = None
+if cw is not None:
+    ad["mcp_inventory_cowork"] = cw
+    frag["mcp_inventory_cowork"] = cw
+# Tell the server this inventory was gathered live this call so the PreToolUse
+# guard treats it as authoritative over any cached snapshot. Only stamp it when
+# we actually gathered something — an empty result must not override a good
+# cache. The flag is deliberately NOT written to the per-session file below, so
+# a later replay of that file is correctly treated as non-fresh.
+if frag:
+    ad["mcp_inventory_fresh"] = True
+p["additional_data"] = ad
+# Persist the inventory fragment to a per-session file so the blocking
+# PreToolUse hook can replay it in its own payload, instead of depending on
+# the server having cached this async SessionStart snapshot in time (DNO-286).
+# The file holds exactly the additional_data keys the server already parses.
+def gram_safe_dir():
+    base = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks")
+    try:
+        os.makedirs(base, mode=0o700, exist_ok=True)
+        st = os.lstat(base)
+    except OSError:
+        return None
+    # Refuse a directory we do not own or that is group/world writable. In a
+    # shared /tmp an attacker could pre-create gram-hooks and plant a forged
+    # inventory the PreToolUse guard would trust; makedirs(exist_ok=True) does
+    # not reapply the mode to a pre-existing dir, so verify ownership and
+    # permissions explicitly (lstat also rejects a symlink planted in its place).
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or (st.st_mode & 0o077):
+        return None
+    return base
+sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
+base = gram_safe_dir()
+# File persistence is strictly best-effort: it must never abort enrichment,
+# which also builds the POST body, or the freshly gathered inventory would be
+# lost for this very SessionStart/ConfigChange event. Swallow anything it
+# raises (e.g. os.listdir failing if the dir vanished after the safe check).
+if sid and frag and base:
+    try:
+        # Prune snapshots older than 24h so session files do not accumulate.
+        now = time.time()
+        for fn in os.listdir(base):
+            if not fn.startswith("mcp-"):
+                continue
+            stale = os.path.join(base, fn)
+            try:
+                if now - os.path.getmtime(stale) > 86400:
+                    os.remove(stale)
+            except OSError:
+                pass
+        dest = os.path.join(base, "mcp-" + sid + ".json")
+        # Unique temp name per writer (mkstemp uses O_EXCL, mode 0600) so concurrent
+        # SessionStart/ConfigChange runs for the same session cannot truncate each
+        # other mid-write; os.replace is atomic so the last writer wins cleanly.
+        fd, tmp = tempfile.mkstemp(dir=base, prefix="mcp-" + sid + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as wf:
+                json.dump(frag, wf)
+            os.replace(tmp, dest)
+        except OSError:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    except Exception:
+        pass
+print(json.dumps(p))
+') || {
+    debug "python3 enrichment failed (missing or payload not JSON); sending original payload without MCP inventory"
+    enriched="$payload"
+  }
+
+  printf '%s' "$enriched"
+}
 `)
 }
 
@@ -1153,6 +1857,15 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 
+# Fire-and-forget: this hook never blocks and always exits 0, so failures are
+# otherwise invisible. Set GRAM_HOOKS_DEBUG=1 to surface why the MCP inventory
+# was never collected or delivered.
+debug() {
+  if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+    printf 'gram-hooks(mcp-inventory): %%s\n' "$1" >&2
+  fi
+}
+
 %s
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
@@ -1166,103 +1879,32 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
-mcp_inventory_claude_code=""
-mcp_inventory_cowork="null"
+# Gather the MCP inventory (cowork config or claude mcp list), persist it to the
+# per-session file the PreToolUse hook replays, and enrich the payload. This is
+# the same gatherer hook.sh falls back to inline on a brand-new session's first
+# tool call, so both paths produce identical inventory (mcp_gather.sh). The
+# gatherer emits its own GRAM_HOOKS_DEBUG diagnostics for why an inventory came
+# back empty.
+# shellcheck source=/dev/null
+. "$script_dir/mcp_gather.sh"
+enriched=$(gram_gather_mcp_inventory "$payload")
 
-# Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
-# .../local_<rid>/outputs; the config sits one directory up as
-# .../local_<rid>.json and lists the remote MCP connectors with their
-# connector UUIDs. That's the only spot on the host filesystem where the
-# UUID <-> URL pairing exists, so when we find it we ship it verbatim.
-local_run_json=""
-
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
-  candidate_local_json="${candidate_local_dir}.json"
-  if [ -f "$candidate_local_json" ]; then
-    local_run_json="$candidate_local_json"
-  else
-    # SessionStart often fires before cmux writes the per-run config
-    # file. Fall back to the most-recent sibling local_*.json — the
-    # remoteMcpServersConfig block is account/org-scoped and identical
-    # across runs in the same subid directory, so any sibling is good
-    # enough for the UUID <-> URL mapping we care about.
-    parent_dir=$(dirname "$candidate_local_dir")
-    if [ -d "$parent_dir" ]; then
-      sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
-      if [ -n "$sibling" ] && [ -f "$sibling" ]; then
-        local_run_json="$sibling"
-      fi
-    fi
-  fi
-fi
-
-if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
-  # Extract the connector UUID + URL pairs we actually care about.
-  # `+"`tools`"+` is dropped — it can be huge and we don't need it here.
-  # cmux's field naming has drifted across versions (snake_case vs
-  # camelCase, `+"`uuid`"+` vs `+"`id`"+` for the connector identifier) so we try
-  # multiple candidates per slot and keep the first non-null. This is
-  # the field that becomes the `+"`mcp__<server>__tool`"+` prefix server-side,
-  # so getting it wrong silently shows users a UUID instead of "Slack".
-  inv=$(jq -c '
-    [
-      (.remoteMcpServersConfig // [])[]
-      | {
-          connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
-          name:           (.name // .displayName // .display_name // null),
-          url:            (.url // .serverUrl // .server_url // null),
-          source:         "claude.ai"
-        }
-    ]
-  ' "$local_run_json" 2>/dev/null)
-  [ -n "$inv" ] && mcp_inventory_cowork="$inv"
-elif command -v claude >/dev/null 2>&1; then
-  # Claude Code: `+"`claude mcp list`"+` health-checks every server, which can
-  # take seconds for stdio servers. Hard-cap wall time so a misbehaving
-  # server can't keep this hook alive forever; since the hook is async
-  # the latency is invisible to Claude anyway. macOS doesn't ship GNU
-  # `+"`timeout`"+` — prefer it, fall back to coreutils' `+"`gtimeout`"+`, then to
-  # no timeout at all rather than failing.
-  if command -v timeout >/dev/null 2>&1; then
-    mcp_inventory_claude_code=$(timeout 15 claude mcp list 2>&1 || true)
-  elif command -v gtimeout >/dev/null 2>&1; then
-    mcp_inventory_claude_code=$(gtimeout 15 claude mcp list 2>&1 || true)
-  else
-    mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
-  fi
-fi
-
-enriched=$(MCP_CC="$mcp_inventory_claude_code" \
-           MCP_CW="$mcp_inventory_cowork" \
-           PAYLOAD="$payload" \
-           python3 -c '
-import json, os, sys
-try:
-    p = json.loads(os.environ["PAYLOAD"])
-except Exception:
-    sys.exit(1)
-ad = p.get("additional_data") or {}
-cc = os.environ.get("MCP_CC", "")
-if cc:
-    ad["mcp_inventory_claude_code"] = cc
-try:
-    cw = json.loads(os.environ.get("MCP_CW", "null"))
-except Exception:
-    cw = None
-if cw is not None:
-    ad["mcp_inventory_cowork"] = cw
-p["additional_data"] = ad
-print(json.dumps(p))
-') || enriched="$payload"
-
-curl -s -o /dev/null -X POST \
-  -H "Content-Type: application/json" \
+# Fire-and-forget through the shared helper (http.sh) so a transient reset
+# retries instead of dropping the inventory. The hook never blocks, but we
+# still log the delivery outcome under GRAM_HOOKS_DEBUG so support can tell
+# "never reached the server" from "server rejected it".
+gram_http_post "${server_url}/rpc/hooks.claude" "$enriched" 30 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  -d "$enriched" \
-  --max-time 30 \
-  "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} >/dev/null 2>&1 || true
+
+http_code="$GRAM_HTTP_CODE"
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+  debug "inventory delivered (HTTP ${http_code})"
+elif [ "$http_code" = "000" ]; then
+  debug "inventory NOT delivered: could not reach ${server_url} (connection failure or timeout)"
+else
+  debug "inventory NOT delivered: server returned HTTP ${http_code}"
+fi
 
 exit 0
 `, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
@@ -1399,17 +2041,43 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	fmt.Fprintf(&b, "MARKETPLACE_KEY=%q\n", marketplace)
 	fmt.Fprintf(&b, "PLUGIN_KEY=%q\n\n", plugin)
 
+	// Desktop-only and MDM-deployed machines run without codex on PATH; probe
+	// the managed-install and app-bundle locations. Candidate list mirrors
+	// find_codex in the generated hook script.
+	b.WriteString(`find_codex() {
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  local candidate
+  for candidate in \
+    "${codex_home}/packages/standalone/current/bin/codex" \
+    "${HOME}/.local/bin/codex" \
+    /usr/local/bin/codex \
+    "/Applications/Codex.app/Contents/Resources/codex"; do
+    if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+CODEX_BIN="$(find_codex || true)"
+
+`)
+
 	// Step 1: marketplace registration differs for remote vs local ZIP installs.
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
 		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
 echo "→ Registering Speakeasy marketplace..."
-if command -v codex >/dev/null 2>&1; then
+if [ -n "${CODEX_BIN}" ]; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
-  codex plugin marketplace add "${MARKETPLACE_URL}" || true
-  codex plugin marketplace upgrade "${MARKETPLACE_KEY}"
+  "${CODEX_BIN}" plugin marketplace add "${MARKETPLACE_URL}" || true
+  "${CODEX_BIN}" plugin marketplace upgrade "${MARKETPLACE_KEY}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
 fi
 
@@ -1418,10 +2086,10 @@ fi
 		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
-if command -v codex >/dev/null 2>&1; then
-  codex plugin marketplace add "${SCRIPT_DIR}"
+if [ -n "${CODEX_BIN}" ]; then
+  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
 fi
 
@@ -1440,16 +2108,14 @@ config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 content = open(config_path).read() if os.path.exists(config_path) else ""
 
-def ensure_dotted_key(text, key, value):
-    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text):
-        return text
-    # Insert before the first table header so the key stays at root scope.
-    # Appending after a [table] section would silently nest it inside that table.
+# A root-level dotted key implicitly defines its parent table and conflicts
+# with an explicit [table] header elsewhere in the file. Only the region
+# before the first table header is touched.
+def strip_root_dotted_key(text, key):
     m = re.search(r'(?m)^\[', text)
-    if m:
-        before = text[:m.start()].rstrip('\n')
-        return before + '\n' + key + ' = ' + value + '\n\n' + text[m.start():]
-    return text.rstrip('\n') + '\n' + key + ' = ' + value + '\n'
+    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
+    root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
+    return root + rest
 
 def ensure_table_entry(text, table_header, key, value):
     if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
@@ -1465,8 +2131,10 @@ def ensure_table_entry(text, table_header, key, value):
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
 	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
 
-	b.WriteString(`content = ensure_dotted_key(content, "features.hooks", "true")
-content = ensure_dotted_key(content, "features.plugin_hooks", "true")
+	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
+content = strip_root_dotted_key(content, "features.plugin_hooks")
+content = ensure_table_entry(content, "[features]", "hooks", "true")
+content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
 if not re.search(r'(?m)^\[hooks\.state\]', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
@@ -1595,7 +2263,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		DisplayName: displayName,
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -1637,9 +2305,17 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 // --- JSON types ---
 
 type marketplaceManifest struct {
-	Name    string             `json:"name"`
-	Owner   marketplaceOwner   `json:"owner"`
-	Plugins []marketplaceEntry `json:"plugins"`
+	Name     string               `json:"name"`
+	Owner    marketplaceOwner     `json:"owner"`
+	Metadata *marketplaceMetadata `json:"metadata,omitempty"`
+	Plugins  []marketplaceEntry   `json:"plugins"`
+}
+
+// marketplaceMetadata carries optional marketplace-level settings. Cursor uses
+// pluginRoot to declare the subdirectory that contains all plugins, letting
+// plugin sources be referenced by bare name relative to that root.
+type marketplaceMetadata struct {
+	PluginRoot string `json:"pluginRoot,omitempty"`
 }
 
 type marketplaceOwner struct {
@@ -1687,8 +2363,16 @@ type cursorPluginMeta struct {
 	DisplayName string       `json:"displayName"`
 	Description string       `json:"description"`
 	Version     string       `json:"version"`
-	Author      pluginAuthor `json:"author"`
+	Author      cursorAuthor `json:"author"`
 	Homepage    string       `json:"homepage"`
+}
+
+// cursorAuthor matches Cursor's documented plugin author schema (name + optional
+// email). Cursor does not recognize a url sub-field — the author URL belongs in
+// the top-level homepage/repository fields instead.
+type cursorAuthor struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
 }
 
 type cursorMCPConfig struct {

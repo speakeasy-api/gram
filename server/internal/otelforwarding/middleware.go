@@ -143,6 +143,7 @@ func tryForward(ctx context.Context, logger *slog.Logger, client *Client, forwar
 		logger.WarnContext(ctx, "build otel forwarding target url",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
+			attr.SlogURLFull(cfg.URL),
 		)
 		return
 	}

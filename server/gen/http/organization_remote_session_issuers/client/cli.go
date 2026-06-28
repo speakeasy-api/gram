@@ -11,107 +11,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildCreateOrganizationRemoteSessionIssuerPayload builds the payload for the
-// organizationRemoteSessionIssuers createOrganizationRemoteSessionIssuer
-// endpoint from CLI flags.
-func BuildCreateOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBody string, organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionToken string, organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyToken string) (*organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload, error) {
+// BuildCreateIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers createIssuer endpoint from CLI flags.
+func BuildCreateIssuerPayload(organizationRemoteSessionIssuersCreateIssuerBody string, organizationRemoteSessionIssuersCreateIssuerSessionToken string, organizationRemoteSessionIssuersCreateIssuerApikeyToken string) (*organizationremotesessionissuers.CreateIssuerPayload, error) {
 	var err error
-	var body CreateOrganizationRemoteSessionIssuerRequestBody
+	var body CreateIssuerRequestBody
 	{
-		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBody), &body)
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
-	}
-	var sessionToken *string
-	{
-		if organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionToken
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 		}
-	}
-	var apikeyToken *string
-	{
-		if organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyToken
+		if body.LogoAssetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 		}
-	}
-	v := &organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload{
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
-	}
-	if body.ScopesSupported != nil {
-		v.ScopesSupported = make([]string, len(body.ScopesSupported))
-		for i, val := range body.ScopesSupported {
-			v.ScopesSupported[i] = val
-		}
-	}
-	if body.GrantTypesSupported != nil {
-		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
-		for i, val := range body.GrantTypesSupported {
-			v.GrantTypesSupported[i] = val
-		}
-	}
-	if body.ResponseTypesSupported != nil {
-		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
-		for i, val := range body.ResponseTypesSupported {
-			v.ResponseTypesSupported[i] = val
-		}
-	}
-	if body.TokenEndpointAuthMethodsSupported != nil {
-		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
-		for i, val := range body.TokenEndpointAuthMethodsSupported {
-			v.TokenEndpointAuthMethodsSupported[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v, nil
-}
-
-// BuildUpdateOrganizationRemoteSessionIssuerPayload builds the payload for the
-// organizationRemoteSessionIssuers updateOrganizationRemoteSessionIssuer
-// endpoint from CLI flags.
-func BuildUpdateOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBody string, organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionToken string, organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyToken string) (*organizationremotesessionissuers.UpdateOrganizationRemoteSessionIssuerPayload, error) {
-	var err error
-	var body UpdateOrganizationRemoteSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionToken
+		if organizationRemoteSessionIssuersCreateIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersCreateIssuerSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyToken
+		if organizationRemoteSessionIssuersCreateIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersCreateIssuerApikeyToken
 		}
 	}
-	v := &organizationremotesessionissuers.UpdateOrganizationRemoteSessionIssuerPayload{
-		ID:                    body.ID,
+	v := &organizationremotesessionissuers.CreateIssuerPayload{
+		ProjectID:             body.ProjectID,
 		Slug:                  body.Slug,
 		Issuer:                body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -149,22 +92,21 @@ func BuildUpdateOrganizationRemoteSessionIssuerPayload(organizationRemoteSession
 	return v, nil
 }
 
-// BuildListOrganizationRemoteSessionIssuersPayload builds the payload for the
-// organizationRemoteSessionIssuers listOrganizationRemoteSessionIssuers
-// endpoint from CLI flags.
-func BuildListOrganizationRemoteSessionIssuersPayload(organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursor string, organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimit string, organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionToken string, organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyToken string) (*organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersPayload, error) {
+// BuildListIssuersPayload builds the payload for the
+// organizationRemoteSessionIssuers listIssuers endpoint from CLI flags.
+func BuildListIssuersPayload(organizationRemoteSessionIssuersListIssuersCursor string, organizationRemoteSessionIssuersListIssuersLimit string, organizationRemoteSessionIssuersListIssuersSessionToken string, organizationRemoteSessionIssuersListIssuersApikeyToken string) (*organizationremotesessionissuers.ListIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
-		if organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursor != "" {
-			cursor = &organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursor
+		if organizationRemoteSessionIssuersListIssuersCursor != "" {
+			cursor = &organizationRemoteSessionIssuersListIssuersCursor
 		}
 	}
 	var limit *int
 	{
-		if organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimit != "" {
+		if organizationRemoteSessionIssuersListIssuersLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(organizationRemoteSessionIssuersListIssuersLimit, 10, strconv.IntSize)
 			val := int(v)
 			limit = &val
 			if err != nil {
@@ -174,17 +116,17 @@ func BuildListOrganizationRemoteSessionIssuersPayload(organizationRemoteSessionI
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionToken
+		if organizationRemoteSessionIssuersListIssuersSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersListIssuersSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyToken != "" {
-			apikeyToken = &organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyToken
+		if organizationRemoteSessionIssuersListIssuersApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersListIssuersApikeyToken
 		}
 	}
-	v := &organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersPayload{}
+	v := &organizationremotesessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
@@ -193,14 +135,13 @@ func BuildListOrganizationRemoteSessionIssuersPayload(organizationRemoteSessionI
 	return v, nil
 }
 
-// BuildGetOrganizationRemoteSessionIssuerPayload builds the payload for the
-// organizationRemoteSessionIssuers getOrganizationRemoteSessionIssuer endpoint
-// from CLI flags.
-func BuildGetOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerID string, organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionToken string, organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyToken string) (*organizationremotesessionissuers.GetOrganizationRemoteSessionIssuerPayload, error) {
+// BuildGetIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers getIssuer endpoint from CLI flags.
+func BuildGetIssuerPayload(organizationRemoteSessionIssuersGetIssuerID string, organizationRemoteSessionIssuersGetIssuerSessionToken string, organizationRemoteSessionIssuersGetIssuerApikeyToken string) (*organizationremotesessionissuers.GetIssuerPayload, error) {
 	var err error
 	var id string
 	{
-		id = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerID
+		id = organizationRemoteSessionIssuersGetIssuerID
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
@@ -208,17 +149,17 @@ func BuildGetOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIss
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionToken
+		if organizationRemoteSessionIssuersGetIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetIssuerSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyToken
+		if organizationRemoteSessionIssuersGetIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetIssuerApikeyToken
 		}
 	}
-	v := &organizationremotesessionissuers.GetOrganizationRemoteSessionIssuerPayload{}
+	v := &organizationremotesessionissuers.GetIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -226,14 +167,14 @@ func BuildGetOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIss
 	return v, nil
 }
 
-// BuildDeleteOrganizationRemoteSessionIssuerPayload builds the payload for the
-// organizationRemoteSessionIssuers deleteOrganizationRemoteSessionIssuer
-// endpoint from CLI flags.
-func BuildDeleteOrganizationRemoteSessionIssuerPayload(organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerID string, organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionToken string, organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyToken string) (*organizationremotesessionissuers.DeleteOrganizationRemoteSessionIssuerPayload, error) {
+// BuildGetIssuerDeletePreflightPayload builds the payload for the
+// organizationRemoteSessionIssuers getIssuerDeletePreflight endpoint from CLI
+// flags.
+func BuildGetIssuerDeletePreflightPayload(organizationRemoteSessionIssuersGetIssuerDeletePreflightID string, organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionToken string, organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyToken string) (*organizationremotesessionissuers.GetIssuerDeletePreflightPayload, error) {
 	var err error
 	var id string
 	{
-		id = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerID
+		id = organizationRemoteSessionIssuersGetIssuerDeletePreflightID
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
@@ -241,18 +182,678 @@ func BuildDeleteOrganizationRemoteSessionIssuerPayload(organizationRemoteSession
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionToken
+		if organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyToken
+		if organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyToken
 		}
 	}
-	v := &organizationremotesessionissuers.DeleteOrganizationRemoteSessionIssuerPayload{}
+	v := &organizationremotesessionissuers.GetIssuerDeletePreflightPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildUpdateIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers updateIssuer endpoint from CLI flags.
+func BuildUpdateIssuerPayload(organizationRemoteSessionIssuersUpdateIssuerBody string, organizationRemoteSessionIssuersUpdateIssuerSessionToken string, organizationRemoteSessionIssuersUpdateIssuerApikeyToken string) (*organizationremotesessionissuers.UpdateIssuerPayload, error) {
+	var err error
+	var body UpdateIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.LogoAssetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersUpdateIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersUpdateIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersUpdateIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersUpdateIssuerApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.UpdateIssuerPayload{
+		ID:                    body.ID,
+		Slug:                  body.Slug,
+		Issuer:                body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
+		AuthorizationEndpoint: body.AuthorizationEndpoint,
+		TokenEndpoint:         body.TokenEndpoint,
+		RegistrationEndpoint:  body.RegistrationEndpoint,
+		JwksURI:               body.JwksURI,
+		Oidc:                  body.Oidc,
+		Passthrough:           body.Passthrough,
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.GrantTypesSupported != nil {
+		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
+		for i, val := range body.GrantTypesSupported {
+			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.ResponseTypesSupported != nil {
+		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
+		for i, val := range body.ResponseTypesSupported {
+			v.ResponseTypesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildDeleteIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers deleteIssuer endpoint from CLI flags.
+func BuildDeleteIssuerPayload(organizationRemoteSessionIssuersDeleteIssuerID string, organizationRemoteSessionIssuersDeleteIssuerSessionToken string, organizationRemoteSessionIssuersDeleteIssuerApikeyToken string) (*organizationremotesessionissuers.DeleteIssuerPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionIssuersDeleteIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersDeleteIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersDeleteIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersDeleteIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersDeleteIssuerApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.DeleteIssuerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildMoveIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers moveIssuer endpoint from CLI flags.
+func BuildMoveIssuerPayload(organizationRemoteSessionIssuersMoveIssuerBody string, organizationRemoteSessionIssuersMoveIssuerSessionToken string, organizationRemoteSessionIssuersMoveIssuerApikeyToken string) (*organizationremotesessionissuers.MoveIssuerPayload, error) {
+	var err error
+	var body MoveIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersMoveIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersMoveIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersMoveIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersMoveIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersMoveIssuerApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.MoveIssuerPayload{
+		ID:        body.ID,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListClientsPayload builds the payload for the
+// organizationRemoteSessionIssuers listClients endpoint from CLI flags.
+func BuildListClientsPayload(organizationRemoteSessionIssuersListClientsIssuerID string, organizationRemoteSessionIssuersListClientsCursor string, organizationRemoteSessionIssuersListClientsLimit string, organizationRemoteSessionIssuersListClientsSessionToken string, organizationRemoteSessionIssuersListClientsApikeyToken string) (*organizationremotesessionissuers.ListClientsPayload, error) {
+	var err error
+	var issuerID string
+	{
+		issuerID = organizationRemoteSessionIssuersListClientsIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("issuer_id", issuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if organizationRemoteSessionIssuersListClientsCursor != "" {
+			cursor = &organizationRemoteSessionIssuersListClientsCursor
+		}
+	}
+	var limit *int
+	{
+		if organizationRemoteSessionIssuersListClientsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationRemoteSessionIssuersListClientsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersListClientsSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersListClientsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersListClientsApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersListClientsApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.ListClientsPayload{}
+	v.IssuerID = issuerID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildGetClientPayload builds the payload for the
+// organizationRemoteSessionIssuers getClient endpoint from CLI flags.
+func BuildGetClientPayload(organizationRemoteSessionIssuersGetClientID string, organizationRemoteSessionIssuersGetClientSessionToken string, organizationRemoteSessionIssuersGetClientApikeyToken string) (*organizationremotesessionissuers.GetClientPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionIssuersGetClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersGetClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersGetClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.GetClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildGetClientDeletePreflightPayload builds the payload for the
+// organizationRemoteSessionIssuers getClientDeletePreflight endpoint from CLI
+// flags.
+func BuildGetClientDeletePreflightPayload(organizationRemoteSessionIssuersGetClientDeletePreflightID string, organizationRemoteSessionIssuersGetClientDeletePreflightSessionToken string, organizationRemoteSessionIssuersGetClientDeletePreflightApikeyToken string) (*organizationremotesessionissuers.GetClientDeletePreflightPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionIssuersGetClientDeletePreflightID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersGetClientDeletePreflightSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetClientDeletePreflightSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersGetClientDeletePreflightApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetClientDeletePreflightApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.GetClientDeletePreflightPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListClientMcpServersPayload builds the payload for the
+// organizationRemoteSessionIssuers listClientMcpServers endpoint from CLI
+// flags.
+func BuildListClientMcpServersPayload(organizationRemoteSessionIssuersListClientMcpServersClientID string, organizationRemoteSessionIssuersListClientMcpServersSessionToken string, organizationRemoteSessionIssuersListClientMcpServersApikeyToken string) (*organizationremotesessionissuers.ListClientMcpServersPayload, error) {
+	var err error
+	var clientID string
+	{
+		clientID = organizationRemoteSessionIssuersListClientMcpServersClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("client_id", clientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersListClientMcpServersSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersListClientMcpServersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersListClientMcpServersApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersListClientMcpServersApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.ListClientMcpServersPayload{}
+	v.ClientID = clientID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListClientSessionsPayload builds the payload for the
+// organizationRemoteSessionIssuers listClientSessions endpoint from CLI flags.
+func BuildListClientSessionsPayload(organizationRemoteSessionIssuersListClientSessionsClientID string, organizationRemoteSessionIssuersListClientSessionsCursor string, organizationRemoteSessionIssuersListClientSessionsLimit string, organizationRemoteSessionIssuersListClientSessionsSessionToken string, organizationRemoteSessionIssuersListClientSessionsApikeyToken string) (*organizationremotesessionissuers.ListClientSessionsPayload, error) {
+	var err error
+	var clientID string
+	{
+		clientID = organizationRemoteSessionIssuersListClientSessionsClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("client_id", clientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if organizationRemoteSessionIssuersListClientSessionsCursor != "" {
+			cursor = &organizationRemoteSessionIssuersListClientSessionsCursor
+		}
+	}
+	var limit *int
+	{
+		if organizationRemoteSessionIssuersListClientSessionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationRemoteSessionIssuersListClientSessionsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersListClientSessionsSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersListClientSessionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersListClientSessionsApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersListClientSessionsApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.ListClientSessionsPayload{}
+	v.ClientID = clientID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildCreateClientPayload builds the payload for the
+// organizationRemoteSessionIssuers createClient endpoint from CLI flags.
+func BuildCreateClientPayload(organizationRemoteSessionIssuersCreateClientBody string, organizationRemoteSessionIssuersCreateClientSessionToken string, organizationRemoteSessionIssuersCreateClientApikeyToken string) (*organizationremotesessionissuers.CreateClientPayload, error) {
+	var err error
+	var body CreateClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			}
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersCreateClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersCreateClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersCreateClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersCreateClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.CreateClientPayload{
+		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
+		ProjectID:               body.ProjectID,
+		ClientID:                body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildUpdateClientPayload builds the payload for the
+// organizationRemoteSessionIssuers updateClient endpoint from CLI flags.
+func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody string, organizationRemoteSessionIssuersUpdateClientSessionToken string, organizationRemoteSessionIssuersUpdateClientApikeyToken string) (*organizationremotesessionissuers.UpdateClientPayload, error) {
+	var err error
+	var body UpdateClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			}
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersUpdateClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersUpdateClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersUpdateClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersUpdateClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.UpdateClientPayload{
+		ID:                      body.ID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildDeleteClientPayload builds the payload for the
+// organizationRemoteSessionIssuers deleteClient endpoint from CLI flags.
+func BuildDeleteClientPayload(organizationRemoteSessionIssuersDeleteClientID string, organizationRemoteSessionIssuersDeleteClientSessionToken string, organizationRemoteSessionIssuersDeleteClientApikeyToken string) (*organizationremotesessionissuers.DeleteClientPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionIssuersDeleteClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersDeleteClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersDeleteClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersDeleteClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersDeleteClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.DeleteClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRemoveClientFromMcpServerPayload builds the payload for the
+// organizationRemoteSessionIssuers removeClientFromMcpServer endpoint from CLI
+// flags.
+func BuildRemoveClientFromMcpServerPayload(organizationRemoteSessionIssuersRemoveClientFromMcpServerBody string, organizationRemoteSessionIssuersRemoveClientFromMcpServerSessionToken string, organizationRemoteSessionIssuersRemoveClientFromMcpServerApikeyToken string) (*organizationremotesessionissuers.RemoveClientFromMcpServerPayload, error) {
+	var err error
+	var body RemoveClientFromMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRemoveClientFromMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", body.ClientID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRemoveClientFromMcpServerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRemoveClientFromMcpServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRemoveClientFromMcpServerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRemoveClientFromMcpServerApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RemoveClientFromMcpServerPayload{
+		ClientID:    body.ClientID,
+		McpServerID: body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRevokeSessionPayload builds the payload for the
+// organizationRemoteSessionIssuers revokeSession endpoint from CLI flags.
+func BuildRevokeSessionPayload(organizationRemoteSessionIssuersRevokeSessionBody string, organizationRemoteSessionIssuersRevokeSessionSessionToken string, organizationRemoteSessionIssuersRevokeSessionApikeyToken string) (*organizationremotesessionissuers.RevokeSessionPayload, error) {
+	var err error
+	var body RevokeSessionRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRevokeSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRevokeSessionSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRevokeSessionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRevokeSessionApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRevokeSessionApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RevokeSessionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRefreshSessionPayload builds the payload for the
+// organizationRemoteSessionIssuers refreshSession endpoint from CLI flags.
+func BuildRefreshSessionPayload(organizationRemoteSessionIssuersRefreshSessionBody string, organizationRemoteSessionIssuersRefreshSessionSessionToken string, organizationRemoteSessionIssuersRefreshSessionApikeyToken string) (*organizationremotesessionissuers.RefreshSessionPayload, error) {
+	var err error
+	var body RefreshSessionRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRefreshSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshSessionSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRefreshSessionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshSessionApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRefreshSessionApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RefreshSessionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRevokeAllClientSessionsPayload builds the payload for the
+// organizationRemoteSessionIssuers revokeAllClientSessions endpoint from CLI
+// flags.
+func BuildRevokeAllClientSessionsPayload(organizationRemoteSessionIssuersRevokeAllClientSessionsBody string, organizationRemoteSessionIssuersRevokeAllClientSessionsSessionToken string, organizationRemoteSessionIssuersRevokeAllClientSessionsApikeyToken string) (*organizationremotesessionissuers.RevokeAllClientSessionsPayload, error) {
+	var err error
+	var body RevokeAllClientSessionsRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRevokeAllClientSessionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", body.ClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRevokeAllClientSessionsSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRevokeAllClientSessionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRevokeAllClientSessionsApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRevokeAllClientSessionsApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RevokeAllClientSessionsPayload{
+		ClientID: body.ClientID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

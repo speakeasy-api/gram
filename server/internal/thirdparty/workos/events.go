@@ -16,6 +16,9 @@ const (
 
 	EventKindDirectorySyncActivated        EventKind = "dsync.activated"
 	EventKindDirectorySyncDeleted          EventKind = "dsync.deleted"
+	EventKindDirectorySyncUserCreated      EventKind = "dsync.user.created"
+	EventKindDirectorySyncUserDeleted      EventKind = "dsync.user.deleted"
+	EventKindDirectorySyncUserUpdated      EventKind = "dsync.user.updated"
 	EventKindDirectorySyncGroupCreated     EventKind = "dsync.group.created"
 	EventKindDirectorySyncGroupDeleted     EventKind = "dsync.group.deleted"
 	EventKindDirectorySyncGroupUpdated     EventKind = "dsync.group.updated"

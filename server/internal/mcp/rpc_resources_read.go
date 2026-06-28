@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -66,11 +65,11 @@ func handleResourcesRead(
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").LogError(ctx, logger)
 	}
 
 	if params.URI == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "resource URI is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "resource URI is required").LogError(ctx, logger)
 	}
 
 	projectID := mv.ProjectID(payload.projectID)
@@ -78,7 +77,7 @@ func handleResourcesRead(
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil, nil, platformExtras...)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
 	var resourceURN urn.Resource
@@ -86,7 +85,7 @@ func handleResourcesRead(
 	for _, resource := range toolset.Resources {
 		if resource.FunctionResourceDefinition != nil && resource.FunctionResourceDefinition.URI == params.URI {
 			if err := resourceURN.UnmarshalText([]byte(resource.FunctionResourceDefinition.ResourceUrn)); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to parse resource URN").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to parse resource URN").LogError(ctx, logger)
 			}
 			resourceDef = resource.FunctionResourceDefinition
 			break
@@ -94,12 +93,12 @@ func handleResourcesRead(
 	}
 
 	if resourceURN.Kind == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "resource not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "resource not found").LogError(ctx, logger)
 	}
 
 	plan, err := toolsetHelpers.GetResourceCallPlanByURN(ctx, resourceURN, uuid.UUID(projectID))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get resource call plan").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get resource call plan").LogError(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
@@ -113,12 +112,12 @@ func handleResourcesRead(
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
 	}
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(resourceURN.Kind), resourceURN.Source)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, logger)
 	}
 
 	rw := &resourceResponseWriter{
@@ -138,11 +137,6 @@ func handleResourcesRead(
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
-	}
-
-	var resourceEmail string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx.Email != nil {
-		resourceEmail = *authCtx.Email
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
@@ -175,17 +169,11 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
-		if payload.userID != "" {
-			logAttrs[attr.UserIDKey] = payload.userID
-		}
-		if payload.externalUserID != "" {
-			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
-		}
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
-		if resourceEmail != "" {
-			logAttrs[attr.UserEmailKey] = resourceEmail
+		if payload.externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
 		}
 
 		logAttrs.RecordToolsetSlug(payload.toolset)
@@ -201,6 +189,7 @@ func handleResourcesRead(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
+			UserInfo:   tm.UserInfoByID(payload.userID),
 			Attributes: logAttrs,
 		}
 		telemLogger.Log(ctx, params)
@@ -213,7 +202,7 @@ func handleResourcesRead(
 		GramEmail:  "",
 	}, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -243,7 +232,7 @@ func handleResourcesRead(
 			Result: json.RawMessage(rw.body.Bytes()),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
 		}
 
 		return bs, nil
@@ -278,7 +267,7 @@ func handleResourcesRead(
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)
 	}
 
 	return bs, nil

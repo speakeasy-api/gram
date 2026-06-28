@@ -25,7 +25,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	case errors.Is(err, pgx.ErrNoRows), err == nil && len(rows) == 0:
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment with assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment with assets").LogError(ctx, logger)
 	}
 
 	deployment := rows[0].Deployment
@@ -51,7 +51,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				"valid asset name", r.DeploymentsOpenapiv3AssetName.Valid && r.DeploymentsOpenapiv3AssetName.String != "",
 				"valid asset slug", r.DeploymentsOpenapiv3AssetSlug.Valid && r.DeploymentsOpenapiv3AssetSlug.String != "",
 			); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").Log(ctx, logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").LogError(ctx, logger)
 			}
 
 			attachedOpenAPIv3 = append(attachedOpenAPIv3, &types.OpenAPIv3DeploymentAsset{
@@ -72,7 +72,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				"valid asset slug", r.DeploymentsFunctionsSlug.Valid && r.DeploymentsFunctionsSlug.String != "",
 				"valid functions runtime", r.DeploymentsFunctionsRuntime.Valid && r.DeploymentsFunctionsRuntime.String != "",
 			); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions").Log(ctx, logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions").LogError(ctx, logger)
 			}
 
 			scale := new(r.DeploymentsFunctionsScale.Int32)
@@ -126,7 +126,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				"valid slug", r.ExternalMcpSlug.Valid && r.ExternalMcpSlug.String != "",
 				"valid registry server specifier", r.ExternalMcpRegistryServerSpecifier.Valid && r.ExternalMcpRegistryServerSpecifier.String != "",
 			); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").Log(ctx, logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").LogError(ctx, logger)
 			}
 
 			mcp := &types.DeploymentExternalMCP{

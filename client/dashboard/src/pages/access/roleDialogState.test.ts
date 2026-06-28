@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   effectiveGrantCount,
+  visiblePermissionCount,
   grantKeysString,
   hasFormChanges,
   isSaveDisabled,
@@ -65,6 +66,29 @@ describe("effectiveGrantCount", () => {
 
   it("returns 0 for empty grants", () => {
     expect(effectiveGrantCount({})).toBe(0);
+  });
+});
+
+describe("visiblePermissionCount", () => {
+  it("excludes risk policy grants from role permission counts", () => {
+    expect(
+      visiblePermissionCount([
+        { scope: "org:read" },
+        { scope: "org:admin" },
+        { scope: "risk_policy:evaluate" },
+        { scope: "risk_policy:bypass" },
+      ]),
+    ).toBe(2);
+  });
+
+  it("excludes grants without scopes from role permission counts", () => {
+    expect(
+      visiblePermissionCount([
+        { scope: "org:read" },
+        {},
+        { scope: "risk_policy:bypass" },
+      ]),
+    ).toBe(1);
   });
 });
 
@@ -438,9 +462,9 @@ describe("computeRuleTooltip", () => {
     );
   });
 
-  it("deny null (project) → denies all projects", () => {
+  it("exception null (project) → excludes all projects", () => {
     expect(computeRuleTooltip("deny", null, "project", projects)).toBe(
-      "Denies access to all projects in your org",
+      "Excludes access to all projects in your org",
     );
   });
 
@@ -458,7 +482,7 @@ describe("computeRuleTooltip", () => {
         "mcp",
         projects,
       ),
-    ).toBe("Denies access to all destructive tools");
+    ).toBe("Excludes access to all destructive tools");
   });
 
   it("multiple dispositions → joined with 'and'", () => {
@@ -480,7 +504,7 @@ describe("computeRuleTooltip", () => {
         "mcp",
         projects,
       ),
-    ).toBe("Denies access to deleteUser");
+    ).toBe("Excludes access to deleteUser");
   });
 
   it("multiple tools → count only", () => {
@@ -514,7 +538,7 @@ describe("computeRuleTooltip", () => {
         "mcp",
         projects,
       ),
-    ).toBe("Denies access to 2 projects");
+    ).toBe("Excludes access to 2 projects");
   });
 
   it("single server → count", () => {
@@ -525,7 +549,7 @@ describe("computeRuleTooltip", () => {
         "mcp",
         projects,
       ),
-    ).toBe("Denies access to 1 server");
+    ).toBe("Excludes access to 1 server");
   });
 
   it("multiple servers → count", () => {

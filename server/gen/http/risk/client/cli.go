@@ -25,7 +25,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -47,11 +47,22 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		}
 	}
 	v := &risk.CreateRiskPolicyPayload{
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		Action:      body.Action,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
+		Name:         body.Name,
+		PolicyType:   body.PolicyType,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
+		Enabled:      body.Enabled,
+		Action:       body.Action,
+		AudienceType: body.AudienceType,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
+		Prompt:       body.Prompt,
+	}
+	{
+		var zero string
+		if v.PolicyType == zero {
+			v.PolicyType = "standard"
+		}
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -95,6 +106,21 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 			v.Action = "flag"
 		}
 	}
+	{
+		var zero string
+		if v.AudienceType == zero {
+			v.AudienceType = "everyone"
+		}
+	}
+	if body.AudiencePrincipalUrns != nil {
+		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+		for i, val := range body.AudiencePrincipalUrns {
+			v.AudiencePrincipalUrns[i] = val
+		}
+	}
+	if body.ModelConfig != nil {
+		v.ModelConfig = marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -124,35 +150,6 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 		}
 	}
 	v := &risk.ListRiskPoliciesPayload{}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetRiskCapabilitiesPayload builds the payload for the risk
-// getRiskCapabilities endpoint from CLI flags.
-func BuildGetRiskCapabilitiesPayload(riskGetRiskCapabilitiesApikeyToken string, riskGetRiskCapabilitiesSessionToken string, riskGetRiskCapabilitiesProjectSlugInput string) (*risk.GetRiskCapabilitiesPayload, error) {
-	var apikeyToken *string
-	{
-		if riskGetRiskCapabilitiesApikeyToken != "" {
-			apikeyToken = &riskGetRiskCapabilitiesApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetRiskCapabilitiesSessionToken != "" {
-			sessionToken = &riskGetRiskCapabilitiesSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetRiskCapabilitiesProjectSlugInput != "" {
-			projectSlugInput = &riskGetRiskCapabilitiesProjectSlugInput
-		}
-	}
-	v := &risk.GetRiskCapabilitiesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -207,12 +204,17 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Action != nil {
 			if !(*body.Action == "flag" || *body.Action == "block") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+			}
+		}
+		if body.AudienceType != nil {
+			if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 			}
 		}
 		if err != nil {
@@ -238,12 +240,16 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		}
 	}
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		Action:      body.Action,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
+		ID:           body.ID,
+		Name:         body.Name,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
+		Enabled:      body.Enabled,
+		Action:       body.Action,
+		AudienceType: body.AudienceType,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
+		Prompt:       body.Prompt,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -280,6 +286,15 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.AudiencePrincipalUrns != nil {
+		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+		for i, val := range body.AudiencePrincipalUrns {
+			v.AudiencePrincipalUrns[i] = val
+		}
+	}
+	if body.ModelConfig != nil {
+		v.ModelConfig = marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -739,6 +754,42 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
+// BuildCompileExprPayload builds the payload for the risk compileExpr endpoint
+// from CLI flags.
+func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {
+	var expr string
+	{
+		if riskCompileExprExpr != "" {
+			expr = riskCompileExprExpr
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCompileExprApikeyToken != "" {
+			apikeyToken = &riskCompileExprApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCompileExprSessionToken != "" {
+			sessionToken = &riskCompileExprSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCompileExprProjectSlugInput != "" {
+			projectSlugInput = &riskCompileExprProjectSlugInput
+		}
+	}
+	v := &risk.CompileExprPayload{}
+	v.Expr = expr
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskUserBreakdownPayload builds the payload for the risk
 // getRiskUserBreakdown endpoint from CLI flags.
 func BuildGetRiskUserBreakdownPayload(riskGetRiskUserBreakdownExternalUserID string, riskGetRiskUserBreakdownFrom string, riskGetRiskUserBreakdownTo string, riskGetRiskUserBreakdownApikeyToken string, riskGetRiskUserBreakdownSessionToken string, riskGetRiskUserBreakdownProjectSlugInput string) (*risk.GetRiskUserBreakdownPayload, error) {
@@ -892,134 +943,6 @@ func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRi
 	return v, nil
 }
 
-// BuildListShadowMCPApprovalsPayload builds the payload for the risk
-// listShadowMCPApprovals endpoint from CLI flags.
-func BuildListShadowMCPApprovalsPayload(riskListShadowMCPApprovalsPolicyID string, riskListShadowMCPApprovalsApikeyToken string, riskListShadowMCPApprovalsSessionToken string, riskListShadowMCPApprovalsProjectSlugInput string) (*risk.ListShadowMCPApprovalsPayload, error) {
-	var err error
-	var policyID string
-	{
-		policyID = riskListShadowMCPApprovalsPolicyID
-		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskListShadowMCPApprovalsApikeyToken != "" {
-			apikeyToken = &riskListShadowMCPApprovalsApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskListShadowMCPApprovalsSessionToken != "" {
-			sessionToken = &riskListShadowMCPApprovalsSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskListShadowMCPApprovalsProjectSlugInput != "" {
-			projectSlugInput = &riskListShadowMCPApprovalsProjectSlugInput
-		}
-	}
-	v := &risk.ListShadowMCPApprovalsPayload{}
-	v.PolicyID = policyID
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildApproveShadowMCPPayload builds the payload for the risk
-// approveShadowMCP endpoint from CLI flags.
-func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveShadowMCPApikeyToken string, riskApproveShadowMCPSessionToken string, riskApproveShadowMCPProjectSlugInput string) (*risk.ApproveShadowMCPPayload, error) {
-	var err error
-	var body ApproveShadowMCPRequestBody
-	{
-		err = json.Unmarshal([]byte(riskApproveShadowMCPBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskApproveShadowMCPApikeyToken != "" {
-			apikeyToken = &riskApproveShadowMCPApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskApproveShadowMCPSessionToken != "" {
-			sessionToken = &riskApproveShadowMCPSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskApproveShadowMCPProjectSlugInput != "" {
-			projectSlugInput = &riskApproveShadowMCPProjectSlugInput
-		}
-	}
-	v := &risk.ApproveShadowMCPPayload{
-		PolicyID:   body.PolicyID,
-		Match:      body.Match,
-		ServerName: body.ServerName,
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildRevokeShadowMCPApprovalPayload builds the payload for the risk
-// revokeShadowMCPApproval endpoint from CLI flags.
-func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID string, riskRevokeShadowMCPApprovalMatch string, riskRevokeShadowMCPApprovalApikeyToken string, riskRevokeShadowMCPApprovalSessionToken string, riskRevokeShadowMCPApprovalProjectSlugInput string) (*risk.RevokeShadowMCPApprovalPayload, error) {
-	var err error
-	var policyID string
-	{
-		policyID = riskRevokeShadowMCPApprovalPolicyID
-		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var match string
-	{
-		match = riskRevokeShadowMCPApprovalMatch
-	}
-	var apikeyToken *string
-	{
-		if riskRevokeShadowMCPApprovalApikeyToken != "" {
-			apikeyToken = &riskRevokeShadowMCPApprovalApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskRevokeShadowMCPApprovalSessionToken != "" {
-			sessionToken = &riskRevokeShadowMCPApprovalSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskRevokeShadowMCPApprovalProjectSlugInput != "" {
-			projectSlugInput = &riskRevokeShadowMCPApprovalProjectSlugInput
-		}
-	}
-	v := &risk.RevokeShadowMCPApprovalPayload{}
-	v.PolicyID = policyID
-	v.Match = match
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildCreateRiskPolicyBypassRequestPayload builds the payload for the risk
 // createRiskPolicyBypassRequest endpoint from CLI flags.
 func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequestBody string, riskCreateRiskPolicyBypassRequestSessionToken string) (*risk.CreateRiskPolicyBypassRequestPayload, error) {
@@ -1039,6 +962,64 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 	}
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetRiskBlockPayload builds the payload for the risk getRiskBlock
+// endpoint from CLI flags.
+func BuildGetRiskBlockPayload(riskGetRiskBlockID string, riskGetRiskBlockSessionToken string) (*risk.GetRiskBlockPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskGetRiskBlockID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskBlockSessionToken != "" {
+			sessionToken = &riskGetRiskBlockSessionToken
+		}
+	}
+	v := &risk.GetRiskBlockPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSubmitRiskBlockFeedbackPayload builds the payload for the risk
+// submitRiskBlockFeedback endpoint from CLI flags.
+func BuildSubmitRiskBlockFeedbackPayload(riskSubmitRiskBlockFeedbackBody string, riskSubmitRiskBlockFeedbackSessionToken string) (*risk.SubmitRiskBlockFeedbackPayload, error) {
+	var err error
+	var body SubmitRiskBlockFeedbackRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSubmitRiskBlockFeedbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sentiment\": \"down\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.Sentiment == "up" || body.Sentiment == "down") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sentiment", body.Sentiment, []any{"up", "down"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSubmitRiskBlockFeedbackSessionToken != "" {
+			sessionToken = &riskSubmitRiskBlockFeedbackSessionToken
+		}
+	}
+	v := &risk.SubmitRiskBlockFeedbackPayload{
+		ID:        body.ID,
+		Sentiment: body.Sentiment,
 	}
 	v.SessionToken = sessionToken
 
@@ -1107,7 +1088,7 @@ func BuildApproveRiskPolicyBypassRequestPayload(riskApproveRiskPolicyBypassReque
 	{
 		err = json.Unmarshal([]byte(riskApproveRiskPolicyBypassRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -1134,6 +1115,12 @@ func BuildApproveRiskPolicyBypassRequestPayload(riskApproveRiskPolicyBypassReque
 	}
 	v := &risk.ApproveRiskPolicyBypassRequestPayload{
 		ID: body.ID,
+	}
+	if body.GrantedPrincipalUrns != nil {
+		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
+		for i, val := range body.GrantedPrincipalUrns {
+			v.GrantedPrincipalUrns[i] = val
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1289,7 +1276,7 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskCreateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -1317,11 +1304,12 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.CreateCustomDetectionRulePayload{
-		RuleID:      body.RuleID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		RuleID:        body.RuleID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
+		Severity:      body.Severity,
 	}
 	{
 		var zero string
@@ -1412,7 +1400,7 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskUpdateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
@@ -1441,11 +1429,12 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.UpdateCustomDetectionRulePayload{
-		ID:          body.ID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		ID:            body.ID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
+		Severity:      body.Severity,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1490,6 +1479,224 @@ func BuildDeleteCustomDetectionRulePayload(riskDeleteCustomDetectionRuleBody str
 	v := &risk.DeleteCustomDetectionRulePayload{
 		ID: body.ID,
 	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListRiskExclusionsPayload builds the payload for the risk
+// listRiskExclusions endpoint from CLI flags.
+func BuildListRiskExclusionsPayload(riskListRiskExclusionsRiskPolicyID string, riskListRiskExclusionsApikeyToken string, riskListRiskExclusionsSessionToken string, riskListRiskExclusionsProjectSlugInput string) (*risk.ListRiskExclusionsPayload, error) {
+	var err error
+	var riskPolicyID *string
+	{
+		if riskListRiskExclusionsRiskPolicyID != "" {
+			riskPolicyID = &riskListRiskExclusionsRiskPolicyID
+			err = goa.MergeErrors(err, goa.ValidateFormat("risk_policy_id", *riskPolicyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskExclusionsApikeyToken != "" {
+			apikeyToken = &riskListRiskExclusionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskExclusionsSessionToken != "" {
+			sessionToken = &riskListRiskExclusionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskExclusionsProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskExclusionsProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskExclusionsPayload{}
+	v.RiskPolicyID = riskPolicyID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateRiskExclusionPayload builds the payload for the risk
+// createRiskExclusion endpoint from CLI flags.
+func BuildCreateRiskExclusionPayload(riskCreateRiskExclusionBody string, riskCreateRiskExclusionApikeyToken string, riskCreateRiskExclusionSessionToken string, riskCreateRiskExclusionProjectSlugInput string) (*risk.CreateRiskExclusionPayload, error) {
+	var err error
+	var body CreateRiskExclusionRequestBody
+	{
+		err = json.Unmarshal([]byte(riskCreateRiskExclusionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }'")
+		}
+		if body.RiskPolicyID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+		}
+		if !(body.MatchType == "exact" || body.MatchType == "regex" || body.MatchType == "rule_id" || body.MatchType == "source" || body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCreateRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskCreateRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCreateRiskExclusionSessionToken != "" {
+			sessionToken = &riskCreateRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCreateRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskCreateRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.CreateRiskExclusionPayload{
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    body.MatchType,
+		MatchValue:   body.MatchValue,
+		RuleIDFilter: body.RuleIDFilter,
+		SourceFilter: body.SourceFilter,
+		Enabled:      body.Enabled,
+	}
+	{
+		var zero string
+		if v.RuleIDFilter == zero {
+			v.RuleIDFilter = ""
+		}
+	}
+	{
+		var zero string
+		if v.SourceFilter == zero {
+			v.SourceFilter = ""
+		}
+	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateRiskExclusionPayload builds the payload for the risk
+// updateRiskExclusion endpoint from CLI flags.
+func BuildUpdateRiskExclusionPayload(riskUpdateRiskExclusionBody string, riskUpdateRiskExclusionApikeyToken string, riskUpdateRiskExclusionSessionToken string, riskUpdateRiskExclusionProjectSlugInput string) (*risk.UpdateRiskExclusionPayload, error) {
+	var err error
+	var body UpdateRiskExclusionRequestBody
+	{
+		err = json.Unmarshal([]byte(riskUpdateRiskExclusionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.RiskPolicyID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+		}
+		if !(body.MatchType == "exact" || body.MatchType == "regex" || body.MatchType == "rule_id" || body.MatchType == "source" || body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUpdateRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskUpdateRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUpdateRiskExclusionSessionToken != "" {
+			sessionToken = &riskUpdateRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUpdateRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskUpdateRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.UpdateRiskExclusionPayload{
+		ID:           body.ID,
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    body.MatchType,
+		MatchValue:   body.MatchValue,
+		RuleIDFilter: body.RuleIDFilter,
+		SourceFilter: body.SourceFilter,
+		Enabled:      body.Enabled,
+	}
+	{
+		var zero string
+		if v.RuleIDFilter == zero {
+			v.RuleIDFilter = ""
+		}
+	}
+	{
+		var zero string
+		if v.SourceFilter == zero {
+			v.SourceFilter = ""
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteRiskExclusionPayload builds the payload for the risk
+// deleteRiskExclusion endpoint from CLI flags.
+func BuildDeleteRiskExclusionPayload(riskDeleteRiskExclusionID string, riskDeleteRiskExclusionApikeyToken string, riskDeleteRiskExclusionSessionToken string, riskDeleteRiskExclusionProjectSlugInput string) (*risk.DeleteRiskExclusionPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskDeleteRiskExclusionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskDeleteRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskDeleteRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskDeleteRiskExclusionSessionToken != "" {
+			sessionToken = &riskDeleteRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskDeleteRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskDeleteRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.DeleteRiskExclusionPayload{}
+	v.ID = id
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1559,7 +1766,7 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 	{
 		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.RuleID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))
@@ -1596,9 +1803,9 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 		}
 	}
 	v := &risk.TestDetectionRulePayload{
-		RuleID: body.RuleID,
-		Text:   body.Text,
-		Regex:  body.Regex,
+		RuleID:        body.RuleID,
+		Text:          body.Text,
+		DetectionExpr: body.DetectionExpr,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

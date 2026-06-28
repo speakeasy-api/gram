@@ -15,10 +15,13 @@ import (
 // UpsertConfigRequestBody is the type of the "aiIntegrations" service
 // "upsertConfig" endpoint HTTP request body.
 type UpsertConfigRequestBody struct {
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string `form:"api_key" json:"api_key" xml:"api_key"`
+	// Provider organization identifier. Required for anthropic_compliance.
+	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// Whether the integration should be active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -26,7 +29,8 @@ type UpsertConfigRequestBody struct {
 // DeleteConfigRequestBody is the type of the "aiIntegrations" service
 // "deleteConfig" endpoint HTTP request body.
 type DeleteConfigRequestBody struct {
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 }
 
@@ -37,10 +41,14 @@ type GetConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Provider organization identifier. Required for anthropic_compliance; omitted
+	// for providers that do not need one.
+	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// Whether the provider integration is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -74,10 +82,14 @@ type UpsertConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Provider organization identifier. Required for anthropic_compliance; omitted
+	// for providers that do not need one.
+	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// Whether the provider integration is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -663,9 +675,10 @@ type DeleteConfigGatewayErrorResponseBody struct {
 // the "upsertConfig" endpoint of the "aiIntegrations" service.
 func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertConfigRequestBody {
 	body := &UpsertConfigRequestBody{
-		Provider: p.Provider,
-		APIKey:   p.APIKey,
-		Enabled:  p.Enabled,
+		Provider:               p.Provider,
+		APIKey:                 p.APIKey,
+		ExternalOrganizationID: p.ExternalOrganizationID,
+		Enabled:                p.Enabled,
 	}
 	return body
 }
@@ -683,19 +696,20 @@ func NewDeleteConfigRequestBody(p *aiintegrations.DeleteConfigPayload) *DeleteCo
 // "getConfig" endpoint result from a HTTP "OK" response.
 func NewGetConfigAIIntegrationConfigOK(body *GetConfigResponseBody) *aiintegrations.AIIntegrationConfig {
 	v := &aiintegrations.AIIntegrationConfig{
-		ID:               body.ID,
-		OrganizationID:   *body.OrganizationID,
-		Provider:         *body.Provider,
-		ProjectID:        body.ProjectID,
-		Enabled:          *body.Enabled,
-		HasAPIKey:        *body.HasAPIKey,
-		LastPolledAt:     body.LastPolledAt,
-		NextPollAfter:    body.NextPollAfter,
-		LastPollStatus:   body.LastPollStatus,
-		LastPollError:    body.LastPollError,
-		LastPollFailedAt: body.LastPollFailedAt,
-		CreatedAt:        body.CreatedAt,
-		UpdatedAt:        body.UpdatedAt,
+		ID:                     body.ID,
+		OrganizationID:         *body.OrganizationID,
+		Provider:               *body.Provider,
+		ProjectID:              body.ProjectID,
+		ExternalOrganizationID: body.ExternalOrganizationID,
+		Enabled:                *body.Enabled,
+		HasAPIKey:              *body.HasAPIKey,
+		LastPolledAt:           body.LastPolledAt,
+		NextPollAfter:          body.NextPollAfter,
+		LastPollStatus:         body.LastPollStatus,
+		LastPollError:          body.LastPollError,
+		LastPollFailedAt:       body.LastPollFailedAt,
+		CreatedAt:              body.CreatedAt,
+		UpdatedAt:              body.UpdatedAt,
 	}
 
 	return v
@@ -855,19 +869,20 @@ func NewGetConfigGatewayError(body *GetConfigGatewayErrorResponseBody) *goa.Serv
 // "upsertConfig" endpoint result from a HTTP "OK" response.
 func NewUpsertConfigAIIntegrationConfigOK(body *UpsertConfigResponseBody) *aiintegrations.AIIntegrationConfig {
 	v := &aiintegrations.AIIntegrationConfig{
-		ID:               body.ID,
-		OrganizationID:   *body.OrganizationID,
-		Provider:         *body.Provider,
-		ProjectID:        body.ProjectID,
-		Enabled:          *body.Enabled,
-		HasAPIKey:        *body.HasAPIKey,
-		LastPolledAt:     body.LastPolledAt,
-		NextPollAfter:    body.NextPollAfter,
-		LastPollStatus:   body.LastPollStatus,
-		LastPollError:    body.LastPollError,
-		LastPollFailedAt: body.LastPollFailedAt,
-		CreatedAt:        body.CreatedAt,
-		UpdatedAt:        body.UpdatedAt,
+		ID:                     body.ID,
+		OrganizationID:         *body.OrganizationID,
+		Provider:               *body.Provider,
+		ProjectID:              body.ProjectID,
+		ExternalOrganizationID: body.ExternalOrganizationID,
+		Enabled:                *body.Enabled,
+		HasAPIKey:              *body.HasAPIKey,
+		LastPolledAt:           body.LastPolledAt,
+		NextPollAfter:          body.NextPollAfter,
+		LastPollStatus:         body.LastPollStatus,
+		LastPollError:          body.LastPollError,
+		LastPollFailedAt:       body.LastPollFailedAt,
+		CreatedAt:              body.CreatedAt,
+		UpdatedAt:              body.UpdatedAt,
 	}
 
 	return v

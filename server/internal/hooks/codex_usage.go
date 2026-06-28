@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -152,7 +153,7 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 	// email don't each trigger a DB round-trip.
 	emailToUserID := make(map[string]string)
 	for _, p := range points {
-		email := strings.ToLower(strings.TrimSpace(p.UserEmail))
+		email := conv.NormalizeEmail(p.UserEmail)
 		if email == "" {
 			continue
 		}
@@ -193,12 +194,6 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 		if p.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = p.Model
 		}
-		if p.UserEmail != "" {
-			attrs[attr.UserEmailKey] = p.UserEmail
-			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(p.UserEmail))]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if p.ConversationID != "" {
 			attrs[attr.GenAIConversationIDKey] = p.ConversationID
 		}
@@ -218,9 +213,15 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			ts = time.Unix(0, p.TimestampNano)
 		}
 
+		userInfo := telemetry.UserInfoByEmail(p.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(p.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  ts,
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

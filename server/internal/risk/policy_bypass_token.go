@@ -1,28 +1,52 @@
 package risk
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
+
+// errPolicyBypassRequestStoreUnavailable marks a failure to reach the cache
+// backing rpbr2 links (connection drop, timeout, etc.) as distinct from a
+// genuine cache miss. A miss means the link is expired or never existed (a
+// client error); an unavailable store is an operational failure the caller
+// must surface as a server error and log, not collapse into "invalid token".
+var errPolicyBypassRequestStoreUnavailable = errors.New("risk policy bypass request store unavailable")
 
 const (
 	policyBypassRequestTokenIssuer  = "gram"
 	policyBypassRequestTokenSubject = "risk_policy_bypass_request" // #nosec G101 -- JWT subject label, not a credential.
-	policyBypassRequestTokenPrefix  = "rpbr1."
+	// policyBypassRequestTokenPrefix is the legacy (rpbr1) format that
+	// encrypts the full request state inline in the URL fragment. Still read
+	// so links delivered before the rpbr2 cutover keep working until they
+	// expire, but no longer generated.
+	policyBypassRequestTokenPrefix = "rpbr1."
+	// policyBypassRequestTokenPrefixV2 is the current format: a short opaque
+	// id whose state lives in the cache. The id is a 128-bit random bearer
+	// secret, so a leaked link still cannot be redeemed by the wrong user —
+	// CreateRiskPolicyBypassRequest re-checks org and requester.
+	policyBypassRequestTokenPrefixV2 = "rpbr2."
+	// policyBypassRequestCacheKeyPrefix namespaces the rpbr2 state in the
+	// shared cache. The link generator and the redeem handler must build keys
+	// identically, so both go through policyBypassRequestCacheKey.
+	policyBypassRequestCacheKeyPrefix = "risk:policy-bypass-request:" // #nosec G101 -- cache key namespace, not a credential.
 )
 
 type PolicyBypassRequestTokenInput struct {
@@ -56,28 +80,72 @@ type policyBypassRequestClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GeneratePolicyBypassRequestURL(siteURL *url.URL, jwtSecret string, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, time.Time, error) {
+// policyBypassRequestRecord is the server-side state an rpbr2 link points at.
+// It holds the same evidence the legacy rpbr1 token encrypted inline, plus a
+// stable RequestID so repeated redemptions of one link upsert the same row.
+type policyBypassRequestRecord struct {
+	RequestID              string    `json:"request_id"`
+	OrganizationID         string    `json:"organization_id"`
+	ProjectID              string    `json:"project_id"`
+	RequesterUserID        string    `json:"requester_user_id,omitempty"`
+	ObservedName           *string   `json:"observed_name,omitempty"`
+	ObservedFullURL        *string   `json:"observed_full_url,omitempty"`
+	ObservedURLHost        *string   `json:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string   `json:"observed_server_identity,omitempty"`
+	ToolName               *string   `json:"tool_name,omitempty"`
+	ToolCall               *string   `json:"tool_call,omitempty"`
+	BlockReason            *string   `json:"block_reason,omitempty"`
+	RiskPolicyID           string    `json:"risk_policy_id"`
+	RiskResultID           *string   `json:"risk_result_id,omitempty"`
+	ExpiresAt              time.Time `json:"expires_at"`
+}
+
+func policyBypassRequestCacheKey(id string) string {
+	return policyBypassRequestCacheKeyPrefix + id
+}
+
+// newPolicyBypassRequestID returns a 128-bit random, URL-safe id used both as
+// the cache key and as the unguessable bearer secret embedded in the link.
+func newPolicyBypassRequestID() (string, error) {
+	raw := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+		return "", fmt.Errorf("generate risk policy bypass request id: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, time.Time, error) {
 	if siteURL == nil {
 		return "", time.Time{}, fmt.Errorf("site url is required")
 	}
-	token, expiry, err := GeneratePolicyBypassRequestToken(jwtSecret, input, ttl)
+	token, expiry, err := GeneratePolicyBypassRequestToken(ctx, c, input, ttl)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	requestURL := siteURL.JoinPath("risk-policy-bypass", "request")
 	query := url.Values{}
 	query.Set("request_token", token)
+	// Carry the token in the URL fragment, never the query string. The token
+	// is a bearer credential: whoever holds it can redeem the link. A fragment
+	// never leaves the browser, so it stays out of server access logs,
+	// proxy/load-balancer logs, and request telemetry — a query param would
+	// land in all of them. The dashboard route also sets `referrer=no-referrer`
+	// and strips the fragment from history after reading it. Shortening the
+	// token to an rpbr2 cache id (AIS-228) did not change this: a short id is
+	// no less a secret, so it still belongs in the fragment.
 	requestURL.Fragment = query.Encode()
 	return requestURL.String(), expiry, nil
 }
 
-func GeneratePolicyBypassRequestToken(jwtSecret string, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, time.Time, error) {
-	if strings.TrimSpace(jwtSecret) == "" {
-		return "", time.Time{}, fmt.Errorf("jwt secret is required")
-	}
+// GeneratePolicyBypassRequestToken stores the request state in the cache and
+// returns a short rpbr2 token (the cache id) plus its expiry. The token is
+// the only reference to the state — it must be stored under the same cache
+// the redeem handler reads from.
+func GeneratePolicyBypassRequestToken(ctx context.Context, c cache.Cache, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, time.Time, error) {
 	now := time.Now()
 	expiry := now.Add(ttl).Truncate(time.Second)
-	claims := policyBypassRequestClaims{
+	record := policyBypassRequestRecord{
+		RequestID:              uuid.NewString(),
 		OrganizationID:         strings.TrimSpace(input.OrganizationID),
 		ProjectID:              strings.TrimSpace(input.ProjectID),
 		RequesterUserID:        strings.TrimSpace(input.RequesterUserID),
@@ -90,32 +158,32 @@ func GeneratePolicyBypassRequestToken(jwtSecret string, input PolicyBypassReques
 		BlockReason:            normalizeOptionalString(input.BlockReason),
 		RiskPolicyID:           strings.TrimSpace(input.RiskPolicyID),
 		RiskResultID:           normalizeOptionalString(input.RiskResultID),
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    policyBypassRequestTokenIssuer,
-			Subject:   policyBypassRequestTokenSubject,
-			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(expiry),
-			NotBefore: jwt.NewNumericDate(now),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        uuid.NewString(),
-		},
+		ExpiresAt:              expiry,
 	}
-	if err := validatePolicyBypassRequestClaims(&claims); err != nil {
+	if err := validatePolicyBypassRequestFields(record.OrganizationID, record.ProjectID, record.RiskPolicyID, record.ObservedFullURL, record.ObservedURLHost, record.ObservedServerIdentity); err != nil {
 		return "", time.Time{}, err
+	}
+	if c == nil {
+		return "", time.Time{}, fmt.Errorf("risk policy bypass request cache is not configured")
 	}
 
-	plaintext, err := json.Marshal(claims)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("marshal risk policy bypass request token: %w", err)
-	}
-	token, err := encryptPolicyBypassRequestToken(jwtSecret, plaintext)
+	id, err := newPolicyBypassRequestID()
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return token, expiry, nil
+	if err := c.Set(ctx, policyBypassRequestCacheKey(id), record, ttl); err != nil {
+		return "", time.Time{}, fmt.Errorf("store risk policy bypass request: %w", err)
+	}
+	return policyBypassRequestTokenPrefixV2 + id, expiry, nil
 }
 
-func parsePolicyBypassRequestToken(jwtSecret string, tokenString string) (*policyBypassRequestClaims, error) {
+func parsePolicyBypassRequestToken(ctx context.Context, c cache.Cache, jwtSecret string, tokenString string) (*policyBypassRequestClaims, error) {
+	if strings.HasPrefix(tokenString, policyBypassRequestTokenPrefixV2) {
+		return lookupPolicyBypassRequestClaims(ctx, c, tokenString)
+	}
+
+	// Legacy rpbr1 path: decrypt the inline claims. Retained only for links
+	// already in flight at the rpbr2 cutover; drop in a later contract change.
 	if strings.TrimSpace(jwtSecret) == "" {
 		return nil, fmt.Errorf("jwt secret is required")
 	}
@@ -131,6 +199,53 @@ func parsePolicyBypassRequestToken(jwtSecret string, tokenString string) (*polic
 		return nil, err
 	}
 	return &claims, nil
+}
+
+func lookupPolicyBypassRequestClaims(ctx context.Context, c cache.Cache, tokenString string) (*policyBypassRequestClaims, error) {
+	if c == nil {
+		return nil, fmt.Errorf("risk policy bypass request cache is not configured")
+	}
+	id := strings.TrimPrefix(tokenString, policyBypassRequestTokenPrefixV2)
+	if strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("invalid risk policy bypass request token format")
+	}
+	var record policyBypassRequestRecord
+	if err := c.Get(ctx, policyBypassRequestCacheKey(id), &record); err != nil {
+		// A miss means the link expired or never existed — a client-side
+		// invalid token. Any other error is the cache being unreachable, which
+		// must not masquerade as an invalid token.
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return nil, fmt.Errorf("risk policy bypass request not found or expired: %w", err)
+		}
+		return nil, fmt.Errorf("%w: %w", errPolicyBypassRequestStoreUnavailable, err)
+	}
+	claims := &policyBypassRequestClaims{
+		OrganizationID:         record.OrganizationID,
+		ProjectID:              record.ProjectID,
+		RequesterUserID:        record.RequesterUserID,
+		ObservedName:           record.ObservedName,
+		ObservedFullURL:        record.ObservedFullURL,
+		ObservedURLHost:        record.ObservedURLHost,
+		ObservedServerIdentity: record.ObservedServerIdentity,
+		ToolName:               record.ToolName,
+		ToolCall:               record.ToolCall,
+		BlockReason:            record.BlockReason,
+		RiskPolicyID:           record.RiskPolicyID,
+		RiskResultID:           record.RiskResultID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    policyBypassRequestTokenIssuer,
+			Subject:   policyBypassRequestTokenSubject,
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(record.ExpiresAt),
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        record.RequestID,
+		},
+	}
+	if err := validatePolicyBypassRequestClaims(claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
 }
 
 func validatePolicyBypassRequestClaims(claims *policyBypassRequestClaims) error {
@@ -150,23 +265,37 @@ func validatePolicyBypassRequestClaims(claims *policyBypassRequestClaims) error 
 	if claims.NotBefore != nil && now.Before(claims.NotBefore.Time) {
 		return fmt.Errorf("token is not valid yet")
 	}
-	if strings.TrimSpace(claims.OrganizationID) == "" {
-		return fmt.Errorf("organization_id is required")
-	}
-	if _, err := uuid.Parse(claims.ProjectID); err != nil {
-		return fmt.Errorf("invalid project_id: %w", err)
-	}
-	if _, err := uuid.Parse(claims.RiskPolicyID); err != nil {
-		return fmt.Errorf("invalid risk_policy_id: %w", err)
-	}
-	return validatePolicyBypassEvidence(claims.ObservedFullURL, claims.ObservedURLHost, claims.ObservedServerIdentity)
+	return validatePolicyBypassRequestFields(claims.OrganizationID, claims.ProjectID, claims.RiskPolicyID, claims.ObservedFullURL, claims.ObservedURLHost, claims.ObservedServerIdentity)
 }
 
-func validatePolicyBypassEvidence(fullURL, _, _ *string) error {
-	if strings.TrimSpace(conv.PtrValOr(fullURL, "")) == "" {
-		return fmt.Errorf("observed_full_url is required")
+func validatePolicyBypassRequestFields(orgID, projectID, policyID string, fullURL, urlHost, serverIdentity *string) error {
+	if strings.TrimSpace(orgID) == "" {
+		return fmt.Errorf("organization_id is required")
 	}
-	return nil
+	if _, err := uuid.Parse(projectID); err != nil {
+		return fmt.Errorf("invalid project_id: %w", err)
+	}
+	if _, err := uuid.Parse(policyID); err != nil {
+		return fmt.Errorf("invalid risk_policy_id: %w", err)
+	}
+	return validatePolicyBypassEvidence(fullURL, urlHost, serverIdentity)
+}
+
+func validatePolicyBypassEvidence(fullURL, urlHost, serverIdentity *string) error {
+	if rawURL := strings.TrimSpace(conv.PtrValOr(fullURL, "")); rawURL != "" {
+		parsed, err := url.Parse(rawURL)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return fmt.Errorf("invalid observed_full_url: must include URI scheme and host")
+		}
+		return nil
+	}
+	if strings.TrimSpace(conv.PtrValOr(urlHost, "")) != "" {
+		return nil
+	}
+	if strings.TrimSpace(conv.PtrValOr(serverIdentity, "")) != "" {
+		return nil
+	}
+	return fmt.Errorf("policy bypass request evidence is required")
 }
 
 func encryptPolicyBypassRequestToken(jwtSecret string, plaintext []byte) (string, error) {

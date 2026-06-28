@@ -3,6 +3,8 @@ package remotesessionissuers
 import (
 	. "goa.design/goa/v3/dsl"
 
+	rsclients "github.com/speakeasy-api/gram/server/design/remotesessionclients"
+	rsessions "github.com/speakeasy-api/gram/server/design/remotesessions"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -191,11 +193,20 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 	})
 	shared.DeclareErrorResponses()
 
-	Method("createOrganizationRemoteSessionIssuer", func() {
-		Description("Create a new organization-level remote_session_issuer.")
+	// --- Organization administrator surface (AIS-119) ---
+	// These methods power the org-admin "Remote Identity Providers" UI. Reads
+	// require org:read, writes require org:admin. Unlike the methods above they
+	// span both organizational (project_id NULL) and project-specific issuers in
+	// the caller's organization, scoped exclusively by organization_id.
+
+	Method("createIssuer", func() {
+		Description("Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.")
 
 		Payload(func() {
 			Extend(CreateRemoteSessionIssuerForm)
+			Attribute("project_id", String, "Owning project id; the project must belong to the caller's organization. Omit to create an organization-level issuer.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
@@ -203,19 +214,100 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Result(RemoteSessionIssuer)
 
 		HTTP(func() {
-			POST("/rpc/organizationRemoteSessionIssuers.create")
+			POST("/rpc/organizationRemoteSessionIssuers.createIssuer")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
 		Meta("openapi:operationId", "createOrganizationRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-name-override", "createIssuer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationRemoteSessionIssuer"}`)
 	})
 
-	Method("updateOrganizationRemoteSessionIssuer", func() {
-		Description("Update fields on an existing organization-level remote_session_issuer.")
+	Method("listIssuers", func() {
+		Description("List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.")
+
+		Payload(func() {
+			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationRemoteSessionIssuersResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.listIssuers")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationRemoteSessionIssuers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIssuers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuers"}`)
+	})
+
+	Method("getIssuer", func() {
+		Description("Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionIssuer)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getIssuer")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "getIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuer"}`)
+	})
+
+	Method("getIssuerDeletePreflight", func() {
+		Description("Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationIssuerDeletePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getIssuerDeletePreflight")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuerDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getIssuerDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerDeletePreflight"}`)
+	})
+
+	Method("updateIssuer", func() {
+		Description("Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.")
 
 		Payload(func() {
 			Extend(UpdateRemoteSessionIssuerForm)
@@ -226,49 +318,50 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Result(RemoteSessionIssuer)
 
 		HTTP(func() {
-			POST("/rpc/organizationRemoteSessionIssuers.update")
+			POST("/rpc/organizationRemoteSessionIssuers.updateIssuer")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
 		Meta("openapi:operationId", "updateOrganizationRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateIssuer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationRemoteSessionIssuer"}`)
 	})
 
-	Method("listOrganizationRemoteSessionIssuers", func() {
-		Description("List organization-level remote_session_issuers in the caller's organization.")
+	Method("deleteIssuer", func() {
+		Description("Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.")
 
 		Payload(func() {
-			Attribute("cursor", String, "Pagination cursor.")
-			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
 
-		Result(ListRemoteSessionIssuersResult)
-
 		HTTP(func() {
-			GET("/rpc/organizationRemoteSessionIssuers.list")
-			Param("cursor")
-			Param("limit")
+			DELETE("/rpc/organizationRemoteSessionIssuers.deleteIssuer")
+			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
-		shared.CursorPagination()
-		Meta("openapi:operationId", "listOrganizationRemoteSessionIssuers")
-		Meta("openapi:extension:x-speakeasy-name-override", "list")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuers"}`)
+		Meta("openapi:operationId", "deleteOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationRemoteSessionIssuer"}`)
 	})
 
-	Method("getOrganizationRemoteSessionIssuer", func() {
-		Description("Get an organization-level remote_session_issuer by id.")
+	Method("moveIssuer", func() {
+		Description("Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("project_id", String, "Target owning project id; the project must belong to the caller's organization. Omit to make the issuer organization-level.", func() {
 				Format(FormatUUID)
 			})
 			Required("id")
@@ -279,23 +372,213 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Result(RemoteSessionIssuer)
 
 		HTTP(func() {
-			GET("/rpc/organizationRemoteSessionIssuers.get")
+			POST("/rpc/organizationRemoteSessionIssuers.moveIssuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "moveOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "moveIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MoveOrganizationRemoteSessionIssuer"}`)
+	})
+
+	Method("listClients", func() {
+		Description("List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.")
+
+		Payload(func() {
+			Attribute("issuer_id", String, "The remote_session_issuer id to list clients for.", func() {
+				Format(FormatUUID)
+			})
+			Required("issuer_id")
+			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationRemoteSessionClientsResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.listClients")
+			Param("issuer_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationRemoteSessionClients")
+		Meta("openapi:extension:x-speakeasy-name-override", "listClients")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClients"}`)
+	})
+
+	Method("getClient", func() {
+		Description("Get a remote_session_client in the caller's organization by id. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsclients.RemoteSessionClient)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getClient")
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "get")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuer"}`)
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "getClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
 	})
 
-	Method("deleteOrganizationRemoteSessionIssuer", func() {
-		Description("Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.")
+	Method("getClientDeletePreflight", func() {
+		Description("Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.")
 
 		Payload(func() {
-			Attribute("id", String, "The remote_session_issuer id.", func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationClientDeletePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getClientDeletePreflight")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getClientDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDeletePreflight"}`)
+	})
+
+	Method("listClientMcpServers", func() {
+		Description("List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationMcpServersResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.listClientMcpServers")
+			Param("client_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listOrganizationRemoteSessionClientMcpServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listClientMcpServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientMcpServers"}`)
+	})
+
+	Method("listClientSessions", func() {
+		Description("List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id")
+			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationRemoteSessionsResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.listClientSessions")
+			Param("client_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationRemoteSessionClientSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listClientSessions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientSessions"}`)
+	})
+
+	Method("createClient", func() {
+		Description("Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
+
+		Payload(func() {
+			Extend(CreateOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsclients.RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.createClient")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("updateClient", func() {
+		Description("Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.")
+
+		Payload(func() {
+			Extend(UpdateOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsclients.RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.updateClient")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("deleteClient", func() {
+		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
 				Format(FormatUUID)
 			})
 			Required("id")
@@ -304,16 +587,119 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/organizationRemoteSessionIssuers.delete")
+			DELETE("/rpc/organizationRemoteSessionIssuers.deleteClient")
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteOrganizationRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "delete")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationRemoteSessionIssuer"}`)
+		Meta("openapi:operationId", "deleteOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("removeClientFromMcpServer", func() {
+		Description("Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_server_id", String, "The mcp_server id to detach from.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id", "mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "removeOrganizationRemoteSessionClientFromMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeClientFromMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOrganizationRemoteSessionClientFromMcpServer"}`)
+	})
+
+	Method("revokeSession", func() {
+		Description("Revoke (soft-delete) a single remote_session in the caller's organization. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.revokeSession")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeOrganizationRemoteSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeOrganizationRemoteSession"}`)
+	})
+
+	Method("refreshSession", func() {
+		Description("Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsessions.RemoteSession)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.refreshSession")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshOrganizationRemoteSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshOrganizationRemoteSession"}`)
+	})
+
+	Method("revokeAllClientSessions", func() {
+		Description("Revoke (soft-delete) all remote_sessions minted against a remote_session_client in the caller's organization. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RevokeAllRemoteSessionsResult)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.revokeAllClientSessions")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeAllOrganizationRemoteSessionClientSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeAllClientSessions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAllOrganizationRemoteSessionClientSessions"}`)
 	})
 })
 
@@ -322,6 +708,10 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
+	Attribute("name", String, "Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.")
+	Attribute("logo_asset_id", String, "Optional logo asset id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; absent for issuers without DCR.")
@@ -344,6 +734,10 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	})
 	Attribute("slug", String, "Rename the slug.")
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
+	Attribute("name", String, "Set or clear the display name. An empty string clears it to NULL.")
+	Attribute("logo_asset_id", String, "Set the logo asset id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint.")
@@ -372,6 +766,10 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("organization_id", String, "The owning organization id. Empty for legacy rows not yet backfilled.")
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
+	Attribute("name", String, "Optional display name; null when unset.")
+	Attribute("logo_asset_id", String, "Optional logo asset id; null when unset.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")

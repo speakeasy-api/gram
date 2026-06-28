@@ -102,10 +102,13 @@ async function $do(
     "from": payload?.from,
     "has_risk": payload?.has_risk,
     "limit": payload?.limit,
+    "min_risk_score": payload?.min_risk_score,
     "offset": payload?.offset,
+    "pinned": payload?.pinned,
     "search": payload?.search,
     "sort_by": payload?.sort_by,
     "sort_order": payload?.sort_order,
+    "source": payload?.source,
     "to": payload?.to,
   });
 

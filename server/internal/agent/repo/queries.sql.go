@@ -20,6 +20,23 @@ SELECT
   om.name AS organization_name,
   pgc.marketplace_token,
   pgc.updated_at AS marketplace_updated_at,
+  pms.marketplace_name AS marketplace_name_override,
+  -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
+  -- not just published ones) keeps the bare org-derived marketplace name; others
+  -- are project-scoped. Resolved the same way the publish path does so the names
+  -- match. The subquery spans unpublished projects too, so an unpublished default
+  -- doesn't hand the bare name to a different project.
+  (pr.id = (
+    -- Pinned to the @organization_id parameter (not pr.organization_id) so this
+    -- stays uncorrelated and Postgres evaluates the org's default project once,
+    -- not per row.
+    SELECT p2.id
+    FROM projects p2
+    WHERE p2.organization_id = $1
+      AND p2.deleted IS FALSE
+    ORDER BY p2.id ASC
+    LIMIT 1
+  )) AS is_default_project,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
   p.updated_at AS plugin_updated_at
@@ -29,34 +46,28 @@ JOIN projects pr
   AND pr.deleted IS FALSE
 JOIN organization_metadata om
   ON om.id = pr.organization_id
+LEFT JOIN project_marketplace_settings pms
+  ON pms.project_id = pr.id
 LEFT JOIN plugins p
   ON p.project_id = pr.id
   AND p.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1 FROM plugin_assignments pa
-    WHERE pa.plugin_id = p.id
-      AND pa.principal_urn = ANY($1::text[])
-  )
-WHERE pr.organization_id = $2
+WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
-ORDER BY pr.slug, p.slug
+ORDER BY pr.id, p.slug
 `
 
-type GetAgentPluginSetParams struct {
-	PrincipalUrns  []string
-	OrganizationID string
-}
-
 type GetAgentPluginSetRow struct {
-	ProjectID            uuid.UUID
-	ProjectSlug          string
-	OrganizationSlug     string
-	OrganizationName     string
-	MarketplaceToken     pgtype.Text
-	MarketplaceUpdatedAt pgtype.Timestamptz
-	PluginID             uuid.NullUUID
-	PluginSlug           pgtype.Text
-	PluginUpdatedAt      pgtype.Timestamptz
+	ProjectID               uuid.UUID
+	ProjectSlug             string
+	OrganizationSlug        string
+	OrganizationName        string
+	MarketplaceToken        pgtype.Text
+	MarketplaceUpdatedAt    pgtype.Timestamptz
+	MarketplaceNameOverride pgtype.Text
+	IsDefaultProject        bool
+	PluginID                uuid.NullUUID
+	PluginSlug              pgtype.Text
+	PluginUpdatedAt         pgtype.Timestamptz
 }
 
 // Returns the device agent's full plugin set for an org, marketplace-first.
@@ -64,11 +75,24 @@ type GetAgentPluginSetRow struct {
 // The base is every *published* marketplace in the org (a
 // plugin_github_connections row with a marketplace_token), so a marketplace —
 // and its always-required observability plugin, synthesized in the view layer —
-// is returned even when the user has no explicit assignments. Plugins the user
-// is assigned to (via principal_urn) are LEFT JOINed on top; projects with no
-// matching assignment still yield one row with null plugin columns.
-func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
-	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.PrincipalUrns, arg.OrganizationID)
+// is returned for every published project. Every non-deleted plugin in those
+// projects is LEFT JOINed on top and returned to every org member: per-principal
+// assignment scoping is intentionally disabled for now (see DNO-239) and will be
+// reinstated once RBAC-backed assignment management ships. Projects with no
+// plugins still yield one row with null plugin columns.
+//
+// Each project resolves to a marketplace name the way the publish path does:
+// the per-project override (project_marketplace_settings.marketplace_name) when
+// set, else the org-derived default (computed in the view). Projects with
+// distinct names surface as distinct marketplaces; projects that share a name
+// (e.g. several on the org default) still collapse to one in the view.
+//
+// Rows are ordered by pr.id so the org's default project (first by id ASC, the
+// one created at org setup) sorts first. When projects share a name and the view
+// collapses them, keeping the first row's token makes that collapse resolve to
+// the default project rather than the arbitrary alphabetically-first one.
+func (q *Queries) GetAgentPluginSet(ctx context.Context, organizationID string) ([]GetAgentPluginSetRow, error) {
+	rows, err := q.db.Query(ctx, getAgentPluginSet, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +107,8 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.OrganizationName,
 			&i.MarketplaceToken,
 			&i.MarketplaceUpdatedAt,
+			&i.MarketplaceNameOverride,
+			&i.IsDefaultProject,
 			&i.PluginID,
 			&i.PluginSlug,
 			&i.PluginUpdatedAt,

@@ -83,7 +83,9 @@ func defaultMarketplaceNameForTest(t *testing.T, ctx context.Context, ti *testIn
 	if err != nil {
 		orgName = authCtx.OrganizationSlug
 	}
-	return plugins.DefaultMarketplaceName(orgName)
+	// The test instance's project is its org's only (hence default) project, so
+	// the default name is the bare org-derived one — the slug is ignored.
+	return plugins.DefaultMarketplaceName(orgName, "", true)
 }
 
 func TestPluginsService_UpdateMarketplaceSettings_RejectsInvalidName(t *testing.T) {

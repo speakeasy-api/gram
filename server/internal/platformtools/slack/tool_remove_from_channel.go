@@ -60,7 +60,7 @@ func callRemoveFromChannel(ctx context.Context, client *apiClient, env toolconfi
 		"user":    userID,
 	}
 
-	body, err := client.call(ctx, "conversations.kick", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.kick", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

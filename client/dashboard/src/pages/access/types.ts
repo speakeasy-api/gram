@@ -47,14 +47,17 @@ export type ActivePanel =
   | "tools"
   | "collection";
 
-/** Policy effect for a grant: allow (default) or deny. */
+/**
+ * UI-only rule effect. "deny" means an exception rule in the dashboard and is
+ * serialized as an allow grant on the corresponding exclusion scope.
+ */
 export type PolicyEffect = "allow" | "deny";
 
-/** A single allow or deny rule within a scope grant. */
+/** A single allow or exception rule within a scope grant. */
 export interface ScopeRule {
   /** Unique identifier (React key + editing reference). */
   id: string;
-  /** Whether this rule allows or denies access. */
+  /** Whether this UI rule allows access or defines an exception. */
   effect: PolicyEffect;
   /** null = unrestricted (all resources); Selector[] = constrained. */
   selectors: Selector[] | null;
@@ -64,10 +67,10 @@ export interface ScopeRule {
   customTab?: CustomTab;
 }
 
-/** A scope within a role, containing one or more allow/deny rules. */
+/** A scope within a role, containing one or more allow/exception rules. */
 export interface RoleGrant {
   scope: Scope;
-  /** The set of allow and deny rules for this scope. */
+  /** The set of allow and exception rules for this scope. */
   rules: ScopeRule[];
 }
 

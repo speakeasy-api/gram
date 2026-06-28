@@ -96,7 +96,6 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				RemoteSessionIssuerID:   issuer.ID,
-				UserSessionIssuerID:     userIssuer,
 				ClientID:                "scope-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 				ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -105,7 +104,12 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 				Scope:                   tc.clientScope,
 			})
 			require.NoError(t, err)
-			_ = client
+
+			err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: client.ID,
+				UserSessionIssuerID:   userIssuer,
+			})
+			require.NoError(t, err)
 
 			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
 			require.NoError(t, err)

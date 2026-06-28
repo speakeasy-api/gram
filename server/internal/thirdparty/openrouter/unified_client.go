@@ -227,12 +227,26 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		}
 	}
 
-	// Apply usage tracking strategy (async)
+	// Apply usage tracking strategy (async). OpenRouter ships the full usage
+	// payload (cost + cost_details + token detail subobjects) inline on every
+	// completion, so we hand the strategy the decoded ModelUsage directly
+	// instead of polling /v1/generation.
 	if c.usageTrackingStrategy != nil {
+		inlineUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
+			modelUsage := inlineUsage
+			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
+				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+				if err != nil {
+					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
+				} else if fallbackUsage != nil {
+					modelUsage = fallbackUsage
+				}
+			}
+
 			if err := c.usageTrackingStrategy.TrackUsage(
 				context.WithoutCancel(ctx),
-				response.MessageID,
+				modelUsage,
 				req.OrgID,
 				req.ProjectID,
 				req.UsageSource,
@@ -273,6 +287,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		req.ExternalUserID,
 		req.UserEmail,
 		req.APIKeyID,
+		string(req.UsageSource),
 		response,
 	)
 }
@@ -363,9 +378,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	message := chatResp.Choices[0].Message
 	finishReason := chatResp.Choices[0].FinishReason
 	usage := Usage{
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
+		PromptTokens:            0,
+		CompletionTokens:        0,
+		TotalTokens:             0,
+		Cost:                    nil,
+		CostDetails:             nil,
+		PromptTokensDetails:     nil,
+		CompletionTokensDetails: nil,
 	}
 	if chatResp.Usage != nil {
 		usage = *chatResp.Usage
@@ -452,9 +471,17 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageID:            "",
 		model:                "",
 		finishReason:         nil,
-		usage:                Usage{PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0},
-		usageSet:             false,
-		isDone:               false,
+		usage: Usage{
+			PromptTokens:            0,
+			CompletionTokens:        0,
+			TotalTokens:             0,
+			Cost:                    nil,
+			CostDetails:             nil,
+			PromptTokensDetails:     nil,
+			CompletionTokensDetails: nil,
+		},
+		usageSet: false,
+		isDone:   false,
 	}
 
 	return streamReader, nil
@@ -676,6 +703,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	ctx context.Context,
 	toolCalls []ToolCall,
 	orgID, projectID, chatID, userID, externalUserID, userEmail, apiKeyID string,
+	usageSource string,
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
@@ -684,13 +712,14 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 
 	duration := float64(time.Since(result.StartTime).Seconds())
+	resourceURN, normalizedSource := completionTelemetryIdentity(usageSource)
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey: string(telemetry.EventSourceChatCompletion),
-		attr.ResourceURNKey: "agents:chat:completion",
+		attr.ResourceURNKey: resourceURN,
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			result.Model, result.Usage.PromptTokens, result.Usage.CompletionTokens),
 
@@ -706,8 +735,14 @@ func (c *ChatClient) emitGenAITelemetry(
 		attr.APIKeyIDKey:               apiKeyID,
 	}
 
+	if normalizedSource != "" {
+		attrs[attr.HookSourceKey] = normalizedSource
+	}
 	if result.MessageID != "" {
 		attrs[attr.GenAIResponseIDKey] = result.MessageID
+	}
+	if result.Usage.Cost != nil {
+		attrs[attr.GenAIUsageCostKey] = *result.Usage.Cost
 	}
 	if result.FinishReason != nil {
 		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*result.FinishReason}
@@ -716,16 +751,6 @@ func (c *ChatClient) emitGenAITelemetry(
 		toolCallsJSON, _ := json.Marshal(toolCalls)
 		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
 	}
-	if userID != "" {
-		attrs[attr.UserIDKey] = userID
-	}
-	if externalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = externalUserID
-	}
-	if userEmail != "" {
-		attrs[attr.UserEmailKey] = userEmail
-	}
-
 	// Extract trace context from the request context
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
@@ -734,10 +759,13 @@ func (c *ChatClient) emitGenAITelemetry(
 	if spanCtx.HasSpanID() {
 		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
 	}
+	if externalUserID != "" {
+		attrs[attr.ExternalUserIDKey] = externalUserID
+	}
 
 	toolInfo := telemetry.ToolInfo{
 		ID:             chatID,
-		URN:            chatID,
+		URN:            resourceURN,
 		Name:           "",
 		ProjectID:      projectID,
 		DeploymentID:   "",
@@ -748,8 +776,20 @@ func (c *ChatClient) emitGenAITelemetry(
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
 	})
+}
+
+func completionTelemetryIdentity(source string) (resourceURN, normalizedSource string) {
+	switch source {
+	case "assistant", "assistants":
+		return "assistants:chat:completion", "assistants"
+	case "":
+		return "chat:completion", ""
+	default:
+		return "chat:completion", source
+	}
 }
 
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {

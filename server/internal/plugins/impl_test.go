@@ -711,6 +711,9 @@ func TestPluginsService_GetPublishStatus_Configured(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Configured)
 	require.False(t, result.Connected)
+	// Freshness is only meaningful for a connected project.
+	require.Nil(t, result.UpToDate)
+	require.Nil(t, result.LastPublishedAt)
 }
 
 func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
@@ -748,6 +751,61 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NotNil(t, status.MarketplaceURL)
 	require.Contains(t, *status.MarketplaceURL, "/marketplace/")
 	require.Contains(t, *status.MarketplaceURL, ".git")
+
+	// A just-published project is up to date, and the last-published timestamp
+	// is surfaced from the connection row.
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate)
+	require.NotNil(t, status.LastPublishedAt)
+}
+
+// After a publish, mutating the plugin set (here: adding another server) must
+// flip the project's published freshness to out-of-date, since the live
+// fingerprint no longer matches what was last pushed to GitHub.
+func TestPluginsService_GetPublishStatus_StaleAfterEdit(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Freshness Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "freshness-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("First Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate)
+
+	// Mutate the published plugin set without re-publishing.
+	secondToolset := createTestToolset(t, ctx, ti.conn, "freshness-toolset-2")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(secondToolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Second Server"),
+		Policy:      "required",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	status, err = ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.False(t, *status.UpToDate)
+	// The timestamp still reflects the prior publish — editing doesn't publish.
+	require.NotNil(t, status.LastPublishedAt)
 }
 
 // A Remote MCP-backed (mcp_server) plugin server is emitted into the generated
@@ -1018,7 +1076,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the Cursor config uses ${env:ANALYTICS_API_KEY} for the public server.
-	cursorMCP := mock.lastPushedFiles["public-test-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/public-test-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1107,7 +1165,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	cursorMCP := mock.lastPushedFiles["headerless-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/headerless-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1167,7 +1225,7 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	cursorMCP := mock.lastPushedFiles["mixed-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/mixed-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1246,9 +1304,9 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
 
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -1266,7 +1324,7 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1328,7 +1386,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
 	// accepts it as an optional header for plugin-driven attribution).
-	for _, path := range []string{claudeObservability + "/hooks/hook.sh", cursorObservability + "/hooks/hook.sh"} {
+	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)

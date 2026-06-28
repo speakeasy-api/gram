@@ -33,7 +33,7 @@ export type GenerateTitleRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
-  serveImageForm: components.ServeImageForm;
+  generateTitleRequestBody: components.GenerateTitleRequestBody;
 };
 
 /** @internal */
@@ -140,7 +140,7 @@ export type GenerateTitleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
-  ServeImageForm: components.ServeImageForm$Outbound;
+  GenerateTitleRequestBody: components.GenerateTitleRequestBody$Outbound;
 };
 
 /** @internal */
@@ -152,14 +152,15 @@ export const GenerateTitleRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-    serveImageForm: components.ServeImageForm$outboundSchema,
+    generateTitleRequestBody:
+      components.GenerateTitleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",
-      serveImageForm: "ServeImageForm",
+      generateTitleRequestBody: "GenerateTitleRequestBody",
     });
   }),
 );

@@ -5,6 +5,8 @@ import (
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const (
@@ -21,44 +23,40 @@ type noDirectChatMessageInsertSettings struct {
 
 func newNoDirectChatMessageInsertAnalyzer(rule noDirectChatMessageInsertSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name: noDirectChatMessageInsertAnalyzer,
-		Doc:  noDirectChatMessageInsertMessage,
+		Name:     noDirectChatMessageInsertAnalyzer,
+		Doc:      noDirectChatMessageInsertMessage,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
 			// Allow calls from within the chat package itself.
 			if pass.Pkg.Path() == chatPkgPath {
 				return nil, nil
 			}
 
-			for _, file := range pass.Files {
-				ast.Inspect(file, func(node ast.Node) bool {
-					callExpr, ok := node.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
+			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
-					selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-					if !ok {
-						return true
-					}
+			ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(node ast.Node) {
+				callExpr := node.(*ast.CallExpr)
 
-					if selectorExpr.Sel.Name != "CreateChatMessage" {
-						return true
-					}
+				selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return
+				}
 
-					called, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
-					if !ok || called.Pkg() == nil {
-						return true
-					}
+				if selectorExpr.Sel.Name != "CreateChatMessage" {
+					return
+				}
 
-					if called.Pkg().Path() != chatRepoPkgPath {
-						return true
-					}
+				called, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
+				if !ok || called.Pkg() == nil {
+					return
+				}
 
-					pass.ReportRangef(callExpr, "%s", noDirectChatMessageInsertMessage)
+				if called.Pkg().Path() != chatRepoPkgPath {
+					return
+				}
 
-					return true
-				})
-			}
+				pass.ReportRangef(callExpr, "%s", noDirectChatMessageInsertMessage)
+			})
 
 			return nil, nil
 		},

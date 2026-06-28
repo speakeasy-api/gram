@@ -6,33 +6,40 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/zricethezav/gitleaks/v8/detect"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // RiskScanner checks text against blocking risk policies.
 type RiskScanner interface {
-	// ScanForEnforcement scans text against all enabled blocking policies
-	// for the given project. Returns nil if no blocking policy matches.
-	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error)
+	// ScanForEnforcement scans text against enabled blocking policies that
+	// apply to the given user. Everyone-audience policies always apply;
+	// targeted policies require a matching risk_policy:evaluate grant.
+	// toolName is the tool-call name for tool_request/tool_response messages
+	// ("" otherwise); it is surfaced to prompt-based policies.
+	ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
-	// policy for the project whose action is "block". Returns nil when no
-	// such policy exists. Used by hooks to gate the realtime deny path.
-	LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error)
+	// policy that applies to the given user. Returns nil when no such policy
+	// exists. Used by hooks to gate the realtime deny path.
+	LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error)
 	// HasEnabledShadowMCPPolicy reports whether the project has at least one
 	// enabled shadow-MCP policy (any action). Used by the MCP server to
 	// decide whether to inject the x-gram-toolset-id constant into tool
@@ -59,7 +66,7 @@ type ScanResult struct {
 	Action      string // "block"
 	PolicyID    string
 	PolicyName  string
-	Source      string // "gitleaks" or "presidio"
+	Source      string
 	MessageType message.Type
 	RuleID      string
 	Description string
@@ -107,44 +114,53 @@ var _ RiskScanner = (*Scanner)(nil)
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
 	logger     *slog.Logger
+	db         *pgxpool.Pool
 	repo       *repo.Queries
-	gitleaksMu sync.Mutex                 // DetectString is not concurrent-safe
-	detector   *detect.Detector           // pre-created, reused across scans
+	gitleaks   *ra.GitleaksScanner        // pre-created, reused & serialized across scans
 	piiScanner ra.PIIScanner              // nil if Presidio is unavailable
 	piScanner  *ra.PromptInjectionScanner // never nil; stub-classifier when L1 disabled
+	judge      ra.PromptJudge             // nil-safe; guarded at the call site
+	flags      feature.Provider           // nil disables prompt_based enforcement
 	metrics    *scannerMetrics
+	celEng     *celenv.Engine
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
 // is not available in the server process. piScanner must be non-nil; pass a
-// scanner wrapping ra.StubClassifier{} when --pi-classifier-url is empty.
+// scanner built with a nil engine to run L0 heuristics only.
 // Pre-creates a gitleaks detector to avoid per-scan rule compilation on the
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
-	det, err := ra.SharedDetector()
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider, celEng *celenv.Engine) (*Scanner, error) {
+	gitleaksScanner, err := ra.NewGitleaksScanner()
 	if err != nil {
-		return nil, fmt.Errorf("create gitleaks detector: %w", err)
+		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
 	}
 
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, nil)
+		piScanner = ra.NewPromptInjectionScanner(logger, nil)
 	}
 
 	return &Scanner{
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
+		db:         db,
 		repo:       repo.New(db),
-		gitleaksMu: sync.Mutex{},
-		detector:   det,
+		gitleaks:   gitleaksScanner,
 		piiScanner: piiScanner,
 		piScanner:  piScanner,
+		judge:      judge,
+		flags:      flags,
 		metrics:    newScannerMetrics(meterProvider, logger),
+		celEng:     celEng,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error) {
-	if text == "" {
+func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error) {
+	// An empty body is only a no-op when there is also no tool attribution: a
+	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
+	// a tool-scoped prompt policy can match, so let those events through.
+	if text == "" && toolName == "" {
 		return nil, nil
 	}
 
@@ -161,10 +177,48 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		return nil, nil
 	}
 
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+		return nil, err
+	}
+
+	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
+	// fan-out) so prompt_based policies don't each repeat the slug lookup and
+	// so the lookup is never cancelled by a sibling match. Gated on the exact
+	// condition under which the fan-out would run the judge — a prompt_based
+	// policy whose message_types apply to this message — so the lookup is
+	// skipped entirely for scans that can never enforce one. message_types gates
+	// candidacy; scope_include narrows further per-message in scanPolicy.
+	inMessageScope := func(p repo.RiskPolicy) bool {
+		return len(p.MessageTypes) == 0 ||
+			slices.Contains(p.MessageTypes, messageType)
+	}
+
+	promptPoliciesOn := false
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return p.PolicyType == ra.PolicyTypePromptBased && inMessageScope(p)
+	}) {
+		// All enforcing policies for a project belong to the same org.
+		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
+	}
+
+	// Same once-per-scan resolution for the L1 prompt-injection engine: gate on
+	// a standard policy whose prompt_injection source applies to this message,
+	// so the slug/flag lookup is skipped for scans that can never run L1.
+	piEngineOn := false
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return p.PolicyType != ra.PolicyTypePromptBased &&
+			slices.Contains(p.Sources, ra.SourcePromptInjection) &&
+			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+	}) {
+		piEngineOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptInjectionUseClassifier)
+	}
+
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context — sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
-	// finishing uselessly. Gitleaks scans serialize on s.gitleaksMu (the v8
+	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
 	var (
 		winner   atomic.Pointer[ScanResult]
@@ -172,12 +226,20 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
-		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
+		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if !policyApplication.Satisfied {
+			continue
+		}
+		if !inMessageScope(p) {
 			continue
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn, piEngineOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -210,12 +272,24 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 // LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP policy
 // for the project whose action is "block". Flag-action policies surface as
 // findings via the batch scanner instead of denying at the hook layer.
-func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error) {
+func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error) {
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	for _, p := range policies {
+		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if !policyApplication.Satisfied {
+			continue
+		}
 		if p.Action == "block" {
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
@@ -226,6 +300,18 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 		}
 	}
 	return nil, nil
+}
+
+func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, organizationID, principals)
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy audience grants: %w", err)
+	}
+	return grants, nil
 }
 
 // HasEnabledShadowMCPPolicy reports whether the project has at least one
@@ -260,25 +346,78 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
+	// Build the structured view once; the application predicates and custom
+	// rules both evaluate against it.
+	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
+	if messageType == message.ToolRequest && toolName != "" {
+		// In realtime a tool-request's text carries the call arguments (the same
+		// body the judge sees), so it doubles as the tool_args source.
+		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+
+	// Policy application gates detection: include narrows scope (alongside
+	// message_types); exempt takes the message out of the policy.
+	eng := s.celEng
+	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	if !app.Includes(view) || app.Exempts(view) {
+		return nil, nil
+	}
+
+	if policy.PolicyType == ra.PolicyTypePromptBased {
+		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
+	}
+
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
+
+	// Suppress findings matched by an exclusion (the policy's own plus any
+	// global ones) so a false positive never blocks in real time.
+	exclusionRows, err := s.repo.ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    policy.ProjectID,
+		RiskPolicyID: uuid.NullUUID{UUID: policy.ID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list exclusions: %w", err)
+	}
+	exclusions := ra.NewExclusionSet(exclusionRows)
+	filter := func(findings []ra.Finding) []ra.Finding {
+		return exclusions.FilterFindings(disabled.FilterFindings(findings))
+	}
+
+	// Evaluate custom detection rules up front; their findings are held for the
+	// block check after the built-in sources. Message exemptions were already
+	// applied above via the policy's scope_exempt.
+	var customFindings []ra.Finding
+	if len(policy.CustomRuleIds) > 0 {
+		customFindings, err = s.scanCustomRules(ctx, policy, view)
+		if err != nil {
+			// A broken custom rule must not disable the built-in detectors (a
+			// fail-open bypass); drop its findings and keep scanning.
+			s.logger.ErrorContext(ctx, "custom detection rules failed; continuing with built-in sources", attr.SlogError(err))
+			customFindings = nil
+		}
+	}
+
 	for _, source := range policy.Sources {
 		switch source {
-		case "gitleaks":
-			findings := disabled.FilterFindings(s.scanGitleaks(text))
+		case ra.SourceGitleaks:
+			findings := filter(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
-					Source:      "gitleaks",
+					Source:      ra.SourceGitleaks,
 					MessageType: messageType,
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
 					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
-		case "presidio":
+		case ra.SourcePresidio:
 			if s.piiScanner == nil {
 				continue
 			}
@@ -287,14 +426,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
 			if len(batchResults) > 0 {
-				filtered := disabled.FilterFindings(batchResults[0])
+				filtered := filter(batchResults[0])
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
 						Action:      policy.Action,
 						PolicyID:    policy.ID.String(),
 						PolicyName:  policy.Name,
-						Source:      "presidio",
+						Source:      ra.SourcePresidio,
 						MessageType: messageType,
 						RuleID:      f.RuleID,
 						Description: f.Description,
@@ -303,11 +442,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), ra.NewJudgeMessage(messageType, toolName, text), piEngineOn)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
-			findings = disabled.FilterFindings(findings)
+			findings = filter(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -322,66 +461,105 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
-	if len(policy.CustomRuleIds) > 0 {
-		findings, err := s.scanCustomRules(ctx, policy, text)
-		if err != nil {
-			return nil, err
-		}
-		findings = disabled.FilterFindings(findings)
-		if len(findings) > 0 {
-			return &ScanResult{
-				Action:      policy.Action,
-				PolicyID:    policy.ID.String(),
-				PolicyName:  policy.Name,
-				Source:      ra.SourceCustom,
-				MessageType: messageType,
-				RuleID:      findings[0].RuleID,
-				Description: findings[0].Description,
-				UserMessage: conv.FromPGText[string](policy.UserMessage),
-			}, nil
-		}
+	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
+		return &ScanResult{
+			Action:      policy.Action,
+			PolicyID:    policy.ID.String(),
+			PolicyName:  policy.Name,
+			Source:      ra.SourceCustom,
+			MessageType: messageType,
+			RuleID:      denyFindings[0].RuleID,
+			Description: denyFindings[0].Description,
+			UserMessage: conv.FromPGText[string](policy.UserMessage),
+		}, nil
 	}
 	return nil, nil
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {
-	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
+// scanPromptPolicy evaluates text against a prompt_based policy's guardrail
+// prompt via the LLM judge. The caller (ScanForEnforcement) has already
+// filtered policies to those whose message_types apply to this message, so the
+// judge runs for whatever message types the policy declares. Returns nil when
+// the judge does not match (including fail-open on judge error).
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
+	if !promptPoliciesOn {
+		return nil
+	}
+	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
+		return promptPolicyUnavailableResult(policy, messageType, cfg)
+	}
+
+	verdict := s.judge.Evaluate(ctx, ra.JudgeInput{
+		OrgID:     policy.OrganizationID,
+		ProjectID: policy.ProjectID.String(),
+		Prompt:    policy.Prompt.String,
+		// text is the type-appropriate body the hook layer already flattened:
+		// the prompt for user messages, tool-input JSON for tool_request,
+		// tool-output JSON for tool_response.
+		Message: ra.NewJudgeMessage(messageType, toolName, text),
+		Config:  cfg,
+	})
+	if verdict == nil {
+		return nil
+	}
+
+	finding := ra.JudgeFinding(*verdict)
+	return &ScanResult{
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      finding.RuleID,
+		Description: finding.Description,
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
+	}
+}
+
+func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
+	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
+}
+
+func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg ra.JudgeConfig) *ScanResult {
+	if cfg.FailOpen {
+		return nil
+	}
+	return &ScanResult{
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      ra.RuleLLMJudge,
+		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
+	}
+}
+
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
+	if len(policy.CustomRuleIds) == 0 {
+		return []ra.Finding{}, nil
+	}
+
+	rules, err := customrules.LoadSelected(ctx, s.repo, policy.ProjectID, policy.CustomRuleIds)
 	if err != nil {
-		return nil, fmt.Errorf("list custom detection rules: %w", err)
+		return nil, fmt.Errorf("load custom detection rules: %w", err)
 	}
-
-	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
-	for _, id := range policy.CustomRuleIds {
-		selected[id] = struct{}{}
-	}
-
-	customRules := make([]ra.CustomDetectionRule, 0, len(policy.CustomRuleIds))
-	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
-			continue
-		}
-		customRules = append(customRules, ra.CustomDetectionRule{
-			RuleID:      rule.RuleID,
-			Title:       rule.Title,
-			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
-		})
-	}
-
-	compiled, err := ra.CompileCustomDetectionRules(customRules)
+	compiled, err := ra.CompileCELRules(s.celEng, rules)
 	if err != nil {
 		return nil, fmt.Errorf("compile custom detection rules: %w", err)
 	}
-	return ra.ScanCustomDetectionRules(text, compiled), nil
+	findings, err := ra.ScanCELRules(s.celEng, view, compiled)
+	if err != nil {
+		return nil, fmt.Errorf("scan custom detection rules: %w", err)
+	}
+	return findings, nil
 }
 
-// scanGitleaks runs DetectString on the pre-created detector under
-// gitleaksMu. The detector is reused (avoiding per-scan rule compilation)
-// but DetectString mutates internal state (rules, line counters, last-finding
-// bookkeeping) without synchronization, so calls must serialize.
+// scanGitleaks scans text on the pre-created, reused gitleaks scanner. The
+// scanner reuses one detector (avoiding per-scan rule compilation) and
+// serializes the underlying DetectString call, which mutates detector state.
 func (s *Scanner) scanGitleaks(text string) []ra.Finding {
-	s.gitleaksMu.Lock()
-	raw := s.detector.DetectString(text)
-	s.gitleaksMu.Unlock()
-	return ra.ConvertFindings(text, raw)
+	return s.gitleaks.Scan(text)
 }

@@ -17,11 +17,17 @@ import {
   usePluginSuspense,
 } from "@gram/client/react-query/plugin";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
+import {
+  invalidateAllPublishStatus,
+  usePublishStatus,
+} from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import type { PublishStatusResult } from "@gram/client/models/components";
 import {
   Button,
   DropdownMenu,
@@ -32,8 +38,9 @@ import {
   Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import { Network, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type {
   McpServer,
@@ -41,8 +48,9 @@ import type {
   ToolsetEntry,
 } from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
+import { InstallInstructionsButton } from "./InstallInstructionsDialog";
+import { PublishDialog } from "./PublishDialog";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote MCP-backed mcp_server. The kind determines whether it is submitted
@@ -64,13 +72,12 @@ export default function PluginDetail(): JSX.Element | null {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  const { data: publishStatus } = usePublishStatus();
 
   const client = useSdkClient();
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -79,10 +86,10 @@ export default function PluginDetail(): JSX.Element | null {
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project, gated on the remote-mcp
-  // feature. Only remote-backed, non-disabled servers are publishable today.
+  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
+  // non-disabled servers are publishable today.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
-    useMcpServers({}, undefined, { enabled: isRemoteMcpEnabled });
+    useMcpServers({});
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
@@ -93,15 +100,83 @@ export default function PluginDetail(): JSX.Element | null {
 
   const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
 
+  // Invalidate publish status too so the dirty/up-to-date affordance reflects
+  // the edit the moment a mutation lands.
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
+    await invalidateAllPublishStatus(queryClient);
   };
+
+  const publishMutation = usePublishPluginsMutation({
+    onSuccess: (data) => {
+      setIsPublishDialogOpen(false);
+      void invalidateAllPublishStatus(queryClient);
+      toast.success("Plugins published to GitHub", {
+        description: data.repoUrl,
+        action: {
+          label: "Open",
+          onClick: () => {
+            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+          },
+        },
+      });
+    },
+    onError: () => {
+      toast.error("Failed to publish plugins to GitHub");
+    },
+  });
+
+  // Destructure mutate so callbacks depend on the stable function rather than
+  // the fresh-per-render wrapper object (mirrors Plugins.tsx).
+  const { mutate: publishMutate } = publishMutation;
+  // Mirror the in-flight flag into a ref so detached callbacks can gate on the
+  // current pending state. The "Publish now" toast action closure is created
+  // when offerPublish runs (before any publish starts), so it can't read a live
+  // isPending — without this guard, stacking edits into multiple toasts lets a
+  // user fire concurrent publishes that the disabled header button prevents.
+  const isPublishingRef = useRef(publishMutation.isPending);
+  isPublishingRef.current = publishMutation.isPending;
+  const handlePublish = useCallback(
+    (githubUsernames: string[]) => {
+      if (isPublishingRef.current) return;
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: { publishPluginsRequestBody: { githubUsernames } },
+      });
+    },
+    [publishMutate],
+  );
+
+  // Nudge the user to publish straight after an edit instead of hunting for
+  // Re-publish on the list page. A connected project republishes in one click;
+  // a configured-but-unconnected project needs the first-publish dialog (it
+  // collects collaborators). Unconfigured projects get no nudge — there's
+  // nowhere to publish to.
+  const offerPublish = useCallback(
+    (message: string) => {
+      if (!publishStatus?.configured) return;
+      toast.success(message, {
+        action: {
+          label: "Publish now",
+          onClick: () => {
+            if (publishStatus.connected) {
+              handlePublish([]);
+            } else {
+              setIsPublishDialogOpen(true);
+            }
+          },
+        },
+      });
+    },
+    [publishStatus?.configured, publishStatus?.connected, handlePublish],
+  );
 
   const updateMutation = useUpdatePluginMutation({
     onSuccess: () => {
       setIsEditOpen(false);
       void invalidateAll();
+      offerPublish("Plugin updated");
     },
   });
 
@@ -109,11 +184,15 @@ export default function PluginDetail(): JSX.Element | null {
     onSuccess: () => {
       setIsAddServerOpen(false);
       void invalidateAll();
+      offerPublish("Server added to plugin");
     },
   });
 
   const removeServerMutation = useRemovePluginServerMutation({
-    onSuccess: () => invalidateAll(),
+    onSuccess: () => {
+      void invalidateAll();
+      offerPublish("Server removed from plugin");
+    },
   });
 
   const handleRemoveServer = (server: PluginServer) => {
@@ -255,11 +334,52 @@ export default function PluginDetail(): JSX.Element | null {
             <Type muted small className="mt-1">
               Slug: <code>{plugin.slug}</code>
             </Type>
+            <PublishFreshnessIndicator publishStatus={publishStatus} />
           </div>
-          <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-            Edit
-          </Button>
+          <Stack direction="horizontal" gap={2} align="center">
+            <PublishStatusControl
+              publishStatus={publishStatus}
+              isPending={publishMutation.isPending}
+              onRepublish={() => handlePublish([])}
+              onOpenDialog={() => setIsPublishDialogOpen(true)}
+            />
+            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
+              Edit
+            </Button>
+          </Stack>
         </Stack>
+
+        {/* Marketplace banner — durable path to the install instructions, so the
+            published marketplace URL is reachable without going back to the list.
+            Gated only on a connected repo URL (mirrors the plugins list); the
+            owner/name display and install button degrade independently so partial
+            metadata never hides the whole entrypoint. */}
+        {publishStatus?.connected && publishStatus.repoUrl && (
+          <div className="bg-muted/30 border-border/60 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Marketplace
+              </span>
+              <a
+                href={publishStatus.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+              >
+                {publishStatus.repoOwner && publishStatus.repoName
+                  ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                  : publishStatus.repoUrl}
+              </a>
+            </div>
+            {publishStatus.repoOwner && publishStatus.repoName && (
+              <InstallInstructionsButton
+                repoOwner={publishStatus.repoOwner}
+                repoName={publishStatus.repoName}
+                marketplaceUrl={publishStatus.marketplaceUrl}
+              />
+            )}
+          </div>
+        )}
 
         {/* Servers section */}
         <Stack
@@ -470,8 +590,112 @@ export default function PluginDetail(): JSX.Element | null {
             </form>
           </Dialog.Content>
         </Dialog>
+        <PublishDialog
+          open={isPublishDialogOpen}
+          onOpenChange={setIsPublishDialogOpen}
+          onPublish={handlePublish}
+          isPending={publishMutation.isPending}
+        />
       </Page.Body>
     </Page>
+  );
+}
+
+// Durable publish affordance for the plugin detail header. Renders nothing when
+// the server has no GitHub publishing configured; otherwise it surfaces the
+// project's publish freshness (sourced from getPublishStatus) and a one-click
+// path to publish without returning to the plugins list.
+function PublishStatusControl({
+  publishStatus,
+  isPending,
+  onRepublish,
+  onOpenDialog,
+}: {
+  publishStatus: PublishStatusResult | undefined;
+  isPending: boolean;
+  onRepublish: () => void;
+  onOpenDialog: () => void;
+}): JSX.Element | null {
+  if (!publishStatus?.configured) return null;
+
+  // Never published: the first publish needs the dialog (it collects repo
+  // collaborators), so there's no freshness to show yet.
+  if (!publishStatus.connected) {
+    return (
+      <Button variant="secondary" onClick={onOpenDialog} disabled={isPending}>
+        <Button.LeftIcon>
+          <Icon name="upload" className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>
+          {isPending ? "Publishing..." : "Publish Private Marketplace"}
+        </Button.Text>
+      </Button>
+    );
+  }
+
+  // up_to_date is absent when freshness can't be determined (connection
+  // predates fingerprinting) — treat only an explicit false as dirty.
+  const hasUnpublishedChanges = publishStatus.upToDate === false;
+
+  return (
+    <Button
+      variant={hasUnpublishedChanges ? "primary" : "secondary"}
+      onClick={onRepublish}
+      disabled={isPending}
+    >
+      <Button.LeftIcon>
+        <Icon name="refresh-cw" className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>
+        {isPending
+          ? "Publishing..."
+          : hasUnpublishedChanges
+            ? "Publish changes"
+            : "Re-publish"}
+      </Button.Text>
+    </Button>
+  );
+}
+
+// Shows the published freshness of a connected project under the plugin
+// metadata: an explicit "Unpublished changes" vs "Up to date" badge, paired
+// with the last-published time. The timestamp shows in both states (it's still
+// useful to know when the last publish happened while there are pending
+// changes). Renders nothing when not connected, or when freshness is unknown
+// and there's no publish timestamp to show.
+function PublishFreshnessIndicator({
+  publishStatus,
+}: {
+  publishStatus: PublishStatusResult | undefined;
+}): JSX.Element | null {
+  if (!publishStatus?.connected) return null;
+
+  // up_to_date is absent when freshness can't be determined (connection
+  // predates fingerprinting) — treat only the explicit booleans as known.
+  const hasUnpublishedChanges = publishStatus.upToDate === false;
+  const isUpToDate = publishStatus.upToDate === true;
+
+  const lastPublished = publishStatus.lastPublishedAt ? (
+    <Type muted small>
+      Published{" "}
+      {formatDistanceToNow(publishStatus.lastPublishedAt, {
+        addSuffix: true,
+      })}
+    </Type>
+  ) : null;
+
+  // Freshness unknown and nothing published yet — nothing meaningful to show.
+  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished) return null;
+
+  return (
+    <Stack direction="horizontal" gap={2} align="center" className="mt-2">
+      {hasUnpublishedChanges ? (
+        <Badge variant="warning">Unpublished changes</Badge>
+      ) : isUpToDate ? (
+        <Badge variant="secondary">Up to date</Badge>
+      ) : null}
+      {lastPublished}
+    </Stack>
   );
 }
 
@@ -500,7 +724,7 @@ function PluginServerCard({
     // Remote MCP servers live on the mcp_servers-backed details page (x/);
     // toolset-backed servers use the toolset details page.
     if (isRemote) {
-      if (mcpServer) routes.mcp.x.goTo(mcpServerRouteParam(mcpServer));
+      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
       routes.mcp.details.goTo(toolset.slug);
     }

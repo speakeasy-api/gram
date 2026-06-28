@@ -5433,14 +5433,15 @@ func DecodeResolveChallengeResponse(decoder func(*http.Response) goahttp.Decoder
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 	res := &access.Role{
-		ID:          *v.ID,
-		Name:        *v.Name,
-		Slug:        *v.Slug,
-		Description: *v.Description,
-		IsSystem:    *v.IsSystem,
-		MemberCount: *v.MemberCount,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:           *v.ID,
+		PrincipalUrn: *v.PrincipalUrn,
+		Name:         *v.Name,
+		Slug:         *v.Slug,
+		Description:  *v.Description,
+		IsSystem:     *v.IsSystem,
+		MemberCount:  *v.MemberCount,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
 	}
 	res.Grants = make([]*access.RoleGrant, len(v.Grants))
 	for i, val := range v.Grants {
@@ -5459,12 +5460,6 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *access.RoleGrant {
 	res := &access.RoleGrant{
 		Scope: *v.Scope,
-	}
-	if v.Effect != nil {
-		res.Effect = *v.Effect
-	}
-	if v.Effect == nil {
-		res.Effect = "allow"
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -5502,14 +5497,7 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 // *RoleGrantRequestBody from a value of type *access.RoleGrant.
 func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGrantRequestBody {
 	res := &RoleGrantRequestBody{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	{
-		var zero string
-		if res.Effect == zero {
-			res.Effect = "allow"
-		}
+		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*SelectorRequestBody, len(v.Selectors))
@@ -5547,14 +5535,7 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 // *access.RoleGrant from a value of type *RoleGrantRequestBody.
 func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
 	res := &access.RoleGrant{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	{
-		var zero string
-		if res.Effect == zero {
-			res.Effect = "allow"
-		}
+		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -5593,9 +5574,11 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 // *ScopeDefinitionResponseBody.
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
-		Slug:         *v.Slug,
-		Description:  *v.Description,
-		ResourceType: *v.ResourceType,
+		Slug:           *v.Slug,
+		Description:    *v.Description,
+		ResourceType:   *v.ResourceType,
+		Visibility:     *v.Visibility,
+		ExclusionScope: v.ExclusionScope,
 	}
 
 	return res
@@ -5605,11 +5588,12 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 // *access.AccessMember from a value of type *AccessMemberResponseBody.
 func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberResponseBody) *access.AccessMember {
 	res := &access.AccessMember{
-		ID:       *v.ID,
-		Name:     *v.Name,
-		Email:    *v.Email,
-		PhotoURL: v.PhotoURL,
-		JoinedAt: *v.JoinedAt,
+		ID:           *v.ID,
+		PrincipalUrn: *v.PrincipalUrn,
+		Name:         *v.Name,
+		Email:        *v.Email,
+		PhotoURL:     v.PhotoURL,
+		JoinedAt:     *v.JoinedAt,
 	}
 	res.RoleIds = make([]string, len(v.RoleIds))
 	for i, val := range v.RoleIds {
@@ -5624,12 +5608,6 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantResponseBody) *access.ListRoleGrant {
 	res := &access.ListRoleGrant{
 		Scope: *v.Scope,
-	}
-	if v.Effect != nil {
-		res.Effect = *v.Effect
-	}
-	if v.Effect == nil {
-		res.Effect = "allow"
 	}
 	if v.SubScopes != nil {
 		res.SubScopes = make([]string, len(v.SubScopes))

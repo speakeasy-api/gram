@@ -45,6 +45,49 @@ var UsageTiers = Type("UsageTiers", func() {
 	Required("free", "pro", "enterprise")
 })
 
+// TUMPeriodDay is one UTC day of tokens under management within a billing
+// cycle.
+var TUMPeriodDay = Type("TUMPeriodDay", func() {
+	Attribute("date", String, "The UTC day", func() {
+		Format(FormatDate)
+	})
+	Attribute("tokens", Int64, "Tokens under management consumed on this day")
+
+	Required("date", "tokens")
+})
+
+// TUMPeriod is tokens under management for one billing cycle.
+var TUMPeriod = Type("TUMPeriod", func() {
+	Attribute("period_start", String, "Start of the billing cycle", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("period_end", String, "End of the billing cycle (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("tokens", Int64, "Tokens under management consumed during the cycle")
+	Attribute("days", ArrayOf(TUMPeriodDay), "Daily breakdown of TUM within the cycle. Days without usage are omitted.")
+
+	Required("period_start", "period_end", "tokens", "days")
+})
+
+// TokensUnderManagement reports TUM consumption for the active billing cycle
+// alongside the contracted terms for the organization.
+var TokensUnderManagement = Type("TokensUnderManagement", func() {
+	Attribute("period_start", String, "Start of the active billing cycle", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("period_end", String, "End of the active billing cycle (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("tokens", Int64, "Tokens under management consumed during the active billing cycle")
+	Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit, if one has been configured")
+	Attribute("billing_cycle_anchor_day", Int, "Day of month (1-31) the billing cycle starts, at 00:00 UTC")
+	Attribute("alert_email", String, "Email address to notify on TUM threshold events. Only populated for platform admins.")
+	Attribute("history", ArrayOf(TUMPeriod), "TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.")
+
+	Required("period_start", "period_end", "tokens", "billing_cycle_anchor_day", "history")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -68,6 +111,58 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
+	})
+
+	Method("getTokensUnderManagement", func() {
+		Description("Get tokens under management for the active billing cycle alongside the contracted terms")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(TokensUnderManagement)
+
+		HTTP(func() {
+			GET("/rpc/usage.getTokensUnderManagement")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getTokensUnderManagement")
+		Meta("openapi:extension:x-speakeasy-name-override", "getTokensUnderManagement")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getTokensUnderManagement"}`)
+	})
+
+	Method("setBillingMetadata", func() {
+		Description("Set an organization's billing contract terms. Restricted to platform admins.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit. Omit to clear.", func() {
+				Minimum(0)
+			})
+			Attribute("alert_email", String, "Email address to notify on TUM threshold events. Omit to clear.", func() {
+				Format(FormatEmail)
+			})
+			Attribute("billing_cycle_anchor_day", Int, "Day of month (1-31) the billing cycle starts, at 00:00 UTC", func() {
+				Minimum(1)
+				Maximum(31)
+			})
+
+			Required("billing_cycle_anchor_day")
+		})
+
+		Result(TokensUnderManagement)
+
+		HTTP(func() {
+			POST("/rpc/usage.setBillingMetadata")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setBillingMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "setBillingMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingMetadata"}`)
 	})
 
 	Method("getUsageTiers", func() {

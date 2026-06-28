@@ -1,9 +1,10 @@
 #!/usr/bin/env -S uv run --script
+# fmt: off
 #MISE description="Run the prompt-injection risk report harness and print metrics"
-#USAGE flag "--classifier-url <url>" help="Base URL for the L1 prompt-injection classifier sidecar. Also reads PI_CLASSIFIER_URL."
 #USAGE flag "--metrics-file <path>" help="Path to the JSON metrics artifact. Defaults to server/risk_accuracy_metrics.json."
-#USAGE flag "--no-classifier" help="Disable classifier use even if PI_CLASSIFIER_URL is set by the environment."
 #USAGE flag "--no-run" help="Only print an existing metrics artifact without running the evaluator harness."
+#USAGE flag "--judge" help="Also evaluate the L1 LLM judge against the corpus (needs OPENROUTER_DEV_KEY)."
+# fmt: on
 # /// script
 # requires-python = ">=3.11"
 # ///
@@ -27,17 +28,9 @@ def main() -> int:
     args = parse_args()
     metrics_file = args.metrics_file
 
-    env = os.environ.copy()
-    classifier_url = None if args.no_classifier else first_nonempty(args.classifier_url, env.get("PI_CLASSIFIER_URL"))
-
-    if classifier_url:
-        env["PI_CLASSIFIER_URL"] = classifier_url
-    else:
-        env.pop("PI_CLASSIFIER_URL", None)
-
     harness_exit = 0
     if not args.no_run:
-        harness_exit = run_evaluator(env, metrics_file, classifier_url)
+        harness_exit = run_evaluator(metrics_file, args.judge)
 
     if not metrics_file.exists():
         print(
@@ -49,21 +42,13 @@ def main() -> int:
     with metrics_file.open("r", encoding="utf-8") as fh:
         payload = json.load(fh)
 
-    print_report(payload, classifier_url, metrics_file)
+    print_report(payload, metrics_file)
     return harness_exit
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Run the prompt-injection risk report harness and print L0/L1 opt-in metrics. "
-            "Pass --classifier-url to compare production L1 opt-in behavior against L0."
-        )
-    )
-    parser.add_argument(
-        "--classifier-url",
-        default=os.environ.get("usage_classifier_url"),
-        help="Base URL for the L1 classifier sidecar, for example http://127.0.0.1:5051.",
+        description="Run the prompt-injection risk report harness and print L0 metrics."
     )
     parser.add_argument(
         "--metrics-file",
@@ -72,21 +57,21 @@ def parse_args() -> argparse.Namespace:
         help=f"Path to metrics JSON. Default: {DEFAULT_METRICS_FILE}",
     )
     parser.add_argument(
-        "--no-classifier",
-        action="store_true",
-        default=os.environ.get("usage_no_classifier") == "true",
-        help="Disable L1 classifier evaluation even if PI_CLASSIFIER_URL is set.",
-    )
-    parser.add_argument(
         "--no-run",
         action="store_true",
         default=os.environ.get("usage_no_run") == "true",
         help="Print the existing metrics artifact without rerunning the evaluator harness.",
     )
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        default=os.environ.get("usage_judge") == "true",
+        help="Also evaluate the L1 LLM judge against the corpus (needs OPENROUTER_DEV_KEY).",
+    )
     return parser.parse_args()
 
 
-def run_evaluator(env: dict[str, str], metrics_file: Path, classifier_url: str | None) -> int:
+def run_evaluator(metrics_file: Path, judge: bool) -> int:
     cmd = [
         "go",
         "run",
@@ -94,12 +79,12 @@ def run_evaluator(env: dict[str, str], metrics_file: Path, classifier_url: str |
         "--out",
         str(metrics_file),
     ]
-    if classifier_url:
-        cmd.extend(["--classifier-url", classifier_url])
-    return subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False).returncode
+    if judge:
+        cmd.append("--judge")
+    return subprocess.run(cmd, cwd=REPO_ROOT, check=False).returncode
 
 
-def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_file: Path) -> None:
+def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
     summary = payload["summary"]
 
     print()
@@ -109,7 +94,6 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
     print(f"git_sha:    {payload.get('git_sha', '-')}")
     print(f"timestamp:  {payload.get('timestamp', '-')}")
     print(f"artifact:   {metrics_file}")
-    print(f"classifier: {classifier_status(classifier_url)}")
     print(f"corpus:     {corpus_status(summary)}")
     print()
 
@@ -117,7 +101,20 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
     if modes:
         print("Operational comparison:")
         print_table(
-            ["mode", "status", "total", "tp", "fp", "tn", "fn", "precision", "recall", "f1", "accuracy", "fp_rate"],
+            [
+                "mode",
+                "status",
+                "total",
+                "tp",
+                "fp",
+                "tn",
+                "fn",
+                "precision",
+                "recall",
+                "f1",
+                "accuracy",
+                "fp_rate",
+            ],
             mode_rows(modes),
         )
         print()
@@ -128,11 +125,16 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
             print()
 
             print("Regression sources:")
-            print_table(["source", "fp_before", "fp_after", "delta"], regression_source_rows(modes))
+            print_table(
+                ["source", "fp_before", "fp_after", "delta"],
+                regression_source_rows(modes),
+            )
             print()
 
             print("Recall gain sources:")
-            print_table(["source", "tp_before", "tp_after", "delta"], recall_gain_rows(modes))
+            print_table(
+                ["source", "tp_before", "tp_after", "delta"], recall_gain_rows(modes)
+            )
             print()
 
         print("By source:")
@@ -149,11 +151,17 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
         l1 = maybe_mode_by_name(modes, "l1_opt_in")
         if l1:
             print("New false positives:")
-            print_table(["source", "id", "rule", "score", "text"], example_rows(l1.get("new_false_positives", [])))
+            print_table(
+                ["source", "id", "rule", "score", "text"],
+                example_rows(l1.get("new_false_positives", [])),
+            )
             print()
 
             print("Recovered true positives:")
-            print_table(["source", "id", "rule", "score", "text"], example_rows(l1.get("recovered_true_positives", [])))
+            print_table(
+                ["source", "id", "rule", "score", "text"],
+                example_rows(l1.get("recovered_true_positives", [])),
+            )
             print()
         return
 
@@ -182,7 +190,10 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
     print("By rule:")
     print_table(
         ["rule_id", "tp", "fp"],
-        [[item["rule_id"], item["tp_count"], item["fp_count"]] for item in summary.get("by_rule", [])],
+        [
+            [item["rule_id"], item["tp_count"], item["fp_count"]]
+            for item in summary.get("by_rule", [])
+        ],
     )
     print()
 
@@ -190,7 +201,9 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
 def print_counts(summary: dict[str, Any]) -> None:
     counts = summary["counts"]
     overall = summary["overall"]
-    print(f"total:     {summary['total']}  (TP={counts['tp']} FP={counts['fp']} TN={counts['tn']} FN={counts['fn']})")
+    print(
+        f"total:     {summary['total']}  (TP={counts['tp']} FP={counts['fp']} TN={counts['tn']} FN={counts['fn']})"
+    )
     print(f"precision: {fmt(overall.get('precision'))}")
     print(f"recall:    {fmt(overall.get('recall'))}")
     print(f"f1:        {fmt(overall.get('f1'))}")
@@ -285,7 +298,14 @@ def rule_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
         if mode.get("skipped"):
             continue
         for item in mode.get("by_rule", []):
-            rows.append([display_mode_name(mode["name"]), item["rule_id"], item["tp_count"], item["fp_count"]])
+            rows.append(
+                [
+                    display_mode_name(mode["name"]),
+                    item["rule_id"],
+                    item["tp_count"],
+                    item["fp_count"],
+                ]
+            )
     return rows
 
 
@@ -300,9 +320,15 @@ def delta_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
         ["true positives", signed(l1_counts["tp"] - l0_counts["tp"])],
         ["false negatives", signed(l1_counts["fn"] - l0_counts["fn"])],
         ["false positives", signed(l1_counts["fp"] - l0_counts["fp"])],
-        ["recall", signed_percentage_points(l1_overall["recall"] - l0_overall["recall"])],
+        [
+            "recall",
+            signed_percentage_points(l1_overall["recall"] - l0_overall["recall"]),
+        ],
         ["f1", signed_percentage_points(l1_overall["f1"] - l0_overall["f1"])],
-        ["fp_rate", signed_percentage_points(l1_overall["fp_rate"] - l0_overall["fp_rate"])],
+        [
+            "fp_rate",
+            signed_percentage_points(l1_overall["fp_rate"] - l0_overall["fp_rate"]),
+        ],
     ]
 
 
@@ -363,13 +389,6 @@ def print_table(headers: list[str], rows: list[list[Any]]) -> None:
         print("  ".join(row[i].ljust(widths[i]) for i in range(len(headers))))
 
 
-def classifier_status(classifier_url: str | None) -> str:
-    if not classifier_url:
-        return "disabled (pass --classifier-url or set PI_CLASSIFIER_URL to include L1 opt-in mode)"
-
-    return f"enabled ({classifier_url})"
-
-
 def has_modes(modes: list[dict[str, Any]], *names: str) -> bool:
     available = {mode["name"] for mode in modes if not mode.get("skipped")}
     return all(name in available for name in names)
@@ -386,13 +405,6 @@ def maybe_mode_by_name(modes: list[dict[str, Any]], name: str) -> dict[str, Any]
     for mode in modes:
         if mode["name"] == name and not mode.get("skipped"):
             return mode
-    return None
-
-
-def first_nonempty(*values: str | None) -> str | None:
-    for value in values:
-        if value and value.strip():
-            return value.strip()
     return None
 
 

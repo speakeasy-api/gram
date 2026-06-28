@@ -9,10 +9,10 @@ import { Badge } from "../ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
-// Today only Remote-MCP-backed servers reach this component (gated upstream
-// by the gram-remote-mcp flag and the remoteMcpServerId filter); after the
-// AGE-1902/AGE-1880 cutover, toolset-backed mcp_servers will render through
-// the same card alongside Hosted MCPCard.
+// Today only Remote-MCP-backed servers reach this component (filtered upstream
+// by the remoteMcpServerId filter); after the AGE-1902/AGE-1880 cutover,
+// toolset-backed mcp_servers will render through the same card alongside Hosted
+// MCPCard.
 //
 // TODO(AGE-1902): collapse with MCPCard once Hosted (toolset-backed) cards
 // also source from mcp_servers and the per-card data shape no longer branches
@@ -31,7 +31,7 @@ export function MCPServerCard({
 
   return (
     <Link
-      to={routes.mcp.x.href(mcpServerRouteParam(server))}
+      to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>

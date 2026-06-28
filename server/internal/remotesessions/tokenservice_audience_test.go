@@ -100,7 +100,6 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuer.ID,
-		UserSessionIssuerID:     userIssuer,
 		ClientID:                "aud-cid",
 		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
@@ -108,6 +107,12 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
 		Scope:                   nil,
 		Audience:                audience,
+	})
+	require.NoError(t, err)
+
+	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuer,
 	})
 	require.NoError(t, err)
 

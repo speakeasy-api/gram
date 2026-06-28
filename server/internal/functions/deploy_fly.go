@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -150,24 +151,24 @@ func (f *FlyRunner) prepareFunctionAuth(ctx context.Context, logger *slog.Logger
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil, oops.E(oops.CodeNotFound, err, "no function runner available").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeNotFound, err, "no function runner available").LogError(ctx, logger)
 	case err != nil:
-		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").LogError(ctx, logger)
 	}
 
 	format := row.BearerFormat.String
 	sec := row.EncryptionKey.Reveal()
 	if format == "" || len(sec) == 0 {
-		return "", nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials").LogError(ctx, logger)
 	}
 
 	unsealedAuthKey, err := f.encryption.Decrypt(string(sec))
 	if err != nil {
-		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials").LogError(ctx, logger)
 	}
 	enc, err = encryption.NewWithBytes([]byte(unsealedAuthKey))
 	if err != nil {
-		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client").LogError(ctx, logger)
 	}
 
 	return row.AppUrl, enc, nil
@@ -193,7 +194,7 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 		"tool urn cannot be empty", !req.ToolURN.IsZero(),
 		"tool name cannot be empty", req.ToolName != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed tool call request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed tool call request").LogError(ctx, logger)
 	}
 
 	appURL, enc, err := f.prepareFunctionAuth(ctx, logger, req.RunnerBaseRequest)
@@ -203,7 +204,7 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 
 	endpoint, err := url.JoinPath(appURL, "/tool-call")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").LogError(ctx, logger)
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
@@ -212,7 +213,7 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 		Subject: req.ToolURN.String(),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").LogError(ctx, logger)
 	}
 
 	payload, err := json.Marshal(CallToolPayload{
@@ -221,12 +222,12 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 		Environment: req.Environment,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").LogError(ctx, logger)
 	}
 
 	httpreq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function tool request").LogError(ctx, logger)
 	}
 
 	httpreq.Header.Set("Authorization", "Bearer "+token)
@@ -255,7 +256,7 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 		"resource urn cannot be empty", !req.ResourceURN.IsZero(),
 		"resource uri cannot be empty", req.ResourceURI != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed read resource request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed read resource request").LogError(ctx, logger)
 	}
 
 	appURL, enc, err := f.prepareFunctionAuth(ctx, logger, req.RunnerBaseRequest)
@@ -265,7 +266,7 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 
 	endpoint, err := url.JoinPath(appURL, "/resource-request")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function resource request url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function resource request url").LogError(ctx, logger)
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
@@ -274,7 +275,7 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 		Subject: req.ResourceURN.String(),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function read resource call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function read resource call").LogError(ctx, logger)
 	}
 
 	payload, err := json.Marshal(ReadResourcePayload{
@@ -283,12 +284,12 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 		Environment: req.Environment,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function read resource payload").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function read resource payload").LogError(ctx, logger)
 	}
 
 	httpreq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function read resource request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function read resource request").LogError(ctx, logger)
 	}
 
 	httpreq.Header.Set("Authorization", "Bearer "+token)
@@ -336,7 +337,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		"deployment function id cannot be nil", req.FunctionID != uuid.Nil,
 		"runner version cannot be empty", req.Version != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid function runner deploy request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid function runner deploy request").LogError(ctx, logger)
 	}
 
 	if err := f.reap(ctx, logger, appsRepo, ReapRequest{
@@ -366,7 +367,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	case errors.As(err, &serr):
 		return nil, err
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to encode machine files").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to encode machine files").LogError(ctx, logger)
 	}
 
 	image, err := f.imgSelector.Select(ctx, ImageRequest{
@@ -381,7 +382,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 			oops.CodeUnexpected,
 			err,
 			"failed select runner image",
-		).Log(ctx, logger, attr.SlogFunctionsRunnerVersion(runnerVersion))
+		).LogError(ctx, logger, attr.SlogFunctionsRunnerVersion(runnerVersion))
 	}
 
 	machineConfig := f.newMachineConfig(req, image, files, sharedMetadata)
@@ -395,7 +396,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 
 	org, err := f.client.GetOrganizationBySlug(ctx, orgSlug)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve runner target organization id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve runner target organization id").LogError(ctx, logger)
 	}
 
 	appFull, err := f.client.CreateApp(ctx, fly.CreateAppInput{
@@ -405,7 +406,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		Network:         &networkName,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create app").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create app").LogError(ctx, logger)
 	}
 
 	appName := appFull.Name
@@ -437,7 +438,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		PrimaryRegion: region,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save app details").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save app details").LogError(ctx, logger)
 	}
 
 	logger = logger.With(
@@ -455,7 +456,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 			oops.CodeUnexpected,
 			fmt.Errorf("%s: %w", appFull.AppURL, err),
 			"failed to parse fly app url",
-		).Log(ctx, logger)
+		).LogError(ctx, logger)
 	}
 
 	flapsc, err := flaps.NewWithOptions(ctx, flaps.NewClientOpts{
@@ -469,12 +470,12 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create flaps client").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create flaps client").LogError(ctx, logger)
 	}
 
 	minSecretVersion, err := f.setSecrets(ctx, logger, appName, map[string]string{functionAuthSecretVar: req.BearerSecret})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to set function runner secrets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set function runner secrets").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "Starting runner machines")
@@ -483,16 +484,24 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	ms, err := f.launchN(ctx, logger, appName, flapsc, region, machineConfig, minSecretVersion, scale)
 	if err != nil {
 		if len(ms) > 0 {
+			// Partial success is tolerated: the app still serves traffic on the
+			// machines that came up, so this is a warning, not a failure. The
+			// joined err carries each per-machine cause; include the
+			// succeeded/requested counts so it reads as partial rather than as
+			// a hard failure. Only an all-zero result (below) is user-facing.
 			span.RecordError(err)
-			logger.WarnContext(ctx, "failed to spin up some function runner machines", attr.SlogError(err))
+			logger.WarnContext(ctx,
+				fmt.Sprintf("function runner deploy came up partially: %d/%d machines started", len(ms), scale),
+				attr.SlogError(err),
+			)
 		} else {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").LogError(ctx, logger)
 		}
 	}
 
 	_, err = f.client.AllocateSharedIPAddress(ctx, appName)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to allocate shared IP address").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to allocate shared IP address").LogError(ctx, logger)
 	}
 
 	machineIDs := make([]string, 0, len(ms))
@@ -509,7 +518,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		ReapedAt:     pgtype.Timestamptz{Valid: false, Time: time.Time{}, InfinityModifier: 0},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark app as ready").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark app as ready").LogError(ctx, logger)
 	}
 
 	var mem int
@@ -543,7 +552,7 @@ func (f *FlyRunner) Reap(ctx context.Context, req ReapRequest) error {
 	appsRepo := repo.New(f.db)
 
 	if err := f.reap(ctx, logger, appsRepo, req); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to reap app").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to reap app").LogError(ctx, logger)
 	}
 
 	return nil
@@ -628,31 +637,22 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	return nil
 }
 
-// concurrencyLimits derives Fly proxy concurrency soft and hard limits from the
-// machine's memory allocation. The hard limit caps the maximum concurrent
-// connections the Fly proxy will route to a single machine; the soft limit
-// triggers traffic deprioritization so the proxy can spread load before hitting
-// the hard cap.
-func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
-	hardLimit = max(memoryMB/48, 4)
-	softLimit = max(hardLimit*1/5, 2)
-	return softLimit, hardLimit
-}
-
 func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, files []*fly.File, baseMetadata map[string]string) *fly.MachineConfig {
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
 
 	mem := conv.Default(min(maxMachineMemoryMiB, max(0, req.MemoryMiB)), defaultMachineMemoryMiB)
-	softLimit, hardLimit := concurrencyLimits(mem)
+	slots := executionSlots(req.Runtime, mem)
+	softLimit, hardLimit := concurrencyLimits(slots)
 
 	return &fly.MachineConfig{
 		Image: image,
 		Env: map[string]string{
-			"GRAM_SERVER_URL":    f.serverURL.String(),
-			"GRAM_DEPLOYMENT_ID": req.DeploymentID.String(),
-			"GRAM_FUNCTION_ID":   req.FunctionID.String(),
-			"GRAM_PROJECT_ID":    req.ProjectID.String(),
+			"GRAM_SERVER_URL":               f.serverURL.String(),
+			"GRAM_DEPLOYMENT_ID":            req.DeploymentID.String(),
+			"GRAM_FUNCTION_ID":              req.FunctionID.String(),
+			"GRAM_PROJECT_ID":               req.ProjectID.String(),
+			"GRAM_FUNCTION_MAX_CONCURRENCY": strconv.Itoa(slots),
 		},
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
@@ -703,13 +703,23 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 
 // isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
 // propagation failure where the Machines API hasn't seen the newly-created app
-// yet. Returns true when err is nil or is an unrelated error.
+// yet. Returns true when err is nil or is an unrelated (non-retryable) error.
 func isFlyAppReady(err error) bool {
 	if err == nil {
 		return true
 	}
+
+	// The Machines API answers 404 ("app not found") while an app created via
+	// the GraphQL API is still propagating. Match the typed Flaps status code
+	// rather than relying solely on substrings.
+	if errors.Is(err, flaps.FlapsErrorNotFound) {
+		return false
+	}
+
 	msg := err.Error()
-	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
+	return !strings.Contains(msg, "no rows in result set") &&
+		!strings.Contains(msg, "failed to get app") &&
+		!strings.Contains(msg, "app not found")
 }
 
 func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
@@ -757,7 +767,10 @@ func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName st
 				return
 			}
 
-			if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
+			// Every deploy creates a brand-new app, so the runner image (tagged
+			// per server version) is always a cold pull on the first machine.
+			// 30s was too tight and misread cold pulls as failures.
+			if err := flapsc.Wait(ctx, appName, m, "started", 60*time.Second); err != nil {
 				errCh <- fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
 				return
 			}
@@ -898,7 +911,7 @@ func (f *FlyRunner) serializeAssets(
 	for _, asset := range assets {
 		rdr, err := f.assetStore.Read(ctx, asset.AssetURL)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").LogError(ctx, logger)
 		}
 		defer o11y.LogDefer(ctx, f.logger, func() error {
 			if cerr := rdr.Close(); cerr != nil {
@@ -911,7 +924,7 @@ func (f *FlyRunner) serializeAssets(
 		if useTigris {
 			wr, _, err := f.tigrisStore.Write(ctx, asset.AssetURL.Path, asset.ContentType, asset.ContentLength)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").LogError(ctx, logger)
 			}
 			defer o11y.LogDefer(ctx, f.logger, func() error {
 				if werr := wr.Close(); werr != nil {
@@ -922,7 +935,7 @@ func (f *FlyRunner) serializeAssets(
 			})
 
 			if _, err := io.Copy(wr, rdr); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to copy function asset to blob storage").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to copy function asset to blob storage").LogError(ctx, logger)
 			}
 
 			encoded := base64.StdEncoding.EncodeToString([]byte(asset.AssetID.String()))
@@ -934,7 +947,7 @@ func (f *FlyRunner) serializeAssets(
 		} else {
 			data, err := io.ReadAll(rdr)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").LogError(ctx, logger)
 			}
 
 			encoded := base64.StdEncoding.EncodeToString(data)
@@ -962,6 +975,15 @@ func (f *FlyRunner) tryMarkDeployFailed(
 	req RunnerDeployRequest,
 	state partialDeploy,
 ) {
+	// Cleanup usually runs precisely because the parent ctx was cancelled (the
+	// deploy was torn down mid-flight). Detach from that cancellation with a
+	// fresh deadline so we can still delete the Fly app and reconcile the DB
+	// row. Otherwise the leaked fly_apps row stays active (reaped_at IS NULL)
+	// and poisons later retries with a duplicate-key collision on
+	// fly_apps_project_deployment_function_active_key.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	var reapedAt time.Time
 	if state.appName != "" {
 		if err := f.client.DeleteApp(ctx, state.appName); err != nil {
@@ -977,6 +999,9 @@ func (f *FlyRunner) tryMarkDeployFailed(
 			reapedAt = time.Now().UTC()
 		}
 	}
+
+	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 
 	if state.internalAppID != uuid.Nil {
 		reapColumn := pgtype.Timestamptz{

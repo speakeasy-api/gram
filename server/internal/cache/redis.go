@@ -64,6 +64,17 @@ func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl 
 	})
 }
 
+// Add uses Redis SET NX to create key only when it is absent. The value is a
+// fixed sentinel ("1") since callers only care about presence. Returns true
+// when this call created the key, false when it already existed.
+func (r *RedisCacheAdapter) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	ok, err := r.client.SetNX(ctx, key, "1", ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("setnx %s: %w", key, err)
+	}
+	return ok, nil
+}
+
 func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
 	var lastErr error
 	for range mutateMaxRetries {
@@ -225,6 +236,27 @@ func (r *RedisCacheAdapter) ListRange(ctx context.Context, key string, start, st
 	}
 
 	return nil
+}
+
+// ScanKeys returns every key in the cache that starts with prefix. It walks
+// the keyspace with SCAN, so it is safe to run against a live instance, but
+// it is still a full-keyspace traversal — reserve it for operator-driven
+// flows, not request hot paths.
+func (r *RedisCacheAdapter) ScanKeys(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	var cursor uint64
+	for {
+		batch, next, err := r.client.Scan(ctx, cursor, prefix+"*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("scan keys with prefix %q: %w", prefix, err)
+		}
+		keys = append(keys, batch...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return keys, nil
 }
 
 func (r *RedisCacheAdapter) DeleteByPrefix(ctx context.Context, prefix string) error {

@@ -55,7 +55,7 @@ func NewProcessWorkOSUserEvents(logger *slog.Logger, db *pgxpool.Pool, workosCli
 func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUserEventsParams) (*ProcessWorkOSUserEventsResult, error) {
 	logger := p.logger.With(attr.SlogWorkOSUserID(params.WorkOSUserID))
 	if params.WorkOSUserID == "" {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("missing WorkOS user ID"), "missing WorkOS user ID").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("missing WorkOS user ID"), "missing WorkOS user ID").LogError(ctx, logger)
 	}
 
 	sinceEventID := conv.PtrValOr(params.SinceEventID, "")
@@ -64,7 +64,7 @@ func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUs
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "get user sync cursor").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get user sync cursor").LogError(ctx, logger)
 		default:
 			sinceEventID = cursor
 		}
@@ -83,7 +83,7 @@ func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUs
 		RangeEnd:       "",
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS user events").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS user events").LogError(ctx, logger)
 	}
 
 	lastEventID, err := p.handlePage(ctx, logger, params.WorkOSUserID, resp.Data)
@@ -108,7 +108,7 @@ func (p *ProcessWorkOSUserEvents) handlePage(ctx context.Context, logger *slog.L
 
 		eventID, err := p.handleEvent(ctx, eventLogger, workosUserID, event)
 		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS user event").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS user event").LogError(ctx, eventLogger)
 		}
 		if eventID != "" {
 			lastEventID = eventID
@@ -212,6 +212,9 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
+	}
+	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.Email); err != nil {
+		return nil, err
 	}
 
 	organizationQueries := organizationsrepo.New(dbtx)
@@ -349,6 +352,21 @@ func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Querie
 	default:
 		return fmt.Errorf("get linked user for WorkOS user %q: %w", workosUserID, err)
 	}
+}
+
+func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, email string) error {
+	email = conv.NormalizeEmail(email)
+	if email == "" {
+		return nil
+	}
+
+	if _, err := workosrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, workosrepo.LinkDirectoryUsersToUserByEmailParams{
+		UserID: conv.ToPGText(userID),
+		Email:  conv.ToPGText(email),
+	}); err != nil {
+		return fmt.Errorf("link directory users to user: %w", err)
+	}
+	return nil
 }
 
 func displayNameFromWorkOSUser(payload workosUserEventPayload) string {

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -41,10 +42,17 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
-	sourceKindCron       = bgtriggers.DefinitionSlugCron
-	sourceKindWake       = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
+	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
+	sourceKindCron      = bgtriggers.DefinitionSlugCron
+	sourceKindWake      = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	// sourceKindWarmup marks the event-less thread that eager-boots the
+	// runtime at assistant creation. It has no source adapter — adapters are
+	// only consulted while processing events, and this thread never has any.
+	sourceKindWarmup     = "warmup"
+	warmupCorrelationID  = "runtime-warmup"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -63,9 +71,26 @@ const (
 	// loop forever.
 	maxEventAttempts = 5
 
-	runtimeStartupReapGrace     = 2 * time.Minute
-	runtimeWarmExpiryReapGrace  = 1 * time.Minute
-	runtimeProcessingLeaseGrace = 2 * time.Minute
+	// maxRuntimeTeardowns caps how many times one event may tear down and
+	// re-admit its runtime (the ErrRuntimeUnhealthy path) before it is failed
+	// terminally. Higher than maxEventAttempts because a genuine infra blip
+	// deserves generous retries, while a deterministic error misclassified as
+	// unhealthy still cannot churn fresh runtimes without bound. event.Attempts
+	// advances on every claim, so it doubles as the teardown counter here.
+	maxRuntimeTeardowns = 10
+
+	// teardownCapCleanupTimeout bounds the detached cleanup (stop runtime,
+	// fail event) on the exhausted-teardown path. The turn that triggered it
+	// already failed — often because its context was canceled — so the cleanup
+	// runs on a fresh deadline rather than the dead request context.
+	teardownCapCleanupTimeout = 30 * time.Second
+
+	assistantPipelineTelemetryURN = "assistants:pipeline"
+	assistantRuntimeTelemetryURN  = "assistants:runtime"
+
+	meterAssistantTurnClassified = "assistant.turn.classified"
+
+	runtimeStartupReapGrace = 2 * time.Minute
 	// runtimeExpiringReapGrace is the cushion the reaper waits before
 	// reclaiming a row stuck in `expiring`. It must exceed the worst-case
 	// total budget of the ExpireThreadRuntime activity (Temporal
@@ -281,6 +306,15 @@ type ExpireThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
+// WarmupThreadResult identifies the warmup thread to signal. ShouldSignal is
+// false on every no-op path (assistant gone/paused, organic traffic owns the
+// runtime row).
+type WarmupThreadResult struct {
+	ThreadID     uuid.UUID
+	ProjectID    uuid.UUID
+	ShouldSignal bool
+}
+
 // WakeCanceller cancels every pending wake trigger owned by an assistant on
 // deletion. The trigger app implements this; assistants owns the interface to
 // avoid a dependency back into the triggers package.
@@ -310,11 +344,13 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
+	turnClassified    metric.Int64Counter
 }
 
 func NewServiceCore(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
 	encryptionClient *encryption.Client,
@@ -325,6 +361,16 @@ func NewServiceCore(
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
+	turnClassified, err := meter.Int64Counter(
+		meterAssistantTurnClassified,
+		metric.WithDescription("Assistant turn failures bucketed by classifyTurnError outcome"),
+		metric.WithUnit("{turn}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterAssistantTurnClassified), attr.SlogError(err))
+	}
+
 	return &ServiceCore{
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
@@ -340,6 +386,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,
+		turnClassified:    turnClassified,
 	}
 }
 
@@ -440,13 +487,14 @@ func (s *ServiceCore) emitAssistantTelemetry(
 		Timestamp: time.Now().UTC(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             assistant.ID.String(),
-			URN:            "urn:uuid:" + assistant.ID.String(),
+			URN:            assistantPipelineTelemetryURN,
 			Name:           "assistant:" + assistant.Name,
 			ProjectID:      assistant.ProjectID.String(),
 			DeploymentID:   "",
 			FunctionID:     nil,
 			OrganizationID: assistant.OrganizationID,
 		},
+		UserInfo:   telemetry.UserInfo{},
 		Attributes: attrs,
 	})
 }
@@ -476,24 +524,20 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// process is gone or its driving workflow has given up:
 	//   - 'starting' rows that never transitioned to active within the
 	//     startup grace window (usually server crashed mid-boot).
-	//   - 'active' rows whose warm_until passed a grace window ago (usually
-	//     server crashed after a turn; unexpected-exit callback didn't fire
-	//     because the whole process died).
 	//   - 'expiring' rows whose updated_at is older than the activity's full
 	//     retry budget — the ExpireThreadRuntime activity exhausted Temporal
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
+	// 'active' rows are never reaped: an idle runtime keeps its VM until the
+	// assistant is deleted.
 	queries := assistantrepo.New(s.db)
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
-		StoppedState:    runtimeStateStopped,
-		StartingState:   runtimeStateStarting,
-		StartingCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
-		ActiveState:     runtimeStateActive,
-		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
-		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
-		ExpiringState:   runtimeStateExpiring,
-		ExpiringCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
+		StoppedState:   runtimeStateStopped,
+		StartingState:  runtimeStateStarting,
+		StartingCutoff: conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
+		ExpiringState:  runtimeStateExpiring,
+		ExpiringCutoff: conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
@@ -747,17 +791,18 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		toolsets = append(toolsets, ref)
 	}
 	return &types.Assistant{
-		ID:             record.ID.String(),
-		ProjectID:      record.ProjectID.String(),
-		Name:           record.Name,
-		Model:          record.Model,
-		Instructions:   record.Instructions,
-		Toolsets:       toolsets,
-		WarmTTLSeconds: record.WarmTTLSeconds,
-		MaxConcurrency: record.MaxConcurrency,
-		Status:         record.Status,
-		CreatedAt:      record.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:      record.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:              record.ID.String(),
+		ProjectID:       record.ProjectID.String(),
+		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
+		Name:            record.Name,
+		Model:           record.Model,
+		Instructions:    record.Instructions,
+		Toolsets:        toolsets,
+		WarmTTLSeconds:  record.WarmTTLSeconds,
+		MaxConcurrency:  record.MaxConcurrency,
+		Status:          record.Status,
+		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
 }
 
@@ -1036,8 +1081,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
-// runtime rows whose owning assistant has had no recorded activity within
-// InactivityThreshold and tears down the corresponding backend resources.
+// runtime rows that are finalized (soft-deleted or ended) or belong to a
+// soft-deleted assistant, whose owning assistant has had no recorded
+// activity within InactivityThreshold, and tears down the backend resources
+// their Stop/Reap left behind. A live row under a live assistant is never a
+// candidate: an idle runtime keeps its VM until the assistant is deleted.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
@@ -1048,7 +1096,12 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
-		LimitCount:     params.BatchSize,
+		// Also collect runtimes parked on a backend we no longer target so a
+		// provider switch (e.g. flyio -> gke) drains the old backend lazily as
+		// assistants go idle, without an admission-path teardown.
+		TargetBackend: s.runtime.Backend(),
+		StoppedState:  runtimeStateStopped,
+		LimitCount:    params.BatchSize,
 	})
 	if err != nil {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list inactive assistant runtimes for reap: %w", err)
@@ -1075,6 +1128,239 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 		}
 	}
 	return result, nil
+}
+
+// ReapStoppedAssistantRuntimesParams configures one per-thread reap sweep.
+type ReapStoppedAssistantRuntimesParams struct {
+	// StoppedTTL is the minimum age (against the row's own updated_at) before
+	// a stopped or failed runtime row becomes eligible for collection.
+	StoppedTTL time.Duration
+	// BatchSize caps how many runtime rows one sweep will reap. Bounds the
+	// activity's duration under Temporal's StartToCloseTimeout.
+	BatchSize int32
+}
+
+// ReapStoppedAssistantRuntimes drives the per-thread janitor. It collects
+// runtime rows whose own updated_at has aged past StoppedTTL, regardless of
+// sibling activity on the same assistant. The Fly machine for each row is
+// destroyed; the surrounding app stays in place so the next admit for the
+// same thread can cold-launch into it and keep its IP and secrets.
+func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if params.StoppedTTL <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
+	}
+	if params.BatchSize <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
+	}
+
+	rows, err := assistantrepo.New(s.db).ListStoppedRuntimesForReap(ctx, assistantrepo.ListStoppedRuntimesForReapParams{
+		StoppedState:  runtimeStateStopped,
+		FailedState:   runtimeStateFailed,
+		StoppedBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.StoppedTTL)),
+		ReapedState:   runtimeStateReaped,
+		LimitCount:    params.BatchSize,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list stopped assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// RecycleAssistantRuntimeImagesResult summarises one deploy-time image sweep
+// at the runtime-row level. Skipped covers every expected non-recycle: image
+// already current, machine busy with a turn, or backend resource gone.
+type RecycleAssistantRuntimeImagesResult struct {
+	Recycled int
+	Skipped  int
+	Errors   int
+}
+
+// RecycleAssistantRuntimeImagesParams configures one image recycle sweep.
+type RecycleAssistantRuntimeImagesParams struct {
+	// OnRowProcessed, if set, fires once per row after the recycle attempt
+	// (success, skip or failure).
+	OnRowProcessed func()
+}
+
+// RecycleActiveRuntimeImages best-effort rolls every active v2 runtime onto
+// the currently configured runtime image, so deploys absorb the image-pull +
+// reboot cost while runtimes are idle instead of the next turn paying it.
+// Busy or failed rows are not chased — the per-admission path catches them
+// lazily.
+//
+// This is the in-place roll for backends that reuse idle runtimes (Fly). A
+// non-reuse backend (GKE) has no in-place swap and rolls onto a new image by
+// terminating idle runtimes instead (the warm-TTL expiry stops them, which
+// deletes the claim, and the next /turn re-admits onto a fresh warm-pool pod
+// already running the new image), so this sweep is a no-op for it.
+func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	if !s.runtime.ReusesIdleRuntimes() {
+		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
+	}
+
+	queries := assistantrepo.New(s.db)
+	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
+	if err != nil {
+		return RecycleAssistantRuntimeImagesResult{}, fmt.Errorf("list active assistant runtimes for image recycle: %w", err)
+	}
+
+	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
+	for _, row := range rows {
+		record := assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}
+		// In-flight events mean turns are queued for or running on this VM —
+		// the runner's idle clock only clears on /turn enqueue, so the idle
+		// probe alone can miss a turn that admission is about to deliver.
+		// Those admissions recycle the image lazily through Ensure anyway.
+		inFlight, err := queries.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{
+			ProjectID:        row.ProjectID,
+			AssistantID:      row.AssistantID,
+			PendingStatus:    eventStatusPending,
+			ProcessingStatus: eventStatusProcessing,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "count in-flight assistant thread events for image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+		if inFlight > 0 {
+			result.Skipped++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+
+		recycled, err := s.runtime.RecycleImage(ctx, record)
+		switch {
+		case err != nil:
+			s.logger.WarnContext(ctx, "assistant runtime image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+		case recycled.Recycled:
+			affected, err := queries.UpdateActiveAssistantRuntimeMetadata(ctx, assistantrepo.UpdateActiveAssistantRuntimeMetadataParams{
+				BackendMetadataJson: recycled.BackendMetadataJSON,
+				RuntimeID:           row.ID,
+				ProjectID:           row.ProjectID,
+				ActiveState:         runtimeStateActive,
+			})
+			switch {
+			case err != nil:
+				// A persist failure only costs the next Ensure a cold-start
+				// health budget (LastBootID mismatch) — the machine itself
+				// is already on the new image, so still count the recycle.
+				s.logger.WarnContext(ctx, "persist recycled assistant runtime metadata failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogProjectID(row.ProjectID.String()),
+					attr.SlogError(err),
+				)
+				result.Recycled++
+			case affected == 0:
+				// The warm timer expired the row mid-recycle and Stop already
+				// ran against the pre-recycle machine. Undo the restart so the
+				// sweep never leaves a machine running that no live row tracks.
+				if stopErr := s.runtime.Stop(ctx, record); stopErr != nil {
+					s.logger.WarnContext(ctx, "stop assistant runtime after raced image recycle failed",
+						attr.SlogAssistantID(row.AssistantID.String()),
+						attr.SlogProjectID(row.ProjectID.String()),
+						attr.SlogError(stopErr),
+					)
+				}
+				result.Skipped++
+			default:
+				result.Recycled++
+			}
+		default:
+			result.Skipped++
+		}
+		if params.OnRowProcessed != nil {
+			params.OnRowProcessed()
+		}
+	}
+	return result, nil
+}
+
+// reapStoppedRuntimeRow tears down the machine first and only flips the row
+// to `reaped` once the destroy call returns. Inverting the order would orphan
+// the machine if the Fly call hits a transient error: a row marked `reaped`
+// with `machine_id` cleared no longer matches `ListStoppedRuntimesForReap`,
+// so the next sweep cannot retry — and the whole-assistant 7d janitor cannot
+// either, because it inherits the same cleared metadata. The narrow window
+// where a racing warm-resume admit copies this row's `machine_id` before
+// destroy is bounded by `ListStoppedRuntimesForReap`'s per-thread NOT EXISTS
+// guard, which excludes any row whose thread already has a fresher
+// starting/active sibling. Returns true on success (including idempotent
+// no-op when the machine was already gone).
+func (s *ServiceCore) reapStoppedRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
+	if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
+		s.logger.WarnContext(ctx, "reap stopped runtime machine failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+			attr.SlogError(err),
+		)
+		return false
+	}
+
+	if _, err := assistantrepo.New(s.db).MarkAssistantRuntimeMachineReaped(ctx, assistantrepo.MarkAssistantRuntimeMachineReapedParams{
+		ReapedState:  runtimeStateReaped,
+		StoppedState: runtimeStateStopped,
+		FailedState:  runtimeStateFailed,
+		RuntimeID:    record.ID,
+		ProjectID:    record.ProjectID,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "mark assistant runtime machine reaped failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return true
+}
+
+// RuntimeImageRef returns the runtime image reference the configured backend
+// launches machines with. The deploy-time recycle workflow is keyed on it so
+// each image version triggers exactly one sweep.
+func (s *ServiceCore) RuntimeImageRef() string {
+	return s.runtime.ImageRef()
 }
 
 // reapRuntimeRow tears down the backend resource for one row and records the
@@ -1164,7 +1450,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
-		Title:          conv.ToPGText(assistant.Name),
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
@@ -1267,6 +1553,47 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindLinear:
+		var event linearEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode linear trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(linearSourceRef{
+			EventType: event.EventType,
+			URL:       event.URL,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindGithub:
+		var event githubEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode github trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(githubSourceRef{
+			EventType: event.EventType,
+			Action:    event.Action,
+			Repo:      event.Repo,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1423,10 +1750,11 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	}
 
 	active, err := queries.CountActiveAssistantThreads(ctx, assistantrepo.CountActiveAssistantThreadsParams{
-		ProjectID:     assistant.ProjectID,
-		AssistantID:   assistant.ID,
-		ActiveSince:   conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
-		PendingStatus: eventStatusPending,
+		ProjectID:        assistant.ProjectID,
+		AssistantID:      assistant.ID,
+		WarmupSourceKind: sourceKindWarmup,
+		ActiveSince:      conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
+		PendingStatus:    eventStatusPending,
 	})
 	if err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant threads: %w", err)
@@ -1458,9 +1786,162 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
+// EnsureWarmupThread sets up the assistant's event-less warmup thread and
+// reserves the v2 runtime row against it, so that signalling the standard
+// thread workflow boots the runtime exactly as a turn would — Ensure,
+// coordinator kicks and the warm window all run through the existing
+// machinery; the thread simply never has events to process.
+//
+// Idempotent under the same advisory lock admit uses. ShouldSignal is false
+// when a live runtime row exists that the warmup thread doesn't own —
+// organic traffic got there first and its threads drive the boot.
+func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.UUID) (WarmupThreadResult, error) {
+	noop := WarmupThreadResult{ThreadID: uuid.Nil, ProjectID: uuid.Nil, ShouldSignal: false}
+
+	dispatchRow, err := assistantrepo.New(s.db).GetAssistantForDispatch(ctx, assistantID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Deleted between creation and the warmup running.
+		return noop, nil
+	case err != nil:
+		return noop, fmt.Errorf("select assistant for warmup: %w", err)
+	}
+	// Skip getAssistantForDispatch's toolset hydration — warmup only needs
+	// the scalar fields.
+	assistant := assistantRecordFromDispatchRow(dispatchRow)
+	if assistant.Status != StatusActive {
+		return noop, nil
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return noop, fmt.Errorf("begin assistant warmup tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return noop, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	chatID := deterministicChatID(assistant.ID, warmupCorrelationID)
+	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      assistant.ProjectID,
+		OrganizationID: assistant.OrganizationID,
+		UserID:         pgtype.Text{String: "", Valid: false},
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
+	}); err != nil {
+		return noop, fmt.Errorf("upsert warmup chat: %w", err)
+	}
+	threadID, err := queries.UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     assistant.ProjectID,
+		CorrelationID: warmupCorrelationID,
+		ChatID:        chatID,
+		SourceKind:    sourceKindWarmup,
+		SourceRefJson: []byte("{}"),
+	})
+	if err != nil {
+		return noop, fmt.Errorf("upsert warmup thread: %w", err)
+	}
+
+	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threadID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           s.runtime.Backend(),
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return noop, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
+		}
+	case err != nil:
+		return noop, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
+	case row.AssistantThreadID != threadID || row.State == runtimeStateExpiring:
+		// A real thread owns the boot, or the row is mid-teardown — either
+		// way the existing workflows drive the lifecycle from here.
+		return noop, nil
+		// Else: the warmup thread already owns a live row (an earlier signal
+		// was lost or the workflow died mid-boot) — fall through and
+		// re-signal; SignalWithStart and ProcessThreadEvents are idempotent.
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return noop, fmt.Errorf("commit assistant warmup tx: %w", err)
+	}
+	return WarmupThreadResult{ThreadID: threadID, ProjectID: assistant.ProjectID, ShouldSignal: true}, nil
+}
+
+// ReleaseWarmupRuntime best-effort clears a runtime row reserved for the
+// warmup thread whose workflow signal could not be delivered. Only a
+// still-starting row owned by that thread is touched — anything else means a
+// workflow or real traffic took over.
+func (s *ServiceCore) ReleaseWarmupRuntime(ctx context.Context, projectID, assistantID, warmupThreadID uuid.UUID) {
+	// The signal often fails precisely because ctx was canceled or timed
+	// out; detach so the cleanup's own DB writes can still land.
+	ctx = context.WithoutCancel(ctx)
+
+	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil || row.AssistantThreadID != warmupThreadID || row.State != runtimeStateStarting {
+		return
+	}
+	// Re-check `starting` inside the UPDATE (every state slot pinned to it):
+	// if the signal was actually delivered and the workflow advanced the row
+	// between the read above and this write, no-op instead of tearing down a
+	// live runtime.
+	if err := assistantrepo.New(s.db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+		State:         runtimeStateFailed,
+		ProjectID:     projectID,
+		RuntimeID:     row.ID,
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateStarting,
+		ExpiringState: runtimeStateStarting,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "release warmup runtime reservation failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogError(err),
+		)
+	}
+}
+
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
 	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The runtime row was retired (reaper, expire, manual stop) between
+		// this thread being admitted and the activity executing. The events
+		// are still pending, so hand back to the coordinator: re-admission
+		// reserves a fresh runtime row and re-dispatches. Failing the
+		// activity here instead would burn its retry budget against a
+		// tombstone and drop the turn.
+		row, rerr := assistantrepo.New(s.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+			ThreadID:  threadID,
+			ProjectID: projectID,
+		})
+		if rerr != nil {
+			return ProcessThreadEventsResult{}, fmt.Errorf("resolve thread for retry admission: %w", errors.Join(err, rerr))
+		}
+		return ProcessThreadEventsResult{
+			AssistantID:         row.AssistantID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      0,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: false,
+		}, nil
+	}
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
@@ -1535,6 +2016,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 
+			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
+			outcome := turnErrorBucket(runErr)
+			if teardownExhausted {
+				outcome = turnOutcomeRuntimeUnhealthyExhausted
+			}
+			s.recordTurnClassification(turnCtx, assistant.ID, thread.ID, outcome)
+
 			// Runtime-level failure (dead VM, connection refused, missing
 			// state). Tear down the runtime row and leave the event in
 			// 'processing' — do NOT reset it to 'pending', or the outer
@@ -1542,6 +2030,48 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// A reaper reclaims stuck 'processing' events after a grace
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
+				// An event that has torn down this many runtimes is far more
+				// likely a deterministic failure misread as infra than a
+				// transient blip, so fail it terminally instead of re-admitting
+				// it forever. Still request admission afterwards: the failed
+				// event is no longer claimable, but any other pending event on
+				// the thread must get a fresh runtime rather than sit idle.
+				if teardownExhausted {
+					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
+					// Each step gets its own detached budget so a slow best-effort
+					// runtime Stop cannot starve the two writes that actually break
+					// the loop: failEvent makes the event terminal, and
+					// stopRuntimeRecord frees the per-thread runtime slot so the
+					// re-admission below reserves a fresh VM instead of redispatching
+					// onto this dead one.
+					failCtx, cancelFail := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					err := s.failEvent(failCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
+					cancelFail()
+					if err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
+					stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_ = s.runtime.Stop(stopCtx, runtimeRecord)
+					cancelStop()
+					recordCtx, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					recordErr := s.stopRuntimeRecord(recordCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					cancelRecord()
+					if recordErr != nil {
+						// The slot is still held by an active row; re-admitting now
+						// would redispatch siblings onto the dead runtime. Surface the
+						// error so the workflow retries and frees the slot first.
+						return ProcessThreadEventsResult{}, fmt.Errorf("free runtime slot after teardown cap: %w", recordErr)
+					}
+					return ProcessThreadEventsResult{
+						AssistantID:         assistant.ID,
+						WarmUntil:           time.Time{},
+						WarmTTLSeconds:      assistant.WarmTTLSeconds,
+						RuntimeActive:       false,
+						RetryAdmission:      true,
+						ProcessedAnyEvent:   processedAny,
+						BootstrappedRuntime: bootstrappedRuntime,
+					}, nil
+				}
 				_ = s.runtime.Stop(ctx, runtimeRecord)
 				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
@@ -1602,10 +2132,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 
 			// Upstream completion provider rejected the request (Anthropic 400
-			// on a malformed message, OpenRouter rate limit, etc). The runtime
-			// is fine — replaying the same input would just produce the same
-			// failure, so terminally fail the event and keep the VM warm for
-			// subsequent ones rather than churning Fly on every retry.
+			// on a malformed message, OpenRouter rate limit, etc), or a live
+			// runtime returned a deterministic 4xx. The runtime is fine —
+			// replaying the same input would just reproduce it, so terminally
+			// fail the event and keep the VM warm. Request admission so any
+			// other pending event on the thread is drained on the warm runtime
+			// instead of waiting out the warm timer; the failed event is no
+			// longer claimable, so this cannot loop on it.
 			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
@@ -1620,7 +2153,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					WarmUntil:           warmUntil,
 					WarmTTLSeconds:      assistant.WarmTTLSeconds,
 					RuntimeActive:       true,
-					RetryAdmission:      false,
+					RetryAdmission:      true,
 					ProcessedAnyEvent:   processedAny,
 					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
@@ -1698,6 +2231,8 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) error {
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+
 	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
@@ -1705,7 +2240,7 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 			return fmt.Errorf("run assistant turn: %w", err)
 		}
 		return nil
@@ -1723,10 +2258,53 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
+}
+
+// currentRuntimeMCPServers builds the MCP server set the runner should be
+// running with right now. The runner reconciles its live thread state
+// against this list on every turn, so toolset edits (added/removed MCP
+// servers) take effect on the next event without recycling the VM. Falls
+// back to nil when the runtime server URL is not configured — the runner
+// already has the bootstrap-time set and we'd rather skip reconcile than
+// dispatch a turn with bogus URLs. Platform toolsets must be included so
+// the reconcile target matches what bootstrap granted — otherwise the
+// runner would treat them as removed and disconnect them mid-thread.
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
+	serverURL := s.runtime.ServerURL()
+	if serverURL == nil {
+		return nil
+	}
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
+			attr.SlogError(err),
+		)
+		return nil
+	}
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, platformSlugs)
+}
+
+// assistantPlatformSlugs returns the platform toolset slugs granted to this
+// assistant's runtime. Every assistant gets the base assistants toolset; the
+// project's managed assistant additionally gets the managed-only toolset,
+// which must never be reachable by any other assistant.
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+		// Project has no managed assistant; managed-only tools stay ungranted.
+	default:
+		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
+	}
+	return platformSlugs, nil
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -1827,12 +2405,12 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").Log(ctx, s.logger, logAttrs...)
+			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").LogError(ctx, s.logger, logAttrs...)
 		}
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").LogError(ctx, s.logger, logAttrs...)
 	}
 	if row.AssistantID != principalAssistantID {
-		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	thread := assistantThreadRecord{
@@ -1863,28 +2441,21 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").LogError(ctx, s.logger, logAttrs...)
 	}
 	assistant.Toolsets = toolsets[assistant.ID]
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
-	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
-	case mErr == nil:
-		if managed.ID == assistant.ID {
-			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-		}
-	case errors.Is(mErr, pgx.ErrNoRows):
-		// Project has no managed assistant; managed-only tools stay ungranted.
-	default:
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").Log(ctx, s.logger, logAttrs...)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
@@ -1895,18 +2466,23 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
 	completionsQuery := completionsEndpoint.Query()
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
+
+	compaction := compactionPolicyFor(thread.SourceKind)
+	if err := compaction.Validate(); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "build compaction policy").LogError(ctx, s.logger, logAttrs...)
+	}
 
 	return threadBootstrap{
 		Model:          assistant.Model,
@@ -1916,6 +2492,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		MCPServers:     mcpServers,
 		History:        history,
 		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		Compaction:     compaction,
 		SourceRefJSON:  thread.SourceRefJSON,
 	}, nil
 }
@@ -1933,11 +2510,11 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 // live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
-OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
+OAuth + MCP auth are owner-only: only owner can sign in and complete flow. Owner = the person who set this assistant up — NOT simply whoever triggered the current turn. When your instructions record the owner's identity (an "Owner" entry, e.g. a Slack handle + user ID), treat the requester as owner only if they match it. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners; if the current surface can't reach the owner privately, don't surface the URL — tell the requester (without URL) that owner must complete auth, then stop. The per-surface output preferences below describe how to deliver the URL on this surface.
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners. If no owner identity is recorded on this surface, deliver the URL privately to the requester but say explicitly that it should be completed by the assistant's owner, so an unexpected prompt isn't mistaken for a failure. If owner identity is recorded and the requester is not the owner, don't surface the URL to them — tell them (without URL) that only the owner can complete auth, naming the owner, and still deliver the AuthURL to the owner privately when this surface can reach them (per the output preferences below). If owner identity is recorded but no private route to the owner exists, stop without posting the URL. The per-surface output preferences below describe how to deliver the URL on this surface.
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
@@ -2367,6 +2944,18 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 		return fmt.Errorf("complete assistant thread event: %w", err)
 	}
 	return nil
+}
+
+// recordTurnClassification counts a failed turn by its classifyTurnError
+// bucket. The thread and assistant ids are attached explicitly — metric
+// instruments do not inherit them from the context — so a runaway teardown
+// loop can be grouped to a single thread.
+func (s *ServiceCore) recordTurnClassification(ctx context.Context, assistantID, threadID uuid.UUID, outcome turnOutcome) {
+	s.turnClassified.Add(ctx, 1, metric.WithAttributes(
+		attr.AssistantTurnOutcome(string(outcome)),
+		attr.AssistantID(assistantID.String()),
+		attr.AssistantThreadID(threadID.String()),
+	))
 }
 
 func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {

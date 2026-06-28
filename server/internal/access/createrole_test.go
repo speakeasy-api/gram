@@ -91,6 +91,25 @@ func TestService_CreateRole(t *testing.T) {
 	require.Len(t, grants, 3)
 }
 
+func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Risk Policy Writer",
+		Description: "Should not be allowed through access roles",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
+	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 	t.Parallel()
 

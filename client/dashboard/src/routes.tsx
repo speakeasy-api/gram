@@ -1,11 +1,6 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import {
-  RedirectToInsightsTools,
-  RedirectToLogAgents,
-  RedirectToLogTools,
-} from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -18,9 +13,11 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -31,25 +28,19 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import {
-  LogsRoot,
-  LogsMCPPage,
-  LogsRiskEventsPage,
-  LogsToolsPage,
-} from "./pages/logs/Logs";
+import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
-  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
-  InsightsMCPPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
+import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -68,6 +59,12 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
+import {
+  RemoteIdentityProvidersPage,
+  RemoteIdentityProvidersRoot,
+} from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
+import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -75,12 +72,11 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
-import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
@@ -190,6 +186,22 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  chat: {
+    title: "Project Assistant",
+    url: "chat",
+    icon: "message-circle",
+    stage: "beta",
+    // Layout route: renders the index (ChatHome) or a conversation subpage.
+    component: ChatRoot,
+    indexComponent: ChatHome,
+    subPages: {
+      conversation: {
+        title: "Chat",
+        url: ":chatId",
+        component: ChatConversation,
+      },
+    },
   },
   playground: {
     title: "Playground",
@@ -301,7 +313,7 @@ const ROUTE_STRUCTURE = {
     title: "Assistants",
     url: "assistants",
     icon: "bot",
-    stage: "preview",
+    stage: "beta",
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
     subPages: {
@@ -314,20 +326,6 @@ const ROUTE_STRUCTURE = {
         title: "Assistant",
         url: ":assistantId",
         component: AssistantPage,
-      },
-    },
-  },
-  slackApps: {
-    title: "Slack Apps",
-    url: "slack",
-    icon: "bot",
-    component: SlackAppsRoot,
-    indexComponent: SlackAppsIndex,
-    subPages: {
-      detail: {
-        title: "Slack App",
-        url: ":slackAppId",
-        component: SlackAppDetailPage,
       },
     },
   },
@@ -359,6 +357,35 @@ const ROUTE_STRUCTURE = {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
         component: MCPServerDetails,
+        subPages: {
+          overview: {
+            title: "MCP Server Overview",
+            url: "overview",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
+          },
+          analytics: {
+            title: "MCP Server Analytics",
+            url: "analytics",
+          },
+          // Legacy route. MCPServerDetails redirects this to
+          // settings#authentication now that authentication lives under
+          // Settings.
+          authentication: {
+            title: "MCP Server Authentication",
+            url: "authentication",
+          },
+          teamAccess: {
+            title: "MCP Server Team Access",
+            url: "team-access",
+          },
+          settings: {
+            title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
       },
       details: {
         title: "MCP Details",
@@ -390,82 +417,53 @@ const ROUTE_STRUCTURE = {
     indexComponent: TriggersIndex,
   },
   insights: {
-    title: "Insights",
+    title: "MCP & Tools",
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsTools,
+    indexComponent: InsightsHooksPage,
+  },
+  employees: {
+    title: "Employee Enrollment",
+    url: "employees",
+    icon: "users",
+    component: InsightsEmployeesLayout,
+    indexComponent: InsightsEmployeesPage,
     subPages: {
-      costs: {
-        title: "Costs",
-        url: "costs",
-        component: InsightsAgentsPage,
-      },
-      tools: {
-        title: "Tools",
-        url: "tools",
-        component: InsightsHooksPage,
-      },
-      mcp: {
-        title: "MCP Servers",
-        url: "mcp",
-        component: InsightsMCPPage,
-      },
-      employees: {
-        title: "Employees",
-        url: "employees",
-        component: InsightsEmployeesLayout,
-        indexComponent: InsightsEmployeesPage,
-        subPages: {
-          detail: {
-            title: "Employee Detail",
-            url: ":userSlug",
-            component: InsightsEmployeeDetailPage,
-          },
-        },
+      detail: {
+        title: "Employee Detail",
+        url: ":userSlug",
+        component: InsightsEmployeeDetailPage,
       },
     },
   },
-  hooks: {
-    // redirect to insights/tools. TODO: remove this in a month
-    title: "Hooks",
-    url: "hooks",
-    component: RedirectToInsightsTools,
+  costs: {
+    title: "Costs",
+    url: "costs",
+    icon: "credit-card",
+    component: Costs,
+    subPages: {
+      // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
+      // renders the same explorer at any depth. CostsExplorer reads the drill
+      // levels from the pathname; no per-depth route definition is needed.
+      drill: {
+        title: "Costs",
+        url: "*",
+        component: Costs,
+      },
+    },
   },
   logs: {
-    title: "Logs",
+    title: "Tool Logs",
     url: "logs",
     icon: "logs",
     component: LogsRoot,
-    indexComponent: RedirectToLogTools,
-    subPages: {
-      tools: {
-        title: "Tools",
-        url: "tools",
-        component: LogsToolsPage,
-      },
-      mcp: {
-        title: "MCP Servers",
-        url: "mcp",
-        component: LogsMCPPage,
-      },
-      riskEvents: {
-        title: "Risk Events",
-        url: "risk-events",
-        component: LogsRiskEventsPage,
-      },
-      agents: {
-        title: "Agent Sessions",
-        url: "agents",
-        component: ChatSessions,
-      },
-    },
   },
-  chatSessions: {
-    // redirect to logs/agents. TODO: remove this in a month
+  agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
-    component: RedirectToLogAgents,
+    icon: "message-square",
+    component: ChatSessions,
   },
   riskOverview: {
     title: "Risk Overview",
@@ -518,6 +516,12 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
+  },
+  riskEvents: {
+    title: "Risk Events",
+    url: "risk-events",
+    icon: "flag",
+    component: RiskEventsPage,
   },
   sdks: {
     title: "SDKs",
@@ -608,6 +612,18 @@ export const useRoutes = (overrides?: {
   const matchesCurrent = (url: string) => {
     const urlParts = url.split("/").filter(Boolean);
     const currentParts = location.pathname.split("/").filter(Boolean);
+
+    // Splat routes (trailing `*`, e.g. the costs drill) match any deeper path
+    // that shares their prefix — keeps the sidebar item active while drilling.
+    if (urlParts[urlParts.length - 1] === "*") {
+      const prefix = urlParts.slice(0, -1);
+      return (
+        currentParts.length >= prefix.length &&
+        prefix.every(
+          (part, index) => part === currentParts[index] || part.startsWith(":"),
+        )
+      );
+    }
 
     if (urlParts.length !== currentParts.length) {
       return false;
@@ -793,11 +809,47 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  userSessions: {
+    title: "MCP Connections",
+    url: "user-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
   identity: {
-    title: "Identity",
+    title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  remoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers",
+    icon: "key-round",
+    component: RemoteIdentityProvidersRoot,
+    indexComponent: RemoteIdentityProvidersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Remote Identity Provider",
+        url: ":issuerId",
+        component: RemoteIdentityProviderDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          clients: { title: "Clients", url: "clients" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      clientDetail: {
+        title: "Remote Session Client",
+        url: ":issuerId/clients/:clientId",
+        component: RemoteSessionClientDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
+          sessions: { title: "Sessions", url: "sessions" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
   },
   deviceAgent: {
     title: "Device Agent",

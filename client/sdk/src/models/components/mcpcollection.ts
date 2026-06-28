@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Visibility of the collection
  */
-export const Visibility = {
+export const MCPCollectionVisibility = {
   Public: "public",
   Private: "private",
 } as const;
 /**
  * Visibility of the collection
  */
-export type Visibility = ClosedEnum<typeof Visibility>;
+export type MCPCollectionVisibility = ClosedEnum<
+  typeof MCPCollectionVisibility
+>;
 
 /**
  * An MCP collection within an organization
@@ -48,12 +50,13 @@ export type MCPCollection = {
   /**
    * Visibility of the collection
    */
-  visibility: Visibility;
+  visibility: MCPCollectionVisibility;
 };
 
 /** @internal */
-export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
-  .enum(Visibility);
+export const MCPCollectionVisibility$inboundSchema: z.ZodMiniEnum<
+  typeof MCPCollectionVisibility
+> = z.enum(MCPCollectionVisibility);
 
 /** @internal */
 export const MCPCollection$inboundSchema: z.ZodMiniType<
@@ -66,7 +69,7 @@ export const MCPCollection$inboundSchema: z.ZodMiniType<
     mcp_registry_namespace: z.optional(z.string()),
     name: z.string(),
     slug: z.string(),
-    visibility: Visibility$inboundSchema,
+    visibility: MCPCollectionVisibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

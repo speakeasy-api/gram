@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -72,33 +73,27 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// GetPlugins returns every plugin assigned to the resolved principal set for
-// the supplied email within the caller's org. user: and role: resolution
-// lands in the follow-up ticket alongside email→user_id lookup and RBAC
-// role-membership reads.
+// GetPlugins returns every plugin in the published projects of the caller's
+// org. Per-principal assignment scoping is intentionally disabled for now (see
+// DNO-239): every org member receives every published-project plugin. The
+// supplied email is still validated and will drive principal resolution again
+// (user:/role: lookups) once RBAC-backed assignment management ships.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	email := strings.TrimSpace(strings.ToLower(payload.Email))
-	emailPrincipal, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email)
-	if err != nil {
+	// Validate the caller sent a well-formed email even though it does not yet
+	// scope the result, so the request contract stays stable for DNO-239.
+	email := conv.NormalizeEmail(payload.Email)
+	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
 	}
 
-	principals := []string{
-		emailPrincipal.String(),
-		urn.PrincipalWildcard,
-	}
-
-	rows, err := s.repo.GetAgentPluginSet(ctx, repo.GetAgentPluginSetParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrns:  principals,
-	})
+	rows, err := s.repo.GetAgentPluginSet(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").LogError(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")

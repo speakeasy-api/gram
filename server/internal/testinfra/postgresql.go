@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -40,7 +41,13 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
 		postgres.WithInitScripts(rootPath("database", "schema.sql")),
-		postgres.BasicWaitStrategies(),
+		testcontainers.WithWaitStrategy(
+			// The log appears twice because postgres restarts itself after
+			// the init-script bootstrap run.
+			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+			PortWait("5432/tcp"),
+		),
+		WithoutPublishedPorts(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
@@ -49,7 +56,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		return nil, nil, fmt.Errorf("start postgres container: %w", err)
 	}
 
-	uri, err := container.ConnectionString(ctx, "sslmode=disable")
+	uri, err := postgresURI(ctx, container)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read connection string: %w", err)
 	}
@@ -67,12 +74,20 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	return container, newPostgresCloneFunc(container), nil
 }
 
+func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (string, error) {
+	addr, err := ContainerAddr(ctx, container, "5432/tcp")
+	if err != nil {
+		return "", fmt.Errorf("resolve postgres address: %w", err)
+	}
+	return fmt.Sprintf("postgres://gotest:gotest@%s/gotestdb?sslmode=disable", addr), nil
+}
+
 func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
 		t.Helper()
 
 		ctx := t.Context()
-		uri, err := container.ConnectionString(ctx, "sslmode=disable")
+		uri, err := postgresURI(ctx, container)
 		if err != nil {
 			return nil, fmt.Errorf("read connection string: %w", err)
 		}

@@ -102,7 +102,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			err,
 			"failed to set organization feature flag %q",
 			payload.FeatureName,
-		).Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		).LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	cacheEntry := FeatureCache{
@@ -182,6 +182,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		Webhooks:                     isEnabled(FeatureWebhooks),
 		SsoEnabled:                   isEnabled(FeatureSSO),
 		ScimEnabled:                  isEnabled(FeatureSCIM),
+		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 	}, nil
 }
 

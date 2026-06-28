@@ -1,5 +1,255 @@
 # dashboard
 
+## 0.77.1
+
+### Patch Changes
+
+- 24b41d9: Improve tool observability filter performance by returning hosted MCP server display names from telemetry filter options, allowing the logs and insights pages to avoid hydrating full toolset resources for server filter labels.
+- 1751a59: Publish plugins straight from the plugin detail page. After adding or removing a server, or editing a plugin's metadata, a "Publish now" prompt offers a one-click republish — or opens the first-publish dialog for projects not yet connected to GitHub — so there's no need to return to the plugins list to re-publish. The detail page now also shows publish freshness: an "Unpublished changes" badge when the project's current plugin state differs from what was last published, or the last published time when up to date, alongside a durable publish button and a marketplace install banner.
+
+  This is backed by new `up_to_date` and `last_published_at` fields on the `plugins.getPublishStatus` API, which compare the project's live plugin fingerprint against the fingerprint last pushed to GitHub. Both fields are absent when the project has no GitHub connection.
+
+- 045b0ae: Stop chat-conversation search from erroring on long queries. The `chat.load` API caps `query` at 200 characters, but the find-in-conversation bar sent whatever was typed, so a long query failed with a hard validation error. The bar now gates the request at 200 characters and flags the over-limit state inline: the search icon turns into a red warning icon (with a tooltip) and the match counter shows the live `length/200` count in red.
+- 1751a59: Fix toast notifications rendering twice. A second `<Toaster>` was mounted at the app root in addition to the one inside the provider tree, so every toast appeared (and dismissed) as a duplicate. Removed the redundant root-level Toaster.
+- bbdda53: Pinned chats: pin/unpin conversations on the /chat page. Pinned chats surface in a dedicated "Pinned" section above Recent Chats. Adds a `setPinned` chat API and a `pinned` filter on `listChats`, backed by the `chats.pinned_at` column.
+
+## 0.77.0
+
+### Minor Changes
+
+- f479a1b: Org admins can now register a standalone `remote_session_client` directly from the Remote Identity Provider details page. A new `organizationRemoteSessionIssuers.createClient` endpoint creates a client under an existing issuer with no `user_session_issuer` attachments; the client inherits a project-specific issuer's project, or the admin names a project (downscoping) when the issuer is organization-level. The dashboard surfaces a `New Client` button on the issuer's Clients tab that opens a sheet supporting Dynamic Client Registration (when the issuer advertises a `registration_endpoint`) or manual `client_id` / `client_secret` entry.
+
+### Patch Changes
+
+- 81bc532: Audit trail subjects now link to their detail pages. MCP servers, risk policies, environments, assistants, roles, members, and collections render as links in the org audit log, alongside the deployments, toolsets, projects, plugins, and API keys that were already linked. Project-scoped subjects route under the entry's own project (which may differ from the project in the current URL), and risk policies and roles deep-link to open the specific item.
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+- 9b85ddd: feat(telemetry): include the chat title on `listSessions` results (resolved from Postgres, batched per page) and show it in place of the chat id in the cost dashboard's session table
+- Updated dependencies [4f9b199]
+  - @gram-ai/elements@1.38.1
+
+## 0.76.0
+
+### Minor Changes
+
+- 66fcd5a: feat(assistants): add a search box to the Assistants list. The shared `SearchBar` is always shown above the list and filters the grid by name and model (case-insensitive), with a "no matches" message when a query returns nothing.
+- 1ba5adb: feat(dashboard): search within a chat thread. The chat detail sheet gains a find-in-conversation bar backed by full-thread server-side text search (`chat.load` `query` param returns the messages matching the query plus surrounding context, mirroring the risk-windowed view). Jump between matches with the prev/next controls or Enter/Shift+Enter (wrapping at the ends), Escape clears. The active match is highlighted bright yellow and the rest pale — across message text, tool names, and tool argument/output sections — and the tool holding the active match expands, collapsing again as you navigate away.
+- 0d23d1f: Add an Analytics tab to the MCP Server details page with observability scoped by `mcp_server_id`, spanning both remote-backed and toolset-backed activity: a time-range picker, trend metric cards (tool calls, failed calls, error rate, average latency), a tool-calls time-series chart, and top tools by call count and by failure rate.
+- ef2f5ef: Add an organization-level observability mode that makes generated hook plugins fully non-blocking. When enabled, hooks only observe and report and can never deny or delay a tool call. Defaults off, preserving existing behavior. Toggle it from the organization logging settings.
+- 6f3180d: chat.load now paginates a generation's messages by `seq` keyset (`limit`, `before_seq`, `after_seq`) and exposes each message's `seq` plus `has_more_before`/`has_more_after`. A new `risk_only` flag returns just the messages with active risk findings padded with surrounding context, grouped into contiguous `risk_segments` that can be expanded on demand. The chat detail sheet consumes this with a virtualized transcript (`@tanstack/react-virtual`, constant DOM node count regardless of how many pages are loaded) and infinite scroll (scroll up to load older messages, anchored so the viewport doesn't jump), and renders the risk-only view as expandable segments with load-above/below and gap-fill controls.
+
+### Patch Changes
+
+- c1ef552: `remoteSessionClients` and the org-admin client views now source the `user_session_issuer` relationship entirely from the join table. The `RemoteSessionClient` result replaces the single `user_session_issuer_id` with a `user_session_issuer_ids` array (breaking), create/clone accept zero or more `user_session_issuer_ids` so a client can be created standalone, and a client's issuer attachments are now managed through the new `attachUserSessionIssuer` / `detachUserSessionIssuer` endpoints instead of `update`. No more reads or writes of the legacy `remote_session_clients.user_session_issuer_id` column.
+- 3955c10: Better performance on tool logs page
+- e6c756b: Add drag-to-zoom time window controls to dashboard charts.
+- 4b45485: `chat.load` now returns a `totals` object with whole-generation trace-entry counts (`total`, `user_messages`, `assistant_messages`, `tool_calls`, `tool_results`, `risk_only`). Because the detail-sheet transcript is paginated, the filter bar previously derived its counts from the loaded page — showing e.g. "Showing 150 of 150 entries" on a 19k-message chat, and a risk count that disagreed with the (generation-scoped) risk-only transcript. The dashboard now renders these counts from the server totals. Totals are scoped to the returned generation so they stay consistent with the messages on screen.
+- b968804: Exclude tools lists from registry list view to lean out the response size and make the catalog experience more reliable in flake-y network conditions
+- 03cf22a: Fix two Cmd+K command palette glitches. Recently Visited is now only shown when the search box is empty, so a closer text match always ranks ahead of a recently visited page (AGE-2808). The "Ask AI" row drops below the results while searching, so the closest match keeps the auto-selected highlight instead of requiring an extra ↓ keypress to reach it (AGE-2807).
+- b0a9186: Fix filter sheet options not applying when clicked. The multiselect controls in the unified filter sheet opened their dropdown but never registered option clicks, so filters on the MCP & Tools and Insights pages did not respond.
+- cd3738b: Link the SSO and Directory Sync (SCIM) "Configure" buttons on the org Identity page to the in-product setup wizard (`/setup?step=connect-idp` and `/setup?step=directory-sync`) when no connection has been set up yet, instead of bouncing admins straight to the WorkOS admin portal. Once a connection exists, the buttons continue to open the WorkOS portal to manage it. The entitled-org configure buttons no longer emit `identity_provider_interest` PostHog tracking events; the non-entitled upsell button still does (it backs the "our team has been contacted" notification).
+- d53899a: Fix the Agent filter on the MCP & Tools insights page not reloading data. Selecting an agent updated the filter chip but the tool usage summary ignored the hook source, so the graphs never changed.
+- 5917df2: Enhance the org-level MCP Connections page: multi-select with select-all to revoke sessions in bulk, a search box in the filter bar, brand status badges, and a status filter (removed the OAuth Client filter).
+- Updated dependencies [1ba5adb]
+  - @gram-ai/elements@1.38.0
+
+## 0.75.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+
+### Patch Changes
+
+- 0b4e42b: Unify the search, filters, sort, and view-as controls on every list page into a single `Page.Toolbar` component, replacing the per-page mix of bespoke search boxes, filter sidebars, sort dropdowns, and view toggles.
+
+  - One contained control bar per page (search + filters on the left, sort + count + view on the right), with uniform control heights.
+  - Filter chips and sheet share a typed schema (`defineFilters`/`useFilterState`); adds Status + Source filters to the MCP page.
+  - Folds in fixes: "Reset to default" now clears every filter atomically, the date picker opens inside the filter sheet, and empty filter labels are pluralized ("All servers").
+
+## 0.74.0
+
+### Minor Changes
+
+- bf94bd2: Add a full-page Project Assistant chat as a second way into the assistant, alongside the docked composer.
+
+  - New **Project Assistant** entry in the project sidebar (under Home) opening a `/chat` landing: a personalized "Ask your Project Assistant about your AI usage" composer with a cycling, crossfading placeholder, a `/` slash menu of starter prompts, your recent conversations grouped by time period ("Show all" to expand), and a set of enterprise-focused starter prompts.
+  - A `/chat/:id` conversation view with a back/new-chat bar and the conversation's title in the header, which updates live as the backend generates it.
+  - The project home page now embeds the same "Ask anything" widget.
+  - The dock and the full-page chat share **one** assistant runtime, so an in-flight conversation continues seamlessly when you expand the dock into the page (no lost response). The docked pill offers "Continue chat" to reopen a recent conversation, and pages that host their own chat runtime (Playground, Elements, assistant onboarding) hide the dock to avoid duplicate composers.
+  - A decorative rainbow "powder burst" header on the chat landing.
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+
+### Patch Changes
+
+- 94f624d: Add Beta badges to the Project Assistant (sidebar nav item, footer resume button, and `/chat` landing page) and promote the Assistants surface from Preview to Beta. Both use the shared `ReleaseStageBadge` so the label stays consistent across every surface.
+- 672d9bc: Add optional onboarding for configuring Cursor and Anthropic Compliance API integrations, and show Codex instrumentation plus OpenAI Compliance API configuration as coming soon.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- 2adba2f: Add employee detail metric drilldowns for tool logs, agent sessions, and risk events.
+- 94c551b: Fix the Project Assistant chat getting stuck "loading" after a tool-using turn, where the assistant had already replied but the composer stayed disabled.
+- bd4261a: Use the Speakeasy marketing site favicon for the dashboard
+- dfd4834: The MCP servers screen no longer crashes when a non-critical request fails to load. It now keeps showing the most recently loaded servers with a subtle "couldn't refresh" indicator instead of replacing the whole page with an error.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+- 04ddbd0: Rename and reorder project sidebar navigation groups.
+- 88669aa: Update moonshine - design system dependency to latest
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [bf94bd2]
+  - @gram-ai/elements@1.37.1
+
+## 0.73.1
+
+### Patch Changes
+
+- 2630d11: Fix the Cmd+K command palette's "Recently Visited" list showing an assistant's opaque id (e.g. "Assistant · 0190abcd") instead of its name. Visits are recorded centrally from the URL, which for the id-keyed assistant detail route fell back to the id. The assistant detail page now registers its name as the recents label, and `App` consults that override (re-recording when the name resolves asynchronously), so the palette shows the assistant name.
+- 1e1e9b7: Pin the assistant ⌘/ shortcut hint to the nav bar's right edge on wide screens, and show it in the assistant dock.
+
+## 0.73.0
+
+### Minor Changes
+
+- e81a134: feat(assistants): surface Triggers as a tab on the Assistants page and a filtered Triggers tab per assistant, and rename the Assistants "Audit log" tab to "Activity"
+- 4f65d12: Make the Project Assistant dock a continuous experience across the dashboard. The dock stays expanded across page navigation and swaps in the new page's suggestions; every suggestion set is colocated in one route-keyed object with question-phrased titles and per-subject icons, and chips animate in on route change. The expanded composer gets a Granola-style grey tray with a bordered inner input, the Cmd+/ hint moves to the breadcrumb bar, and the chat panel opens as an extension of the pill — including a matching slim composer.
+
+  Elements: add `theme.customCss` to `ElementsConfig` — extra CSS injected into the Elements shadow root after the built-in stylesheet, the supported escape hatch for embedders restyling the stable `aui-*` class hooks (host-page CSS cannot reach into the shadow DOM).
+
+### Patch Changes
+
+- 4f65d12: Fix the Project Assistant dock losing or duplicating the first message sent after a cold page load.
+
+  Elements: the history-enabled runtime now mounts immediately instead of waiting for auth — the previous auth gate swapped the without-history runtime for the history one when the session resolved, replacing the runtime and wiping any message sent into the first. The thread-list adapter resolves request headers through an async `getHeaders` that awaits the session fetch, so its bind-time `chat.list` waits for auth instead of failing. The custom transport is also resolved in its own memo so churn in the default transport's dependencies (MCP tool discovery settling, auth, connection status) no longer changes the transport identity mid-turn, which rebuilt the per-thread runtimes and discarded in-flight optimistic messages.
+
+  Dashboard: the dock's queued-prompt bridge appends exactly once — a throw from the placeholder thread core (before the real core binds) leaves the prompt queued for retry, while a successful append never re-fires, fixing both the dropped first message and the duplicate sends that minted a fresh chat per attempt. The server-assistant transport keeps at most one chat.load poll loop alive per dock: each send aborts the previous turn's poller, so a turn that never reaches a terminal row no longer leaves zombie polling loops behind.
+
+- Updated dependencies [4f65d12]
+- Updated dependencies [4f65d12]
+  - @gram-ai/elements@1.37.0
+
+## 0.72.0
+
+### Minor Changes
+
+- 0d51b12: Assistants UX: the detail panel is wider and split into Overview and Sessions tabs, system instructions open in an editable modal, the active/paused status toggle is available on the detail panel (shared with the index cards), and index cards show a mini activity sparkline derived from chat session activity.
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
+## 0.71.0
+
+### Minor Changes
+
+- 87cb734: The Project Assistant now cycles a set of whimsical "thinking" verbs while it works and types replies onto the screen token-by-token, emulating an SSE stream over the poll-based transport.
+- 430deac: Add tokens under management (TUM) billing for enterprise organizations. The billing page now shows enterprise orgs their TUM consumption for the active billing cycle against the contracted monthly allowance, replacing the self-serve usage meters. TUM counts token usage only from agent sessions Gram has stored non-metrics data for (chats, tool calls), excluding OTEL-forwarded token metrics from uninstalled users. Platform admins get an admin-only section on the billing page to set the contracted monthly token limit, an alert email (alerting to follow), and the billing cycle anchor day, backed by the new `usage.getTokensUnderManagement` and `usage.setBillingMetadata` endpoints and a `billing_metadata` table. Contract changes emit `audit_log.billing_metadata_event_v1` audit events.
+- 430deac: The tokens under management endpoint now returns usage history: the trailing 12 billing cycles, each with a per-UTC-day breakdown. Chat qualification is evaluated per cycle, so daily points sum exactly to each cycle's TUM. The enterprise billing page renders this as a bar chart with day and billing-cycle granularity toggles, including a contracted-limit line in the cycle view.
+
+### Patch Changes
+
+- 8759477: Auto-configure remote identity providers for custom remote MCP servers when OAuth
+  metadata can be discovered, including reusing existing issuers and deriving a
+  display name from the issuer URL.
+- 2e738a7: Attribute message type + destructured tool name to LLM-judge evaluation.
+
+  The judge now receives structured context — the message type (as an actor/role
+  label), and for tool calls the destructured MCP server + function — instead of
+  one ambiguous text field, so prompt-based policies can target message types,
+  actors, and specific MCP servers/functions. Also: the chat-session risk view
+  renders the judge rationale (instead of "llm_judge · llm_judge"), shows a
+  tooltip when the annotation truncates, and drops the no-op "Create exclusion"
+  action for judge findings.
+
+  Hardens the judge against adversarial input: the policy and message are now sent
+  as a single structured JSON payload framed as untrusted data, so a hostile body
+  can't spoof prompt headings or steer the verdict via embedded instructions;
+  oversized bodies are head+tail truncated before the call so a padded payload
+  can't blow the model's context window into a fail-open allow; and multi-tool-call
+  messages render each call with its own MCP attribution instead of an opaque blob.
+
+- 850b430: Add a Distribute MCP servers step to onboarding. Teams can search the MCP catalog and distribute selected servers to their organization during setup, running the deploy → bundle → publish flow inline. Servers that require OAuth are auto-configured with Speakeasy OAuth, matching the catalog add-server flow. The onboarding list shows only servers Gram can fully auto-configure (OAuth with dynamic client registration); servers needing manual setup (OAuth without DCR, API keys) remain available in the catalog.
+- 657f61c: Add a "Platform Status" link to the profile menu, pointing to the Speakeasy status page.
+- 46374b8: Show which tool the Project Assistant is calling while it works. Tool calls
+  and their results now render in the side panel as they happen, instead of the
+  conversation sitting silent until the final reply lands.
+- b5fc99c: Promoted Agent Sessions to top-level Observe navigation.
+- b4e32a6: Promoted Employees and Costs to top-level navigation.
+- d857151: Open prompt-based ("LLM-judge") risk policies to all message types.
+
+  Previously the judge was hard-scoped to `tool_request` in both the realtime
+  scanner and the batch analyzer, regardless of the policy's `message_types`. The
+  judge now runs on whatever types a policy declares (`user_message`,
+  `tool_request`, `tool_response`, `assistant_message`), and the policy form lets
+  you choose them instead of locking to tool requests.
+
+- 4207390: Moved Risk Events into the Secure section.
+- 30cefe6: Add a "Source" filter to the Tools logs/insights pages so tool traces can be narrowed by originating agent (Claude Code, Cursor, Codex, …).
+- 0c7373d: Added unified Tools insights for hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [87cb734]
+- Updated dependencies [9bc9a1d]
+  - @gram-ai/elements@1.36.0
+
+## 0.70.1
+
+### Patch Changes
+
+- ba8bdd4: Direct assistant MCP authentication prompts to the assistant's owner instead
+  of whoever happened to trigger the assistant. Slack onboarding now records the
+  owner's Slack identity in the assistant's instructions, runtime guidance
+  delivers OAuth links to the owner (ephemeral or DM) and tells anyone else that
+  the owner has to complete the connection, and prompts shown when the owner is
+  unknown now say explicitly that authentication is for the owner — so an
+  unexpected auth message is no longer mistaken for a failed setup.
+- 2a7fbec: Fix a request storm of `GET /rpc/auth.info` 401s introduced by the command
+  palette's Recently Visited feature. The user-id lookup issued an unconditional
+  `auth.info` request from the always-mounted palette (including on the
+  unauthenticated login page). The session lookup is now gated on the palette's
+  open state, and the page-visit recorder reuses the session already fetched by
+  the auth provider instead of issuing its own request.
+- f18938f: Fix dark mode visibility in the enterprise onboarding flow. The onboarding stepper and the instrument-agents step now use theme-aware colors so text and controls remain legible in dark mode.
+- 15bb129: Add a Configure policies step to onboarding. Teams can enable the Shadow MCP guardrail and per-category detection policies (secrets, PII, prompt injection) directly during setup, with state persisted via the risk policy API.
+- cc9d8ee: Add optional `name` (display name) and `logo_asset_id` to remote session issuers across both the project-scoped (`remoteSessionIssuers`) and organization-scoped (`organizationRemoteSessionIssuers`) services. On create, `name` is trimmed and stored as NULL when empty; on update it follows the same three-state semantics as the nullable endpoint fields (omitted keeps, empty string clears). `logo_asset_id` is set-only for now (no clear path, no upload UI yet). The dashboard renders the display name as the primary label with the issuer URL as the secondary line, exposes an optional Display name input on the attach and modify sheets, and renders a logo when one is present. On the attach sheet the Display name auto-derives from the Issuer URL hostname until the operator edits it, matching the existing Slug behavior.
+
+## 0.70.0
+
+### Minor Changes
+
+- 84240ec: `Cmd+K` — and a new magnifying-glass trigger beside the logo — now searches
+  across resources (MCP servers, sources, deployments, environments, assistants,
+  plugins, and admin-only risk policies, detection rules and approval requests),
+  all app pages (auto-enumerated from the route map), and offers a free-form
+  "Ask AI" hand-off to the Project Assistant.
+- 489f7fe: Support publishing Remote MCP-backed `mcp_servers` to collections alongside toolset-backed servers. `collections.attachServer` / `collections.detachServer` accept either `toolset_id` or `mcp_server_id` (exactly one), `collections.create` accepts `mcp_server_ids` in addition to `toolset_ids`, `collections.listServers` returns both backends merged by publish time, and `ExternalMCPServer` exposes `mcp_server_id`. In the dashboard, the Publishing section, the create-collection form, and the collection detail edit-servers picker all offer Remote MCP-backed servers, and the Remote MCP server settings page gains a Publishing section.
+
+### Patch Changes
+
+- e99b6fc: Change the Project Assistant keyboard shortcut from Option+Shift+W to Cmd+/ (Ctrl+/ on PC), updating the trigger's hover hint and tooltip to match, and add a hover tooltip to the sidebar collapse button showing its Cmd+B shortcut.
+- 327fc15: Fix "Server not found" on the catalog detail page for servers whose `registrySpecifier` was not in the first page of the unfiltered catalog list (e.g. `com.pulsemcp.mirror/datadog`). The backend `ListCatalog` aggregates across registries and caps results at 100, and only emits a `nextCursor` for single-registry queries, so the detail page could never reach deep entries. The lookup now passes the specifier's last path segment as a `search` filter so the upstream registry narrows the result set and the target server lands in the first page.
+- de92585: Order and filter agent sessions by their latest persisted chat message instead of original session creation time, and show that activity time in the dashboard sessions list.
+- 30a5bb6: Dim inactive access rules when no blocking Shadow MCP policy exists while keeping rule actions available
+- a1038ec: Fix feature-flag gated UI (e.g. the Device Agent nav link) staying hidden even when the flag is on. PostHog loads feature flags asynchronously, but `useTelemetry()` consumers never re-rendered once flags resolved, so `isFeatureEnabled(...)` reads were stuck on their pre-load value. `useTelemetry` now subscribes to PostHog's `onFeatureFlags` event and re-renders consumers when flags resolve or change, making every `isFeatureEnabled` call site reactive.
+- a0a0ebe: Align Risk Policies page title with design system
+- ee1c922: Remove the `value_hash` field from environment entries. It was documented as a way to identify matching values across environments, but every code path computed it from the already-redacted display value (`val[:3] + "*****"`), so it collided for any two values sharing a 3-character prefix and never reliably identified matching values. The only dashboard consumer grouped by it, and because colliding values also render identical redacted strings, the grouping was never observable. Replaced the dashboard's value-hash grouping with direct per-environment value tracking and dropped the field from the API surface.
+- cfd120a: Removed the deprecated standalone Slack app feature. The dedicated Slack app pages, their backend endpoints, and the associated event-handling workflow have been retired. Slack continues to work through assistants and triggers, which is the supported path.
+
 ## 0.69.0
 
 ### Minor Changes

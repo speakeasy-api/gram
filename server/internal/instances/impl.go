@@ -184,7 +184,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	if toolset.CustomDomainID != nil {
 		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
 		}
 		baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
 	}
@@ -236,7 +236,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			}
 			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(constants.APIKeyHeader), &sc)
 			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").LogError(ctx, logger)
 			}
 		}
 	}
@@ -249,21 +249,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").LogError(ctx, logger)
 	}
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").LogError(ctx, logger)
 	}
 
 	toolURNParam := r.URL.Query().Get(toolUrnQueryParam)
 	if toolURNParam == "" {
-		return oops.E(oops.CodeBadRequest, nil, "tool_urn query parameter is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "tool_urn query parameter is required").LogError(ctx, logger)
 	}
 	toolURN, err := urn.ParseTool(toolURNParam)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse tool URN").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse tool URN").LogError(ctx, logger)
 	}
 
 	// These variables will come in our playground chats
@@ -277,12 +277,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			Slug:      strings.ToLower(environmentSlug),
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").LogError(ctx, logger)
 		}
 
 		for _, entry := range environmentEntries {
@@ -292,7 +292,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	plan, err := s.toolset.GetToolCallPlanByURN(ctx, toolURN, *authCtx.ProjectID)
 	if err != nil || plan == nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load tool call plan").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load tool call plan").LogError(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
@@ -310,20 +310,20 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		} else if toolset != nil {
 			toolsetUUID, err = uuid.Parse(toolset.ID)
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").LogError(ctx, logger)
 			}
 		}
 	}
 
 	systemConfig, err := s.env.LoadSystemEnv(ctx, *authCtx.ProjectID, toolsetUUID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, logger)
 	}
 
 	requestBody := r.Body
 	requestBodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to read request body").LogError(ctx, logger)
 	}
 
 	requestNumBytes := int64(len(requestBodyBytes))
@@ -429,18 +429,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		if chatID != "" {
 			attrRecorder[attr.GenAIConversationIDKey] = chatID
 		}
+		var userInfo tm.UserInfo
 		if authCtx != nil {
-			if authCtx.UserID != "" {
-				attrRecorder[attr.UserIDKey] = authCtx.UserID
-			}
+			userInfo = tm.UserInfoByID(authCtx.UserID)
 			if authCtx.ExternalUserID != "" {
 				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 			}
 			if authCtx.APIKeyID != "" {
 				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
-			}
-			if authCtx.Email != nil && *authCtx.Email != "" {
-				attrRecorder[attr.UserEmailKey] = *authCtx.Email
 			}
 		}
 
@@ -456,6 +452,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
+			UserInfo:   userInfo,
 			Attributes: attrRecorder,
 		}
 		s.telemLogger.Log(ctx, logParams)

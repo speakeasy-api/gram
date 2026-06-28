@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersDelete } from "../funcs/organizationRemoteSessionIssuersDelete.js";
+import { organizationRemoteSessionIssuersDeleteIssuer } from "../funcs/organizationRemoteSessionIssuersDeleteIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -49,10 +49,10 @@ export type DeleteOrganizationRemoteSessionIssuerMutationError =
   | SDKValidationError;
 
 /**
- * deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * deleteIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.
+ * Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.
  */
 export function useDeleteOrganizationRemoteSessionIssuerMutation(
   options?: MutationHookOptions<
@@ -73,7 +73,7 @@ export function useDeleteOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyDeleteOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "delete"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "deleteIssuer"];
 }
 
 export function buildDeleteOrganizationRemoteSessionIssuerMutation(
@@ -104,7 +104,7 @@ export function buildDeleteOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersDelete(
+      return unwrapAsync(organizationRemoteSessionIssuersDeleteIssuer(
         client$,
         request,
         security,

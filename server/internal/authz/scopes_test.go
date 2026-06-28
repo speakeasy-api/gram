@@ -11,16 +11,20 @@ func TestScopeParts(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, ScopeParts{Resource: "project", Action: "read"}, ScopeProjectRead.Parts())
+	require.Equal(t, ScopeParts{Resource: "project", Action: "blocked_write"}, ScopeProjectBlockedWrite.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "evaluate"}, ScopeRiskPolicyEvaluate.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "bypass"}, ScopeRiskPolicyBypass.Parts())
 	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
 }
 
-func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
+func TestUserVisibleScopesCoverDefinedPublicScopes(t *testing.T) {
 	t.Parallel()
 
-	seen := make(map[Scope]struct{}, len(allScopes))
-	for _, scope := range allScopes {
+	seen := make(map[Scope]struct{}, len(scopeVisibilityByScope))
+	for scope, visibility := range scopeVisibilityByScope {
+		if visibility != scopeVisibilityUserVisible {
+			continue
+		}
 		require.NotEqual(t, ScopeRoot, scope)
 		require.Contains(t, scopeExpansions, scope)
 		require.NotContains(t, seen, scope)
@@ -31,8 +35,70 @@ func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
 		if scope == ScopeRoot {
 			continue
 		}
+		if scopeVisibilityByScope[scope] == scopeVisibilityInternal {
+			continue
+		}
 		require.Contains(t, seen, scope)
 	}
+}
+
+func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
+	t.Parallel()
+
+	for scope := range scopeExpansions {
+		if scope == ScopeRoot {
+			continue
+		}
+
+		require.Contains(t, scopeVisibilityByScope, scope)
+	}
+}
+
+func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		scope    Scope
+		expected Scope
+	}{
+		{scope: ScopeOrgRead, expected: ScopeOrgBlockedRead},
+		{scope: ScopeOrgAdmin, expected: ScopeOrgBlockedAdmin},
+		{scope: ScopeProjectRead, expected: ScopeProjectBlockedRead},
+		{scope: ScopeProjectWrite, expected: ScopeProjectBlockedWrite},
+		{scope: ScopeMCPRead, expected: ScopeMCPBlockedRead},
+		{scope: ScopeMCPWrite, expected: ScopeMCPBlockedWrite},
+		{scope: ScopeMCPConnect, expected: ScopeMCPBlockedConnect},
+		{scope: ScopeEnvironmentRead, expected: ScopeEnvironmentBlockedRead},
+		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
+		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
+	}
+
+	for _, tc := range cases {
+		exclusion, ok := ExclusionScopeFor(tc.scope)
+		require.True(t, ok)
+		require.Equal(t, tc.expected, exclusion)
+	}
+
+	_, ok := ExclusionScopeFor(ScopeRiskPolicyBypass)
+	require.False(t, ok)
+}
+
+func TestBlocklistScopeExpansions(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
+	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
+	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
+	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
+	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
+}
+
+func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, CalculateSubScopes(ScopeMCPBlockedConnect))
+	require.Empty(t, CalculateSubScopes(ScopeMCPBlockedRead))
+	require.Empty(t, CalculateSubScopes(ScopeProjectBlockedRead))
 }
 
 func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {
@@ -168,6 +234,62 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
 	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand())
 	require.Nil(t, grant)
+}
+
+func TestEvaluateGrants_riskPolicyBypassRequiresCheckDimensionsForScopedGrant(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind: ResourceKindRiskPolicy,
+		SelectorKeyResourceID:   "policy_123",
+		SelectorKeyServerURL:    "https://api.example.com",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassWholePolicyGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeRiskPolicyBypass, "policy_123")}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassScopedGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind: ResourceKindRiskPolicy,
+		SelectorKeyResourceID:   "policy_123",
+		SelectorKeyServerURL:    "https://api.example.com",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassServerIdentityGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind:   ResourceKindRiskPolicy,
+		SelectorKeyResourceID:     "policy_123",
+		SelectorKeyServerIdentity: "github",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: "github"}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
 }
 
 // --- Deny-wins evaluation tests ---
@@ -979,7 +1101,7 @@ func TestFlattenRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
 }
 
-func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
+func TestFlattenRoleGrants_deduplicatesByScopeAndSelector(t *testing.T) {
 	t.Parallel()
 
 	selector := NewSelector(ScopeProjectRead, "proj_1")
@@ -994,15 +1116,21 @@ func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
 			Effect:    PolicyEffectAllow,
 			Selectors: []Selector{selector},
 		},
-		{
-			Scope:     string(ScopeProjectRead),
-			Effect:    PolicyEffectDeny,
-			Selectors: []Selector{selector},
-		},
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	require.ElementsMatch(t, []PolicyEffect{PolicyEffectAllow, PolicyEffectDeny}, []PolicyEffect{rows[0].Effect, rows[1].Effect})
+	require.Len(t, rows, 1)
+	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
+}
+
+func TestFlattenRoleGrants_rejectsDenyEffect(t *testing.T) {
+	t.Parallel()
+
+	_, err := flattenRoleGrants([]*RoleGrant{{
+		Scope:     string(ScopeProjectRead),
+		Effect:    PolicyEffectDeny,
+		Selectors: []Selector{NewSelector(ScopeProjectRead, "proj_1")},
+	}})
+	require.ErrorContains(t, err, `policy effect "deny" is deprecated`)
 }
 
 func TestEvaluateGrants_emptyEffectFailsClosed(t *testing.T) {
@@ -1105,7 +1233,13 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 	t.Parallel()
 
 	for lower, highers := range scopeExpansions {
+		if scopeVisibilityByScope[lower] != scopeVisibilityUserVisible {
+			continue
+		}
 		for _, h := range highers {
+			if scopeVisibilityByScope[h] != scopeVisibilityUserVisible {
+				continue
+			}
 			require.Contains(t, CalculateSubScopes(h), string(lower),
 				"higher scope %q should imply lower scope %q", h, lower)
 		}

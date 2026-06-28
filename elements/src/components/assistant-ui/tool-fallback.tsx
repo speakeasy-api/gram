@@ -26,11 +26,13 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
 
   // Check if this specific tool call has a pending approval
   const pendingApproval = pendingApprovals.get(toolCallId);
-  const message = useAssistantState(({ message }) => message);
-  const toolParts = message.parts.filter((part) => part.type === "tool-call");
-  const matchingMessagePartIndex = toolParts.findIndex(
-    (part) => part.toolCallId === toolCallId,
-  );
+  // Selecting the whole message would re-render this card on every streamed
+  // chunk; select only the derived value.
+  const needsTrailingBorder = useAssistantState(({ message }) => {
+    const toolParts = message.parts.filter((part) => part.type === "tool-call");
+    const index = toolParts.findIndex((part) => part.toolCallId === toolCallId);
+    return index !== -1 && index !== toolParts.length - 1;
+  });
 
   const handleApproveOnce = () => {
     confirmPendingApproval(toolCallId);
@@ -89,9 +91,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     <div
       className={cn(
         "aui-tool-fallback-root flex w-full flex-col",
-        matchingMessagePartIndex !== -1 &&
-          matchingMessagePartIndex !== toolParts.length - 1 &&
-          "border-b",
+        needsTrailingBorder && "border-b",
       )}
     >
       <ToolUI

@@ -8,19 +8,29 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CreateOrganizationRemoteSessionIssuerRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP request body.
-type CreateOrganizationRemoteSessionIssuerRequestBody struct {
+// CreateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// request body.
+type CreateIssuerRequestBody struct {
+	// Owning project id; the project must belong to the caller's organization.
+	// Omit to create an organization-level issuer.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -44,16 +54,20 @@ type CreateOrganizationRemoteSessionIssuerRequestBody struct {
 	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP request body.
-type UpdateOrganizationRemoteSessionIssuerRequestBody struct {
+// UpdateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// request body.
+type UpdateIssuerRequestBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Rename the slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Set the logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -70,10 +84,98 @@ type UpdateOrganizationRemoteSessionIssuerRequestBody struct {
 	Passthrough                       *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 }
 
-// CreateOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type CreateOrganizationRemoteSessionIssuerResponseBody struct {
+// MoveIssuerRequestBody is the type of the "organizationRemoteSessionIssuers"
+// service "moveIssuer" endpoint HTTP request body.
+type MoveIssuerRequestBody struct {
+	// The remote_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Target owning project id; the project must belong to the caller's
+	// organization. Omit to make the issuer organization-level.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
+// CreateClientRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// request body.
+type CreateClientRequestBody struct {
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project;
+	// required when the issuer is organization-level.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Optional client_secret supplied by the caller. Gram encrypts before
+	// persisting; the plaintext is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// UpdateClientRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// request body.
+type UpdateClientRequestBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
+	// is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Replace the explicit upstream OAuth scopes for this client.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Replace the upstream OAuth audience sent for this client.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// RemoveClientFromMcpServerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP request body.
+type RemoveClientFromMcpServerRequestBody struct {
+	// The remote_session_client id.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The mcp_server id to detach from.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// RevokeSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// request body.
+type RevokeSessionRequestBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// RefreshSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// request body.
+type RefreshSessionRequestBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// RevokeAllClientSessionsRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP request body.
+type RevokeAllClientSessionsRequestBody struct {
+	// The remote_session_client id.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+}
+
+// CreateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body.
+type CreateIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level issuers.
@@ -84,6 +186,10 @@ type CreateOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -104,53 +210,18 @@ type CreateOrganizationRemoteSessionIssuerResponseBody struct {
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type UpdateOrganizationRemoteSessionIssuerResponseBody struct {
-	// The remote_session_issuer id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level issuers.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Project-unique slug.
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Issuer URL; matches the iss claim.
-	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
-	// Upstream authorization endpoint.
-	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
-	// Upstream token endpoint.
-	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
-	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
-	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
-	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	// When true, may unlock OIDC-aware behaviour.
-	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
-	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// ListOrganizationRemoteSessionIssuersResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body.
-type ListOrganizationRemoteSessionIssuersResponseBody struct {
-	Items []*RemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
+// ListIssuersResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body.
+type ListIssuersResponseBody struct {
+	Items []*OrganizationRemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// GetOrganizationRemoteSessionIssuerResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body.
-type GetOrganizationRemoteSessionIssuerResponseBody struct {
+// GetIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "getIssuer" endpoint HTTP response body.
+type GetIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level issuers.
@@ -161,6 +232,10 @@ type GetOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -181,11 +256,266 @@ type GetOrganizationRemoteSessionIssuerResponseBody struct {
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// GetIssuerDeletePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body.
+type GetIssuerDeletePreflightResponseBody struct {
+	// Number of non-deleted remote_session_clients registered with this issuer.
+	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
+	// Display names of MCP servers attached to this issuer's clients.
+	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+}
+
+// UpdateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body.
+type UpdateIssuerResponseBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level issuers.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project-unique slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Issuer URL; matches the iss claim.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "moveIssuer" endpoint HTTP response body.
+type MoveIssuerResponseBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level issuers.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project-unique slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Issuer URL; matches the iss claim.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListClientsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body.
+type ListClientsResponseBody struct {
+	Items []*OrganizationRemoteSessionClientResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetClientResponseBody is the type of the "organizationRemoteSessionIssuers"
+// service "getClient" endpoint HTTP response body.
+type GetClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
+	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetClientDeletePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body.
+type GetClientDeletePreflightResponseBody struct {
+	// Number of non-deleted remote_sessions minted against this client.
+	SessionCount int `form:"session_count" json:"session_count" xml:"session_count"`
+	// Display names of MCP servers this client is attached to.
+	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+}
+
+// ListClientMcpServersResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body.
+type ListClientMcpServersResponseBody struct {
+	Items []*OrganizationMcpServerResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// ListClientSessionsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body.
+type ListClientSessionsResponseBody struct {
+	Items []*RemoteSessionResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CreateClientResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body.
+type CreateClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
+	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateClientResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body.
+type UpdateClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
+	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RefreshSessionResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body.
+type RefreshSessionResponseBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RevokeAllClientSessionsResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body.
+type RevokeAllClientSessionsResponseBody struct {
+	// Number of remote_sessions revoked.
+	RevokedCount int `form:"revoked_count" json:"revoked_count" xml:"revoked_count"`
+}
+
+// CreateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -201,11 +531,10 @@ type CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type CreateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// CreateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -221,11 +550,10 @@ type CreateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type CreateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// CreateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -241,11 +569,10 @@ type CreateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type CreateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// CreateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type CreateIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -261,11 +588,10 @@ type CreateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type CreateOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// CreateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type CreateIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -281,11 +607,10 @@ type CreateOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// CreateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -301,11 +626,10 @@ type CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type CreateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// CreateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type CreateIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -321,11 +645,10 @@ type CreateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// CreateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -341,11 +664,10 @@ type CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// CreateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -361,11 +683,10 @@ type CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "createOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// CreateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -381,11 +702,10 @@ type CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// ListIssuersUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListIssuersUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -401,11 +721,10 @@ type UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// ListIssuersForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "forbidden" error.
+type ListIssuersForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -421,11 +740,10 @@ type UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// ListIssuersBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "bad_request" error.
+type ListIssuersBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,11 +759,10 @@ type UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// ListIssuersNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "not_found" error.
+type ListIssuersNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -461,11 +778,10 @@ type UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type UpdateOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// ListIssuersConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "conflict" error.
+type ListIssuersConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -481,11 +797,10 @@ type UpdateOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// ListIssuersUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListIssuersUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -501,11 +816,10 @@ type UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type UpdateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// ListIssuersInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "invalid" error.
+type ListIssuersInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -521,11 +835,10 @@ type UpdateOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// ListIssuersInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListIssuersInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -541,11 +854,10 @@ type UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// ListIssuersUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "unexpected" error.
+type ListIssuersUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -561,11 +873,10 @@ type UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "updateOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// ListIssuersGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listIssuers" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListIssuersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -581,11 +892,10 @@ type UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unauthorized" error.
-type ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody struct {
+// GetIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -601,11 +911,10 @@ type ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "forbidden" error.
-type ListOrganizationRemoteSessionIssuersForbiddenResponseBody struct {
+// GetIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type GetIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -621,11 +930,10 @@ type ListOrganizationRemoteSessionIssuersForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "bad_request" error.
-type ListOrganizationRemoteSessionIssuersBadRequestResponseBody struct {
+// GetIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type GetIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -641,11 +949,10 @@ type ListOrganizationRemoteSessionIssuersBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "not_found" error.
-type ListOrganizationRemoteSessionIssuersNotFoundResponseBody struct {
+// GetIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type GetIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -661,11 +968,10 @@ type ListOrganizationRemoteSessionIssuersNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "conflict" error.
-type ListOrganizationRemoteSessionIssuersConflictResponseBody struct {
+// GetIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type GetIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -681,11 +987,10 @@ type ListOrganizationRemoteSessionIssuersConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody struct {
+// GetIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -701,11 +1006,10 @@ type ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "invalid" error.
-type ListOrganizationRemoteSessionIssuersInvalidResponseBody struct {
+// GetIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type GetIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -721,11 +1025,10 @@ type ListOrganizationRemoteSessionIssuersInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody struct {
+// GetIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -741,11 +1044,10 @@ type ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "unexpected" error.
-type ListOrganizationRemoteSessionIssuersUnexpectedResponseBody struct {
+// GetIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type GetIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -761,11 +1063,10 @@ type ListOrganizationRemoteSessionIssuersUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "listOrganizationRemoteSessionIssuers" endpoint HTTP response body for the
-// "gateway_error" error.
-type ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody struct {
+// GetIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -781,11 +1082,10 @@ type ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// GetIssuerDeletePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetIssuerDeletePreflightUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -801,11 +1101,10 @@ type GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type GetOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// GetIssuerDeletePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "forbidden" error.
+type GetIssuerDeletePreflightForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -821,11 +1120,10 @@ type GetOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type GetOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// GetIssuerDeletePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "bad_request" error.
+type GetIssuerDeletePreflightBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -841,11 +1139,10 @@ type GetOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type GetOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// GetIssuerDeletePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "not_found" error.
+type GetIssuerDeletePreflightNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -861,11 +1158,10 @@ type GetOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type GetOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// GetIssuerDeletePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "conflict" error.
+type GetIssuerDeletePreflightConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -881,11 +1177,10 @@ type GetOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// GetIssuerDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetIssuerDeletePreflightUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -901,11 +1196,10 @@ type GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type GetOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// GetIssuerDeletePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "invalid" error.
+type GetIssuerDeletePreflightInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -921,11 +1215,10 @@ type GetOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the type
-// of the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// GetIssuerDeletePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetIssuerDeletePreflightInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -941,11 +1234,10 @@ type GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type GetOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// GetIssuerDeletePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "unexpected" error.
+type GetIssuerDeletePreflightUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -961,11 +1253,10 @@ type GetOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "getOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// GetIssuerDeletePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerDeletePreflight"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetIssuerDeletePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -981,11 +1272,10 @@ type GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
+// UpdateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1001,11 +1291,10 @@ type DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
+// UpdateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1021,11 +1310,10 @@ type DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
+// UpdateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1041,11 +1329,10 @@ type DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
+// UpdateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1061,11 +1348,10 @@ type DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type DeleteOrganizationRemoteSessionIssuerConflictResponseBody struct {
+// UpdateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1081,11 +1367,10 @@ type DeleteOrganizationRemoteSessionIssuerConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unsupported_media" error.
-type DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// UpdateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1101,11 +1386,10 @@ type DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invalid" error.
-type DeleteOrganizationRemoteSessionIssuerInvalidResponseBody struct {
+// UpdateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1121,11 +1405,10 @@ type DeleteOrganizationRemoteSessionIssuerInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody is the
-// type of the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct {
+// UpdateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1141,11 +1424,10 @@ type DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody struct 
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
+// UpdateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1161,11 +1443,10 @@ type DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody is the type of
-// the "organizationRemoteSessionIssuers" service
-// "deleteOrganizationRemoteSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
+// UpdateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1179,6 +1460,2678 @@ type DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody struct {
 	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
 	// Is the error a server-side fault?
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type MoveIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type MoveIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type MoveIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type MoveIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type MoveIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type MoveIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type MoveIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type MoveIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type MoveIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "moveIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type MoveIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "forbidden" error.
+type ListClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "bad_request" error.
+type ListClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "not_found" error.
+type ListClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "conflict" error.
+type ListClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "invalid" error.
+type ListClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "unexpected" error.
+type ListClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "forbidden" error.
+type GetClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "bad_request" error.
+type GetClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "not_found" error.
+type GetClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "conflict" error.
+type GetClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "invalid" error.
+type GetClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "unexpected" error.
+type GetClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetClientDeletePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "forbidden" error.
+type GetClientDeletePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "bad_request" error.
+type GetClientDeletePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "not_found" error.
+type GetClientDeletePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "conflict" error.
+type GetClientDeletePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetClientDeletePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "invalid" error.
+type GetClientDeletePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetClientDeletePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "unexpected" error.
+type GetClientDeletePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDeletePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetClientDeletePreflightGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unauthorized" error.
+type ListClientMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "forbidden" error.
+type ListClientMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "bad_request" error.
+type ListClientMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "not_found" error.
+type ListClientMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "conflict" error.
+type ListClientMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unsupported_media" error.
+type ListClientMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "invalid" error.
+type ListClientMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "invariant_violation" error.
+type ListClientMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "unexpected" error.
+type ListClientMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientMcpServersGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
+// HTTP response body for the "gateway_error" error.
+type ListClientMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unauthorized" error.
+type ListClientSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "forbidden" error.
+type ListClientSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "bad_request" error.
+type ListClientSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "not_found" error.
+type ListClientSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "conflict" error.
+type ListClientSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unsupported_media" error.
+type ListClientSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "invalid" error.
+type ListClientSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "invariant_violation" error.
+type ListClientSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "unexpected" error.
+type ListClientSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListClientSessionsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
+// HTTP response body for the "gateway_error" error.
+type ListClientSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unauthorized" error.
+type RemoveClientFromMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "forbidden" error.
+type RemoveClientFromMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "bad_request" error.
+type RemoveClientFromMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "not_found" error.
+type RemoveClientFromMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "conflict" error.
+type RemoveClientFromMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RemoveClientFromMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "invalid" error.
+type RemoveClientFromMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RemoveClientFromMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "unexpected" error.
+type RemoveClientFromMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveClientFromMcpServerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
+// endpoint HTTP response body for the "gateway_error" error.
+type RemoveClientFromMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RevokeSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RevokeSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RevokeSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "not_found" error.
+type RevokeSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "conflict" error.
+type RevokeSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RevokeSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "invalid" error.
+type RevokeSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RevokeSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RevokeSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RevokeSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RefreshSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unauthorized" error.
+type RevokeAllClientSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "forbidden" error.
+type RevokeAllClientSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "bad_request" error.
+type RevokeAllClientSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "not_found" error.
+type RevokeAllClientSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "conflict" error.
+type RevokeAllClientSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RevokeAllClientSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "invalid" error.
+type RevokeAllClientSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RevokeAllClientSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "unexpected" error.
+type RevokeAllClientSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeAllClientSessionsGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
+// endpoint HTTP response body for the "gateway_error" error.
+type RevokeAllClientSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationRemoteSessionIssuerResponseBody is used to define fields on
+// response body types.
+type OrganizationRemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of non-deleted remote_session_clients registered with this issuer.
+	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
+	// The owning project's name. Empty for organizational (project_id NULL)
+	// issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 }
 
 // RemoteSessionIssuerResponseBody is used to define fields on response body
@@ -1194,6 +4147,10 @@ type RemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1214,16 +4171,109 @@ type RemoteSessionIssuerResponseBody struct {
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// NewCreateOrganizationRemoteSessionIssuerResponseBody builds the HTTP
-// response body from the result of the "createOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateOrganizationRemoteSessionIssuerResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerResponseBody{
+// OrganizationRemoteSessionClientResponseBody is used to define fields on
+// response body types.
+type OrganizationRemoteSessionClientResponseBody struct {
+	// The remote_session_client record.
+	Client *RemoteSessionClientResponseBody `form:"client" json:"client" xml:"client"`
+	// Number of non-deleted MCP servers attached to this client (via
+	// user_session_issuers).
+	McpServerCount int `form:"mcp_server_count" json:"mcp_server_count" xml:"mcp_server_count"`
+	// Number of non-deleted (active) remote_sessions minted against this client.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
+}
+
+// RemoteSessionClientResponseBody is used to define fields on response body
+// types.
+type RemoteSessionClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
+	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// OrganizationMcpServerResponseBody is used to define fields on response body
+// types.
+type OrganizationMcpServerResponseBody struct {
+	// The mcp_server id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning project's slug, for linking to the MCP server in its project.
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The MCP server name; empty when unset (display falls back to the URL).
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The remote MCP server URL; empty for non-remote (toolset-backed) servers.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+}
+
+// RemoteSessionResponseBody is used to define fields on response body types.
+type RemoteSessionResponseBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// NewCreateIssuerResponseBody builds the HTTP response body from the result of
+// the "createIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerResponseBody {
+	body := &CreateIssuerResponseBody{
 		ID:                    res.ID,
 		ProjectID:             res.ProjectID,
 		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
 		TokenEndpoint:         res.TokenEndpoint,
 		RegistrationEndpoint:  res.RegistrationEndpoint,
@@ -1260,84 +4310,38 @@ func NewCreateOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessi
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerResponseBody builds the HTTP
-// response body from the result of the "updateOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateOrganizationRemoteSessionIssuerResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
-	}
-	if res.ScopesSupported != nil {
-		body.ScopesSupported = make([]string, len(res.ScopesSupported))
-		for i, val := range res.ScopesSupported {
-			body.ScopesSupported[i] = val
-		}
-	}
-	if res.GrantTypesSupported != nil {
-		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
-		for i, val := range res.GrantTypesSupported {
-			body.GrantTypesSupported[i] = val
-		}
-	}
-	if res.ResponseTypesSupported != nil {
-		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
-		for i, val := range res.ResponseTypesSupported {
-			body.ResponseTypesSupported[i] = val
-		}
-	}
-	if res.TokenEndpointAuthMethodsSupported != nil {
-		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
-		for i, val := range res.TokenEndpointAuthMethodsSupported {
-			body.TokenEndpointAuthMethodsSupported[i] = val
-		}
-	}
-	return body
-}
-
-// NewListOrganizationRemoteSessionIssuersResponseBody builds the HTTP response
-// body from the result of the "listOrganizationRemoteSessionIssuers" endpoint
-// of the "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersResponseBody(res *organizationremotesessionissuers.ListRemoteSessionIssuersResult) *ListOrganizationRemoteSessionIssuersResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersResponseBody{
+// NewListIssuersResponseBody builds the HTTP response body from the result of
+// the "listIssuers" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewListIssuersResponseBody(res *organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersResult) *ListIssuersResponseBody {
+	body := &ListIssuersResponseBody{
 		NextCursor: res.NextCursor,
 	}
 	if res.Items != nil {
-		body.Items = make([]*RemoteSessionIssuerResponseBody, len(res.Items))
+		body.Items = make([]*OrganizationRemoteSessionIssuerResponseBody, len(res.Items))
 		for i, val := range res.Items {
 			if val == nil {
 				body.Items[i] = nil
 				continue
 			}
-			body.Items[i] = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(val)
+			body.Items[i] = marshalOrganizationremotesessionissuersOrganizationRemoteSessionIssuerToOrganizationRemoteSessionIssuerResponseBody(val)
 		}
 	} else {
-		body.Items = []*RemoteSessionIssuerResponseBody{}
+		body.Items = []*OrganizationRemoteSessionIssuerResponseBody{}
 	}
 	return body
 }
 
-// NewGetOrganizationRemoteSessionIssuerResponseBody builds the HTTP response
-// body from the result of the "getOrganizationRemoteSessionIssuer" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetOrganizationRemoteSessionIssuerResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerResponseBody{
+// NewGetIssuerResponseBody builds the HTTP response body from the result of
+// the "getIssuer" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponseBody {
+	body := &GetIssuerResponseBody{
 		ID:                    res.ID,
 		ProjectID:             res.ProjectID,
 		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
 		TokenEndpoint:         res.TokenEndpoint,
 		RegistrationEndpoint:  res.RegistrationEndpoint,
@@ -1374,137 +4378,341 @@ func NewGetOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessionI
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerDeletePreflightResponseBody builds the HTTP response body from
+// the result of the "getIssuerDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+func NewGetIssuerDeletePreflightResponseBody(res *organizationremotesessionissuers.OrganizationIssuerDeletePreflight) *GetIssuerDeletePreflightResponseBody {
+	body := &GetIssuerDeletePreflightResponseBody{
+		ClientCount: res.ClientCount,
+	}
+	if res.McpServerNames != nil {
+		body.McpServerNames = make([]string, len(res.McpServerNames))
+		for i, val := range res.McpServerNames {
+			body.McpServerNames[i] = val
+		}
+	} else {
+		body.McpServerNames = []string{}
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerForbiddenResponseBody builds the
-// HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewUpdateIssuerResponseBody builds the HTTP response body from the result of
+// the "updateIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerResponseBody {
+	body := &UpdateIssuerResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
+		Slug:                  res.Slug,
+		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
+		AuthorizationEndpoint: res.AuthorizationEndpoint,
+		TokenEndpoint:         res.TokenEndpoint,
+		RegistrationEndpoint:  res.RegistrationEndpoint,
+		JwksURI:               res.JwksURI,
+		Oidc:                  res.Oidc,
+		Passthrough:           res.Passthrough,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.ScopesSupported != nil {
+		body.ScopesSupported = make([]string, len(res.ScopesSupported))
+		for i, val := range res.ScopesSupported {
+			body.ScopesSupported[i] = val
+		}
+	}
+	if res.GrantTypesSupported != nil {
+		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
+		for i, val := range res.GrantTypesSupported {
+			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.ResponseTypesSupported != nil {
+		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
+		for i, val := range res.ResponseTypesSupported {
+			body.ResponseTypesSupported[i] = val
+		}
+	}
+	if res.TokenEndpointAuthMethodsSupported != nil {
+		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
+		for i, val := range res.TokenEndpointAuthMethodsSupported {
+			body.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	return body
+}
+
+// NewMoveIssuerResponseBody builds the HTTP response body from the result of
+// the "moveIssuer" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerResponseBody {
+	body := &MoveIssuerResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
+		Slug:                  res.Slug,
+		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
+		AuthorizationEndpoint: res.AuthorizationEndpoint,
+		TokenEndpoint:         res.TokenEndpoint,
+		RegistrationEndpoint:  res.RegistrationEndpoint,
+		JwksURI:               res.JwksURI,
+		Oidc:                  res.Oidc,
+		Passthrough:           res.Passthrough,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.ScopesSupported != nil {
+		body.ScopesSupported = make([]string, len(res.ScopesSupported))
+		for i, val := range res.ScopesSupported {
+			body.ScopesSupported[i] = val
+		}
+	}
+	if res.GrantTypesSupported != nil {
+		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
+		for i, val := range res.GrantTypesSupported {
+			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.ResponseTypesSupported != nil {
+		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
+		for i, val := range res.ResponseTypesSupported {
+			body.ResponseTypesSupported[i] = val
+		}
+	}
+	if res.TokenEndpointAuthMethodsSupported != nil {
+		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
+		for i, val := range res.TokenEndpointAuthMethodsSupported {
+			body.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	return body
+}
+
+// NewListClientsResponseBody builds the HTTP response body from the result of
+// the "listClients" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewListClientsResponseBody(res *organizationremotesessionissuers.ListOrganizationRemoteSessionClientsResult) *ListClientsResponseBody {
+	body := &ListClientsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*OrganizationRemoteSessionClientResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalOrganizationremotesessionissuersOrganizationRemoteSessionClientToOrganizationRemoteSessionClientResponseBody(val)
+		}
+	} else {
+		body.Items = []*OrganizationRemoteSessionClientResponseBody{}
+	}
+	return body
+}
+
+// NewGetClientResponseBody builds the HTTP response body from the result of
+// the "getClient" endpoint of the "organizationRemoteSessionIssuers" service.
+func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponseBody {
+	body := &GetClientResponseBody{
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		Audience:                res.Audience,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.UserSessionIssuerIds != nil {
+		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
+		for i, val := range res.UserSessionIssuerIds {
+			body.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		body.UserSessionIssuerIds = []string{}
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightResponseBody builds the HTTP response body from
+// the result of the "getClientDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerForbiddenResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionissuers.OrganizationClientDeletePreflight) *GetClientDeletePreflightResponseBody {
+	body := &GetClientDeletePreflightResponseBody{
+		SessionCount: res.SessionCount,
+	}
+	if res.McpServerNames != nil {
+		body.McpServerNames = make([]string, len(res.McpServerNames))
+		for i, val := range res.McpServerNames {
+			body.McpServerNames[i] = val
+		}
+	} else {
+		body.McpServerNames = []string{}
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerBadRequestResponseBody builds the
-// HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewListClientMcpServersResponseBody builds the HTTP response body from the
+// result of the "listClientMcpServers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerBadRequestResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+func NewListClientMcpServersResponseBody(res *organizationremotesessionissuers.ListOrganizationMcpServersResult) *ListClientMcpServersResponseBody {
+	body := &ListClientMcpServersResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*OrganizationMcpServerResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalOrganizationremotesessionissuersOrganizationMcpServerToOrganizationMcpServerResponseBody(val)
+		}
+	} else {
+		body.Items = []*OrganizationMcpServerResponseBody{}
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerNotFoundResponseBody builds the HTTP
-// response body from the result of the "createOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerNotFoundResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOrganizationRemoteSessionIssuerConflictResponseBody builds the HTTP
-// response body from the result of the "createOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerConflictResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody builds
-// the HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewListClientSessionsResponseBody builds the HTTP response body from the
+// result of the "listClientSessions" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+func NewListClientSessionsResponseBody(res *organizationremotesessionissuers.ListOrganizationRemoteSessionsResult) *ListClientSessionsResponseBody {
+	body := &ListClientSessionsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*RemoteSessionResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalTypesRemoteSessionToRemoteSessionResponseBody(val)
+		}
+	} else {
+		body.Items = []*RemoteSessionResponseBody{}
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerInvalidResponseBody builds the HTTP
-// response body from the result of the "createOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerInvalidResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+// NewCreateClientResponseBody builds the HTTP response body from the result of
+// the "createClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientResponseBody {
+	body := &CreateClientResponseBody{
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		Audience:                res.Audience,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.UserSessionIssuerIds != nil {
+		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
+		for i, val := range res.UserSessionIssuerIds {
+			body.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		body.UserSessionIssuerIds = []string{}
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// builds the HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewUpdateClientResponseBody builds the HTTP response body from the result of
+// the "updateClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientResponseBody {
+	body := &UpdateClientResponseBody{
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		Audience:                res.Audience,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.UserSessionIssuerIds != nil {
+		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
+		for i, val := range res.UserSessionIssuerIds {
+			body.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		body.UserSessionIssuerIds = []string{}
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewRefreshSessionResponseBody builds the HTTP response body from the result
+// of the "refreshSession" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResponseBody {
+	body := &RefreshSessionResponseBody{
+		ID:                    res.ID,
+		SubjectUrn:            res.SubjectUrn,
+		SubjectDisplayName:    res.SubjectDisplayName,
+		SubjectEmail:          res.SubjectEmail,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		AccessExpiresAt:       res.AccessExpiresAt,
+		RefreshExpiresAt:      res.RefreshExpiresAt,
+		HasRefreshToken:       res.HasRefreshToken,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsResponseBody builds the HTTP response body from
+// the result of the "revokeAllClientSessions" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
+func NewRevokeAllClientSessionsResponseBody(res *organizationremotesessionissuers.RevokeAllRemoteSessionsResult) *RevokeAllClientSessionsResponseBody {
+	body := &RevokeAllClientSessionsResponseBody{
+		RevokedCount: res.RevokedCount,
 	}
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody builds the
-// HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerUnexpectedResponseBody{
+func NewCreateIssuerUnauthorizedResponseBody(res *goa.ServiceError) *CreateIssuerUnauthorizedResponseBody {
+	body := &CreateIssuerUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1515,12 +4723,11 @@ func NewCreateOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.Ser
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody {
-	body := &CreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody{
+func NewCreateIssuerForbiddenResponseBody(res *goa.ServiceError) *CreateIssuerForbiddenResponseBody {
+	body := &CreateIssuerForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1531,12 +4738,11 @@ func NewCreateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.S
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerBadRequestResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody{
+func NewCreateIssuerBadRequestResponseBody(res *goa.ServiceError) *CreateIssuerBadRequestResponseBody {
+	body := &CreateIssuerBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1547,12 +4753,11 @@ func NewUpdateOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.S
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody builds the
-// HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerForbiddenResponseBody{
+func NewCreateIssuerNotFoundResponseBody(res *goa.ServiceError) *CreateIssuerNotFoundResponseBody {
+	body := &CreateIssuerNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1563,12 +4768,11 @@ func NewUpdateOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.Serv
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody builds the
-// HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerBadRequestResponseBody{
+func NewCreateIssuerConflictResponseBody(res *goa.ServiceError) *CreateIssuerConflictResponseBody {
+	body := &CreateIssuerConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1579,42 +4783,11 @@ func NewUpdateOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.Ser
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerNotFoundResponseBody builds the HTTP
-// response body from the result of the "updateOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerConflictResponseBody builds the HTTP
-// response body from the result of the "updateOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerConflictResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody builds
-// the HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody{
+func NewCreateIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateIssuerUnsupportedMediaResponseBody {
+	body := &CreateIssuerUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1625,27 +4798,11 @@ func NewUpdateOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *g
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerInvalidResponseBody builds the HTTP
-// response body from the result of the "updateOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerInvalidResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// builds the HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody{
+func NewCreateIssuerInvalidResponseBody(res *goa.ServiceError) *CreateIssuerInvalidResponseBody {
+	body := &CreateIssuerInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1656,12 +4813,11 @@ func NewUpdateOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res 
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody builds the
-// HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody{
+func NewCreateIssuerInvariantViolationResponseBody(res *goa.ServiceError) *CreateIssuerInvariantViolationResponseBody {
+	body := &CreateIssuerInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1672,12 +4828,11 @@ func NewUpdateOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.Ser
 	return body
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// NewCreateIssuerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewUpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody {
-	body := &UpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody{
+func NewCreateIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateIssuerUnexpectedResponseBody {
+	body := &CreateIssuerUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1688,12 +4843,11 @@ func NewUpdateOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.S
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewCreateIssuerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersUnauthorizedResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersUnauthorizedResponseBody{
+func NewCreateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateIssuerGatewayErrorResponseBody {
+	body := &CreateIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1704,27 +4858,11 @@ func NewListOrganizationRemoteSessionIssuersUnauthorizedResponseBody(res *goa.Se
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersForbiddenResponseBody builds the HTTP
-// response body from the result of the "listOrganizationRemoteSessionIssuers"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersForbiddenResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersForbiddenResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOrganizationRemoteSessionIssuersBadRequestResponseBody builds the
-// HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewListIssuersUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersBadRequestResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersBadRequestResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersBadRequestResponseBody{
+func NewListIssuersUnauthorizedResponseBody(res *goa.ServiceError) *ListIssuersUnauthorizedResponseBody {
+	body := &ListIssuersUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1735,42 +4873,11 @@ func NewListOrganizationRemoteSessionIssuersBadRequestResponseBody(res *goa.Serv
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersNotFoundResponseBody builds the HTTP
-// response body from the result of the "listOrganizationRemoteSessionIssuers"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersNotFoundResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersNotFoundResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOrganizationRemoteSessionIssuersConflictResponseBody builds the HTTP
-// response body from the result of the "listOrganizationRemoteSessionIssuers"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersConflictResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersConflictResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody builds
-// the HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewListIssuersForbiddenResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody{
+func NewListIssuersForbiddenResponseBody(res *goa.ServiceError) *ListIssuersForbiddenResponseBody {
+	body := &ListIssuersForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1781,27 +4888,11 @@ func NewListOrganizationRemoteSessionIssuersUnsupportedMediaResponseBody(res *go
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersInvalidResponseBody builds the HTTP
-// response body from the result of the "listOrganizationRemoteSessionIssuers"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersInvalidResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersInvalidResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOrganizationRemoteSessionIssuersInvariantViolationResponseBody builds
-// the HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewListIssuersBadRequestResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersInvariantViolationResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersInvariantViolationResponseBody{
+func NewListIssuersBadRequestResponseBody(res *goa.ServiceError) *ListIssuersBadRequestResponseBody {
+	body := &ListIssuersBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1812,12 +4903,11 @@ func NewListOrganizationRemoteSessionIssuersInvariantViolationResponseBody(res *
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersUnexpectedResponseBody builds the
-// HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewListIssuersNotFoundResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersUnexpectedResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersUnexpectedResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersUnexpectedResponseBody{
+func NewListIssuersNotFoundResponseBody(res *goa.ServiceError) *ListIssuersNotFoundResponseBody {
+	body := &ListIssuersNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1828,12 +4918,11 @@ func NewListOrganizationRemoteSessionIssuersUnexpectedResponseBody(res *goa.Serv
 	return body
 }
 
-// NewListOrganizationRemoteSessionIssuersGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
+// NewListIssuersConflictResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewListOrganizationRemoteSessionIssuersGatewayErrorResponseBody(res *goa.ServiceError) *ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody {
-	body := &ListOrganizationRemoteSessionIssuersGatewayErrorResponseBody{
+func NewListIssuersConflictResponseBody(res *goa.ServiceError) *ListIssuersConflictResponseBody {
+	body := &ListIssuersConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1844,12 +4933,11 @@ func NewListOrganizationRemoteSessionIssuersGatewayErrorResponseBody(res *goa.Se
 	return body
 }
 
-// NewGetOrganizationRemoteSessionIssuerUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "getOrganizationRemoteSessionIssuer" endpoint of the
+// NewListIssuersUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerUnauthorizedResponseBody{
+func NewListIssuersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListIssuersUnsupportedMediaResponseBody {
+	body := &ListIssuersUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1860,72 +4948,11 @@ func NewGetOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.Serv
 	return body
 }
 
-// NewGetOrganizationRemoteSessionIssuerForbiddenResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerForbiddenResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerBadRequestResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerBadRequestResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerNotFoundResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerNotFoundResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerConflictResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerConflictResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody builds the
-// HTTP response body from the result of the
-// "getOrganizationRemoteSessionIssuer" endpoint of the
+// NewListIssuersInvalidResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody{
+func NewListIssuersInvalidResponseBody(res *goa.ServiceError) *ListIssuersInvalidResponseBody {
+	body := &ListIssuersInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1936,27 +4963,11 @@ func NewGetOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.
 	return body
 }
 
-// NewGetOrganizationRemoteSessionIssuerInvalidResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerInvalidResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerInvariantViolationResponseBody builds
-// the HTTP response body from the result of the
-// "getOrganizationRemoteSessionIssuer" endpoint of the
+// NewListIssuersInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerInvariantViolationResponseBody{
+func NewListIssuersInvariantViolationResponseBody(res *goa.ServiceError) *ListIssuersInvariantViolationResponseBody {
+	body := &ListIssuersInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1967,27 +4978,11 @@ func NewGetOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res *go
 	return body
 }
 
-// NewGetOrganizationRemoteSessionIssuerUnexpectedResponseBody builds the HTTP
-// response body from the result of the "getOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerUnexpectedResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationRemoteSessionIssuerGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "getOrganizationRemoteSessionIssuer" endpoint of the
+// NewListIssuersUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody {
-	body := &GetOrganizationRemoteSessionIssuerGatewayErrorResponseBody{
+func NewListIssuersUnexpectedResponseBody(res *goa.ServiceError) *ListIssuersUnexpectedResponseBody {
+	body := &ListIssuersUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1998,12 +4993,11 @@ func NewGetOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.Serv
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewListIssuersGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody{
+func NewListIssuersGatewayErrorResponseBody(res *goa.ServiceError) *ListIssuersGatewayErrorResponseBody {
+	body := &ListIssuersGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2014,12 +5008,86 @@ func NewDeleteOrganizationRemoteSessionIssuerUnauthorizedResponseBody(res *goa.S
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerForbiddenResponseBody builds the
-// HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerUnauthorizedResponseBody(res *goa.ServiceError) *GetIssuerUnauthorizedResponseBody {
+	body := &GetIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerForbiddenResponseBody(res *goa.ServiceError) *GetIssuerForbiddenResponseBody {
+	body := &GetIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerBadRequestResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerBadRequestResponseBody(res *goa.ServiceError) *GetIssuerBadRequestResponseBody {
+	body := &GetIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerNotFoundResponseBody(res *goa.ServiceError) *GetIssuerNotFoundResponseBody {
+	body := &GetIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerConflictResponseBody(res *goa.ServiceError) *GetIssuerConflictResponseBody {
+	body := &GetIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerForbiddenResponseBody{
+func NewGetIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *GetIssuerUnsupportedMediaResponseBody {
+	body := &GetIssuerUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2030,12 +5098,26 @@ func NewDeleteOrganizationRemoteSessionIssuerForbiddenResponseBody(res *goa.Serv
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerBadRequestResponseBody builds the
-// HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerInvalidResponseBody(res *goa.ServiceError) *GetIssuerInvalidResponseBody {
+	body := &GetIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerBadRequestResponseBody{
+func NewGetIssuerInvariantViolationResponseBody(res *goa.ServiceError) *GetIssuerInvariantViolationResponseBody {
+	body := &GetIssuerInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2046,11 +5128,11 @@ func NewDeleteOrganizationRemoteSessionIssuerBadRequestResponseBody(res *goa.Ser
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerNotFoundResponseBody builds the HTTP
-// response body from the result of the "deleteOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerNotFoundResponseBody{
+// NewGetIssuerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerUnexpectedResponseBody(res *goa.ServiceError) *GetIssuerUnexpectedResponseBody {
+	body := &GetIssuerUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2061,11 +5143,11 @@ func NewDeleteOrganizationRemoteSessionIssuerNotFoundResponseBody(res *goa.Servi
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerConflictResponseBody builds the HTTP
-// response body from the result of the "deleteOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerConflictResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerConflictResponseBody{
+// NewGetIssuerGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetIssuerGatewayErrorResponseBody(res *goa.ServiceError) *GetIssuerGatewayErrorResponseBody {
+	body := &GetIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2076,12 +5158,11 @@ func NewDeleteOrganizationRemoteSessionIssuerConflictResponseBody(res *goa.Servi
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody builds
-// the HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerDeletePreflightUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody{
+func NewGetIssuerDeletePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightUnauthorizedResponseBody {
+	body := &GetIssuerDeletePreflightUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2092,27 +5173,11 @@ func NewDeleteOrganizationRemoteSessionIssuerUnsupportedMediaResponseBody(res *g
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerInvalidResponseBody builds the HTTP
-// response body from the result of the "deleteOrganizationRemoteSessionIssuer"
-// endpoint of the "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerInvalidResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody
-// builds the HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerDeletePreflightForbiddenResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody{
+func NewGetIssuerDeletePreflightForbiddenResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightForbiddenResponseBody {
+	body := &GetIssuerDeletePreflightForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2123,12 +5188,11 @@ func NewDeleteOrganizationRemoteSessionIssuerInvariantViolationResponseBody(res 
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody builds the
-// HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerDeletePreflightBadRequestResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody{
+func NewGetIssuerDeletePreflightBadRequestResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightBadRequestResponseBody {
+	body := &GetIssuerDeletePreflightBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2139,12 +5203,11 @@ func NewDeleteOrganizationRemoteSessionIssuerUnexpectedResponseBody(res *goa.Ser
 	return body
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// NewGetIssuerDeletePreflightNotFoundResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewDeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody {
-	body := &DeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody{
+func NewGetIssuerDeletePreflightNotFoundResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightNotFoundResponseBody {
+	body := &GetIssuerDeletePreflightNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2155,13 +5218,2355 @@ func NewDeleteOrganizationRemoteSessionIssuerGatewayErrorResponseBody(res *goa.S
 	return body
 }
 
-// NewCreateOrganizationRemoteSessionIssuerPayload builds a
-// organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer endpoint payload.
-func NewCreateOrganizationRemoteSessionIssuerPayload(body *CreateOrganizationRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload {
-	v := &organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload{
+// NewGetIssuerDeletePreflightConflictResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightConflictResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightConflictResponseBody {
+	body := &GetIssuerDeletePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerDeletePreflightUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getIssuerDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightUnsupportedMediaResponseBody {
+	body := &GetIssuerDeletePreflightUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerDeletePreflightInvalidResponseBody builds the HTTP response body
+// from the result of the "getIssuerDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightInvalidResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightInvalidResponseBody {
+	body := &GetIssuerDeletePreflightInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerDeletePreflightInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getIssuerDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightInvariantViolationResponseBody {
+	body := &GetIssuerDeletePreflightInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerDeletePreflightUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightUnexpectedResponseBody {
+	body := &GetIssuerDeletePreflightUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerDeletePreflightGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getIssuerDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerDeletePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetIssuerDeletePreflightGatewayErrorResponseBody {
+	body := &GetIssuerDeletePreflightGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateIssuerUnauthorizedResponseBody {
+	body := &UpdateIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerForbiddenResponseBody(res *goa.ServiceError) *UpdateIssuerForbiddenResponseBody {
+	body := &UpdateIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerBadRequestResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerBadRequestResponseBody(res *goa.ServiceError) *UpdateIssuerBadRequestResponseBody {
+	body := &UpdateIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerNotFoundResponseBody(res *goa.ServiceError) *UpdateIssuerNotFoundResponseBody {
+	body := &UpdateIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerConflictResponseBody(res *goa.ServiceError) *UpdateIssuerConflictResponseBody {
+	body := &UpdateIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateIssuerUnsupportedMediaResponseBody {
+	body := &UpdateIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerInvalidResponseBody(res *goa.ServiceError) *UpdateIssuerInvalidResponseBody {
+	body := &UpdateIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateIssuerInvariantViolationResponseBody {
+	body := &UpdateIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerUnexpectedResponseBody(res *goa.ServiceError) *UpdateIssuerUnexpectedResponseBody {
+	body := &UpdateIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateIssuerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateIssuerGatewayErrorResponseBody {
+	body := &UpdateIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteIssuerUnauthorizedResponseBody {
+	body := &DeleteIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerForbiddenResponseBody(res *goa.ServiceError) *DeleteIssuerForbiddenResponseBody {
+	body := &DeleteIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerBadRequestResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerBadRequestResponseBody(res *goa.ServiceError) *DeleteIssuerBadRequestResponseBody {
+	body := &DeleteIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerNotFoundResponseBody(res *goa.ServiceError) *DeleteIssuerNotFoundResponseBody {
+	body := &DeleteIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerConflictResponseBody(res *goa.ServiceError) *DeleteIssuerConflictResponseBody {
+	body := &DeleteIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteIssuerUnsupportedMediaResponseBody {
+	body := &DeleteIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerInvalidResponseBody(res *goa.ServiceError) *DeleteIssuerInvalidResponseBody {
+	body := &DeleteIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerInvariantViolationResponseBody(res *goa.ServiceError) *DeleteIssuerInvariantViolationResponseBody {
+	body := &DeleteIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerUnexpectedResponseBody(res *goa.ServiceError) *DeleteIssuerUnexpectedResponseBody {
+	body := &DeleteIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteIssuerGatewayErrorResponseBody {
+	body := &DeleteIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerUnauthorizedResponseBody(res *goa.ServiceError) *MoveIssuerUnauthorizedResponseBody {
+	body := &MoveIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerForbiddenResponseBody(res *goa.ServiceError) *MoveIssuerForbiddenResponseBody {
+	body := &MoveIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerBadRequestResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerBadRequestResponseBody(res *goa.ServiceError) *MoveIssuerBadRequestResponseBody {
+	body := &MoveIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerNotFoundResponseBody(res *goa.ServiceError) *MoveIssuerNotFoundResponseBody {
+	body := &MoveIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerConflictResponseBody(res *goa.ServiceError) *MoveIssuerConflictResponseBody {
+	body := &MoveIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *MoveIssuerUnsupportedMediaResponseBody {
+	body := &MoveIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerInvalidResponseBody(res *goa.ServiceError) *MoveIssuerInvalidResponseBody {
+	body := &MoveIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerInvariantViolationResponseBody(res *goa.ServiceError) *MoveIssuerInvariantViolationResponseBody {
+	body := &MoveIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerUnexpectedResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerUnexpectedResponseBody(res *goa.ServiceError) *MoveIssuerUnexpectedResponseBody {
+	body := &MoveIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveIssuerGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMoveIssuerGatewayErrorResponseBody(res *goa.ServiceError) *MoveIssuerGatewayErrorResponseBody {
+	body := &MoveIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsUnauthorizedResponseBody(res *goa.ServiceError) *ListClientsUnauthorizedResponseBody {
+	body := &ListClientsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsForbiddenResponseBody(res *goa.ServiceError) *ListClientsForbiddenResponseBody {
+	body := &ListClientsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsBadRequestResponseBody(res *goa.ServiceError) *ListClientsBadRequestResponseBody {
+	body := &ListClientsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsNotFoundResponseBody(res *goa.ServiceError) *ListClientsNotFoundResponseBody {
+	body := &ListClientsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsConflictResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsConflictResponseBody(res *goa.ServiceError) *ListClientsConflictResponseBody {
+	body := &ListClientsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientsUnsupportedMediaResponseBody {
+	body := &ListClientsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsInvalidResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsInvalidResponseBody(res *goa.ServiceError) *ListClientsInvalidResponseBody {
+	body := &ListClientsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsInvariantViolationResponseBody(res *goa.ServiceError) *ListClientsInvariantViolationResponseBody {
+	body := &ListClientsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsUnexpectedResponseBody(res *goa.ServiceError) *ListClientsUnexpectedResponseBody {
+	body := &ListClientsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientsGatewayErrorResponseBody(res *goa.ServiceError) *ListClientsGatewayErrorResponseBody {
+	body := &ListClientsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientUnauthorizedResponseBody(res *goa.ServiceError) *GetClientUnauthorizedResponseBody {
+	body := &GetClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientForbiddenResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientForbiddenResponseBody(res *goa.ServiceError) *GetClientForbiddenResponseBody {
+	body := &GetClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientBadRequestResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientBadRequestResponseBody(res *goa.ServiceError) *GetClientBadRequestResponseBody {
+	body := &GetClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientNotFoundResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientNotFoundResponseBody(res *goa.ServiceError) *GetClientNotFoundResponseBody {
+	body := &GetClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientConflictResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientConflictResponseBody(res *goa.ServiceError) *GetClientConflictResponseBody {
+	body := &GetClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClientUnsupportedMediaResponseBody {
+	body := &GetClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientInvalidResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientInvalidResponseBody(res *goa.ServiceError) *GetClientInvalidResponseBody {
+	body := &GetClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientInvariantViolationResponseBody(res *goa.ServiceError) *GetClientInvariantViolationResponseBody {
+	body := &GetClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientUnexpectedResponseBody(res *goa.ServiceError) *GetClientUnexpectedResponseBody {
+	body := &GetClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewGetClientGatewayErrorResponseBody(res *goa.ServiceError) *GetClientGatewayErrorResponseBody {
+	body := &GetClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnauthorizedResponseBody {
+	body := &GetClientDeletePreflightUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightForbiddenResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightForbiddenResponseBody(res *goa.ServiceError) *GetClientDeletePreflightForbiddenResponseBody {
+	body := &GetClientDeletePreflightForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightBadRequestResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightBadRequestResponseBody(res *goa.ServiceError) *GetClientDeletePreflightBadRequestResponseBody {
+	body := &GetClientDeletePreflightBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightNotFoundResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightNotFoundResponseBody(res *goa.ServiceError) *GetClientDeletePreflightNotFoundResponseBody {
+	body := &GetClientDeletePreflightNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightConflictResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightConflictResponseBody(res *goa.ServiceError) *GetClientDeletePreflightConflictResponseBody {
+	body := &GetClientDeletePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getClientDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnsupportedMediaResponseBody {
+	body := &GetClientDeletePreflightUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightInvalidResponseBody builds the HTTP response body
+// from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightInvalidResponseBody(res *goa.ServiceError) *GetClientDeletePreflightInvalidResponseBody {
+	body := &GetClientDeletePreflightInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getClientDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetClientDeletePreflightInvariantViolationResponseBody {
+	body := &GetClientDeletePreflightInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnexpectedResponseBody {
+	body := &GetClientDeletePreflightUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDeletePreflightGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getClientDeletePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetClientDeletePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetClientDeletePreflightGatewayErrorResponseBody {
+	body := &GetClientDeletePreflightGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *ListClientMcpServersUnauthorizedResponseBody {
+	body := &ListClientMcpServersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersForbiddenResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersForbiddenResponseBody(res *goa.ServiceError) *ListClientMcpServersForbiddenResponseBody {
+	body := &ListClientMcpServersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersBadRequestResponseBody(res *goa.ServiceError) *ListClientMcpServersBadRequestResponseBody {
+	body := &ListClientMcpServersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersNotFoundResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersNotFoundResponseBody(res *goa.ServiceError) *ListClientMcpServersNotFoundResponseBody {
+	body := &ListClientMcpServersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersConflictResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersConflictResponseBody(res *goa.ServiceError) *ListClientMcpServersConflictResponseBody {
+	body := &ListClientMcpServersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientMcpServersUnsupportedMediaResponseBody {
+	body := &ListClientMcpServersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersInvalidResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersInvalidResponseBody(res *goa.ServiceError) *ListClientMcpServersInvalidResponseBody {
+	body := &ListClientMcpServersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *ListClientMcpServersInvariantViolationResponseBody {
+	body := &ListClientMcpServersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListClientMcpServersUnexpectedResponseBody {
+	body := &ListClientMcpServersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientMcpServersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListClientMcpServersGatewayErrorResponseBody {
+	body := &ListClientMcpServersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsUnauthorizedResponseBody(res *goa.ServiceError) *ListClientSessionsUnauthorizedResponseBody {
+	body := &ListClientSessionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsForbiddenResponseBody(res *goa.ServiceError) *ListClientSessionsForbiddenResponseBody {
+	body := &ListClientSessionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsBadRequestResponseBody(res *goa.ServiceError) *ListClientSessionsBadRequestResponseBody {
+	body := &ListClientSessionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsNotFoundResponseBody(res *goa.ServiceError) *ListClientSessionsNotFoundResponseBody {
+	body := &ListClientSessionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsConflictResponseBody builds the HTTP response body from
+// the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsConflictResponseBody(res *goa.ServiceError) *ListClientSessionsConflictResponseBody {
+	body := &ListClientSessionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientSessionsUnsupportedMediaResponseBody {
+	body := &ListClientSessionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsInvalidResponseBody builds the HTTP response body from
+// the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsInvalidResponseBody(res *goa.ServiceError) *ListClientSessionsInvalidResponseBody {
+	body := &ListClientSessionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsInvariantViolationResponseBody(res *goa.ServiceError) *ListClientSessionsInvariantViolationResponseBody {
+	body := &ListClientSessionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListClientSessionsUnexpectedResponseBody {
+	body := &ListClientSessionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListClientSessionsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListClientSessionsGatewayErrorResponseBody {
+	body := &ListClientSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateClientUnauthorizedResponseBody {
+	body := &CreateClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientForbiddenResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientForbiddenResponseBody(res *goa.ServiceError) *CreateClientForbiddenResponseBody {
+	body := &CreateClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientBadRequestResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientBadRequestResponseBody(res *goa.ServiceError) *CreateClientBadRequestResponseBody {
+	body := &CreateClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientNotFoundResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientNotFoundResponseBody(res *goa.ServiceError) *CreateClientNotFoundResponseBody {
+	body := &CreateClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientConflictResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientConflictResponseBody(res *goa.ServiceError) *CreateClientConflictResponseBody {
+	body := &CreateClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateClientUnsupportedMediaResponseBody {
+	body := &CreateClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientInvalidResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientInvalidResponseBody(res *goa.ServiceError) *CreateClientInvalidResponseBody {
+	body := &CreateClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateClientInvariantViolationResponseBody {
+	body := &CreateClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientUnexpectedResponseBody builds the HTTP response body from the
+// result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientUnexpectedResponseBody(res *goa.ServiceError) *CreateClientUnexpectedResponseBody {
+	body := &CreateClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateClientGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateClientGatewayErrorResponseBody {
+	body := &CreateClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientUnauthorizedResponseBody(res *goa.ServiceError) *UpdateClientUnauthorizedResponseBody {
+	body := &UpdateClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientForbiddenResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientForbiddenResponseBody(res *goa.ServiceError) *UpdateClientForbiddenResponseBody {
+	body := &UpdateClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientBadRequestResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientBadRequestResponseBody(res *goa.ServiceError) *UpdateClientBadRequestResponseBody {
+	body := &UpdateClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientNotFoundResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientNotFoundResponseBody(res *goa.ServiceError) *UpdateClientNotFoundResponseBody {
+	body := &UpdateClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientConflictResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientConflictResponseBody(res *goa.ServiceError) *UpdateClientConflictResponseBody {
+	body := &UpdateClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateClientUnsupportedMediaResponseBody {
+	body := &UpdateClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientInvalidResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientInvalidResponseBody(res *goa.ServiceError) *UpdateClientInvalidResponseBody {
+	body := &UpdateClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientInvariantViolationResponseBody(res *goa.ServiceError) *UpdateClientInvariantViolationResponseBody {
+	body := &UpdateClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientUnexpectedResponseBody builds the HTTP response body from the
+// result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientUnexpectedResponseBody(res *goa.ServiceError) *UpdateClientUnexpectedResponseBody {
+	body := &UpdateClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateClientGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewUpdateClientGatewayErrorResponseBody(res *goa.ServiceError) *UpdateClientGatewayErrorResponseBody {
+	body := &UpdateClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientUnauthorizedResponseBody(res *goa.ServiceError) *DeleteClientUnauthorizedResponseBody {
+	body := &DeleteClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientForbiddenResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientForbiddenResponseBody(res *goa.ServiceError) *DeleteClientForbiddenResponseBody {
+	body := &DeleteClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientBadRequestResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientBadRequestResponseBody(res *goa.ServiceError) *DeleteClientBadRequestResponseBody {
+	body := &DeleteClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientNotFoundResponseBody(res *goa.ServiceError) *DeleteClientNotFoundResponseBody {
+	body := &DeleteClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientConflictResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientConflictResponseBody(res *goa.ServiceError) *DeleteClientConflictResponseBody {
+	body := &DeleteClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteClientUnsupportedMediaResponseBody {
+	body := &DeleteClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientInvalidResponseBody(res *goa.ServiceError) *DeleteClientInvalidResponseBody {
+	body := &DeleteClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientInvariantViolationResponseBody(res *goa.ServiceError) *DeleteClientInvariantViolationResponseBody {
+	body := &DeleteClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientUnexpectedResponseBody builds the HTTP response body from the
+// result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientUnexpectedResponseBody(res *goa.ServiceError) *DeleteClientUnexpectedResponseBody {
+	body := &DeleteClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteClientGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewDeleteClientGatewayErrorResponseBody(res *goa.ServiceError) *DeleteClientGatewayErrorResponseBody {
+	body := &DeleteClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "removeClientFromMcpServer" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnauthorizedResponseBody {
+	body := &RemoveClientFromMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerForbiddenResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerForbiddenResponseBody {
+	body := &RemoveClientFromMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerBadRequestResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerBadRequestResponseBody {
+	body := &RemoveClientFromMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerNotFoundResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerNotFoundResponseBody {
+	body := &RemoveClientFromMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerConflictResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerConflictResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerConflictResponseBody {
+	body := &RemoveClientFromMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "removeClientFromMcpServer" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnsupportedMediaResponseBody {
+	body := &RemoveClientFromMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerInvalidResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerInvalidResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerInvalidResponseBody {
+	body := &RemoveClientFromMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "removeClientFromMcpServer" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerInvariantViolationResponseBody {
+	body := &RemoveClientFromMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "removeClientFromMcpServer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerUnexpectedResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnexpectedResponseBody {
+	body := &RemoveClientFromMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveClientFromMcpServerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "removeClientFromMcpServer" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRemoveClientFromMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerGatewayErrorResponseBody {
+	body := &RemoveClientFromMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionUnauthorizedResponseBody(res *goa.ServiceError) *RevokeSessionUnauthorizedResponseBody {
+	body := &RevokeSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionForbiddenResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionForbiddenResponseBody(res *goa.ServiceError) *RevokeSessionForbiddenResponseBody {
+	body := &RevokeSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionBadRequestResponseBody(res *goa.ServiceError) *RevokeSessionBadRequestResponseBody {
+	body := &RevokeSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionNotFoundResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionNotFoundResponseBody(res *goa.ServiceError) *RevokeSessionNotFoundResponseBody {
+	body := &RevokeSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionConflictResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionConflictResponseBody(res *goa.ServiceError) *RevokeSessionConflictResponseBody {
+	body := &RevokeSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeSessionUnsupportedMediaResponseBody {
+	body := &RevokeSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionInvalidResponseBody(res *goa.ServiceError) *RevokeSessionInvalidResponseBody {
+	body := &RevokeSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionInvariantViolationResponseBody(res *goa.ServiceError) *RevokeSessionInvariantViolationResponseBody {
+	body := &RevokeSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionUnexpectedResponseBody(res *goa.ServiceError) *RevokeSessionUnexpectedResponseBody {
+	body := &RevokeSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeSessionGatewayErrorResponseBody(res *goa.ServiceError) *RevokeSessionGatewayErrorResponseBody {
+	body := &RevokeSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnauthorizedResponseBody(res *goa.ServiceError) *RefreshSessionUnauthorizedResponseBody {
+	body := &RefreshSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionForbiddenResponseBody(res *goa.ServiceError) *RefreshSessionForbiddenResponseBody {
+	body := &RefreshSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionBadRequestResponseBody(res *goa.ServiceError) *RefreshSessionBadRequestResponseBody {
+	body := &RefreshSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionNotFoundResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionNotFoundResponseBody(res *goa.ServiceError) *RefreshSessionNotFoundResponseBody {
+	body := &RefreshSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionConflictResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionConflictResponseBody(res *goa.ServiceError) *RefreshSessionConflictResponseBody {
+	body := &RefreshSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshSessionUnsupportedMediaResponseBody {
+	body := &RefreshSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionInvalidResponseBody(res *goa.ServiceError) *RefreshSessionInvalidResponseBody {
+	body := &RefreshSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionInvariantViolationResponseBody(res *goa.ServiceError) *RefreshSessionInvariantViolationResponseBody {
+	body := &RefreshSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnexpectedResponseBody(res *goa.ServiceError) *RefreshSessionUnexpectedResponseBody {
+	body := &RefreshSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionGatewayErrorResponseBody(res *goa.ServiceError) *RefreshSessionGatewayErrorResponseBody {
+	body := &RefreshSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsUnauthorizedResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnauthorizedResponseBody {
+	body := &RevokeAllClientSessionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsForbiddenResponseBody builds the HTTP response
+// body from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsForbiddenResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsForbiddenResponseBody {
+	body := &RevokeAllClientSessionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsBadRequestResponseBody builds the HTTP response
+// body from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsBadRequestResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsBadRequestResponseBody {
+	body := &RevokeAllClientSessionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsNotFoundResponseBody builds the HTTP response body
+// from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsNotFoundResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsNotFoundResponseBody {
+	body := &RevokeAllClientSessionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsConflictResponseBody builds the HTTP response body
+// from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsConflictResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsConflictResponseBody {
+	body := &RevokeAllClientSessionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "revokeAllClientSessions" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnsupportedMediaResponseBody {
+	body := &RevokeAllClientSessionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsInvalidResponseBody builds the HTTP response body
+// from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsInvalidResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsInvalidResponseBody {
+	body := &RevokeAllClientSessionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "revokeAllClientSessions" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsInvariantViolationResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsInvariantViolationResponseBody {
+	body := &RevokeAllClientSessionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsUnexpectedResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnexpectedResponseBody {
+	body := &RevokeAllClientSessionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeAllClientSessionsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRevokeAllClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsGatewayErrorResponseBody {
+	body := &RevokeAllClientSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateIssuerPayload builds a organizationRemoteSessionIssuers service
+// createIssuer endpoint payload.
+func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateIssuerPayload {
+	v := &organizationremotesessionissuers.CreateIssuerPayload{
+		ProjectID:             body.ProjectID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -2199,56 +7604,10 @@ func NewCreateOrganizationRemoteSessionIssuerPayload(body *CreateOrganizationRem
 	return v
 }
 
-// NewUpdateOrganizationRemoteSessionIssuerPayload builds a
-// organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer endpoint payload.
-func NewUpdateOrganizationRemoteSessionIssuerPayload(body *UpdateOrganizationRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.UpdateOrganizationRemoteSessionIssuerPayload {
-	v := &organizationremotesessionissuers.UpdateOrganizationRemoteSessionIssuerPayload{
-		ID:                    *body.ID,
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
-	}
-	if body.ScopesSupported != nil {
-		v.ScopesSupported = make([]string, len(body.ScopesSupported))
-		for i, val := range body.ScopesSupported {
-			v.ScopesSupported[i] = val
-		}
-	}
-	if body.GrantTypesSupported != nil {
-		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
-		for i, val := range body.GrantTypesSupported {
-			v.GrantTypesSupported[i] = val
-		}
-	}
-	if body.ResponseTypesSupported != nil {
-		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
-		for i, val := range body.ResponseTypesSupported {
-			v.ResponseTypesSupported[i] = val
-		}
-	}
-	if body.TokenEndpointAuthMethodsSupported != nil {
-		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
-		for i, val := range body.TokenEndpointAuthMethodsSupported {
-			v.TokenEndpointAuthMethodsSupported[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewListOrganizationRemoteSessionIssuersPayload builds a
-// organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers endpoint payload.
-func NewListOrganizationRemoteSessionIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersPayload {
-	v := &organizationremotesessionissuers.ListOrganizationRemoteSessionIssuersPayload{}
+// NewListIssuersPayload builds a organizationRemoteSessionIssuers service
+// listIssuers endpoint payload.
+func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListIssuersPayload {
+	v := &organizationremotesessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
@@ -2257,11 +7616,10 @@ func NewListOrganizationRemoteSessionIssuersPayload(cursor *string, limit *int, 
 	return v
 }
 
-// NewGetOrganizationRemoteSessionIssuerPayload builds a
-// organizationRemoteSessionIssuers service getOrganizationRemoteSessionIssuer
-// endpoint payload.
-func NewGetOrganizationRemoteSessionIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetOrganizationRemoteSessionIssuerPayload {
-	v := &organizationremotesessionissuers.GetOrganizationRemoteSessionIssuerPayload{}
+// NewGetIssuerPayload builds a organizationRemoteSessionIssuers service
+// getIssuer endpoint payload.
+func NewGetIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetIssuerPayload {
+	v := &organizationremotesessionissuers.GetIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2269,11 +7627,10 @@ func NewGetOrganizationRemoteSessionIssuerPayload(id string, sessionToken *strin
 	return v
 }
 
-// NewDeleteOrganizationRemoteSessionIssuerPayload builds a
-// organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer endpoint payload.
-func NewDeleteOrganizationRemoteSessionIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.DeleteOrganizationRemoteSessionIssuerPayload {
-	v := &organizationremotesessionissuers.DeleteOrganizationRemoteSessionIssuerPayload{}
+// NewGetIssuerDeletePreflightPayload builds a organizationRemoteSessionIssuers
+// service getIssuerDeletePreflight endpoint payload.
+func NewGetIssuerDeletePreflightPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetIssuerDeletePreflightPayload {
+	v := &organizationremotesessionissuers.GetIssuerDeletePreflightPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2281,26 +7638,406 @@ func NewDeleteOrganizationRemoteSessionIssuerPayload(id string, sessionToken *st
 	return v
 }
 
-// ValidateCreateOrganizationRemoteSessionIssuerRequestBody runs the
-// validations defined on CreateOrganizationRemoteSessionIssuerRequestBody
-func ValidateCreateOrganizationRemoteSessionIssuerRequestBody(body *CreateOrganizationRemoteSessionIssuerRequestBody) (err error) {
+// NewUpdateIssuerPayload builds a organizationRemoteSessionIssuers service
+// updateIssuer endpoint payload.
+func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.UpdateIssuerPayload {
+	v := &organizationremotesessionissuers.UpdateIssuerPayload{
+		ID:                    *body.ID,
+		Slug:                  body.Slug,
+		Issuer:                body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
+		AuthorizationEndpoint: body.AuthorizationEndpoint,
+		TokenEndpoint:         body.TokenEndpoint,
+		RegistrationEndpoint:  body.RegistrationEndpoint,
+		JwksURI:               body.JwksURI,
+		Oidc:                  body.Oidc,
+		Passthrough:           body.Passthrough,
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.GrantTypesSupported != nil {
+		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
+		for i, val := range body.GrantTypesSupported {
+			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.ResponseTypesSupported != nil {
+		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
+		for i, val := range body.ResponseTypesSupported {
+			v.ResponseTypesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewDeleteIssuerPayload builds a organizationRemoteSessionIssuers service
+// deleteIssuer endpoint payload.
+func NewDeleteIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.DeleteIssuerPayload {
+	v := &organizationremotesessionissuers.DeleteIssuerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewMoveIssuerPayload builds a organizationRemoteSessionIssuers service
+// moveIssuer endpoint payload.
+func NewMoveIssuerPayload(body *MoveIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.MoveIssuerPayload {
+	v := &organizationremotesessionissuers.MoveIssuerPayload{
+		ID:        *body.ID,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListClientsPayload builds a organizationRemoteSessionIssuers service
+// listClients endpoint payload.
+func NewListClientsPayload(issuerID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientsPayload {
+	v := &organizationremotesessionissuers.ListClientsPayload{}
+	v.IssuerID = issuerID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewGetClientPayload builds a organizationRemoteSessionIssuers service
+// getClient endpoint payload.
+func NewGetClientPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetClientPayload {
+	v := &organizationremotesessionissuers.GetClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewGetClientDeletePreflightPayload builds a organizationRemoteSessionIssuers
+// service getClientDeletePreflight endpoint payload.
+func NewGetClientDeletePreflightPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetClientDeletePreflightPayload {
+	v := &organizationremotesessionissuers.GetClientDeletePreflightPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListClientMcpServersPayload builds a organizationRemoteSessionIssuers
+// service listClientMcpServers endpoint payload.
+func NewListClientMcpServersPayload(clientID string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientMcpServersPayload {
+	v := &organizationremotesessionissuers.ListClientMcpServersPayload{}
+	v.ClientID = clientID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListClientSessionsPayload builds a organizationRemoteSessionIssuers
+// service listClientSessions endpoint payload.
+func NewListClientSessionsPayload(clientID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientSessionsPayload {
+	v := &organizationremotesessionissuers.ListClientSessionsPayload{}
+	v.ClientID = clientID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewCreateClientPayload builds a organizationRemoteSessionIssuers service
+// createClient endpoint payload.
+func NewCreateClientPayload(body *CreateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateClientPayload {
+	v := &organizationremotesessionissuers.CreateClientPayload{
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ProjectID:               body.ProjectID,
+		ClientID:                *body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewUpdateClientPayload builds a organizationRemoteSessionIssuers service
+// updateClient endpoint payload.
+func NewUpdateClientPayload(body *UpdateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.UpdateClientPayload {
+	v := &organizationremotesessionissuers.UpdateClientPayload{
+		ID:                      *body.ID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewDeleteClientPayload builds a organizationRemoteSessionIssuers service
+// deleteClient endpoint payload.
+func NewDeleteClientPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.DeleteClientPayload {
+	v := &organizationremotesessionissuers.DeleteClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewRemoveClientFromMcpServerPayload builds a
+// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// payload.
+func NewRemoveClientFromMcpServerPayload(body *RemoveClientFromMcpServerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RemoveClientFromMcpServerPayload {
+	v := &organizationremotesessionissuers.RemoveClientFromMcpServerPayload{
+		ClientID:    *body.ClientID,
+		McpServerID: *body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewRevokeSessionPayload builds a organizationRemoteSessionIssuers service
+// revokeSession endpoint payload.
+func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RevokeSessionPayload {
+	v := &organizationremotesessionissuers.RevokeSessionPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewRefreshSessionPayload builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint payload.
+func NewRefreshSessionPayload(body *RefreshSessionRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RefreshSessionPayload {
+	v := &organizationremotesessionissuers.RefreshSessionPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewRevokeAllClientSessionsPayload builds a organizationRemoteSessionIssuers
+// service revokeAllClientSessions endpoint payload.
+func NewRevokeAllClientSessionsPayload(body *RevokeAllClientSessionsRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RevokeAllClientSessionsPayload {
+	v := &organizationremotesessionissuers.RevokeAllClientSessionsPayload{
+		ClientID: *body.ClientID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// ValidateCreateIssuerRequestBody runs the validations defined on
+// CreateIssuerRequestBody
+func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) {
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
 	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
 	return
 }
 
-// ValidateUpdateOrganizationRemoteSessionIssuerRequestBody runs the
-// validations defined on UpdateOrganizationRemoteSessionIssuerRequestBody
-func ValidateUpdateOrganizationRemoteSessionIssuerRequestBody(body *UpdateOrganizationRemoteSessionIssuerRequestBody) (err error) {
+// ValidateUpdateIssuerRequestBody runs the validations defined on
+// UpdateIssuerRequestBody
+func ValidateUpdateIssuerRequestBody(body *UpdateIssuerRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateMoveIssuerRequestBody runs the validations defined on
+// MoveIssuerRequestBody
+func ValidateMoveIssuerRequestBody(body *MoveIssuerRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateClientRequestBody runs the validations defined on
+// CreateClientRequestBody
+func ValidateCreateClientRequestBody(body *CreateClientRequestBody) (err error) {
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
+	return
+}
+
+// ValidateUpdateClientRequestBody runs the validations defined on
+// UpdateClientRequestBody
+func ValidateUpdateClientRequestBody(body *UpdateClientRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
+	return
+}
+
+// ValidateRemoveClientFromMcpServerRequestBody runs the validations defined on
+// RemoveClientFromMcpServerRequestBody
+func ValidateRemoveClientFromMcpServerRequestBody(body *RemoveClientFromMcpServerRequestBody) (err error) {
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRevokeSessionRequestBody runs the validations defined on
+// RevokeSessionRequestBody
+func ValidateRevokeSessionRequestBody(body *RevokeSessionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRefreshSessionRequestBody runs the validations defined on
+// RefreshSessionRequestBody
+func ValidateRefreshSessionRequestBody(body *RefreshSessionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRevokeAllClientSessionsRequestBody runs the validations defined on
+// RevokeAllClientSessionsRequestBody
+func ValidateRevokeAllClientSessionsRequestBody(body *RevokeAllClientSessionsRequestBody) (err error) {
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
 	}
 	return
 }

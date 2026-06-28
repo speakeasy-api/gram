@@ -1,6 +1,9 @@
-import { InsightsConfig } from "@/components/insights-sidebar";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -10,17 +13,31 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SearchBar } from "@/components/ui/search-bar";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  OnboardingStepper,
+  type Step,
+} from "@/pages/setup/components/onboarding-stepper";
+import { useInsightsState } from "@/components/insights-context";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
+import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import {
   Badge,
   Button,
@@ -34,31 +51,52 @@ import {
 } from "@speakeasy-api/moonshine";
 import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
 import {
+  ArrowLeft,
   Plus,
   Shield,
   Ellipsis,
+  Info,
   Loader2,
   ChevronRight,
   RefreshCw,
+  Sparkles,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  type ReactNode,
+} from "react";
+import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
+  useMembers,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesUpdateMutation,
+  useRoles,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
   POLICY_MESSAGE_TYPE_META,
+  RULE_FAMILY_OF,
+  RULE_FAMILY_ORDER,
+  type DetectionRule,
   type RuleCategory,
   type PolicyAction,
   type PolicyMessageType,
@@ -66,6 +104,10 @@ import {
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import { useDetectionRulesStore } from "./detection-rules-data";
+import { CelExpressionField } from "./cel-field";
+import { useCelStatus } from "./use-cel-status";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -103,6 +145,436 @@ const ALL_CATEGORIES: RuleCategory[] = [
 const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
+]);
+
+/** Steps in the guided standard-policy creation/edit flow. Mirrors the
+ *  enterprise onboarding wizard (left rail + paged content). */
+const POLICY_WIZARD_STEPS: Step[] = [
+  {
+    id: "detect",
+    title: "Detect",
+    description: "What to scan for",
+    badge: "Required",
+  },
+  {
+    id: "scope",
+    title: "Scope",
+    description: "Where it applies",
+    badge: "Optional",
+  },
+  {
+    id: "action",
+    title: "Action",
+    description: "What happens on a match",
+    badge: "Required",
+  },
+  { id: "review", title: "Review", description: "Name & enable" },
+];
+
+/** Prompt-policy flow: same staged shell, but step 0 is the guardrail prompt
+ *  (+ advanced judge config) instead of detectors. */
+const PROMPT_WIZARD_STEPS: Step[] = [
+  {
+    id: "guardrail",
+    title: "Guardrail",
+    description: "What to catch, in plain language",
+    badge: "Required",
+  },
+  POLICY_WIZARD_STEPS[1]!,
+  POLICY_WIZARD_STEPS[2]!,
+  POLICY_WIZARD_STEPS[3]!,
+];
+
+/** Shared wizard chrome: the left step rail + the paged content column. The
+ *  footer (Back/Continue/Create) lives in the page shell, driven by the parent. */
+function WizardShell({
+  steps,
+  currentStep,
+  setCurrentStep,
+  children,
+}: {
+  steps: Step[];
+  currentStep: number;
+  setCurrentStep: (v: number) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-8">
+      <div className="w-44 flex-shrink-0">
+        <OnboardingStepper
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={(i) => setCurrentStep(i)}
+          allowJumpAhead
+        />
+      </div>
+      <div className="min-w-0 flex-1 space-y-6">{children}</div>
+    </div>
+  );
+}
+
+function WizardStepHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  );
+}
+
+function SummaryRow({ label, chips }: { label: string; chips: string[] }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex flex-wrap justify-end gap-1">
+        {chips.map((chip) => (
+          <span
+            key={chip}
+            className="bg-muted rounded-full px-2 py-0.5 text-xs"
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Built-in detector categories that only produce findings when Speakeasy hooks
+ *  are installed on the agent (no rule list to customize). */
+const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
+  "shadow_mcp",
+  "destructive_tool",
+]);
+
+/** Built-in detectors that run at the category level and have no individual
+ *  sub-rules in DETECTION_RULES (their rule list is intentionally empty).
+ *  Selecting one of these is enough to enable the policy on its own. */
+const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
+  "prompt_injection",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+]);
+
+/** One built-in detector as a toggleable card (Detect step). "Customize" opens
+ *  a side-sheet to pick which rules in the category are active. */
+function DetectorCard({
+  category,
+  selected,
+  disabledRules,
+  onToggle,
+  onCustomize,
+}: {
+  category: RuleCategory;
+  selected: boolean;
+  disabledRules: Set<string>;
+  onToggle: (checked: boolean) => void;
+  onCustomize: () => void;
+}) {
+  const meta = RULE_CATEGORY_META[category];
+  const available = AVAILABLE_CATEGORIES.has(category);
+  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
+  const customizable = available && rules.length > 1;
+  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
+  const customized = selected && enabledCount < rules.length;
+  const needsHook = HOOK_REQUIRED_CATEGORIES.has(category);
+  return (
+    <div
+      className={cn(
+        "flex gap-3 rounded-lg border p-3 transition-colors",
+        selected ? "border-foreground bg-muted/40" : "border-border",
+      )}
+    >
+      <Icon
+        name={meta.icon as IconName}
+        className="text-muted-foreground mt-0.5 size-5 shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{meta.label}</span>
+          {!available && (
+            <Badge variant="neutral">
+              <Badge.Text>Coming soon</Badge.Text>
+            </Badge>
+          )}
+        </div>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          {meta.description}
+        </p>
+        <div className="mt-2 flex items-center gap-3 text-xs">
+          {needsHook ? (
+            <span className="text-warning">Requires Speakeasy hooks</span>
+          ) : (
+            rules.length > 0 && (
+              <span
+                className={cn(
+                  "bg-muted rounded-full px-2 py-0.5",
+                  customized ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {customized
+                  ? `${enabledCount} of ${rules.length} rules`
+                  : `${rules.length} rules`}
+              </span>
+            )
+          )}
+          {selected && customizable && (
+            <button
+              type="button"
+              onClick={onCustomize}
+              className="text-primary hover:underline"
+            >
+              Customize
+            </button>
+          )}
+        </div>
+      </div>
+      <Switch
+        checked={selected}
+        disabled={!available}
+        onCheckedChange={onToggle}
+      />
+    </div>
+  );
+}
+
+/** Side-sheet to pick which rules within a built-in detector category are
+ *  active. Disabling a rule adds its canonical rule_id to the policy's
+ *  disabled_rules; a search box tames the large categories (e.g. 222 secrets). */
+function CustomizeRulesSheet({
+  category,
+  selectedCategories,
+  setSelectedCategories,
+  disabledRules,
+  setDisabledRules,
+  onClose,
+}: {
+  category: RuleCategory;
+  selectedCategories: Set<RuleCategory>;
+  setSelectedCategories: (v: Set<RuleCategory>) => void;
+  disabledRules: Set<string>;
+  setDisabledRules: (v: Set<string>) => void;
+  onClose: () => void;
+}) {
+  const meta = RULE_CATEGORY_META[category];
+  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? rules.filter((r) => r.title.toLowerCase().includes(query))
+    : rules;
+  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
+
+  const setRule = (id: string, on: boolean) => {
+    const next = new Set(disabledRules);
+    if (on) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setDisabledRules(next);
+    if (on && !selectedCategories.has(category)) {
+      const cats = new Set(selectedCategories);
+      cats.add(category);
+      setSelectedCategories(cats);
+    }
+  };
+  const bulk = (on: boolean) => {
+    const next = new Set(disabledRules);
+    for (const r of rules) {
+      if (on) {
+        next.delete(r.id);
+      } else {
+        next.add(r.id);
+      }
+    }
+    setDisabledRules(next);
+  };
+
+  // Large categories (currently just secrets, ~200 rules) classify into named
+  // families so the list is navigable; everything else renders flat.
+  const grouper = RULE_FAMILY_OF[category];
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (family: string) => {
+    const next = new Set(expandedGroups);
+    if (next.has(family)) {
+      next.delete(family);
+    } else {
+      next.add(family);
+    }
+    setExpandedGroups(next);
+  };
+  const bulkGroup = (familyRules: DetectionRule[], on: boolean) => {
+    const next = new Set(disabledRules);
+    for (const r of familyRules) {
+      if (on) {
+        next.delete(r.id);
+      } else {
+        next.add(r.id);
+      }
+    }
+    setDisabledRules(next);
+    if (on && !selectedCategories.has(category)) {
+      const cats = new Set(selectedCategories);
+      cats.add(category);
+      setSelectedCategories(cats);
+    }
+  };
+  // Ordered, non-empty families over the (search-)filtered rules.
+  const groupedRules = grouper
+    ? RULE_FAMILY_ORDER.map((family) => ({
+        family,
+        rules: filtered.filter((r) => grouper(r) === family),
+      })).filter((g) => g.rules.length > 0)
+    : [];
+
+  return (
+    <Sheet
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <SheetContent side="right" className="flex flex-col p-0 sm:max-w-md">
+        <SheetHeader className="px-6 pt-6">
+          <SheetTitle>Customize {meta.label}</SheetTitle>
+          <SheetDescription>
+            Pick which rules in this category are active. All are on by default.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="px-6 pt-3">
+          <Input
+            value={search}
+            onChange={setSearch}
+            placeholder={`Search ${rules.length} ${meta.label.toLowerCase()} rules…`}
+          />
+        </div>
+        <div className="text-muted-foreground flex items-center justify-between px-6 py-2 text-xs">
+          <span>
+            {enabledCount} of {rules.length} active
+          </span>
+          <span className="flex gap-3">
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => bulk(true)}
+            >
+              Enable all
+            </button>
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => bulk(false)}
+            >
+              Disable all
+            </button>
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          {grouper
+            ? groupedRules.map(({ family, rules: familyRules }) => {
+                const open = expandedGroups.has(family) || query.length > 0;
+                const enabled = familyRules.filter(
+                  (r) => !disabledRules.has(r.id),
+                ).length;
+                return (
+                  <div
+                    key={family}
+                    className="border-border border-b last:border-b-0"
+                  >
+                    <div className="flex items-center gap-2 px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(family)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                            open && "rotate-90",
+                          )}
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {family}
+                        </span>
+                        <span className="text-muted-foreground shrink-0 text-xs">
+                          {enabled}/{familyRules.length}
+                        </span>
+                      </button>
+                      <Switch
+                        checked={enabled === familyRules.length}
+                        onCheckedChange={(on) => bulkGroup(familyRules, on)}
+                      />
+                    </div>
+                    {open && (
+                      <div className="pb-1 pl-4">
+                        {familyRules.map((rule) => (
+                          <RuleToggleRow
+                            key={rule.id}
+                            rule={rule}
+                            checked={!disabledRules.has(rule.id)}
+                            onToggle={(on) => setRule(rule.id, on)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            : filtered.map((rule) => (
+                <RuleToggleRow
+                  key={rule.id}
+                  rule={rule}
+                  checked={!disabledRules.has(rule.id)}
+                  onToggle={(on) => setRule(rule.id, on)}
+                />
+              ))}
+          {grouper && groupedRules.length === 0 && (
+            <p className="text-muted-foreground px-2 py-6 text-center text-xs">
+              No rules match.
+            </p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function RuleToggleRow({
+  rule,
+  checked,
+  onToggle,
+}: {
+  rule: DetectionRule;
+  checked: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  return (
+    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
+      <span className="min-w-0 truncate">{rule.title}</span>
+      <Switch checked={checked} onCheckedChange={onToggle} />
+    </div>
+  );
+}
+
+type PolicyKind = "risk" | "prompt";
+type PolicyAudienceType = "everyone" | "targeted";
+type PolicyAudienceChoice = "everyone" | "users" | "roles";
+
+type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
+
+const USER_SEARCH_RESULT_LIMIT = 10;
+
+const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
+  "tool_request",
+  "tool_response",
 ]);
 
 const ALL_POLICY_MESSAGE_TYPES = Object.keys(
@@ -147,9 +619,9 @@ function policyToCategories(
  *   per-rule allowlist applied post-scan for sources without entity-level
  *   query support (gitleaks). It also serves as a redundancy net for
  *   presidio in case of API drift.
- * - `promptInjectionRules` stays empty for backward compatibility — the
- *   detection engine (deberta classifier vs L0 regex) is chosen per-org
- *   via a feature flag, not by the policy author. */
+ * - `promptInjectionRules` stays empty for backward compatibility — whether
+ *   the L1 LLM judge runs on top of the L0 heuristics is chosen per-org via a
+ *   feature flag, not by the policy author. */
 function categoriesToPayload(
   cats: Set<RuleCategory>,
   disabledRules: Set<string>,
@@ -172,7 +644,9 @@ function categoriesToPayload(
         // serialized into the Presidio query just because their category is
         // selected. We only keep one if the policy being edited already
         // pinned it, so an edit round-trips without silently dropping it.
-        if (rule.hidden && !pinnedHidden.has(rule.id)) continue;
+        if ("hidden" in rule && rule.hidden && !pinnedHidden.has(rule.id)) {
+          continue;
+        }
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
@@ -205,6 +679,7 @@ function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
   for (const cat of PRESIDIO_CATEGORIES) {
     for (const rule of DETECTION_RULES[cat]) {
       if (
+        "hidden" in rule &&
         rule.hidden &&
         presidioEntities.includes(ruleIdToPresidioEntity(rule.id))
       ) {
@@ -255,6 +730,93 @@ function policyMessageTypesForDisplay(
   return [...policyMessageTypesForForm(messageTypes)];
 }
 
+function policyAudienceSummary(row: PolicyRow): string {
+  if (row.kind === "prompt") {
+    return "Everyone";
+  }
+  if (row.policy.audienceType !== "targeted") {
+    return "Everyone";
+  }
+
+  const count = row.policy.audiencePrincipalUrns.length;
+  if (count === 1) {
+    return "1 target";
+  }
+  return `${count} targets`;
+}
+
+function policyAudienceChoiceForSelection(
+  audienceType: PolicyAudienceType,
+  principalUrns: Set<string>,
+): PolicyAudienceChoice {
+  if (audienceType === "everyone") {
+    return "everyone";
+  }
+
+  const hasUser = [...principalUrns].some((urn) => urn.startsWith("user:"));
+  if (hasUser) {
+    return "users";
+  }
+
+  const hasRole = [...principalUrns].some((urn) => urn.startsWith("role:"));
+  return hasRole ? "roles" : "users";
+}
+
+function filterAudiencePrincipalsForChoice(
+  principalUrns: Set<string>,
+  choice: PolicyAudienceChoice,
+): Set<string> {
+  if (choice === "everyone") {
+    return new Set<string>();
+  }
+
+  const prefix = choice === "users" ? "user:" : "role:";
+  return new Set([...principalUrns].filter((urn) => urn.startsWith(prefix)));
+}
+
+function memberDisplayName(member: AccessMember): string {
+  return member.name || member.email;
+}
+
+function memberInitials(member: Pick<AccessMember, "email" | "name">): string {
+  const source = member.name.trim() || member.email.trim();
+  const initials = source
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return initials || "?";
+}
+
+function memberMatchesSearch(member: AccessMember, search: string): boolean {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) {
+    return false;
+  }
+
+  return (
+    member.name.toLowerCase().includes(normalizedSearch) ||
+    member.email.toLowerCase().includes(normalizedSearch)
+  );
+}
+
+function compareMembersByName(a: AccessMember, b: AccessMember): number {
+  return memberDisplayName(a).localeCompare(memberDisplayName(b));
+}
+
+function compareRolesByName(a: Role, b: Role): number {
+  return a.name.localeCompare(b.name);
+}
+
+function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
+  return (
+    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
+    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
+  );
+}
+
 function messageTypesSummary(
   selectedMessageTypes: Set<PolicyMessageType>,
 ): string {
@@ -262,8 +824,70 @@ function messageTypesSummary(
     return "All types";
   }
 
+  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
+    return "Tool Calls";
+  }
+
+  if (
+    selectedMessageTypes.size === 1 &&
+    selectedMessageTypes.has("tool_request")
+  ) {
+    return "Tool Requests";
+  }
+
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
+
+function truncatePrompt(prompt: string, maxLength = 60): string {
+  const singleLine = prompt.trim().replace(/\s+/g, " ");
+  if (singleLine.length <= maxLength) {
+    return singleLine;
+  }
+  return `${singleLine.slice(0, maxLength - 1)}…`;
+}
+
+function promptTemplateNameForInstruction(prompt: string): string | undefined {
+  return PROMPT_POLICY_TEMPLATES.find((template) => template.prompt === prompt)
+    ?.name;
+}
+
+function isPromptPolicy(policy: RiskPolicy): boolean {
+  return policy.policyType === "prompt_based";
+}
+
+function promptPolicyName(prompt: string): string {
+  return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
+}
+
+/** Example scope CEL snippets offered beneath the include field — narrow a
+ *  policy to a subset of messages. */
+const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  {
+    label: "Only a GitHub server",
+    expr: 'tools.exists(t, t.server.matchExact("github"))',
+  },
+  {
+    label: "Production prompts",
+    expr: 'prompt.matchText("production")',
+  },
+  {
+    label: "Delete-style tools",
+    expr: 'tools.exists(t, t.function.matchGlob("*delete*"))',
+  },
+];
+
+/** Example scope CEL snippets offered beneath the exempt field — take matching
+ *  messages out of the policy entirely (an allowlist). */
+const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  {
+    label: "Read-only tools",
+    expr: 'tools.exists(t, t.function.matchGlob("*get*") || t.function.matchGlob("*list*"))',
+  },
+  {
+    label: "A safelisted server",
+    expr: 'tools.exists(t, t.server.matchExact("internal-docs"))',
+  },
+];
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -275,30 +899,113 @@ export default function PolicyCenter(): JSX.Element {
 
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  const policies = data?.policies ?? [];
+  const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
+
+  const policyRows = useMemo(
+    (): PolicyRow[] =>
+      (data?.policies ?? [])
+        .filter((policy) => nlEnabled || !isPromptPolicy(policy))
+        .map((policy) => {
+          const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
+          return { kind, policy };
+        })
+        .sort(
+          (a, b) => b.policy.createdAt.getTime() - a.policy.createdAt.getTime(),
+        ),
+    [data?.policies, nlEnabled],
+  );
 
   const { customRules } = useDetectionRulesStore();
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
+  const [createStep, setCreateStep] = useState<"type" | "details">("details");
+  // Active step in the standard-policy guided flow (0=Detect…3=Review).
+  const [wizardStep, setWizardStep] = useState(0);
+  const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
+  const [formPromptInstruction, setFormPromptInstruction] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(new Set<RuleCategory>(["secrets", "pii"]));
+  >(new Set<RuleCategory>());
   const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
+  // Fine-grained applicability predicates (scope_include / scope_exempt):
+  // a CEL expression scoping the policy, and one taking matching messages out of
+  // it. Empty => rely on the coarse message_types knob.
+  const [scopeInclude, setScopeInclude] = useState("");
+  const [scopeExempt, setScopeExempt] = useState("");
+  // Scope is defined EITHER by the coarse message-type cards OR by a custom CEL
+  // include predicate — a mutex. message_types is kept either way but only sent
+  // (and only required) in "messageTypes" mode.
+  const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
+    "messageTypes",
+  );
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  // Empty string => use the server's default judge model (see JUDGE_MODEL_OPTIONS).
+  const [formModel, setFormModel] = useState("");
+  // Judge sampling temperature. Defaults to the benchmark's deterministic
+  // setting (DEFAULT_JUDGE_TEMPERATURE); only persisted when changed from it.
+  const [formTemperature, setFormTemperature] = useState(
+    DEFAULT_JUDGE_TEMPERATURE,
+  );
+  // Fail-open (true) is the server default: allow the message when the judge errors.
+  const [formFailOpen, setFormFailOpen] = useState(true);
+  const [formAudienceType, setFormAudienceType] =
+    useState<PolicyAudienceType>("everyone");
+  const [selectedAudiencePrincipalUrns, setSelectedAudiencePrincipalUrns] =
+    useState<Set<string>>(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+
+  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
+    "policies",
+  );
+  const [exclusionSheet, setExclusionSheet] =
+    useState<ExclusionSheetState | null>(null);
+
+  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
+  // command palette uses this since policies have no per-item route. Declared
+  // here (above the mutations) so save handlers can clear it on programmatic
+  // close — Radix's onOpenChange only fires for user-initiated closes.
+  const [policyParam, setPolicyParam] = useQueryState("policy");
+  const openedPolicyRef = useRef<string | null>(null);
+  const clearPolicyDeepLink = useCallback(() => {
+    openedPolicyRef.current = null;
+    void setPolicyParam(null);
+  }, [setPolicyParam]);
+
+  // The create/edit view is a focused full-screen card (not a Dialog), so wire
+  // Escape to close it. Skip when a layered sub-sheet (e.g. the category
+  // Customize sheet) already handled Escape — it calls preventDefault on dismiss.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      setSheetOpen(false);
+      clearPolicyDeepLink();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sheetOpen, clearPolicyDeepLink]);
+
+  // While the create/edit card is open it owns the whole viewport, so hide the
+  // floating assistant dock for the duration (it would otherwise float on top).
+  const { registerDockHide } = useInsightsState();
+  useLayoutEffect(() => {
+    if (!sheetOpen) return;
+    return registerDockHide();
+  }, [sheetOpen, registerDockHide]);
 
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
@@ -309,6 +1016,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -316,6 +1024,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -323,25 +1032,80 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
-  const handleCreate = () => {
+  const configurePolicyKind = (kind: PolicyKind) => {
+    setFormPolicyKind(kind);
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
+    setFormAction("flag");
+    setFormAutoName(true);
+  };
+
+  const handleCreate = (kind?: PolicyKind) => {
+    const nextKind = kind ?? "risk";
     setEditingPolicy(null);
+    setCreateStep(kind || !nlEnabled ? "details" : "type");
+    setWizardStep(0);
+    setFormPolicyKind(nextKind);
     setFormName("");
     setFormEnabled(true);
-    setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setFormPromptInstruction("");
+    setSelectedCategories(new Set<RuleCategory>());
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
+    setScopeInclude("");
+    setScopeExempt("");
+    setScopeMode("messageTypes");
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
+    setFormModel("");
+    setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
+    setFormFailOpen(true);
+    setFormAudienceType("everyone");
+    setSelectedAudiencePrincipalUrns(new Set<string>());
     setSheetOpen(true);
   };
 
-  const handleEdit = (policy: RiskPolicy) => {
-    const customRuleIds = policy.customRuleIds ?? [];
+  const handleChoosePolicyKind = (kind: PolicyKind) => {
+    configurePolicyKind(kind);
+    setCreateStep("details");
+  };
+
+  // Memoized so the deep-link effect below can depend on it without re-running
+  // every render. Body references only module-level helpers + stable setters,
+  // so the empty dependency array is correct.
+  const handleEdit = useCallback((policy: RiskPolicy) => {
+    const isPrompt = isPromptPolicy(policy);
+    const kind: PolicyKind = isPrompt ? "prompt" : "risk";
     setEditingPolicy(policy);
+    setCreateStep("details");
+    setWizardStep(0);
+    setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
+    // Scope CEL applies to both kinds; load it before the kind branch.
+    const loadedInclude = policy.scopeInclude ?? "";
+    setScopeInclude(loadedInclude);
+    setScopeExempt(policy.scopeExempt ?? "");
+    setScopeMode(loadedInclude.trim() !== "" ? "cel" : "messageTypes");
+    if (isPrompt) {
+      setFormPromptInstruction(policy.prompt ?? "");
+      setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
+      setFormAction((policy.action as PolicyAction) ?? "flag");
+      setFormAutoName(policy.autoName ?? true);
+      setFormUserMessage(policy.userMessage ?? "");
+      setFormModel(policy.modelConfig?.model ?? "");
+      setFormTemperature(
+        policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+      );
+      setFormFailOpen(policy.modelConfig?.failOpen ?? true);
+      setFormAudienceType("everyone");
+      setSelectedAudiencePrincipalUrns(new Set<string>());
+      setSheetOpen(true);
+      return;
+    }
+    setFormPromptInstruction("");
+    const customRuleIds = policy.customRuleIds ?? [];
     const categories = policyToCategories(
       policy.sources,
       policy.presidioEntities,
@@ -356,10 +1120,110 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
+    const audienceType = policy.audienceType ?? "everyone";
+    setFormAudienceType(audienceType);
+    setSelectedAudiencePrincipalUrns(
+      audienceType === "targeted"
+        ? new Set<string>(policy.audiencePrincipalUrns ?? [])
+        : new Set<string>(),
+    );
     setSheetOpen(true);
-  };
+  }, []);
+
+  // Open the deep-linked policy once its data has loaded. Guarded by a ref so it
+  // fires once per id (not on every policies re-fetch). The ref is marked as
+  // handled even when the id doesn't resolve, so a stale/invalid id doesn't
+  // re-trigger the lookup on every subsequent `data` change.
+  useEffect(() => {
+    if (!policyParam || isLoading) return;
+    if (openedPolicyRef.current === policyParam) return;
+    // Read from the stable react-query `data` (not the per-render `policies`
+    // array) so the effect doesn't re-run every render.
+    const policy = data?.policies?.find((p) => p.id === policyParam);
+    openedPolicyRef.current = policyParam;
+    if (policy) {
+      handleEdit(policy);
+    }
+  }, [policyParam, isLoading, data, handleEdit]);
 
   const handleSave = () => {
+    // Fine-grained scope predicates (both kinds). The include applies only in
+    // CEL scope mode; the exempt is additive and always sent. On update we
+    // always send a value (empty string clears) so the omit-to-preserve impl
+    // can replace it; on create we omit when empty.
+    const includeCel = scopeMode === "cel" ? scopeInclude.trim() : "";
+    const exemptCel = scopeExempt.trim();
+    const applicationUpdate = {
+      scopeInclude: includeCel,
+      scopeExempt: exemptCel,
+    };
+    const applicationCreate = {
+      ...(includeCel ? { scopeInclude: includeCel } : {}),
+      ...(exemptCel ? { scopeExempt: exemptCel } : {}),
+    };
+    if (formPolicyKind === "prompt") {
+      const prompt = formPromptInstruction.trim();
+      const name = formAutoName ? promptPolicyName(prompt) : formName;
+      // Persist model_config only when it diverges from defaults (or already
+      // existed), and include each field only when non-default, so an unset
+      // config stays NULL rather than churning the policy version on every edit.
+      const temperatureIsCustom = formTemperature !== DEFAULT_JUDGE_TEMPERATURE;
+      const hasModelConfig =
+        !!editingPolicy?.modelConfig ||
+        !!formModel ||
+        temperatureIsCustom ||
+        !formFailOpen;
+      const modelConfig = hasModelConfig
+        ? {
+            ...(formModel ? { model: formModel } : {}),
+            ...(temperatureIsCustom ? { temperature: formTemperature } : {}),
+            failOpen: formFailOpen,
+          }
+        : undefined;
+      const userMessagePayload = formUserMessage.trim()
+        ? { userMessage: formUserMessage }
+        : {};
+      const promptMessageTypes =
+        policyMessageTypesForPayload(selectedMessageTypes);
+      if (editingPolicy) {
+        updateMutation.mutate({
+          request: {
+            updateRiskPolicyRequestBody: {
+              id: editingPolicy.id,
+              name,
+              enabled: formEnabled,
+              prompt,
+              messageTypes: promptMessageTypes,
+              action: formAction,
+              autoName: formAutoName,
+              ...applicationUpdate,
+              ...(modelConfig ? { modelConfig } : {}),
+              ...userMessagePayload,
+            },
+          },
+        });
+      } else {
+        createMutation.mutate({
+          request: {
+            createRiskPolicyRequestBody: {
+              name,
+              policyType: "prompt_based",
+              enabled: formEnabled,
+              prompt,
+              messageTypes: promptMessageTypes,
+              action: formAction,
+              autoName: formAutoName,
+              ...applicationCreate,
+              ...(modelConfig ? { modelConfig } : {}),
+              ...userMessagePayload,
+            },
+          },
+        });
+      }
+      return;
+    }
+
+    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const {
       sources,
       presidioEntities,
@@ -368,13 +1232,16 @@ function PolicyCenterContent() {
     } = categoriesToPayload(
       selectedCategories,
       disabledRules,
-      pinnedHiddenRuleIds(editingPolicy?.presidioEntities),
+      pinnedHiddenRuleIds(
+        editingPolicy ? editingPolicy.presidioEntities : undefined,
+      ),
     );
-    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
         : formAction;
+    const audiencePrincipalUrns =
+      formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -388,7 +1255,10 @@ function PolicyCenterContent() {
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
+            ...applicationUpdate,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
           },
@@ -406,7 +1276,10 @@ function PolicyCenterContent() {
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
+            ...applicationCreate,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
@@ -415,8 +1288,8 @@ function PolicyCenterContent() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate({ request: { id } });
+  const handleDelete = (row: PolicyRow) => {
+    deleteMutation.mutate({ request: { id: row.policy.id } });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -432,115 +1305,95 @@ function PolicyCenterContent() {
     });
   };
 
-  if (!isLoading && policies.length === 0) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground h-6 w-6" />
-            </div>
-            <Type variant="subheading" className="mb-1">
-              No Risk Policies
-            </Type>
-            <Type small muted className="mb-4 max-w-md text-center">
-              Risk policies scan your chat messages for secrets and sensitive
-              data. Create your first policy to get started.
-            </Type>
-            <Button
-              onClick={() => {
-                const {
-                  sources,
-                  presidioEntities,
-                  promptInjectionRules,
-                  disabledRules: payloadDisabled,
-                } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                  new Set(),
-                );
-                createMutation.mutate({
-                  request: {
-                    createRiskPolicyRequestBody: {
-                      autoName: true,
-                      enabled: true,
-                      sources,
-                      presidioEntities,
-                      promptInjectionRules,
-                      disabledRules: payloadDisabled,
-                      customRuleIds: [],
-                    },
-                  },
-                });
-              }}
-              disabled={createMutation.isPending}
-            >
-              <Button.Text>
-                {createMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Get Started"
-                )}
-              </Button.Text>
-            </Button>
-          </div>
-        </Page.Body>
-      </Page>
-    );
-  }
+  // Empty state for the Policies tab only. It must NOT short-circuit the whole
+  // page, otherwise the Exclusions tab (and global exclusions) would be
+  // unreachable for projects that have no policies yet.
+  const policiesEmptyState = (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Shield className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No Risk Policies
+      </Type>
+      <Type small muted className="mb-4 max-w-md text-center">
+        Risk policies scan your chat messages for secrets and sensitive data.
+        Create your first policy to get started.
+      </Type>
+      <Button
+        onClick={() => {
+          const {
+            sources,
+            presidioEntities,
+            promptInjectionRules,
+            disabledRules: payloadDisabled,
+          } = categoriesToPayload(
+            new Set<RuleCategory>(["secrets", "pii"]),
+            new Set(),
+          );
+          createMutation.mutate({
+            request: {
+              createRiskPolicyRequestBody: {
+                autoName: true,
+                enabled: true,
+                sources,
+                presidioEntities,
+                promptInjectionRules,
+                disabledRules: payloadDisabled,
+                customRuleIds: [],
+              },
+            },
+          });
+        }}
+        disabled={createMutation.isPending}
+      >
+        <Button.Text>
+          {createMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            "Get Started"
+          )}
+        </Button.Text>
+      </Button>
+    </div>
+  );
 
-  const enabledPolicies = policies.filter((p) => p.enabled);
+  const enabledPolicies = policyRows.filter((r) => r.policy.enabled);
   const insightsContext = [
     "Page: Policy Center.",
-    `Total policies: ${policies.length}, enabled: ${enabledPolicies.length}.`,
-    `Policy actions: ${policies.map((p) => `${p.name} (${p.action})`).join(", ") || "none"}.`,
-    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
+    `Total policies: ${policyRows.length}, enabled: ${enabledPolicies.length}.`,
+    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action})`).join(", ") || "none"}.`,
+    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
 
-  const insightsSuggestions = [
-    {
-      title: "Policy status snapshot",
-      label: "what's running and what's stuck",
-      prompt:
-        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
-    },
-    {
-      title: "Quiet policies",
-      label: "policies with no recent findings",
-      prompt:
-        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
-    },
-    {
-      title: "Coverage by source",
-      label: "what's each source catching",
-      prompt:
-        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
-    },
-    {
-      title: "Capabilities check",
-      label: "what detectors are available",
-      prompt:
-        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
-    },
-  ];
+  const dimIfDisabled = (row: PolicyRow) =>
+    row.policy.enabled ? "" : "opacity-50";
 
-  const dimIfDisabled = (policy: RiskPolicy) =>
-    policy.enabled ? "" : "opacity-50";
-
-  const policyColumns: Column<RiskPolicy>[] = [
+  const policyColumns: Column<PolicyRow>[] = [
     {
       key: "name",
       header: "Name",
       width: "1fr",
-      render: (policy) => (
-        <span className={cn("font-medium", dimIfDisabled(policy))}>
-          {policy.name}
+      render: (row) => (
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 font-medium",
+            dimIfDisabled(row),
+          )}
+        >
+          <span className="truncate">{row.policy.name}</span>
+          {row.kind === "prompt" && (
+            <SimpleTooltip tooltip="Prompt-based policy">
+              <Sparkles
+                aria-label="Prompt-based policy"
+                className="text-muted-foreground h-3.5 w-3.5 shrink-0"
+              />
+            </SimpleTooltip>
+          )}
         </span>
       ),
     },
@@ -548,31 +1401,49 @@ function PolicyCenterContent() {
       key: "action",
       header: "Action",
       width: "0.5fr",
-      render: (policy) => (
-        <span className={cn("inline-flex", dimIfDisabled(policy))}>
-          <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+      render: (row) => (
+        <span className={cn("inline-flex", dimIfDisabled(row))}>
+          <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
         </span>
       ),
     },
     {
       key: "sources",
-      header: "Categories",
+      header: nlEnabled ? "Categories / Prompt" : "Categories",
       width: "2fr",
-      render: (policy) => {
+      render: (row) => {
+        if (row.kind === "prompt") {
+          const prompt = row.policy.prompt ?? "";
+          return (
+            <SimpleTooltip tooltip={prompt}>
+              <span
+                className={cn(
+                  "text-muted-foreground block max-w-full truncate text-sm italic",
+                  dimIfDisabled(row),
+                )}
+              >
+                {truncatePrompt(prompt)}
+              </span>
+            </SimpleTooltip>
+          );
+        }
+
+        const riskPolicy = row.policy;
         const categories = sourcesToCategories(
-          policy.sources,
-          policy.presidioEntities,
+          riskPolicy.sources,
+          riskPolicy.presidioEntities,
         );
-        if (policy.customRuleIds?.length) {
+        if (riskPolicy.customRuleIds?.length) {
           categories.push("custom");
+        }
+
+        if (categories.length === 0) {
+          return <span className="text-muted-foreground text-sm">—</span>;
         }
 
         return (
           <span
-            className={cn(
-              "text-muted-foreground text-sm",
-              dimIfDisabled(policy),
-            )}
+            className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
           >
             {categories.map((cat) => RULE_CATEGORY_META[cat].label).join(", ")}
           </span>
@@ -581,17 +1452,36 @@ function PolicyCenterContent() {
     },
     {
       key: "messageTypes",
-      header: "Message Types",
+      header: "Applies To",
       width: "2.1fr",
-      render: (policy) => {
-        const types = policyMessageTypesForDisplay(policy.messageTypes);
+      render: (row) => {
+        const types = policyMessageTypesForDisplay(row.policy.messageTypes);
+        const typeSet = new Set(types);
+        const tooltip = types
+          .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
+          .join(", ");
+
+        if (
+          typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
+          hasOnlyToolCallMessageTypes(typeSet)
+        ) {
+          return (
+            <SimpleTooltip tooltip={tooltip}>
+              <span
+                className={cn(
+                  "text-muted-foreground text-sm",
+                  dimIfDisabled(row),
+                )}
+              >
+                {messageTypesSummary(typeSet)}
+              </span>
+            </SimpleTooltip>
+          );
+        }
 
         return (
           <span
-            className={cn(
-              "text-muted-foreground text-sm",
-              dimIfDisabled(policy),
-            )}
+            className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
           >
             {types
               .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
@@ -601,14 +1491,26 @@ function PolicyCenterContent() {
       },
     },
     {
+      key: "audience",
+      header: "Audience",
+      width: "1fr",
+      render: (row) => (
+        <span
+          className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
+        >
+          {policyAudienceSummary(row)}
+        </span>
+      ),
+    },
+    {
       key: "enabled",
       header: "Enabled",
       width: "0.5fr",
-      render: (policy) => (
+      render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Switch
-            checked={policy.enabled}
-            onCheckedChange={(checked) => handleToggle(policy, checked)}
+            checked={row.policy.enabled}
+            onCheckedChange={(checked) => handleToggle(row.policy, checked)}
           />
         </div>
       ),
@@ -617,7 +1519,7 @@ function PolicyCenterContent() {
       key: "actions",
       header: "",
       width: "0.3fr",
-      render: (policy) => (
+      render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -635,14 +1537,24 @@ function PolicyCenterContent() {
               <DropdownMenuItem
                 className="cursor-pointer"
                 onSelect={() => {
-                  void setTimeout(() => setRunPanelPolicy(policy), 0);
+                  setTimeout(() => handleEdit(row.policy), 0);
                 }}
               >
-                View Progress
+                Edit
               </DropdownMenuItem>
+              {row.kind === "risk" && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => {
+                    setTimeout(() => setRunPanelPolicy(row.policy), 0);
+                  }}
+                >
+                  View Progress
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(policy.id)}
+                onSelect={() => handleDelete(row)}
               >
                 Delete
               </DropdownMenuItem>
@@ -653,29 +1565,125 @@ function PolicyCenterContent() {
     },
   ];
 
-  let sectionBody = (
+  const headerAction =
+    activeTab === "policies"
+      ? { label: "New Policy", onClick: () => handleCreate() }
+      : {
+          label: "Create Exclusion",
+          onClick: () => setExclusionSheet({ mode: "create" }),
+        };
+
+  const isChoosingPolicyKind =
+    !editingPolicy && nlEnabled && createStep === "type";
+
+  // Footer behaviour for the guided flow. Both standard and prompt policies now
+  // page through steps (Continue, then Create/Update); only the type chooser is
+  // exempt.
+  const isWizard = !isChoosingPolicyKind;
+  const isRiskWizard = isWizard && formPolicyKind === "risk";
+  const wizardSteps =
+    formPolicyKind === "prompt" ? PROMPT_WIZARD_STEPS : POLICY_WIZARD_STEPS;
+  const isLastWizardStep = wizardStep === wizardSteps.length - 1;
+  const showWizardContinue = isWizard && !isLastWizardStep;
+  const mutationPending = createMutation.isPending || updateMutation.isPending;
+  // Scope is satisfied by either a message-type selection or — in CEL mode — a
+  // non-empty include expression (the two are a mutex). Compile validity is
+  // surfaced inline and enforced by the backend on save.
+  const includeCelStatus = useCelStatus(
+    scopeMode === "cel" ? scopeInclude : "",
+  );
+  const exemptCelStatus = useCelStatus(scopeExempt);
+  const scopeMissing =
+    scopeMode === "messageTypes"
+      ? selectedMessageTypes.size === 0
+      : scopeInclude.trim() === "";
+  // A standard policy needs at least one detector that will actually run: a
+  // custom rule, a category-level detector (no sub-rules to enable), or a
+  // selected category with at least one of its rules enabled.
+  const hasEnabledDetector =
+    selectedCustomRuleIds.size > 0 ||
+    [...selectedCategories].some(
+      (c) =>
+        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
+    );
+  const continueDisabled =
+    (wizardStep === 0 &&
+      (formPolicyKind === "prompt"
+        ? !formPromptInstruction.trim()
+        : !hasEnabledDetector)) ||
+    (wizardStep === 1 && scopeMissing);
+  // Block save while a scope expression that will be sent fails to compile.
+  const applicationInvalid =
+    (scopeMode === "cel" && includeCelStatus.kind === "error") ||
+    exemptCelStatus.kind === "error";
+  const saveDisabled =
+    (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
+    // A standard policy needs at least one detector or custom rule (the step-0
+    // gate, re-checked here since free-jump can skip it).
+    (isRiskWizard && !hasEnabledDetector) ||
+    (!formAutoName && !formName.trim()) ||
+    scopeMissing ||
+    applicationInvalid ||
+    // A targeted audience needs at least one selected principal.
+    (formPolicyKind === "risk" &&
+      formAudienceType === "targeted" &&
+      selectedAudiencePrincipalUrns.size === 0) ||
+    mutationPending;
+  const showFooterBack =
+    (isWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
+  const onFooterBack = () => {
+    if (isWizard && wizardStep > 0) {
+      setWizardStep(wizardStep - 1);
+    } else {
+      setCreateStep("type");
+    }
+  };
+
+  let sheetTitle = "New Policy";
+  let sheetDescription = "Create a policy to scan agent session interactions.";
+  if (editingPolicy) {
+    sheetTitle = "Edit Policy";
+    sheetDescription = "Update this policy configuration.";
+  } else if (isChoosingPolicyKind) {
+    sheetTitle = "Choose Policy Type";
+    sheetDescription =
+      "Start with a detector-based policy or define criteria in plain language.";
+  } else if (nlEnabled) {
+    if (formPolicyKind === "prompt") {
+      sheetTitle = "New Prompt-based Policy";
+      sheetDescription = "Describe the tool-call behavior you want to detect.";
+    } else {
+      sheetTitle = "New Policy";
+      sheetDescription = "Configure detection rules to scan agent sessions.";
+    }
+  }
+
+  let policiesBody = (
     <Table
       columns={policyColumns}
-      data={policies}
-      rowKey={(policy) => policy.id}
-      onRowClick={handleEdit}
+      data={policyRows}
+      rowKey={(row) => row.policy.id}
+      onRowClick={(row) => handleEdit(row.policy)}
     />
   );
   if (isLoading) {
-    sectionBody = (
+    policiesBody = (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
       </div>
     );
+  } else if (policyRows.length === 0) {
+    policiesBody = policiesEmptyState;
   }
 
   const cta = isLoading ? null : (
     <Page.Section.CTA>
-      <Button onClick={handleCreate}>
+      <Button onClick={headerAction.onClick}>
         <Button.LeftIcon>
           <Plus className="mr-2 h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>New Policy</Button.Text>
+        <Button.Text>{headerAction.label}</Button.Text>
       </Button>
     </Page.Section.CTA>
   );
@@ -688,82 +1696,212 @@ function PolicyCenterContent() {
       <Page.Body>
         <InsightsConfig
           contextInfo={insightsContext}
-          suggestions={insightsSuggestions}
+          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
         <Page.Section>
-          <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
+          <Page.Section.Title stage="beta">Policies</Page.Section.Title>
           <Page.Section.Description>
-            Configure risk analysis rules to detect secrets and sensitive
-            information in agent session interactions.
+            Configure policies to detect secrets, sensitive information, and
+            prompt-defined risks in agent session interactions.
           </Page.Section.Description>
           {cta}
-          <Page.Section.Body>{sectionBody}</Page.Section.Body>
+          <Page.Section.Body>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) =>
+                setActiveTab(value as "policies" | "exclusions")
+              }
+            >
+              <div className="border-b">
+                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                  <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
+                  <PageTabsTrigger value="exclusions">
+                    Exclusions
+                  </PageTabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="policies" className="mt-6">
+                {policiesBody}
+              </TabsContent>
+              <TabsContent value="exclusions" className="mt-6">
+                <ExclusionsTab
+                  policies={data?.policies ?? []}
+                  sheet={exclusionSheet}
+                  onSheetChange={setExclusionSheet}
+                />
+              </TabsContent>
+            </Tabs>
+          </Page.Section.Body>
         </Page.Section>
 
-        {/* Edit/Create Sheet */}
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
-            <SheetHeader className="px-6 pt-6">
-              <SheetTitle>
-                {editingPolicy ? "Edit Policy" : "New Policy"}
-              </SheetTitle>
-              <SheetDescription>
-                {editingPolicy
-                  ? "Update the risk analysis policy configuration."
-                  : "Create a new risk analysis policy to scan chat messages."}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6">
-              <PolicySheetBody
-                formName={formName}
-                setFormName={setFormName}
-                formEnabled={formEnabled}
-                setFormEnabled={setFormEnabled}
-                selectedCategories={selectedCategories}
-                setSelectedCategories={setSelectedCategories}
-                disabledRules={disabledRules}
-                setDisabledRules={setDisabledRules}
-                customRules={customRules}
-                selectedCustomRuleIds={selectedCustomRuleIds}
-                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                selectedMessageTypes={selectedMessageTypes}
-                setSelectedMessageTypes={setSelectedMessageTypes}
-                formAction={formAction}
-                setFormAction={setFormAction}
-                formAutoName={formAutoName}
-                setFormAutoName={setFormAutoName}
-                formUserMessage={formUserMessage}
-                setFormUserMessage={setFormUserMessage}
-              />
-            </div>
-            <SheetFooter className="px-6 pb-6">
-              <Button
-                onClick={handleSave}
-                disabled={
-                  (!formAutoName && !formName.trim()) ||
-                  selectedMessageTypes.size === 0 ||
-                  createMutation.isPending ||
-                  updateMutation.isPending
-                }
-              >
-                {(createMutation.isPending || updateMutation.isPending) && (
-                  <Button.LeftIcon>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>
-                  {createMutation.isPending || updateMutation.isPending
-                    ? "Saving..."
-                    : editingPolicy
-                      ? "Update"
-                      : "Create"}
-                </Button.Text>
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+        {/* Edit/Create page: a focused full-screen card that covers the nav
+         *  sidebar and assistant dock, inset by a small gutter so it reads as
+         *  padded rather than full-bleed — mirrors the inset content surface
+         *  (see AGE-2756). */}
+        <DialogPrimitive.Root
+          open={sheetOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSheetOpen(false);
+              clearPolicyDeepLink();
+            }
+          }}
+        >
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay className="bg-background fixed inset-0 z-50" />
+            <DialogPrimitive.Content
+              onInteractOutside={(e) => e.preventDefault()}
+              className="bg-surface-primary fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border shadow-sm focus:outline-none"
+            >
+              <div className="border-border flex items-start justify-between gap-4 border-b px-8 py-5">
+                <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <DialogPrimitive.Title asChild>
+                      <Type variant="subheading">{sheetTitle}</Type>
+                    </DialogPrimitive.Title>
+                    <DialogPrimitive.Description asChild>
+                      <Type small muted className="mt-1">
+                        {sheetDescription}
+                      </Type>
+                    </DialogPrimitive.Description>
+                  </div>
+                  <Button
+                    variant="tertiary"
+                    onClick={() => {
+                      setSheetOpen(false);
+                      clearPolicyDeepLink();
+                    }}
+                  >
+                    <Button.LeftIcon>
+                      <X className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Close</Button.Text>
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-8">
+                <div className="mx-auto w-full max-w-5xl space-y-6 py-8">
+                  {isChoosingPolicyKind ? (
+                    <PolicyKindChoice onSelect={handleChoosePolicyKind} />
+                  ) : formPolicyKind === "risk" ? (
+                    <PolicySheetBody
+                      key={editingPolicy?.id ?? "new-risk-policy"}
+                      wizardStep={wizardStep}
+                      setWizardStep={setWizardStep}
+                      formName={formName}
+                      setFormName={setFormName}
+                      formEnabled={formEnabled}
+                      setFormEnabled={setFormEnabled}
+                      selectedCategories={selectedCategories}
+                      setSelectedCategories={setSelectedCategories}
+                      disabledRules={disabledRules}
+                      setDisabledRules={setDisabledRules}
+                      customRules={customRules}
+                      selectedCustomRuleIds={selectedCustomRuleIds}
+                      setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                      scopeInclude={scopeInclude}
+                      setScopeInclude={setScopeInclude}
+                      scopeExempt={scopeExempt}
+                      setScopeExempt={setScopeExempt}
+                      scopeMode={scopeMode}
+                      setScopeMode={setScopeMode}
+                      selectedMessageTypes={selectedMessageTypes}
+                      setSelectedMessageTypes={setSelectedMessageTypes}
+                      formAction={formAction}
+                      setFormAction={setFormAction}
+                      formAutoName={formAutoName}
+                      setFormAutoName={setFormAutoName}
+                      formUserMessage={formUserMessage}
+                      setFormUserMessage={setFormUserMessage}
+                      formAudienceType={formAudienceType}
+                      setFormAudienceType={setFormAudienceType}
+                      selectedAudiencePrincipalUrns={
+                        selectedAudiencePrincipalUrns
+                      }
+                      setSelectedAudiencePrincipalUrns={
+                        setSelectedAudiencePrincipalUrns
+                      }
+                    />
+                  ) : (
+                    <PromptPolicySheetBody
+                      key={editingPolicy?.id ?? "new-prompt-policy"}
+                      wizardStep={wizardStep}
+                      setWizardStep={setWizardStep}
+                      isEditing={!!editingPolicy}
+                      formName={formName}
+                      setFormName={setFormName}
+                      formPromptInstruction={formPromptInstruction}
+                      setFormPromptInstruction={setFormPromptInstruction}
+                      formAction={formAction}
+                      setFormAction={setFormAction}
+                      formAutoName={formAutoName}
+                      setFormAutoName={setFormAutoName}
+                      formEnabled={formEnabled}
+                      setFormEnabled={setFormEnabled}
+                      formModel={formModel}
+                      setFormModel={setFormModel}
+                      formTemperature={formTemperature}
+                      setFormTemperature={setFormTemperature}
+                      formFailOpen={formFailOpen}
+                      setFormFailOpen={setFormFailOpen}
+                      selectedMessageTypes={selectedMessageTypes}
+                      setSelectedMessageTypes={setSelectedMessageTypes}
+                    />
+                  )}
+                </div>
+              </div>
+              {!isChoosingPolicyKind && (
+                <div className="border-border bg-background border-t px-8 py-4">
+                  <div className="mx-auto flex w-full max-w-5xl flex-row items-center justify-between">
+                    {isWizard ? (
+                      <span className="text-muted-foreground text-xs">
+                        Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
+                        {wizardSteps[wizardStep]?.title}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <div className="flex gap-2">
+                      {showFooterBack && (
+                        <Button variant="secondary" onClick={onFooterBack}>
+                          <Button.LeftIcon>
+                            <ArrowLeft className="h-4 w-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Back</Button.Text>
+                        </Button>
+                      )}
+                      {showWizardContinue ? (
+                        <Button
+                          onClick={() => setWizardStep(wizardStep + 1)}
+                          disabled={continueDisabled}
+                        >
+                          <Button.Text>Continue</Button.Text>
+                        </Button>
+                      ) : (
+                        <Button onClick={handleSave} disabled={saveDisabled}>
+                          {mutationPending && (
+                            <Button.LeftIcon>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </Button.LeftIcon>
+                          )}
+                          <Button.Text>
+                            {mutationPending
+                              ? "Saving..."
+                              : editingPolicy
+                                ? "Update"
+                                : "Create"}
+                          </Button.Text>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
 
         {/* View Run Panel */}
         <Sheet
@@ -782,10 +1920,572 @@ function PolicyCenterContent() {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  PolicyKindChoice                                                          */
+/* -------------------------------------------------------------------------- */
+
+function PolicyKindChoice({
+  onSelect,
+}: {
+  onSelect: (kind: PolicyKind) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => onSelect("risk")}
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <div className="bg-muted mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+          <Shield className="text-muted-foreground h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Type className="font-medium">Standard</Type>
+          <Type small muted className="mt-0.5">
+            Catch secrets, PII, and destructive commands using built-in scanners
+            and custom regex rules.
+          </Type>
+        </div>
+        <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect("prompt")}
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <div className="bg-muted mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+          <Sparkles className="text-muted-foreground h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Type className="font-medium">Prompt-based</Type>
+            <Badge variant="neutral" className="text-[10px]">
+              <Badge.Text>New</Badge.Text>
+            </Badge>
+          </div>
+          <Type small muted className="mt-0.5">
+            Describe any behavior you want to detect in plain language. No
+            scanner configuration needed.
+          </Type>
+        </div>
+        <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  PromptPolicySheetBody                                                     */
+/* -------------------------------------------------------------------------- */
+
+function PromptPolicySheetBody({
+  wizardStep,
+  setWizardStep,
+  isEditing,
+  formName,
+  setFormName,
+  formPromptInstruction,
+  setFormPromptInstruction,
+  formAction,
+  setFormAction,
+  formAutoName,
+  setFormAutoName,
+  formEnabled,
+  setFormEnabled,
+  formModel,
+  setFormModel,
+  formTemperature,
+  setFormTemperature,
+  formFailOpen,
+  setFormFailOpen,
+  selectedMessageTypes,
+  setSelectedMessageTypes,
+}: {
+  wizardStep: number;
+  setWizardStep: (v: number) => void;
+  isEditing: boolean;
+  formName: string;
+  setFormName: (v: string) => void;
+  formPromptInstruction: string;
+  setFormPromptInstruction: (v: string) => void;
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
+  formAutoName: boolean;
+  setFormAutoName: (v: boolean) => void;
+  formEnabled: boolean;
+  setFormEnabled: (v: boolean) => void;
+  formModel: string;
+  setFormModel: (v: string) => void;
+  formTemperature: number;
+  setFormTemperature: (v: number) => void;
+  formFailOpen: boolean;
+  setFormFailOpen: (v: boolean) => void;
+  selectedMessageTypes: Set<PolicyMessageType>;
+  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
+}) {
+  const [selectedExampleName, setSelectedExampleName] = useState(
+    () => promptTemplateNameForInstruction(formPromptInstruction) ?? "",
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const handlePromptChange = (value: string) => {
+    setSelectedExampleName("");
+    setFormPromptInstruction(value);
+  };
+
+  const prompt = formPromptInstruction.trim();
+  const summaryScopes =
+    selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
+      ? ["All session parts"]
+      : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
+          selectedMessageTypes.has(t as PolicyMessageType),
+        ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+
+  // One-line view of the judge config shown on the collapsed Advanced card, so
+  // authors can see the (sensible) defaults at a glance without expanding it.
+  const judgeModelLabel =
+    JUDGE_MODEL_OPTIONS.find((o) => o.value === formModel)?.label ??
+    (formModel || JUDGE_MODEL_OPTIONS[0]?.label) ??
+    "Default model";
+  const judgeSummary = `${judgeModelLabel} · temp ${formTemperature.toFixed(1)} · ${formFailOpen ? "fail-open" : "fail-closed"}`;
+
+  return (
+    <WizardShell
+      steps={PROMPT_WIZARD_STEPS}
+      currentStep={wizardStep}
+      setCurrentStep={setWizardStep}
+    >
+      {wizardStep === 0 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="What should this policy catch?"
+            description="Describe the behavior to detect in plain language; the LLM judge evaluates each in-scope message against it."
+          />
+          <PromptPolicyHowItWorks isEditing={isEditing} />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Policy Prompt</Label>
+            <TextArea
+              value={formPromptInstruction}
+              onChange={handlePromptChange}
+              placeholder="Describe the tool-call behavior this policy should match..."
+              rows={5}
+            />
+            {!isEditing && (
+              <PromptExampleChips
+                selectedExampleName={selectedExampleName}
+                onSelect={(template) => {
+                  setSelectedExampleName(template.name);
+                  setFormPromptInstruction(template.prompt);
+                  if (!formName.trim()) {
+                    setFormName(template.name);
+                  }
+                }}
+              />
+            )}
+          </div>
+          <Collapsible
+            open={advancedOpen}
+            onOpenChange={setAdvancedOpen}
+            className="border-border rounded-lg border"
+          >
+            <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+              <SlidersHorizontal className="text-muted-foreground h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    Advanced judge settings
+                  </span>
+                  <Badge variant="neutral" className="text-[10px]">
+                    <Badge.Text>Optional</Badge.Text>
+                  </Badge>
+                </div>
+                <div className="text-muted-foreground truncate text-xs">
+                  {advancedOpen
+                    ? "Judge model, temperature, and failure behavior"
+                    : judgeSummary}
+                </div>
+              </div>
+              <ChevronRight
+                className={cn(
+                  "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                  advancedOpen && "rotate-90",
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-border border-t px-4 py-4">
+              <JudgeConfigSection
+                formModel={formModel}
+                setFormModel={setFormModel}
+                formTemperature={formTemperature}
+                setFormTemperature={setFormTemperature}
+                formFailOpen={formFailOpen}
+                setFormFailOpen={setFormFailOpen}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
+
+      {wizardStep === 1 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="Where should it evaluate?"
+            description="Narrow the scope to control cost — a prompt policy runs the LLM judge on each in-scope message."
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+              <ScopeCard
+                key={type}
+                type={type as PolicyMessageType}
+                checked={selectedMessageTypes.has(type as PolicyMessageType)}
+                onToggle={(checked) => {
+                  const updated = new Set(selectedMessageTypes);
+                  if (checked) {
+                    updated.add(type as PolicyMessageType);
+                  } else {
+                    updated.delete(type as PolicyMessageType);
+                  }
+                  setSelectedMessageTypes(updated);
+                }}
+              />
+            ))}
+          </div>
+          {selectedMessageTypes.size === 0 && (
+            <p className="text-destructive text-xs">
+              Select at least one session part.
+            </p>
+          )}
+        </div>
+      )}
+
+      {wizardStep === 2 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="What happens on a match?"
+            description="Choose how the policy responds when the judge flags a message."
+          />
+          <ActionPicker formAction={formAction} setFormAction={setFormAction} />
+        </div>
+      )}
+
+      {wizardStep === 3 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="Name & enable"
+            description="Review the policy, then create it."
+          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Policy Name</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs">Auto</span>
+                <Switch
+                  checked={formAutoName}
+                  onCheckedChange={setFormAutoName}
+                />
+              </div>
+            </div>
+            {formAutoName ? (
+              <p className="text-muted-foreground text-xs">
+                Name will be generated from the policy prompt.
+              </p>
+            ) : (
+              <Input
+                value={formName}
+                onChange={setFormName}
+                placeholder="e.g. No Production Deletes"
+              />
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Summary</Label>
+            <div className="border-border divide-border divide-y rounded-lg border">
+              <SummaryRow
+                label="Guardrail"
+                chips={[
+                  prompt
+                    ? `${prompt.slice(0, 48)}${prompt.length > 48 ? "…" : ""}`
+                    : "None",
+                ]}
+              />
+              <SummaryRow label="Scope" chips={summaryScopes} />
+              <SummaryRow
+                label="Action"
+                chips={[formAction === "block" ? "Block" : "Flag"]}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Enabled</Label>
+              <p className="text-muted-foreground text-xs">
+                Enable this policy to enforce the prompt.
+              </p>
+            </div>
+            <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+          </div>
+        </div>
+      )}
+    </WizardShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  JudgeConfigSection                                                        */
+/* -------------------------------------------------------------------------- */
+
+// DEFAULT_JUDGE_TEMPERATURE mirrors riskjudge.defaultJudgeTemperature: the
+// benchmark ran at 0 (deterministic verdicts), which is the effective default.
+const DEFAULT_JUDGE_TEMPERATURE = 0;
+const TEMPERATURE_MIN = 0;
+const TEMPERATURE_MAX = 1;
+const TEMPERATURE_STEP = 0.1;
+// Discrete stops rendered on the slider track: 0.0, 0.1, … 1.0.
+const TEMPERATURE_TICKS = Array.from(
+  { length: 11 },
+  (_, i) => Math.round(i * TEMPERATURE_STEP * 10) / 10,
+);
+
+// JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
+// The recommended option uses the empty value, which follows the server's
+// default judge model. Its label names that model and must stay in sync with
+// riskjudge.defaultJudgeModel. See server/cmd/riskjudgebench for the benchmark
+// behind these picks.
+const JUDGE_MODEL_OPTIONS: {
+  value: string;
+  label: string;
+  description: string;
+  recommended?: boolean;
+}[] = [
+  {
+    value: "",
+    label: "Gemini 3.1 Flash Lite",
+    description:
+      "Fast, low-cost, high-recall classifier. Best fit for most policies.",
+    recommended: true,
+  },
+  {
+    value: "google/gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Lowest latency. Good for very high-volume policies.",
+  },
+  {
+    value: "anthropic/claude-sonnet-4.6",
+    label: "Claude Sonnet 4.6",
+    description:
+      "Strong quality and the highest ceiling, at higher latency and cost.",
+  },
+  {
+    value: "anthropic/claude-haiku-4.5",
+    label: "Claude Haiku 4.5",
+    description: "Balanced Anthropic option.",
+  },
+];
+
+function JudgeConfigSection({
+  formModel,
+  setFormModel,
+  formTemperature,
+  setFormTemperature,
+  formFailOpen,
+  setFormFailOpen,
+}: {
+  formModel: string;
+  setFormModel: (v: string) => void;
+  formTemperature: number;
+  setFormTemperature: (v: number) => void;
+  formFailOpen: boolean;
+  setFormFailOpen: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <JudgeModelPicker formModel={formModel} setFormModel={setFormModel} />
+
+      <div className="border-border space-y-4 rounded-lg border p-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Temperature</Label>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {formTemperature.toFixed(1)}
+              {formTemperature === DEFAULT_JUDGE_TEMPERATURE
+                ? " · default"
+                : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-foreground text-xs tabular-nums">0</span>
+            <div className="flex-1">
+              <Slider
+                value={formTemperature}
+                onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
+                min={TEMPERATURE_MIN}
+                max={TEMPERATURE_MAX}
+                step={TEMPERATURE_STEP}
+                ticks={TEMPERATURE_TICKS}
+              />
+            </div>
+            <span className="text-foreground text-xs tabular-nums">1</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Lower is more consistent and repeatable (0 recommended). Higher adds
+            variation, which can surface borderline or unusual violations a
+            rigid read might miss.
+          </p>
+        </div>
+
+        <div className="border-border flex items-start justify-between gap-4 border-t pt-4">
+          <div className="space-y-2 pr-2">
+            <Label className="text-sm font-medium">Fail open</Label>
+            <p className="text-muted-foreground text-xs">
+              When the judge errors or times out, allow the message instead of
+              blocking it.
+            </p>
+          </div>
+          <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JudgeModelPicker({
+  formModel,
+  setFormModel,
+}: {
+  formModel: string;
+  setFormModel: (v: string) => void;
+}) {
+  // A model persisted via the API but not in the curated list still needs to
+  // round-trip, so surface it as a selectable option.
+  const knownValues = JUDGE_MODEL_OPTIONS.map((o) => o.value);
+  const options =
+    formModel && !knownValues.includes(formModel)
+      ? [
+          ...JUDGE_MODEL_OPTIONS,
+          {
+            value: formModel,
+            label: formModel,
+            description: "Custom model configured via the API.",
+          },
+        ]
+      : JUDGE_MODEL_OPTIONS;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Model</Label>
+      <RadioGroup value={formModel} onValueChange={setFormModel}>
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {options.map((opt) => (
+            <label
+              key={opt.value || "recommended"}
+              htmlFor={`judge-model-${opt.value || "recommended"}`}
+              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+            >
+              <RadioGroupItem
+                value={opt.value}
+                id={`judge-model-${opt.value || "recommended"}`}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{opt.label}</span>
+                  {opt.recommended && (
+                    <Badge variant="neutral" className="text-[10px]">
+                      <Badge.Text>Recommended</Badge.Text>
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  {opt.description}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </RadioGroup>
+    </div>
+  );
+}
+
+function PromptExampleChips({
+  selectedExampleName,
+  onSelect,
+}: {
+  selectedExampleName: string;
+  onSelect: (template: (typeof PROMPT_POLICY_TEMPLATES)[number]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted-foreground text-xs">Try:</span>
+      {PROMPT_POLICY_TEMPLATES.map((template) => {
+        const active = selectedExampleName === template.name;
+        return (
+          <SimpleTooltip key={template.name} tooltip={template.prompt}>
+            <button
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(template)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                active
+                  ? "border-foreground/30 bg-muted text-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
+              {template.name}
+            </button>
+          </SimpleTooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
+  const [open, setOpen] = useState(!isEditing);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="border-border rounded-lg border"
+    >
+      <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-start gap-3 px-4 py-3 text-left transition-colors">
+        <Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">How this works</div>
+          <div className="text-muted-foreground text-xs">
+            An LLM judge reads each in-scope message and flags it when it
+            matches your prompt.
+          </div>
+        </div>
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground mt-0.5 h-4 w-4 shrink-0 transition-transform",
+            open && "rotate-90",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-border border-t px-4 py-3">
+        <p className="text-muted-foreground text-sm">
+          Prompt-based policies call an LLM judge, so every in-scope message
+          adds latency and cost versus the deterministic detection rules. The
+          judge sees one message at a time — a tool call and its inputs, or
+          message content — never the whole conversation. Narrow <b>Scope</b> to
+          control which messages it runs on, and add <b>Exemptions</b> to skip
+          trusted ones and keep cost down.
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*  PolicySheetBody                                                           */
 /* -------------------------------------------------------------------------- */
 
 function PolicySheetBody({
+  wizardStep,
+  setWizardStep,
   formName,
   setFormName,
   formEnabled,
@@ -797,6 +2497,12 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
+  scopeInclude,
+  setScopeInclude,
+  scopeExempt,
+  setScopeExempt,
+  scopeMode,
+  setScopeMode,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -805,7 +2511,13 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
 }: {
+  wizardStep: number;
+  setWizardStep: (v: number) => void;
   formName: string;
   setFormName: (v: string) => void;
   formEnabled: boolean;
@@ -817,6 +2529,12 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
+  scopeInclude: string;
+  setScopeInclude: (v: string) => void;
+  scopeExempt: string;
+  setScopeExempt: (v: string) => void;
+  scopeMode: "messageTypes" | "cel";
+  setScopeMode: (v: "messageTypes" | "cel") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -825,385 +2543,769 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
 }) {
-  const [expandedCategory, setExpandedCategory] = useState<
-    RuleCategory | "custom" | null
-  >(null);
-  const [messageTypesOpen, setMessageTypesOpen] = useState(
-    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
-  );
+  // The org's custom rules collapse into their own section; the Customize sheet
+  // opens for one detector category at a time.
+  const [detectionExpanded, setDetectionExpanded] = useState(true);
+  const [customizeCategory, setCustomizeCategory] =
+    useState<RuleCategory | null>(null);
+  const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
+    selectedCategories.has(c),
+  ).length;
+
+  // Toggle a whole built-in detector category on/off (clears any per-rule
+  // disables for it). Flag-only categories force the policy action to flag.
+  const toggleCategory = (cat: RuleCategory, checked: boolean) => {
+    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+    const nextCats = new Set(selectedCategories);
+    const nextDisabled = new Set(disabledRules);
+    if (checked) {
+      nextCats.add(cat);
+    } else {
+      nextCats.delete(cat);
+    }
+    for (const rule of rules) nextDisabled.delete(rule.id);
+    setSelectedCategories(nextCats);
+    setDisabledRules(nextDisabled);
+    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && formAction === "block") {
+      setFormAction("flag");
+    }
+  };
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
-  const actionValue =
-    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+
+  // Custom rules attach as detectors only; a match records a finding. Message
+  // exemptions are expressed via the policy's scope_exempt, not by rule id.
+  const toggleDetector = (ruleId: string, checked: boolean) => {
+    const next = new Set(selectedCustomRuleIds);
+    if (checked) {
+      next.add(ruleId);
+    } else {
+      next.delete(ruleId);
+    }
+    setSelectedCustomRuleIds(next);
+  };
+
+  // Review-step summary chips.
+  const summaryDetectors = ALL_CATEGORIES.filter((c) =>
+    selectedCategories.has(c),
+  ).map((c) => RULE_CATEGORY_META[c].label);
+  const messageTypeScopeLabels =
+    selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
+      ? ["All session parts"]
+      : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
+          selectedMessageTypes.has(t as PolicyMessageType),
+        ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+  const summaryScopes =
+    scopeMode === "cel" ? ["CEL expression"] : messageTypeScopeLabels;
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Policy Name */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Policy Name</Label>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">Auto</span>
-            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
-          </div>
-        </div>
-        {formAutoName ? (
-          <p className="text-muted-foreground text-xs">
-            Name will be generated automatically based on detection rules and
-            action.
-          </p>
-        ) : (
-          <Input
-            value={formName}
-            onChange={(value) => setFormName(value)}
-            placeholder="e.g. Secret Detection"
-          />
-        )}
-      </div>
-
-      {/* Detection Rules */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">Detection Rules</Label>
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {ALL_CATEGORIES.map((cat) => {
-            const meta = RULE_CATEGORY_META[cat];
-            const isAvailable = AVAILABLE_CATEGORIES.has(cat);
-            const isExpanded = expandedCategory === cat;
-            // Hidden rules stay in the catalog so legacy risk_results keep
-            // resolving their title via risk-utils, but they are scrubbed
-            // from the form's display, counts, and bulk toggles. The
-            // underlying disabledRules/selectedCategories state is left
-            // untouched so existing policies that pin a hidden rule round-
-            // trip cleanly through edit.
-            const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
-            const isExpandable = isAvailable && rules.length > 0;
-            const categorySelected = selectedCategories.has(cat);
-            const enabledRuleCount = categorySelected
-              ? rules.filter((r) => !disabledRules.has(r.id)).length
-              : 0;
-            const hasPartialSelection =
-              categorySelected &&
-              rules.length > 0 &&
-              enabledRuleCount > 0 &&
-              enabledRuleCount < rules.length;
-            const headerChecked: boolean | "indeterminate" = hasPartialSelection
-              ? "indeterminate"
-              : categorySelected &&
-                (rules.length === 0 || enabledRuleCount > 0);
-
-            const toggleCategory = (checked: boolean) => {
-              const nextCats = new Set(selectedCategories);
-              const nextDisabled = new Set(disabledRules);
-              if (checked) {
-                nextCats.add(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
-              } else {
-                nextCats.delete(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
-              }
-              setSelectedCategories(nextCats);
-              setDisabledRules(nextDisabled);
-              if (
-                checked &&
-                cat === "destructive_tool" &&
-                formAction === "block"
-              ) {
-                setFormAction("flag");
-              }
-            };
-
-            const toggleRule = (ruleId: string, enabled: boolean) => {
-              const nextDisabled = new Set(disabledRules);
-              const nextCats = new Set(selectedCategories);
-              if (enabled) {
-                nextDisabled.delete(ruleId);
-                // Enabling any rule inside a category implies the category is
-                // selected. Otherwise the rule wouldn't actually run.
-                nextCats.add(cat);
-              } else {
-                nextDisabled.add(ruleId);
-              }
-              setSelectedCategories(nextCats);
-              setDisabledRules(nextDisabled);
-            };
-
-            return (
-              <div key={cat}>
-                {/* Category header */}
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3",
-                    isExpandable && "cursor-pointer",
-                  )}
-                  onClick={() => {
-                    if (isExpandable) {
-                      setExpandedCategory(isExpanded ? null : cat);
-                    }
-                  }}
-                >
-                  {/* Expand chevron (only for categories with rules to expand) */}
-                  {isExpandable ? (
-                    <ChevronRight
-                      className={cn(
-                        "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                        isExpanded && "rotate-90",
-                      )}
-                    />
-                  ) : (
-                    <div className="w-4 shrink-0" />
-                  )}
-
-                  {/* Category icon */}
-                  <Icon
-                    name={meta.icon as IconName}
-                    className="text-muted-foreground size-4 shrink-0"
-                  />
-
-                  {/* Label & description */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{meta.label}</span>
-                      {!isAvailable && (
-                        <Badge variant="neutral">
-                          <Badge.Text>Coming Soon</Badge.Text>
-                        </Badge>
-                      )}
-                      {isExpandable && categorySelected && (
-                        <Badge variant="neutral">
-                          <Badge.Text>
-                            {enabledRuleCount}/{rules.length}
-                          </Badge.Text>
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {meta.description}
-                    </p>
-                  </div>
-
-                  {/* Category checkbox */}
-                  <Checkbox
-                    checked={headerChecked}
-                    disabled={!isAvailable}
-                    onCheckedChange={(checked) => toggleCategory(!!checked)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
-                {/* Expanded per-rule toggles. Each rule is independently
-                    toggleable; unchecking adds the canonical rule_id to the
-                    policy's disabled_rules list and the scanner drops matching
-                    findings. */}
-                {isAvailable && isExpanded && rules.length > 0 && (
-                  <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="space-y-2 py-1">
-                      {rules.map((rule) => {
-                        const ruleEnabled =
-                          categorySelected && !disabledRules.has(rule.id);
-                        return (
-                          <div
-                            key={rule.id}
-                            className="flex items-start gap-3 py-1"
-                          >
-                            <label
-                              htmlFor={rule.id}
-                              className="min-w-0 flex-1 cursor-pointer"
-                            >
-                              <div className="font-mono text-sm">{rule.id}</div>
-                              <div className="text-muted-foreground text-xs">
-                                {rule.title}
-                              </div>
-                            </label>
-                            <Checkbox
-                              id={rule.id}
-                              checked={ruleEnabled}
-                              onCheckedChange={(checked) =>
-                                toggleRule(rule.id, !!checked)
-                              }
-                              className="mt-0.5"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {customRules.length > 0 && (
-        <CustomRulesPicker
-          customRules={customRules}
-          selectedCustomRuleIds={selectedCustomRuleIds}
-          setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-          expanded={expandedCategory === "custom"}
-          onToggle={() =>
-            setExpandedCategory(expandedCategory === "custom" ? null : "custom")
-          }
-        />
-      )}
-
-      <Collapsible
-        open={messageTypesOpen}
-        onOpenChange={setMessageTypesOpen}
-        className="space-y-3"
+    <>
+      <WizardShell
+        steps={POLICY_WIZARD_STEPS}
+        currentStep={wizardStep}
+        setCurrentStep={setWizardStep}
       >
-        <div className="space-y-1">
-          <Label className="text-sm font-medium">Message Types</Label>
-          <p className="text-muted-foreground text-xs">
-            Choose which parts of an agent session this policy scans. Leaving
-            all four selected applies the policy everywhere.
-          </p>
-        </div>
-        <div className="border-border rounded-lg border">
-          <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
-            <ChevronRight
-              className={cn(
-                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                messageTypesOpen && "rotate-90",
-              )}
+        {wizardStep === 0 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What should this policy detect?"
+              description="Turn on detector categories and attach your organization's custom rules."
             />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">
-                {messageTypesSummary(selectedMessageTypes)}
+
+            {/* Built-in rules */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Built-in rules</Label>
+                <span className="text-muted-foreground text-xs">
+                  {selectedBuiltinCount} on
+                </span>
               </div>
-              <div className="text-muted-foreground text-xs">
-                Advanced: narrow scanning to specific parts of a session
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {ALL_CATEGORIES.map((cat) => (
+                  <DetectorCard
+                    key={cat}
+                    category={cat}
+                    selected={selectedCategories.has(cat)}
+                    disabledRules={disabledRules}
+                    onToggle={(checked) => toggleCategory(cat, checked)}
+                    onCustomize={() => setCustomizeCategory(cat)}
+                  />
+                ))}
               </div>
             </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
-            <div className="divide-border divide-y">
-              {ALL_POLICY_MESSAGE_TYPES.map((type) => {
-                const meta = POLICY_MESSAGE_TYPE_META[type];
-                const checked = selectedMessageTypes.has(type);
 
-                return (
-                  <label
-                    key={type}
-                    className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+            {customRules.length > 0 && (
+              <RuleSelectList
+                title="Custom Rules"
+                description={
+                  <>
+                    Attach your organization's custom rules as{" "}
+                    <span className="text-foreground font-medium">
+                      detectors
+                    </span>{" "}
+                    — a match records a finding.
+                  </>
+                }
+                idPrefix="detector"
+                customRules={customRules}
+                selectedRuleIds={selectedCustomRuleIds}
+                onToggleRule={toggleDetector}
+                expanded={detectionExpanded}
+                onToggle={() => setDetectionExpanded((v) => !v)}
+              />
+            )}
+          </div>
+        )}
+
+        {wizardStep === 1 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Where should it evaluate?"
+              description="Apply everywhere, or narrow the scope to reduce noise and cost."
+            />
+            {/* Scope is a mutex: message-type cards (coarse) XOR a CEL include
+                predicate (fine). The segmented control conveys that. */}
+            <div className="space-y-3">
+              <div className="border-border inline-flex rounded-md border p-0.5">
+                {(
+                  [
+                    { key: "messageTypes", label: "Message types" },
+                    { key: "cel", label: "CEL expression" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setScopeMode(opt.key)}
+                    className={cn(
+                      "rounded px-3 py-1 text-xs font-medium transition-colors",
+                      scopeMode === opt.key
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
                   >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(next) => {
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {scopeMode === "messageTypes"
+                  ? "Apply to whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
+                  : "Apply only to messages matching the expression below — this replaces the message-type selection."}
+              </p>
+            </div>
+
+            {scopeMode === "messageTypes" ? (
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                    <ScopeCard
+                      key={type}
+                      type={type as PolicyMessageType}
+                      checked={selectedMessageTypes.has(
+                        type as PolicyMessageType,
+                      )}
+                      onToggle={(checked) => {
                         const updated = new Set(selectedMessageTypes);
-                        if (next) {
-                          updated.add(type);
+                        if (checked) {
+                          updated.add(type as PolicyMessageType);
                         } else {
-                          updated.delete(type);
+                          updated.delete(type as PolicyMessageType);
                         }
                         setSelectedMessageTypes(updated);
                       }}
                     />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{meta.label}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {meta.description}
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
+                  ))}
+                </div>
+                {selectedMessageTypes.size === 0 && (
+                  <p className="text-destructive text-xs">
+                    Select at least one session part.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Evaluate messages matching
+                </Label>
+                <p className="text-muted-foreground text-xs">
+                  The policy evaluates a message only when this expression is
+                  true.
+                </p>
+                <CelExpressionField
+                  value={scopeInclude}
+                  onChange={setScopeInclude}
+                  examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+                />
+              </div>
+            )}
+
+            {/* Exemptions — always available and additive (not part of the
+                scope mutex). A match here skips the whole policy. */}
+            <div className="border-border space-y-4 border-t pt-6">
+              <div>
+                <Label className="text-sm font-medium">Exemptions</Label>
+                <p className="text-muted-foreground text-xs">
+                  Skip the whole policy for any message matching this expression
+                  — an allowlist, regardless of the scope above.
+                </p>
+              </div>
+              <CelExpressionField
+                value={scopeExempt}
+                onChange={setScopeExempt}
+                examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+              />
             </div>
-          </CollapsibleContent>
-        </div>
-        {selectedMessageTypes.size === 0 && (
-          <p className="text-destructive text-xs">
-            Select at least one type. An empty API value means “all types,” so
-            the UI keeps that choice explicit here.
-          </p>
-        )}
-      </Collapsible>
-
-      {/* Action */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Action</Label>
-        <RadioGroup
-          value={actionValue}
-          onValueChange={(v) => {
-            if (flagOnlySelected && v === "block") {
-              return;
-            }
-            setFormAction(v as PolicyAction);
-          }}
-        >
-          <div className="border-border divide-border divide-y rounded-lg border">
-            {ACTION_OPTIONS.map((opt) => {
-              const disabled = flagOnlySelected && opt.value === "block";
-
-              return (
-                <label
-                  key={opt.value}
-                  htmlFor={`action-${opt.value}`}
-                  className={cn(
-                    "flex items-start gap-3 p-3",
-                    disabled
-                      ? "cursor-not-allowed opacity-60"
-                      : "hover:bg-muted/50 cursor-pointer",
-                  )}
-                >
-                  <RadioGroupItem
-                    value={opt.value}
-                    id={`action-${opt.value}`}
-                    className="mt-0.5"
-                    disabled={disabled}
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <ActionBadge action={opt.value} />
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {opt.description}
-                    </div>
-                    {disabled && (
-                      <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools and Destructive CLI Commands support
-                        flagging only.
-                      </div>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
           </div>
-        </RadioGroup>
-      </div>
+        )}
 
-      {/* Custom message — only relevant for block-action policies that
+        {wizardStep === 2 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What happens on a match?"
+              description="Choose how the policy responds when its detection rules fire."
+            />
+            <ActionPicker
+              formAction={formAction}
+              setFormAction={setFormAction}
+              flagOnlySelected={flagOnlySelected}
+            />
+
+            {/* Who the policy applies to (audience). */}
+            <PolicyAudiencePicker
+              formAudienceType={formAudienceType}
+              setFormAudienceType={setFormAudienceType}
+              selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+              setSelectedAudiencePrincipalUrns={
+                setSelectedAudiencePrincipalUrns
+              }
+            />
+
+            {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
           record findings silently, so no message is needed. */}
-      {formAction === "block" && (
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Custom Message</Label>
-          <p className="text-muted-foreground text-xs">
-            Shown to the user when this policy blocks a tool call or prompt.
-            Leave blank to use the default message.
-          </p>
-          <TextArea
-            value={formUserMessage}
-            onChange={setFormUserMessage}
-            placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-            rows={3}
+            {formAction === "block" && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Custom Message</Label>
+                <p className="text-muted-foreground text-xs">
+                  Shown to the user when this policy blocks a tool call or
+                  prompt. Leave blank to use the default message.
+                </p>
+                <TextArea
+                  value={formUserMessage}
+                  onChange={setFormUserMessage}
+                  placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {wizardStep === 3 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Name & enable"
+              description="Review the policy, then create it."
+            />
+
+            {/* Policy Name */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Policy Name</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">Auto</span>
+                  <Switch
+                    checked={formAutoName}
+                    onCheckedChange={setFormAutoName}
+                  />
+                </div>
+              </div>
+              {formAutoName ? (
+                <p className="text-muted-foreground text-xs">
+                  Name will be generated automatically based on detection rules
+                  and action.
+                </p>
+              ) : (
+                <Input
+                  value={formName}
+                  onChange={(value) => setFormName(value)}
+                  placeholder="e.g. Secret Detection"
+                />
+              )}
+            </div>
+
+            {/* Summary */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Summary</Label>
+              <div className="border-border divide-border divide-y rounded-lg border">
+                <SummaryRow
+                  label="Detectors"
+                  chips={
+                    summaryDetectors.length > 0 ? summaryDetectors : ["None"]
+                  }
+                />
+                <SummaryRow
+                  label="Custom rules"
+                  chips={[
+                    selectedCustomRuleIds.size > 0
+                      ? `${selectedCustomRuleIds.size} attached`
+                      : "None",
+                  ]}
+                />
+                {scopeExempt.trim() !== "" && (
+                  <SummaryRow label="Exemptions" chips={["CEL expression"]} />
+                )}
+                <SummaryRow label="Scope" chips={summaryScopes} />
+                <SummaryRow
+                  label="Action"
+                  chips={[formAction === "block" ? "Block" : "Flag"]}
+                />
+              </div>
+            </div>
+
+            {/* Enabled toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Enabled</Label>
+                <p className="text-muted-foreground text-xs">
+                  Enable this policy to begin scanning messages.
+                </p>
+              </div>
+              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+            </div>
+          </div>
+        )}
+      </WizardShell>
+      {customizeCategory && (
+        <CustomizeRulesSheet
+          category={customizeCategory}
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+          disabledRules={disabledRules}
+          setDisabledRules={setDisabledRules}
+          onClose={() => setCustomizeCategory(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function PolicyAudiencePicker({
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
+}: {
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
+}) {
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roles = useMemo(
+    () => [...(rolesData?.roles ?? [])].sort(compareRolesByName),
+    [rolesData?.roles],
+  );
+  const members = useMemo(
+    () => [...(membersData?.members ?? [])].sort(compareMembersByName),
+    [membersData?.members],
+  );
+  const [audienceChoice, setAudienceChoice] = useState<PolicyAudienceChoice>(
+    () =>
+      policyAudienceChoiceForSelection(
+        formAudienceType,
+        selectedAudiencePrincipalUrns,
+      ),
+  );
+  const [userSearch, setUserSearch] = useState("");
+
+  const togglePrincipal = (principalUrn: string, checked: boolean) => {
+    const next = new Set(selectedAudiencePrincipalUrns);
+    if (checked) {
+      next.add(principalUrn);
+    } else {
+      next.delete(principalUrn);
+    }
+    setSelectedAudiencePrincipalUrns(next);
+  };
+
+  const selectAudienceChoice = (choice: PolicyAudienceChoice) => {
+    setAudienceChoice(choice);
+    setFormAudienceType(choice === "everyone" ? "everyone" : "targeted");
+    setSelectedAudiencePrincipalUrns(
+      filterAudiencePrincipalsForChoice(selectedAudiencePrincipalUrns, choice),
+    );
+    if (choice !== "users") {
+      setUserSearch("");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Audience</Label>
+        <p className="text-muted-foreground text-xs">
+          Choose which users this policy evaluates.
+        </p>
+      </div>
+      <RadioGroup
+        value={audienceChoice}
+        onValueChange={(value) =>
+          selectAudienceChoice(value as PolicyAudienceChoice)
+        }
+      >
+        <div className="border-border divide-border divide-y rounded-lg border">
+          <PolicyAudienceChoiceRow
+            id="policy-audience-everyone"
+            value="everyone"
+            title="Everyone"
+            description="Evaluate this policy for every user in the organization."
+          />
+          <PolicyAudienceChoiceRow
+            id="policy-audience-users"
+            value="users"
+            title="Specific users"
+            description="Search and select individual organization members."
+          />
+          <PolicyAudienceChoiceRow
+            id="policy-audience-roles"
+            value="roles"
+            title="Specific roles"
+            description="Evaluate this policy for every member of selected roles."
           />
         </div>
+      </RadioGroup>
+
+      {audienceChoice === "users" && (
+        <SpecificUsersAudienceSection
+          members={members}
+          userSearch={userSearch}
+          setUserSearch={setUserSearch}
+          selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+          onTogglePrincipal={togglePrincipal}
+        />
       )}
 
-      {/* Enabled toggle */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Enabled</Label>
-          <p className="text-muted-foreground text-xs">
-            Enable this policy to begin scanning messages.
-          </p>
+      {audienceChoice === "roles" && (
+        <div className="border-border rounded-lg border">
+          <AudiencePrincipalSection title="Roles">
+            {roles.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-3 text-sm">
+                No roles available.
+              </p>
+            ) : (
+              roles.map((role) => {
+                const principalUrn = role.principalUrn;
+                return (
+                  <AudiencePrincipalRow
+                    key={principalUrn}
+                    id={`audience-${principalUrn}`}
+                    checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+                    title={role.name}
+                    subtitle={`${role.memberCount} members`}
+                    onCheckedChange={(checked) =>
+                      togglePrincipal(principalUrn, checked)
+                    }
+                  />
+                );
+              })
+            )}
+          </AudiencePrincipalSection>
+          {selectedAudiencePrincipalUrns.size === 0 && (
+            <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
+              Select at least one role to save a targeted policy.
+            </p>
+          )}
         </div>
-        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
-      </div>
+      )}
     </div>
+  );
+}
+
+function SpecificUsersAudienceSection({
+  members,
+  userSearch,
+  setUserSearch,
+  selectedAudiencePrincipalUrns,
+  onTogglePrincipal,
+}: {
+  members: AccessMember[];
+  userSearch: string;
+  setUserSearch: (value: string) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+}) {
+  const memberByPrincipalUrn = useMemo(
+    () => new Map(members.map((member) => [member.principalUrn, member])),
+    [members],
+  );
+  const selectedUserPrincipalUrns = useMemo(
+    () =>
+      [...selectedAudiencePrincipalUrns]
+        .filter((principalUrn) => principalUrn.startsWith("user:"))
+        .sort((a, b) => {
+          const aMember = memberByPrincipalUrn.get(a);
+          const bMember = memberByPrincipalUrn.get(b);
+          const aLabel = aMember ? memberDisplayName(aMember) : a;
+          const bLabel = bMember ? memberDisplayName(bMember) : b;
+          return aLabel.localeCompare(bLabel);
+        }),
+    [memberByPrincipalUrn, selectedAudiencePrincipalUrns],
+  );
+  const selectedUserOptions = selectedUserPrincipalUrns.map((principalUrn) => {
+    const member = memberByPrincipalUrn.get(principalUrn);
+    return {
+      member,
+      principalUrn,
+      title: member ? memberDisplayName(member) : principalUrn,
+      subtitle: member?.email ?? "Unknown user",
+    };
+  });
+  const matchingMembers = useMemo(
+    () => members.filter((member) => memberMatchesSearch(member, userSearch)),
+    [members, userSearch],
+  );
+  const unselectedMatchingMembers = matchingMembers.filter(
+    (member) => !selectedAudiencePrincipalUrns.has(member.principalUrn),
+  );
+  const visibleSearchResults = unselectedMatchingMembers.slice(
+    0,
+    USER_SEARCH_RESULT_LIMIT,
+  );
+  const hiddenResultCount = Math.max(
+    unselectedMatchingMembers.length - visibleSearchResults.length,
+    0,
+  );
+  const hasSearch = userSearch.trim().length > 0;
+
+  return (
+    <div className="border-border rounded-lg border">
+      <div className="space-y-4 p-4">
+        <SearchBar
+          value={userSearch}
+          onChange={setUserSearch}
+          placeholder="Search users by name or email"
+          className="w-full"
+        />
+
+        {selectedUserOptions.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-muted-foreground text-xs font-medium">
+              Selected users
+            </div>
+            <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+              {selectedUserOptions.map((option) => (
+                <AudiencePrincipalRow
+                  key={option.principalUrn}
+                  id={`audience-selected-${option.principalUrn}`}
+                  checked
+                  title={option.title}
+                  subtitle={option.subtitle}
+                  leading={
+                    <AudienceMemberAvatar
+                      name={option.member?.name ?? option.title}
+                      email={option.member?.email ?? option.subtitle}
+                      photoUrl={option.member?.photoUrl}
+                    />
+                  }
+                  onCheckedChange={(checked) =>
+                    onTogglePrincipal(option.principalUrn, checked)
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <UserSearchResults
+          hasSearch={hasSearch}
+          hiddenResultCount={hiddenResultCount}
+          results={visibleSearchResults}
+          selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+          onTogglePrincipal={onTogglePrincipal}
+        />
+      </div>
+
+      {selectedUserPrincipalUrns.length === 0 && (
+        <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
+          Select at least one user to save a targeted policy.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UserSearchResults({
+  hasSearch,
+  hiddenResultCount,
+  results,
+  selectedAudiencePrincipalUrns,
+  onTogglePrincipal,
+}: {
+  hasSearch: boolean;
+  hiddenResultCount: number;
+  results: AccessMember[];
+  selectedAudiencePrincipalUrns: Set<string>;
+  onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+}) {
+  if (!hasSearch) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Search users by name or email to add them.
+      </p>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">No matching users to add.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-muted-foreground text-xs font-medium">
+        Search results
+      </div>
+      <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+        {results.map((member) => {
+          const principalUrn = member.principalUrn;
+          return (
+            <AudiencePrincipalRow
+              key={principalUrn}
+              id={`audience-result-${principalUrn}`}
+              checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+              title={memberDisplayName(member)}
+              subtitle={member.email}
+              leading={
+                <AudienceMemberAvatar
+                  name={member.name}
+                  email={member.email}
+                  photoUrl={member.photoUrl}
+                />
+              }
+              onCheckedChange={(checked) =>
+                onTogglePrincipal(principalUrn, checked)
+              }
+            />
+          );
+        })}
+      </div>
+      {hiddenResultCount > 0 && (
+        <p className="text-muted-foreground text-xs">
+          Showing first {USER_SEARCH_RESULT_LIMIT} matches. Refine the search to
+          narrow results.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AudienceMemberAvatar({
+  name,
+  email,
+  photoUrl,
+}: {
+  name: string;
+  email: string;
+  photoUrl?: string;
+}) {
+  return (
+    <Avatar className="h-7 w-7">
+      {photoUrl && <AvatarImage src={photoUrl} alt={name || email} />}
+      <AvatarFallback className="text-xs">
+        {memberInitials({ name, email })}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function PolicyAudienceChoiceRow({
+  id,
+  value,
+  title,
+  description,
+}: {
+  id: string;
+  value: PolicyAudienceChoice;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer gap-3 px-4 py-3"
+    >
+      <RadioGroupItem id={id} value={value} className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block text-xs">
+          {description}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function AudiencePrincipalSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-border border-b last:border-b-0">
+      <div className="bg-muted/30 border-border border-b px-4 py-2 text-xs font-medium">
+        {title}
+      </div>
+      <div className="divide-border divide-y">{children}</div>
+    </div>
+  );
+}
+
+function AudiencePrincipalRow({
+  id,
+  checked,
+  title,
+  subtitle,
+  leading,
+  onCheckedChange,
+}: {
+  id: string;
+  checked: boolean;
+  title: string;
+  subtitle: string;
+  leading?: ReactNode;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(!!value)}
+        className="mt-0.5"
+      />
+      {leading}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block truncate text-xs">
+          {subtitle}
+        </span>
+      </span>
+    </label>
   );
 }
 
@@ -1347,13 +3449,19 @@ const ACTION_BADGE_CONFIG: Record<
   block: { label: "Block", variant: "destructive" },
 };
 
-const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
+const ACTION_OPTIONS: {
+  value: PolicyAction;
+  title: string;
+  description: string;
+}[] = [
   {
     value: "flag",
+    title: "Log for review",
     description: "Log findings for review without interrupting the session",
   },
   {
     value: "block",
+    title: "Deny the request",
     description: "Deny prompts and tool calls that match detection rules",
   },
 ];
@@ -1367,113 +3475,187 @@ function ActionBadge({ action }: { action: PolicyAction }) {
   );
 }
 
+/** One session-part as a selectable card (Scope step). */
+function ScopeCard({
+  type,
+  checked,
+  onToggle,
+}: {
+  type: PolicyMessageType;
+  checked: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  const meta = POLICY_MESSAGE_TYPE_META[type];
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+        checked
+          ? "border-foreground bg-muted/40"
+          : "border-border hover:bg-muted/30",
+      )}
+    >
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(next) => onToggle(!!next)}
+        className="mt-0.5"
+      />
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{meta.label}</div>
+        <div className="text-muted-foreground text-xs">{meta.description}</div>
+      </div>
+    </label>
+  );
+}
+
+function ActionPicker({
+  formAction,
+  setFormAction,
+  flagOnlySelected = false,
+}: {
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
+  flagOnlySelected?: boolean;
+}) {
+  const actionValue =
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+
+  return (
+    <RadioGroup
+      value={actionValue}
+      onValueChange={(v) => {
+        if (flagOnlySelected && v === "block") {
+          return;
+        }
+        setFormAction(v as PolicyAction);
+      }}
+      className="space-y-2.5"
+    >
+      {ACTION_OPTIONS.map((opt) => {
+        const disabled = flagOnlySelected && opt.value === "block";
+        const selected = actionValue === opt.value;
+
+        return (
+          <label
+            key={opt.value}
+            htmlFor={`action-${opt.value}`}
+            className={cn(
+              "flex items-start gap-3 rounded-lg border p-3.5 transition-colors",
+              disabled
+                ? "border-border cursor-not-allowed opacity-60"
+                : selected
+                  ? "border-foreground bg-muted/40 cursor-pointer"
+                  : "border-border hover:bg-muted/30 cursor-pointer",
+            )}
+          >
+            <RadioGroupItem
+              value={opt.value}
+              id={`action-${opt.value}`}
+              className="mt-0.5"
+              disabled={disabled}
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <ActionBadge action={opt.value} />
+                <span className="text-sm font-medium">{opt.title}</span>
+              </div>
+              <div className="text-muted-foreground mt-1.5 text-xs">
+                {opt.description}
+              </div>
+              {disabled && (
+                <div className="text-destructive mt-1 text-xs font-medium">
+                  Destructive Tools and Destructive CLI Commands support
+                  flagging only.
+                </div>
+              )}
+            </div>
+          </label>
+        );
+      })}
+    </RadioGroup>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
-/*  CustomRulesPicker                                                          */
+/*  RuleSelectList                                                             */
 /* -------------------------------------------------------------------------- */
 
-function CustomRulesPicker({
+/** A collapsible checkbox list of the org's custom rules. Used twice in the
+ *  standard-policy wizard: in the Detect step to attach rules as detectors, and
+ *  in the Scope step to attach them as exemptions. The two lists drive disjoint
+ *  id sets (custom_rule_ids vs exempt_rule_ids); the caller's onToggleRule keeps
+ *  them mutually exclusive. */
+function RuleSelectList({
+  title,
+  description,
+  idPrefix,
   customRules,
-  selectedCustomRuleIds,
-  setSelectedCustomRuleIds,
+  selectedRuleIds,
+  onToggleRule,
   expanded,
   onToggle,
 }: {
+  title: string;
+  description: ReactNode;
+  idPrefix: string;
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
-  selectedCustomRuleIds: Set<string>;
-  setSelectedCustomRuleIds: (v: Set<string>) => void;
+  selectedRuleIds: Set<string>;
+  onToggleRule: (ruleId: string, checked: boolean) => void;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const meta = RULE_CATEGORY_META.custom;
-  const allSelected =
-    customRules.length > 0 &&
-    customRules.every((r) => selectedCustomRuleIds.has(r.id));
-  const someSelected =
-    !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
+  const selectedCount = customRules.filter((r) =>
+    selectedRuleIds.has(r.id),
+  ).length;
   return (
     <div className="space-y-3">
-      <Label className="text-sm font-medium">Custom Rules</Label>
-      <div className="border-border divide-border divide-y rounded-lg border">
-        <div
-          className="flex cursor-pointer items-center gap-3 px-4 py-3"
-          onClick={onToggle}
-        >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
-          <Icon
-            name={meta.icon as IconName}
-            className="text-muted-foreground size-4 shrink-0"
-          />
-          <div className="min-w-0 flex-1">
-            <span className="text-sm font-medium">{meta.label}</span>
-            <p className="text-muted-foreground text-xs">
-              {customRules.length} organization-defined rule
-              {customRules.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <Checkbox
-            checked={
-              allSelected ? true : someSelected ? "indeterminate" : false
-            }
-            onCheckedChange={(checked) => {
-              const next = new Set(selectedCustomRuleIds);
-              if (checked) {
-                customRules.forEach((r) => {
-                  void next.add(r.id);
-                });
-              } else {
-                customRules.forEach((r) => {
-                  void next.delete(r.id);
-                });
-              }
-              setSelectedCustomRuleIds(next);
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-        {expanded && (
-          <div className="bg-muted/30 border-border border-t px-4 py-2">
-            <div className="space-y-2 py-1">
-              {customRules.map((rule) => {
-                const checked = selectedCustomRuleIds.has(rule.id);
-                return (
-                  <div key={rule.id} className="flex items-start gap-3 py-1">
-                    <label
-                      htmlFor={`custom-${rule.id}`}
-                      className="min-w-0 flex-1 cursor-pointer"
-                    >
-                      <div className="font-mono text-sm">{rule.id}</div>
-                      {rule.title && (
-                        <div className="text-muted-foreground text-xs">
-                          {rule.title}
-                        </div>
-                      )}
-                    </label>
-                    <Checkbox
-                      id={`custom-${rule.id}`}
-                      checked={checked}
-                      onCheckedChange={(next) => {
-                        const set = new Set(selectedCustomRuleIds);
-                        if (next) {
-                          set.add(rule.id);
-                        } else {
-                          set.delete(rule.id);
-                        }
-                        setSelectedCustomRuleIds(set);
-                      }}
-                      className="mt-0.5"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2"
+      >
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+        <Label className="cursor-pointer text-sm font-medium">{title}</Label>
+        {selectedCount > 0 && (
+          <Badge variant="neutral">
+            <Badge.Text>{selectedCount} selected</Badge.Text>
+          </Badge>
         )}
-      </div>
+      </button>
+      {expanded && (
+        <div className="border-border divide-border divide-y rounded-lg border">
+          <p className="text-muted-foreground px-4 py-3 text-xs">
+            {description}
+          </p>
+          <div className="space-y-2 px-4 py-3">
+            {customRules.map((rule) => (
+              <div key={rule.id} className="flex items-center gap-3 py-1">
+                <Checkbox
+                  id={`${idPrefix}-${rule.id}`}
+                  checked={selectedRuleIds.has(rule.id)}
+                  onCheckedChange={(next) => onToggleRule(rule.id, !!next)}
+                />
+                <label
+                  htmlFor={`${idPrefix}-${rule.id}`}
+                  className="min-w-0 flex-1 cursor-pointer truncate text-xs"
+                >
+                  <span className="text-foreground">
+                    {rule.title || rule.id}
+                  </span>
+                  <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                    {rule.id}
+                  </span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

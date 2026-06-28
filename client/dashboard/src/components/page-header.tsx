@@ -1,5 +1,4 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { InsightsTrigger } from "@/components/insights-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
@@ -9,6 +8,8 @@ import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
+import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
+import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 
@@ -34,16 +35,12 @@ function PageHeaderComponent({
             className="data-[orientation=vertical]:h-4"
           />
           {children}
-          {/* Insights trigger is pinned to the far right of the bar,
-              outside the breadcrumb's max-width container so it lands at
-              the true right edge on wide viewports. Self-hides when no
-              InsightsSidebar ancestor exists. */}
-          <InsightsTrigger className="ml-auto shrink-0" />
         </div>
       </header>
       {/* Brand gradient signature, relocated here from the old top bar — it now
           divides the main panel's header from its content on the right side. */}
       <BrandGradientLine />
+      <OnboardingBanner />
     </>
   );
 }
@@ -59,7 +56,7 @@ function PageHeaderTitle({
     // 1270 carefully chosen to make the header line up with the max width of the page content
     <Heading
       variant="h4"
-      className={cn("mx-auto ml-1 w-full max-w-[1270px]", className)}
+      className={cn("ml-1 w-full max-w-[1270px]", className)}
     >
       {children}
     </Heading>
@@ -82,6 +79,47 @@ const breadcrumbSubstitutions = {
   slack: "Assistants",
   clis: "Skills",
 };
+
+// One rendered crumb. Pending crumbs (substitution key present, value not yet
+// resolved) show a placeholder so the raw id/slug never flashes before its
+// human label arrives.
+function BreadcrumbCrumb({
+  elem,
+}: {
+  elem: {
+    url: string;
+    display: string;
+    isCurrentPage: boolean;
+    disableLink?: boolean;
+    pending?: boolean;
+  };
+}) {
+  if (elem.pending) {
+    return (
+      <span
+        aria-hidden="true"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+      />
+    );
+  }
+  if (elem.isCurrentPage || elem.disableLink) {
+    return (
+      <span
+        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
+      >
+        {elem.display}
+      </span>
+    );
+  }
+  return (
+    <Link
+      to={elem.url}
+      className="text-muted-foreground hover:text-foreground trans"
+    >
+      {elem.display}
+    </Link>
+  );
+}
 
 function PageHeaderBreadcrumbs({
   fullWidth,
@@ -139,13 +177,22 @@ function PageHeaderBreadcrumbs({
       }
 
       let display = decoded;
-      const subSegment = allSubstitutions[segment];
-      const subDecoded = allSubstitutions[decoded];
-      if (subSegment !== undefined) {
-        display = subSegment;
-      } else if (subDecoded !== undefined) {
-        display = subDecoded;
-      } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
+      // A substitution whose KEY is present but VALUE is still undefined means
+      // the caller intends to replace this segment but the replacement isn't
+      // ready yet (e.g. a name loaded from a query). Treat it as pending and
+      // render a placeholder rather than flashing the raw id/slug first and the
+      // real text a moment later.
+      const subValue = allSubstitutions[segment] ?? allSubstitutions[decoded];
+      const pending =
+        subValue === undefined &&
+        (segment in allSubstitutions || decoded in allSubstitutions);
+      if (subValue !== undefined) {
+        display = subValue;
+      } else if (
+        !pending &&
+        !toPreserve.includes(decoded) &&
+        !decoded.includes("@")
+      ) {
         // Only synthesize a Title-Case display for the static parts of the
         // path. Route params (in toPreserve) and email-like identifiers are
         // dynamic slugs and keep their original casing.
@@ -155,6 +202,7 @@ function PageHeaderBreadcrumbs({
       return {
         url: baseUrl + relativeUrl,
         display,
+        pending,
         isCurrentPage: location.pathname.endsWith(relativeUrl),
         skip: skipSegments.includes(segment),
       };
@@ -168,6 +216,7 @@ function PageHeaderBreadcrumbs({
     display: string;
     isCurrentPage: boolean;
     disableLink?: boolean;
+    pending?: boolean;
   }[] = [];
 
   // 1. Org name (always first; only clickable if user has org access)
@@ -198,34 +247,28 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
-      <div className="ml-auto flex items-center gap-2 normal-case">
-        {visibleElements.map((elem, index) => (
-          <React.Fragment key={`${elem.url}-${index}`}>
-            {elem.isCurrentPage || elem.disableLink ? (
-              <span
-                className={
-                  elem.isCurrentPage ? undefined : "text-muted-foreground"
-                }
-              >
-                {elem.display}
-              </span>
-            ) : (
-              <Link
-                to={elem.url}
-                className="text-muted-foreground hover:text-foreground trans"
-              >
-                {elem.display}
-              </Link>
-            )}
-            {index < visibleElements.length - 1 && (
-              <span className="text-muted-foreground"> / </span>
-            )}
-          </React.Fragment>
-        ))}
-        {stage && <ReleaseStageBadge stage={stage} />}
-      </div>
-    </PageHeader.Title>
+    // The shortcut hint is a sibling of the breadcrumb band — not nested inside
+    // it — so it pins to the true right edge of the nav bar. Nested, it would
+    // stop at the right edge of the centered max-w-[1270px] band, landing
+    // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
+    <>
+      <PageHeader.Title
+        className={cn(fullWidth ? "max-w-full" : "", className)}
+      >
+        <div className="ml-auto flex items-center gap-2 normal-case">
+          {visibleElements.map((elem, index) => (
+            <React.Fragment key={`${elem.url}-${index}`}>
+              <BreadcrumbCrumb elem={elem} />
+              {index < visibleElements.length - 1 && (
+                <span className="text-muted-foreground"> / </span>
+              )}
+            </React.Fragment>
+          ))}
+          {stage && <ReleaseStageBadge stage={stage} />}
+        </div>
+      </PageHeader.Title>
+      <InsightsDockShortcutHint className="ml-auto shrink-0" />
+    </>
   );
 }
 

@@ -18,25 +18,81 @@ import (
 // Client lists the organizationRemoteSessionIssuers service endpoint HTTP
 // clients.
 type Client struct {
-	// CreateOrganizationRemoteSessionIssuer Doer is the HTTP client used to make
-	// requests to the createOrganizationRemoteSessionIssuer endpoint.
-	CreateOrganizationRemoteSessionIssuerDoer goahttp.Doer
+	// CreateIssuer Doer is the HTTP client used to make requests to the
+	// createIssuer endpoint.
+	CreateIssuerDoer goahttp.Doer
 
-	// UpdateOrganizationRemoteSessionIssuer Doer is the HTTP client used to make
-	// requests to the updateOrganizationRemoteSessionIssuer endpoint.
-	UpdateOrganizationRemoteSessionIssuerDoer goahttp.Doer
+	// ListIssuers Doer is the HTTP client used to make requests to the listIssuers
+	// endpoint.
+	ListIssuersDoer goahttp.Doer
 
-	// ListOrganizationRemoteSessionIssuers Doer is the HTTP client used to make
-	// requests to the listOrganizationRemoteSessionIssuers endpoint.
-	ListOrganizationRemoteSessionIssuersDoer goahttp.Doer
+	// GetIssuer Doer is the HTTP client used to make requests to the getIssuer
+	// endpoint.
+	GetIssuerDoer goahttp.Doer
 
-	// GetOrganizationRemoteSessionIssuer Doer is the HTTP client used to make
-	// requests to the getOrganizationRemoteSessionIssuer endpoint.
-	GetOrganizationRemoteSessionIssuerDoer goahttp.Doer
+	// GetIssuerDeletePreflight Doer is the HTTP client used to make requests to
+	// the getIssuerDeletePreflight endpoint.
+	GetIssuerDeletePreflightDoer goahttp.Doer
 
-	// DeleteOrganizationRemoteSessionIssuer Doer is the HTTP client used to make
-	// requests to the deleteOrganizationRemoteSessionIssuer endpoint.
-	DeleteOrganizationRemoteSessionIssuerDoer goahttp.Doer
+	// UpdateIssuer Doer is the HTTP client used to make requests to the
+	// updateIssuer endpoint.
+	UpdateIssuerDoer goahttp.Doer
+
+	// DeleteIssuer Doer is the HTTP client used to make requests to the
+	// deleteIssuer endpoint.
+	DeleteIssuerDoer goahttp.Doer
+
+	// MoveIssuer Doer is the HTTP client used to make requests to the moveIssuer
+	// endpoint.
+	MoveIssuerDoer goahttp.Doer
+
+	// ListClients Doer is the HTTP client used to make requests to the listClients
+	// endpoint.
+	ListClientsDoer goahttp.Doer
+
+	// GetClient Doer is the HTTP client used to make requests to the getClient
+	// endpoint.
+	GetClientDoer goahttp.Doer
+
+	// GetClientDeletePreflight Doer is the HTTP client used to make requests to
+	// the getClientDeletePreflight endpoint.
+	GetClientDeletePreflightDoer goahttp.Doer
+
+	// ListClientMcpServers Doer is the HTTP client used to make requests to the
+	// listClientMcpServers endpoint.
+	ListClientMcpServersDoer goahttp.Doer
+
+	// ListClientSessions Doer is the HTTP client used to make requests to the
+	// listClientSessions endpoint.
+	ListClientSessionsDoer goahttp.Doer
+
+	// CreateClient Doer is the HTTP client used to make requests to the
+	// createClient endpoint.
+	CreateClientDoer goahttp.Doer
+
+	// UpdateClient Doer is the HTTP client used to make requests to the
+	// updateClient endpoint.
+	UpdateClientDoer goahttp.Doer
+
+	// DeleteClient Doer is the HTTP client used to make requests to the
+	// deleteClient endpoint.
+	DeleteClientDoer goahttp.Doer
+
+	// RemoveClientFromMcpServer Doer is the HTTP client used to make requests to
+	// the removeClientFromMcpServer endpoint.
+	RemoveClientFromMcpServerDoer goahttp.Doer
+
+	// RevokeSession Doer is the HTTP client used to make requests to the
+	// revokeSession endpoint.
+	RevokeSessionDoer goahttp.Doer
+
+	// RefreshSession Doer is the HTTP client used to make requests to the
+	// refreshSession endpoint.
+	RefreshSessionDoer goahttp.Doer
+
+	// RevokeAllClientSessions Doer is the HTTP client used to make requests to the
+	// revokeAllClientSessions endpoint.
+	RevokeAllClientSessionsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -59,29 +115,42 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateOrganizationRemoteSessionIssuerDoer: doer,
-		UpdateOrganizationRemoteSessionIssuerDoer: doer,
-		ListOrganizationRemoteSessionIssuersDoer:  doer,
-		GetOrganizationRemoteSessionIssuerDoer:    doer,
-		DeleteOrganizationRemoteSessionIssuerDoer: doer,
-		RestoreResponseBody:                       restoreBody,
-		scheme:                                    scheme,
-		host:                                      host,
-		decoder:                                   dec,
-		encoder:                                   enc,
+		CreateIssuerDoer:              doer,
+		ListIssuersDoer:               doer,
+		GetIssuerDoer:                 doer,
+		GetIssuerDeletePreflightDoer:  doer,
+		UpdateIssuerDoer:              doer,
+		DeleteIssuerDoer:              doer,
+		MoveIssuerDoer:                doer,
+		ListClientsDoer:               doer,
+		GetClientDoer:                 doer,
+		GetClientDeletePreflightDoer:  doer,
+		ListClientMcpServersDoer:      doer,
+		ListClientSessionsDoer:        doer,
+		CreateClientDoer:              doer,
+		UpdateClientDoer:              doer,
+		DeleteClientDoer:              doer,
+		RemoveClientFromMcpServerDoer: doer,
+		RevokeSessionDoer:             doer,
+		RefreshSessionDoer:            doer,
+		RevokeAllClientSessionsDoer:   doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
-// CreateOrganizationRemoteSessionIssuer returns an endpoint that makes HTTP
-// requests to the organizationRemoteSessionIssuers service
-// createOrganizationRemoteSessionIssuer server.
-func (c *Client) CreateOrganizationRemoteSessionIssuer() goa.Endpoint {
+// CreateIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service createIssuer server.
+func (c *Client) CreateIssuer() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeCreateOrganizationRemoteSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeCreateOrganizationRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCreateIssuerRequest(c.encoder)
+		decodeResponse = DecodeCreateIssuerResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCreateOrganizationRemoteSessionIssuerRequest(ctx, v)
+		req, err := c.BuildCreateIssuerRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -89,24 +158,23 @@ func (c *Client) CreateOrganizationRemoteSessionIssuer() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.CreateOrganizationRemoteSessionIssuerDoer.Do(req)
+		resp, err := c.CreateIssuerDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createOrganizationRemoteSessionIssuer", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createIssuer", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// UpdateOrganizationRemoteSessionIssuer returns an endpoint that makes HTTP
-// requests to the organizationRemoteSessionIssuers service
-// updateOrganizationRemoteSessionIssuer server.
-func (c *Client) UpdateOrganizationRemoteSessionIssuer() goa.Endpoint {
+// ListIssuers returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service listIssuers server.
+func (c *Client) ListIssuers() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpdateOrganizationRemoteSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeUpdateOrganizationRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListIssuersRequest(c.encoder)
+		decodeResponse = DecodeListIssuersResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdateOrganizationRemoteSessionIssuerRequest(ctx, v)
+		req, err := c.BuildListIssuersRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -114,24 +182,23 @@ func (c *Client) UpdateOrganizationRemoteSessionIssuer() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpdateOrganizationRemoteSessionIssuerDoer.Do(req)
+		resp, err := c.ListIssuersDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "updateOrganizationRemoteSessionIssuer", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listIssuers", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// ListOrganizationRemoteSessionIssuers returns an endpoint that makes HTTP
-// requests to the organizationRemoteSessionIssuers service
-// listOrganizationRemoteSessionIssuers server.
-func (c *Client) ListOrganizationRemoteSessionIssuers() goa.Endpoint {
+// GetIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service getIssuer server.
+func (c *Client) GetIssuer() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListOrganizationRemoteSessionIssuersRequest(c.encoder)
-		decodeResponse = DecodeListOrganizationRemoteSessionIssuersResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetIssuerRequest(c.encoder)
+		decodeResponse = DecodeGetIssuerResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListOrganizationRemoteSessionIssuersRequest(ctx, v)
+		req, err := c.BuildGetIssuerRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -139,24 +206,23 @@ func (c *Client) ListOrganizationRemoteSessionIssuers() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListOrganizationRemoteSessionIssuersDoer.Do(req)
+		resp, err := c.GetIssuerDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listOrganizationRemoteSessionIssuers", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getIssuer", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// GetOrganizationRemoteSessionIssuer returns an endpoint that makes HTTP
-// requests to the organizationRemoteSessionIssuers service
-// getOrganizationRemoteSessionIssuer server.
-func (c *Client) GetOrganizationRemoteSessionIssuer() goa.Endpoint {
+// GetIssuerDeletePreflight returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service getIssuerDeletePreflight server.
+func (c *Client) GetIssuerDeletePreflight() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetOrganizationRemoteSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetIssuerDeletePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetIssuerDeletePreflightResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationRemoteSessionIssuerRequest(ctx, v)
+		req, err := c.BuildGetIssuerDeletePreflightRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -164,24 +230,23 @@ func (c *Client) GetOrganizationRemoteSessionIssuer() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetOrganizationRemoteSessionIssuerDoer.Do(req)
+		resp, err := c.GetIssuerDeletePreflightDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getOrganizationRemoteSessionIssuer", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getIssuerDeletePreflight", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// DeleteOrganizationRemoteSessionIssuer returns an endpoint that makes HTTP
-// requests to the organizationRemoteSessionIssuers service
-// deleteOrganizationRemoteSessionIssuer server.
-func (c *Client) DeleteOrganizationRemoteSessionIssuer() goa.Endpoint {
+// UpdateIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service updateIssuer server.
+func (c *Client) UpdateIssuer() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDeleteOrganizationRemoteSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeDeleteOrganizationRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpdateIssuerRequest(c.encoder)
+		decodeResponse = DecodeUpdateIssuerResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteOrganizationRemoteSessionIssuerRequest(ctx, v)
+		req, err := c.BuildUpdateIssuerRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -189,9 +254,346 @@ func (c *Client) DeleteOrganizationRemoteSessionIssuer() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DeleteOrganizationRemoteSessionIssuerDoer.Do(req)
+		resp, err := c.UpdateIssuerDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "deleteOrganizationRemoteSessionIssuer", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "updateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service deleteIssuer server.
+func (c *Client) DeleteIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteIssuerRequest(c.encoder)
+		decodeResponse = DecodeDeleteIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "deleteIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MoveIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service moveIssuer server.
+func (c *Client) MoveIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMoveIssuerRequest(c.encoder)
+		decodeResponse = DecodeMoveIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMoveIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MoveIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "moveIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListClients returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service listClients server.
+func (c *Client) ListClients() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListClientsRequest(c.encoder)
+		decodeResponse = DecodeListClientsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListClientsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListClientsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service getClient server.
+func (c *Client) GetClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetClientRequest(c.encoder)
+		decodeResponse = DecodeGetClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetClientDeletePreflight returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service getClientDeletePreflight server.
+func (c *Client) GetClientDeletePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetClientDeletePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetClientDeletePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetClientDeletePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetClientDeletePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getClientDeletePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListClientMcpServers returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service listClientMcpServers server.
+func (c *Client) ListClientMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListClientMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListClientMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListClientMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListClientMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listClientMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListClientSessions returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service listClientSessions server.
+func (c *Client) ListClientSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListClientSessionsRequest(c.encoder)
+		decodeResponse = DecodeListClientSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListClientSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListClientSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listClientSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service createClient server.
+func (c *Client) CreateClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateClientRequest(c.encoder)
+		decodeResponse = DecodeCreateClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service updateClient server.
+func (c *Client) UpdateClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateClientRequest(c.encoder)
+		decodeResponse = DecodeUpdateClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "updateClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service deleteClient server.
+func (c *Client) DeleteClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteClientRequest(c.encoder)
+		decodeResponse = DecodeDeleteClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "deleteClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RemoveClientFromMcpServer returns an endpoint that makes HTTP requests to
+// the organizationRemoteSessionIssuers service removeClientFromMcpServer
+// server.
+func (c *Client) RemoveClientFromMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRemoveClientFromMcpServerRequest(c.encoder)
+		decodeResponse = DecodeRemoveClientFromMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRemoveClientFromMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RemoveClientFromMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "removeClientFromMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeSession returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service revokeSession server.
+func (c *Client) RevokeSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeSessionRequest(c.encoder)
+		decodeResponse = DecodeRevokeSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "revokeSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshSession returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service refreshSession server.
+func (c *Client) RefreshSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshSessionRequest(c.encoder)
+		decodeResponse = DecodeRefreshSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "refreshSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeAllClientSessions returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service revokeAllClientSessions server.
+func (c *Client) RevokeAllClientSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeAllClientSessionsRequest(c.encoder)
+		decodeResponse = DecodeRevokeAllClientSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeAllClientSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeAllClientSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "revokeAllClientSessions", err)
 		}
 		return decodeResponse(resp)
 	}

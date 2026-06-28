@@ -7,19 +7,27 @@ import {
   Laptop,
   Maximize2,
 } from "lucide-react";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { SessionRow } from "@/components/sessions/SessionRow";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryGetEmployeeDataFlowGraph";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
@@ -32,7 +40,13 @@ import type {
   TimeSeriesBucket,
   UserSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useMembers } from "@gram/client/react-query";
+import {
+  useGramContext,
+  useListChats,
+  useMembers,
+  useUserSessions,
+} from "@gram/client/react-query";
+import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -42,18 +56,19 @@ import {
 import { useSlugs } from "@/contexts/Sdk";
 import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {
-  CategoryScale,
   Chart as ChartJS,
   Filler,
   Legend,
   LinearScale,
   LineElement,
   PointElement,
-  Tooltip,
+  Tooltip as ChartTooltip,
   type ChartOptions,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
+import { useChartZoom } from "@/components/chart/useChartZoom";
 import { slugify } from "@/lib/constants";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -75,13 +90,13 @@ import {
 import "@xyflow/react/dist/style.css";
 
 ChartJS.register(
-  CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
   Filler,
-  Tooltip,
+  ChartTooltip,
   Legend,
+  ZoomPlugin,
 );
 
 const CHART_COLOR = "#60a5fa";
@@ -134,6 +149,7 @@ const DATA_FLOW_EDGE_TYPES = { dataFlow: DataFlowEdgeLine };
 export function InsightsEmployeeDetailContent(): JSX.Element {
   const { userSlug } = useParams<{ userSlug: string }>();
   const client = useGramContext();
+  const routes = useRoutes();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
@@ -173,6 +189,80 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     if (customRange) return customRangeLabel ?? "the selected range";
     return formatDateRangeLabel(dateRange, null);
   }, [customRange, customRangeLabel, dateRange]);
+  const employeeEmailFilter =
+    member?.email ?? (routeUser.includes("@") ? routeUser : null);
+  const agentSessionsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    if (employeeEmailFilter) {
+      params.set("search", employeeEmailFilter);
+    }
+    return `${routes.agentSessions.href()}?${params.toString()}`;
+  }, [
+    customRange,
+    dateRange,
+    employeeEmailFilter,
+    from,
+    routes.agentSessions,
+    to,
+  ]);
+  const toolLogsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user", employeeEmailFilter);
+    }
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    return `${routes.logs.href()}?${params.toString()}`;
+  }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
+  const agentSessionsQuery = useListChats(
+    {
+      search: employeeEmailFilter ?? undefined,
+      from,
+      to,
+      limit: 1,
+    },
+    undefined,
+    {
+      enabled: employeeEmailFilter != null,
+      throwOnError: false,
+    },
+  );
+  const riskEventsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user_id", employeeEmailFilter);
+    }
+    const query = params.toString();
+    return query
+      ? `${routes.riskEvents.href()}?${query}`
+      : routes.riskEvents.href();
+  }, [employeeEmailFilter, routes.riskEvents]);
+  const riskOverviewQuery = useRiskOverview({ from, to }, undefined, {
+    enabled: employeeEmailFilter != null,
+    throwOnError: false,
+  });
+  const riskEventsCount = useMemo(() => {
+    if (!employeeEmailFilter) return 0;
+    const normalizedEmail = employeeEmailFilter.toLowerCase();
+    return (
+      riskOverviewQuery.data?.topUsers.find((user) => {
+        return (
+          user.email.toLowerCase() === normalizedEmail ||
+          user.externalUserId.toLowerCase() === normalizedEmail
+        );
+      })?.findings ?? 0
+    );
+  }, [employeeEmailFilter, riskOverviewQuery.data?.topUsers]);
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -191,6 +281,20 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     setCustomRange(null);
     setCustomRangeLabel(null);
   };
+  const handleChartRangeSelect = useCallback(
+    (from: Date, to: Date) => {
+      const fmt = (d: Date) =>
+        d.toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      setCustomRange({ from, to });
+      setCustomRangeLabel(`${fmt(from)} – ${fmt(to)}`);
+    },
+    [setCustomRange, setCustomRangeLabel],
+  );
 
   const fallbackUserQuery = useQuery({
     queryKey: [
@@ -291,18 +395,11 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
         mcpConfig={mcpConfig}
         title={`What would you like to know about ${displayName}?`}
         subtitle="Ask about token usage, tool activity, and platform breakdown"
-        suggestions={[
-          {
-            title: "Usage Summary",
-            label: "Summarize usage",
-            prompt: `Summarize the token and tool usage for ${displayName} (${displayEmail}) over ${rangeLabel}.`,
-          },
-          {
-            title: "Platform Breakdown",
-            label: "Show platforms",
-            prompt: `What platforms has ${displayName} been using?`,
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["insights/employees/:userSlug"](
+          displayName,
+          displayEmail,
+          rangeLabel,
+        )}
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -360,12 +457,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   "grid gap-4 transition-all duration-300",
                   isInsightsOpen
                     ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
                 )}
               >
-                <FirstActivityCard
-                  firstSeenUnixNano={summary?.firstSeenUnixNano}
-                />
                 <MetricCard
                   title="Total Tokens"
                   value={totalTokens}
@@ -387,6 +481,31 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                  link={toolLogsHref}
+                />
+                <MetricCard
+                  title="Agent Sessions"
+                  value={agentSessionsQuery.data?.total ?? 0}
+                  displayValue={
+                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
+                      ? "-"
+                      : undefined
+                  }
+                  icon="message-square"
+                  subtext={`Over ${rangeLabel}`}
+                  link={agentSessionsHref}
+                />
+                <MetricCard
+                  title="Risk Events"
+                  value={riskEventsCount}
+                  displayValue={
+                    riskOverviewQuery.isLoading || riskOverviewQuery.isError
+                      ? "-"
+                      : undefined
+                  }
+                  icon="flag"
+                  subtext={`Over ${rangeLabel}`}
+                  link={riskEventsHref}
                 />
               </section>
 
@@ -419,6 +538,8 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   emptyLabel="No tool calls"
                 />
               </section>
+
+              {member?.id && <EmployeeSessions userId={member.id} />}
 
               {dataFlowQuery.error ? (
                 <ErrorAlert
@@ -475,6 +596,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   )}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
+                  onRangeSelect={handleChartRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={handleClearCustomRange}
                 />
               )}
             </>
@@ -485,48 +609,48 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
   );
 }
 
-function FirstActivityCard({
-  firstSeenUnixNano,
-}: {
-  firstSeenUnixNano?: string | null;
-}) {
-  const hasActivity =
-    firstSeenUnixNano != null &&
-    firstSeenUnixNano !== "" &&
-    firstSeenUnixNano !== "0";
-  const date = hasActivity ? unixNanoToDate(firstSeenUnixNano) : null;
-  const primary = date
-    ? date.toLocaleDateString([], {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "No activity";
-  const subtext = date ? `${daysSince(date).toLocaleString()} days ago` : null;
+function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
+  const { data, isPending, isError, refetch } = useUserSessions({
+    subjectUrn: `user:${userId}`,
+    status: "active",
+  });
+  const sessions = data?.result.items ?? [];
 
   return (
-    <div className="bg-card border-border rounded-lg border p-5">
+    <section className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">First Activity</span>
+        <span className="text-sm font-semibold">Active MCP Connections</span>
         <div className="bg-muted/50 rounded-lg p-2">
-          <Icon name="calendar" className="text-muted-foreground size-4" />
+          <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
       </div>
-      <span className="block text-3xl font-semibold tracking-tight">
-        {primary}
-      </span>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
+      {isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : isError ? (
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-destructive text-sm underline-offset-2 hover:underline"
+        >
+          Couldn&apos;t load sessions — retry
+        </button>
+      ) : sessions.length === 0 ? (
+        <span className="text-muted-foreground text-sm">
+          No active sessions
         </span>
+      ) : (
+        <ul className="divide-border divide-y rounded-md border">
+          {sessions.map((s) => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              onRevoked={() => void refetch()}
+            />
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
-}
-
-function daysSince(date: Date) {
-  const ms = Date.now() - date.getTime();
-  return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
 function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
@@ -537,10 +661,10 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
           "grid gap-4 transition-all duration-300",
           isInsightsOpen
             ? "grid-cols-1 md:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
         )}
       >
-        {Array.from({ length: 4 }).map((_, index) => (
+        {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="bg-card rounded-lg border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
@@ -703,7 +827,7 @@ function EmployeeDataFlowGraphCard({
                 pannable
                 zoomable
                 ariaLabel="Data flow minimap"
-                className="!bg-card !border-border rounded-md border"
+                className="bg-card! border-border! rounded-md border"
                 maskColor="hsl(0 0% 50% / 0.12)"
                 nodeColor={getDataFlowMiniMapColor}
                 nodeStrokeWidth={2}
@@ -771,7 +895,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
       <div className="mb-2 flex items-center gap-2">
         <DataFlowNodeVisual
@@ -809,7 +933,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
     </div>
   );
@@ -819,14 +943,17 @@ function DataFlowMetricBadge({ metric }: { metric: DataFlowNodeMetric }) {
   const tooltip = `${metric.value.toLocaleString()} calls received (${metric.successValue.toLocaleString()} ok / ${metric.failureValue.toLocaleString()} blocked)`;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant="neutral" background>
-        <Badge.LeftIcon>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="neutral" background>
+          <Badge.LeftIcon>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -913,16 +1040,19 @@ function ServerClassBadge({
       : meta.tooltip;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant={meta.variant} background aria-label={meta.tooltip}>
-        <Badge.LeftIcon>
-          <ClassIcon className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        {count !== undefined && (
-          <Badge.Text>{count.toLocaleString()}</Badge.Text>
-        )}
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant={meta.variant} background aria-label={meta.tooltip}>
+          <Badge.LeftIcon>
+            <ClassIcon className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          {count !== undefined && (
+            <Badge.Text>{count.toLocaleString()}</Badge.Text>
+          )}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1380,6 +1510,9 @@ function TokenTimeSeriesChart({
   hasData,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   title: string;
   chartId: string;
@@ -1388,31 +1521,29 @@ function TokenTimeSeriesChart({
   hasData: boolean;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 220;
 
-  const chartData = useMemo(() => {
-    const points = timeSeries.map((point) => {
-      const date = unixNanoToDate(point.bucketTimeUnixNano);
-      return {
-        label: formatChartLabel(date, timeRangeMs),
-        tooltipLabel: date.toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-        value: getTotalTokens(point),
-      };
-    });
+  const chartData = useMemo(
+    () =>
+      timeSeries.map((point) => ({
+        x: unixNanoToDate(point.bucketTimeUnixNano).getTime(),
+        y: getTotalTokens(point),
+      })),
+    [timeSeries],
+  );
 
-    return {
-      labels: points.map((p) => p.label),
-      tooltipLabels: points.map((p) => p.tooltipLabel),
-      values: points.map((p) => p.value),
-    };
-  }, [timeSeries, timeRangeMs]);
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+    onRangeSelect,
+  });
+
+  useEffect(() => {
+    resetZoom();
+  }, [timeSeries, resetZoom]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -1423,17 +1554,31 @@ function TokenTimeSeriesChart({
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) =>
-              chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+            title: (items) => {
+              const x = items[0]?.parsed.x;
+              if (x == null) return "";
+              return new Date(x).toLocaleString([], {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              });
+            },
             label: (item) =>
               `Tokens: ${Number(item.parsed.y ?? 0).toLocaleString()}`,
           },
         },
+        zoom: zoomPluginOptions,
       },
       scales: {
         x: {
+          type: "linear",
           grid: { display: true, color: "rgba(128, 128, 128, 0.1)" },
-          ticks: { maxTicksLimit: 8 },
+          ticks: {
+            maxTicksLimit: 8,
+            callback: (value) =>
+              formatChartLabel(new Date(value as number), timeRangeMs),
+          },
         },
         y: {
           beginAtZero: true,
@@ -1442,7 +1587,7 @@ function TokenTimeSeriesChart({
         },
       },
     }),
-    [chartData.tooltipLabels],
+    [zoomPluginOptions, timeRangeMs],
   );
 
   return (
@@ -1452,6 +1597,8 @@ function TokenTimeSeriesChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {!hasData ? (
         <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
@@ -1460,12 +1607,12 @@ function TokenTimeSeriesChart({
       ) : (
         <div style={{ height }}>
           <Line
+            ref={chartRef}
             data={{
-              labels: chartData.labels,
               datasets: [
                 {
                   label: "Tokens",
-                  data: chartData.values,
+                  data: chartData,
                   borderColor: CHART_COLOR,
                   backgroundColor: `${CHART_COLOR}1a`,
                   pointBackgroundColor: CHART_COLOR,
@@ -1623,14 +1770,6 @@ function unixNanoToDate(value: string) {
   const nanos = BigInt(value);
   const millis = Number(nanos / 1_000_000n);
   return new Date(millis);
-}
-
-function formatPlatform(value: string) {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part[0]!.toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function formatToolUrn(value: string) {

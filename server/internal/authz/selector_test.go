@@ -175,15 +175,20 @@ func TestResourceKindForScope_buildScopes(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "project", ResourceKindForScope(ScopeProjectRead))
+	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedRead))
 	require.Equal(t, "project", ResourceKindForScope(ScopeProjectWrite))
+	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedWrite))
 }
 
 func TestResourceKindForScope_mcpScopes(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPRead))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedRead))
 	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPWrite))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedWrite))
 	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPConnect))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedConnect))
 }
 
 func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
@@ -198,7 +203,9 @@ func TestResourceKindForScope_orgScopes(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "org", ResourceKindForScope(ScopeOrgRead))
+	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedRead))
 	require.Equal(t, "org", ResourceKindForScope(ScopeOrgAdmin))
+	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedAdmin))
 }
 
 func TestResourceKindForScope_rootScope(t *testing.T) {
@@ -212,6 +219,15 @@ func TestResourceKindForScope_riskPolicyScope(t *testing.T) {
 
 	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyEvaluate))
 	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyBypass))
+}
+
+func TestResourceKindForScope_environmentScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentRead))
+	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedRead))
+	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentWrite))
+	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedWrite))
 }
 
 func TestNewSelector_includesResourceKind(t *testing.T) {
@@ -315,6 +331,8 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 
 	withServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "https://api.example.com"}
 	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerURL))
+	withServerIdentity := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_identity": "github"}
+	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerIdentity))
 	withHostOnlyServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "api.example.com"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyBypass, withHostOnlyServerURL), "must include URI scheme and host")
 
@@ -325,16 +343,25 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""})
 	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
 	require.Equal(t, "policy_123", check.ResourceID)
 	require.Equal(t, "https://api.example.com", check.Dimensions[SelectorKeyServerURL])
 }
 
+func TestRiskPolicyBypassCheck_injectsServerIdentity(t *testing.T) {
+	t.Parallel()
+
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: "github"})
+	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
+	require.Equal(t, "policy_123", check.ResourceID)
+	require.Equal(t, "github", check.Dimensions[SelectorKeyServerIdentity])
+}
+
 func TestRiskPolicyBypassCheck_emptyServerURLOmitsDimension(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: ""})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
 	require.Nil(t, check.Dimensions)
 }
 

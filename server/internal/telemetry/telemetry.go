@@ -40,6 +40,74 @@ type ToolInfo struct {
 	OrganizationID string
 }
 
+// userAttributes is the v0 allowlist of directory attributes stamped onto
+// telemetry rows: the struct fields are the allowlist. They are WorkOS
+// predefined attributes (https://workos.com/docs/directory-sync/attributes):
+// named and schematized by WorkOS, auto-mapped across directory providers, so
+// they mean the same thing for every organization. Customer-defined custom
+// attributes are deliberately excluded for now; Postgres keeps the full
+// payload, so expanding this later only requires hydrating new rows.
+type userAttributes struct {
+	DepartmentName string `json:"department_name,omitempty"`
+	JobTitle       string `json:"job_title,omitempty"`
+	EmployeeType   string `json:"employee_type,omitempty"`
+	DivisionName   string `json:"division_name,omitempty"`
+	CostCenterName string `json:"cost_center_name,omitempty"`
+}
+
+func emptyUserAttributes() userAttributes {
+	return userAttributes{
+		DepartmentName: "",
+		JobTitle:       "",
+		EmployeeType:   "",
+		DivisionName:   "",
+		CostCenterName: "",
+	}
+}
+
+func (a userAttributes) IsZero() bool {
+	return a == emptyUserAttributes()
+}
+
+// UserInfo identifies the user a telemetry log row is attributed to. Callers
+// provide either a Gram user ID or an email address; the logger resolves the
+// other identity field and directory context during hydration.
+type UserInfo struct {
+	userID string
+	email  string
+}
+
+func UserInfoByID(userID string) UserInfo {
+	return UserInfo{userID: userID, email: ""}
+}
+
+func UserInfoByEmail(email string) UserInfo {
+	return UserInfo{userID: "", email: email}
+}
+
+func UserInfoByIDAndEmail(userID, email string) UserInfo {
+	return UserInfo{userID: userID, email: email}
+}
+
+func (u UserInfo) UserID() string {
+	return u.userID
+}
+
+func (u UserInfo) Email() string {
+	return u.email
+}
+
+func (u UserInfo) AsAttributes() map[attr.Key]any {
+	attrs := make(map[attr.Key]any, 2)
+	if u.userID != "" {
+		attrs[attr.UserIDKey] = u.userID
+	}
+	if u.email != "" {
+		attrs[attr.UserEmailKey] = u.email
+	}
+	return attrs
+}
+
 func (t ToolInfo) AsAttributes() map[attr.Key]any {
 	attrs := map[attr.Key]any{
 		attr.ToolURNKey:        t.URN,

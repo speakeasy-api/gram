@@ -65,7 +65,7 @@ func callLookupCanvasSections(ctx context.Context, client *apiClient, env toolco
 		"criteria":  input.Criteria,
 	}
 
-	body, err := client.call(ctx, "canvases.sections.lookup", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.sections.lookup", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

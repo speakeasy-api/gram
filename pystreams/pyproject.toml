@@ -1,0 +1,56 @@
+[project]
+name = "pystreams"
+version = "0.1.0"
+description = "Python Pub/Sub subscribers for Gram streams"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "aiocop>=1.1.4",
+  "anyio>=4.13.0",
+  "asyncer>=0.0.17",
+  "click>=8.4.1",
+  "en-core-web-lg",
+  "gram-infra",
+  "maxminddb>=3.1.1",
+  "opentelemetry-api>=1.42.1",
+  "opentelemetry-sdk>=1.42.1",
+  "opentelemetry-semantic-conventions>=0.63b1",
+  "presidio-analyzer>=2.2.362",
+  "starlette>=0.40.0",
+  "structlog>=26.1.0",
+  "uvicorn>=0.30.0",
+]
+
+[dependency-groups]
+dev = [
+  "pyrefly>=1.0.0",
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.24.0",
+  "ty>=0.0.48",
+  "types-protobuf>=7.34.1.20260518",
+]
+
+[project.scripts]
+# Entrypoint stands up the scan pool's forkserver while the process is pristine
+# before handing off to multi:cli — see pystreams.cmd.bootstrap for the why.
+multi = "pystreams.cmd.bootstrap:main"
+presidio-load = "pystreams.cmd.presidio_load:cli"
+
+[build-system]
+requires = ["uv_build>=0.11.21,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+gram-infra = { workspace = true }
+en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "RUF", "PT", "TID"]
+
+[tool.pyrefly]
+project-includes = ["**/*.py*", "**/*.ipynb"]
+

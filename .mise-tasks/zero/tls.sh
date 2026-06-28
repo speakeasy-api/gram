@@ -107,20 +107,17 @@ found_keypair() {
 }
 
 cert_names() {
-  local site_host server_host assistant_host
+  local site_host server_host
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
-  assistant_host="${GRAM_ASSISTANT_RUNTIME_SERVER_HOSTNAME:-}"
 
   printf "%s\n" \
     "$site_host" \
     "$server_host" \
-    "$assistant_host" \
     "localhost" \
     "127.0.0.1" \
     "::1" \
     "gram.local" \
-    "host.lima.internal" \
     | awk 'NF && !seen[$0]++'
 }
 

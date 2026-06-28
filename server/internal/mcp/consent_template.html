@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Authorize {{.ClientName}}</title>
+    <title>{{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize {{.ClientName}}{{end}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -206,7 +206,8 @@
         color: var(--text-default-success);
       }
 
-      .remote-card .state.disconnected {
+      .remote-card .state.disconnected,
+      .remote-card .state.expired {
         color: var(--text-default-warning);
       }
 
@@ -325,11 +326,18 @@
     <main class="main">
       <div class="consent-container">
         <div class="header">
+          {{if .FirstParty}}
+          <h1>Connect {{.MCPSlug}}</h1>
+          <p>
+            Link the services this MCP server needs to access on your behalf.
+          </p>
+          {{else}}
           <h1>Authorize {{.ClientName}}</h1>
           <p>
             <strong>{{.ClientName}}</strong> is requesting access to the MCP
             server <strong>{{.MCPSlug}}</strong>
           </p>
+          {{end}}
         </div>
 
         <dl class="info">
@@ -350,6 +358,8 @@
               <div class="issuer">{{.IssuerSlug}}</div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
+              {{else if .Expired}}
+              <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}
               <div class="state disconnected">Not connected</div>
               {{end}}
@@ -358,13 +368,18 @@
               class="btn-link {{if .Connected}}connected{{end}}"
               href="{{.ChallengeURL}}"
               data-connect-link
-              >{{if .Connected}}Reconnect{{else}}Connect{{end}}</a
+              >{{if or .Connected .Expired}}Reconnect{{else}}Connect{{end}}</a
             >
           </div>
           {{end}}
         </div>
         {{end}}
 
+        {{if .FirstParty}}
+        <p class="info">
+          When you've connected the services above, you can close this tab.
+        </p>
+        {{else}}
         <div class="actions">
           <form
             method="POST"
@@ -398,6 +413,7 @@
             </button>
           </form>
         </div>
+        {{end}}
       </div>
     </main>
     <script src="{{.ScriptURL}}"></script>

@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 
 export type DeleteAIIntegrationConfigRequest = {
   /**
-   * AI provider identifier. Initially only cursor is supported.
+   * AI provider identifier. Supported values include cursor and anthropic_compliance.
    */
   provider: string;
 };

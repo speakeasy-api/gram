@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
     hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
+    mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
@@ -89,6 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry_logs (hook_block_reason) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
@@ -106,6 +108,25 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_email SimpleAggregateFunction(any, String),
     hook_source SimpleAggregateFunction(any, String),
     skill_name SimpleAggregateFunction(any, String),
+    -- Tool-usage classification + identity cols, used to serve the unified Tool
+    -- Logs page (hosted MCP / shadow MCP / skill / local target classification and
+    -- multi-identity user resolution) directly from this MV instead of scanning raw
+    -- telemetry_logs. toolset_slug/external_user_id/user_id are materialized columns
+    -- on telemetry_logs; mcp_match/mcp_server_url are read from attributes.
+    --
+    -- These attributes are only present on a subset of a trace's rows (e.g. Cursor
+    -- MCP traces carry gram.mcp.server_url/match only on the before/after MCP
+    -- execution rows, while sibling rows in the same trace carry empty strings).
+    -- Using any() lets ClickHouse persist or merge an empty string from a sibling
+    -- row/part instead of the populated value, which would randomly misclassify a
+    -- trace as shadow/local or drop its user identity. max() ensures empty strings
+    -- ("") always lose to non-empty values during part merges, mirroring the
+    -- block_reason treatment below.
+    toolset_slug SimpleAggregateFunction(max, String),
+    external_user_id SimpleAggregateFunction(max, String),
+    user_id SimpleAggregateFunction(max, String),
+    mcp_match SimpleAggregateFunction(max, String),
+    mcp_server_url SimpleAggregateFunction(max, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -151,6 +172,11 @@ SELECT
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
     any(skill_name) AS skill_name,
+    anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
+    anyIf(external_user_id, external_user_id != '') AS external_user_id,
+    anyIf(user_id, user_id != '') AS user_id,
+    anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
+    anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
@@ -299,6 +325,181 @@ SELECT
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts
 FROM telemetry_logs
 GROUP BY gram_project_id, time_bucket;
+
+-- attribute_metrics_summaries pre-aggregates cost/token/usage metrics broken
+-- down by user-identity and request dimensions (WorkOS directory attributes,
+-- email, model, hook source) so the generic telemetry.query analytics endpoint
+-- can serve grouped tables and per-series timeseries without scanning raw logs.
+--
+-- Cardinality is bounded because the scalar dimensions are all functionally
+-- determined by the user (each user has one department, job title, etc.), so
+-- the row count is roughly (active users x model x hour) per project. roles and
+-- groups are stored as intact arrays in the sorting key (one array per user, so
+-- they do not multiply rows); the query layer uses arrayJoin() to attribute
+-- spend to each role/group and has() to filter. Keeping every dimension on one
+-- row is what lets a single MV serve arbitrary group-by + filter combinations,
+-- including drill-down (e.g. filter department_name, group by role).
+CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
+    -- Key columns
+    gram_project_id UUID,
+    time_bucket DateTime('UTC'),
+
+    -- User-identity dimensions (WorkOS directory attributes), all functionally
+    -- determined by the user so they do not inflate cardinality.
+    department_name String,
+    job_title String,
+    employee_type String,
+    division_name String,
+    cost_center_name String,
+    user_email String,
+
+    -- Request dimensions
+    model String,
+    hook_source String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
+
+    -- Multi-valued user dimensions stored intact (not exploded) so totals stay
+    -- exact; the query layer arrayJoin()s these to attribute spend per role/group.
+    roles Array(String),
+    groups Array(String),
+
+    -- Cardinality
+    total_chats AggregateFunction(uniqExactIf, String, UInt8),
+
+    -- Token sums
+    total_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_output_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_read_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_creation_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+
+    -- Cost
+    total_cost AggregateFunction(sumIf, Float64, UInt8),
+
+    -- Tool call count
+    total_tool_calls AggregateFunction(countIf, UInt8)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
+TTL time_bucket + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
+-- Cutoff separates live MV ingestion from one-time historical backfill.
+WITH toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano
+SELECT
+    gram_project_id,
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+
+    -- User-identity dimensions
+    toString(attributes.user.attributes.department_name) AS department_name,
+    toString(attributes.user.attributes.job_title) AS job_title,
+    toString(attributes.user.attributes.employee_type) AS employee_type,
+    toString(attributes.user.attributes.division_name) AS division_name,
+    toString(attributes.user.attributes.cost_center_name) AS cost_center_name,
+    user_email AS user_email,
+
+    -- Request dimensions
+    toString(attributes.gen_ai.response.model) AS model,
+    hook_source,
+
+    -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
+    -- Bad or non-array payloads resolve to [] instead of failing MV ingestion.
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
+
+    -- Cardinality
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,
+
+    -- Token sums
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens,
+
+    -- Cost
+    sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost,
+
+    -- Tool-call count. Tool calls in a session — Gram and non-Gram alike — are
+    -- reported via agent hooks as one PostToolUse / PostToolUseFailure row per
+    -- call (carrying gram.tool.name). The hook.event guard is required: every
+    -- tool call also emits a PreToolUse row with the same gram.tool.name, so a
+    -- bare `tool.name != ''` count would double-count. Provider names (the
+    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
+    countIfState(
+        toString(attributes.gram.tool.name) != ''
+        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS total_tool_calls
+FROM telemetry_logs
+-- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
+-- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
+-- inflating cost) AND tool-call rows.
+-- Tool calls are captured by the hook events' gram.tool.name, which covers all
+-- tools used in a session, not just Gram-proxied ones. The previous filter kept
+-- only usage rows, so total_tool_calls (counted from a separate event class) was
+-- always 0 (POC-209). Tool rows carry no gen_ai.usage.* so they cannot inflate
+-- token/cost totals.
+WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
+  AND (
+    startsWith(gram_urn, 'claude-code:usage') OR
+    startsWith(gram_urn, 'codex:usage') OR
+    startsWith(gram_urn, 'cursor:usage') OR
+    (toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '') OR
+    (toString(attributes.gram.tool.name) != '' AND
+     toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
+GROUP BY
+    gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups;
+
+CREATE TABLE IF NOT EXISTS chat_token_summaries (
+    -- Key columns
+    gram_project_id UUID,
+    chat_id String,
+    time_bucket DateTime('UTC'),
+
+    -- Token usage reported for the chat during the bucket (rows carrying
+    -- gen_ai.usage.total_tokens, including OTEL-forwarded metrics)
+    total_tokens SimpleAggregateFunction(sum, Int64),
+
+    -- Count of non-metrics rows (tool calls, hook events, chat events without
+    -- token usage) evidencing that Gram stored session data for this chat.
+    -- Chats with zero stored events across a billing window are excluded from
+    -- tokens-under-management billing.
+    stored_event_count SimpleAggregateFunction(sum, UInt64)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, chat_id, time_bucket)
+TTL time_bucket + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Per-chat daily token usage and stored-session evidence, retained beyond the raw telemetry TTL to support tokens-under-management billing across historical billing cycles';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_token_summaries_mv TO chat_token_summaries AS
+SELECT
+    gram_project_id,
+    chat_id,
+    -- Force UTC so the daily billing bucket boundary never shifts with the
+    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
+    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+    sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
+    toUInt64(countIf(
+        startsWith(gram_urn, 'tools:')
+        OR urn != ''
+        OR event_source != ''
+        OR toString(attributes.gen_ai.usage.total_tokens) = ''
+    )) AS stored_event_count
+FROM telemetry_logs
+WHERE chat_id != ''
+GROUP BY gram_project_id, chat_id, time_bucket;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,

@@ -82,7 +82,7 @@ const (
 
 // ListServersResult is the result of a ListServers call.
 type ListServersResult struct {
-	Servers []*types.ExternalMCPServer
+	Servers []*types.ExternalMCPServerEntry
 }
 
 // listResponse represents the response from the MCP registry API.
@@ -166,7 +166,20 @@ type serverRemoteMeta struct {
 }
 
 type serverRemoteMetaAuthOptions struct {
-	Type string `json:"type"`
+	Type   string                     `json:"type"`
+	Detail serverRemoteMetaAuthDetail `json:"detail"`
+}
+
+type serverRemoteMetaAuthDetail struct {
+	// AuthorizationServerMetadata is PulseMCP's embedded RFC 8414 discovery
+	// result for OAuth remotes. A non-empty registration_endpoint means the
+	// upstream authorization server supports dynamic client registration (DCR).
+	// Note: we deliberately read registration_endpoint here rather than
+	// clientRegistration.dynamic.supported, which PulseMCP reports
+	// optimistically (true even when the AS exposes no registration endpoint).
+	AuthorizationServerMetadata struct {
+		RegistrationEndpoint string `json:"registration_endpoint"`
+	} `json:"authorizationServerMetadata"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
@@ -265,7 +278,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 // deletes by this prefix so it evicts every per-registry entry under the URL,
 // including a stale one left behind by a deleted-and-recreated registry.
 func listCacheKeyPrefix(registryURL string) string {
-	return fmt.Sprintf("registry:list:%s", strings.TrimRight(registryURL, "/"))
+	return fmt.Sprintf("registry:list:%s:%s", registryCacheSchemaVersion, strings.TrimRight(registryURL, "/"))
 }
 
 // listCacheKey keys the cached list by both URL and registry ID. The cached
@@ -284,7 +297,7 @@ func listCacheKey(registryURL string, registryID uuid.UUID) string {
 // still remaining (a partial, truncated catalog).
 func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry, cacheKey string) (CachedListServers, bool, error) {
 	seen := make(map[string]struct{})
-	servers := make([]*types.ExternalMCPServer, 0, registryListPageSize)
+	servers := make([]*types.ExternalMCPServerEntry, 0, registryListPageSize)
 	cursor := ""
 
 	for range registryListMaxPages {
@@ -402,13 +415,13 @@ func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Req
 // filterServers applies a case-insensitive substring match over the server
 // specifier, title, and description. Search runs in memory because the catalog
 // is small enough to hold in full.
-func filterServers(servers []*types.ExternalMCPServer, search string) []*types.ExternalMCPServer {
+func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*types.ExternalMCPServerEntry {
 	if search == "" {
 		return servers
 	}
 
 	needle := strings.ToLower(search)
-	filtered := make([]*types.ExternalMCPServer, 0, len(servers))
+	filtered := make([]*types.ExternalMCPServerEntry, 0, len(servers))
 	for _, server := range servers {
 		title := ""
 		if server.Title != nil {
@@ -423,9 +436,9 @@ func filterServers(servers []*types.ExternalMCPServer, search string) []*types.E
 	return filtered
 }
 
-func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServer, error) {
+func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
 	registryID := registryUUID.String()
-	servers := make([]*types.ExternalMCPServer, 0, len(entries))
+	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
 	for _, s := range entries {
 
 		if s.Meta.Version.Status == "deleted" {
@@ -437,14 +450,41 @@ func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types
 			iconURL = &s.Server.Icons[0].Src
 		}
 
-		tools := make([]*types.ExternalMCPTool, 0)
-		for _, tool := range s.Meta.Version.FirstRemote.Tools {
-			tools = append(tools, &types.ExternalMCPTool{
-				Name:        &tool.Name,
-				Description: &tool.Description,
-				InputSchema: tool.InputSchema,
-				Annotations: tool.Annotations,
-			})
+		// The catalog list view needs only a tool count and a read-only flag
+		// (for the card badge and the tool-behavior filter); it never reads the
+		// tool definitions, whose JSON Schemas dominate the registry payload
+		// (repeated in the top-level tools list and across every _meta remote
+		// slot). Compute the two scalars the list needs, then drop the tools from
+		// the _meta blob and omit the top-level tools array entirely. The detail
+		// page fetches full tools via getServerDetails.
+		listTools := s.Meta.Version.FirstRemote.Tools
+		toolCount := len(listTools)
+		isReadOnly := toolCount > 0
+		for _, tool := range listTools {
+			if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
+				isReadOnly = false
+				break
+			}
+		}
+
+		// A server supports DCR when any remote's OAuth auth option carries a
+		// non-empty registration endpoint in PulseMCP's embedded discovery
+		// result. Computed in the same pass that strips per-remote tools.
+		supportsDCR := false
+		for _, remote := range []*serverRemoteMeta{
+			&s.Meta.Version.FirstRemote,
+			&s.Meta.Version.SecondRemote,
+			&s.Meta.Version.ThirdRemote,
+			&s.Meta.Version.FourthRemote,
+			&s.Meta.Version.FifthRemote,
+		} {
+			for _, auth := range remote.AuthOptions {
+				if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
+					supportsDCR = true
+					break
+				}
+			}
+			remote.Tools = nil
 		}
 
 		var remotes []*types.ExternalMCPRemote
@@ -459,24 +499,25 @@ func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types
 
 		meta, err := toCacheSafeAny(&s.Meta)
 		if err != nil {
-			return []*types.ExternalMCPServer{}, fmt.Errorf("convert meta: %w", err)
+			return []*types.ExternalMCPServerEntry{}, fmt.Errorf("convert meta: %w", err)
 		}
 
-		server := &types.ExternalMCPServer{
+		servers = append(servers, &types.ExternalMCPServerEntry{
 			RegistrySpecifier:                   s.Server.Name,
 			Version:                             s.Server.Version,
 			Description:                         s.Server.Description,
 			ToolsetID:                           nil,
+			McpServerID:                         nil,
 			RegistryID:                          &registryID,
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
 			Meta:                                meta,
-			Tools:                               tools,
+			ToolCount:                           toolCount,
+			IsReadOnly:                          isReadOnly,
+			SupportsDcr:                         supportsDCR,
 			Remotes:                             remotes,
-		}
-
-		servers = append(servers, server)
+		})
 	}
 
 	return servers, nil
@@ -524,7 +565,7 @@ func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) err
 		return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
 	}
 
-	detailsPrefix := fmt.Sprintf("registry:details:%s", registryURL)
+	detailsPrefix := fmt.Sprintf("registry:details:%s:%s", registryCacheSchemaVersion, registryURL)
 	if err := c.detailsCache.DeleteByPrefix(ctx, detailsPrefix); err != nil {
 		return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
 	}

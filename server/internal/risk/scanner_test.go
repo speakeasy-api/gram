@@ -5,20 +5,24 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // instrumentedPIIScanner records concurrency observed during AnalyzeBatch and
@@ -36,6 +40,8 @@ type instrumentedPIIScanner struct {
 	inflight      atomic.Int32
 	maxInflight   atomic.Int32
 	cancellations atomic.Int32
+	slowStarted   chan struct{}
+	slowStartOnce sync.Once
 }
 
 func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ func()) ([][]risk_analysis.Finding, error) {
@@ -54,6 +60,12 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 	// trigger, return a finding without sleeping.
 	if l.findOnEntity != "" {
 		if slices.Contains(entities, l.findOnEntity) {
+			if l.slowStarted != nil {
+				select {
+				case <-l.slowStarted:
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
 			out := make([][]risk_analysis.Finding, len(texts))
 			for i := range texts {
 				out[i] = []risk_analysis.Finding{{
@@ -64,6 +76,12 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 			}
 			return out, nil
 		}
+	}
+
+	if l.slowStarted != nil {
+		l.slowStartOnce.Do(func() {
+			close(l.slowStarted)
+		})
 	}
 
 	select {
@@ -83,8 +101,9 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
+		ID:               policyID,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Name:             name,
@@ -92,17 +111,20 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 		PresidioEntities: entities,
 		Enabled:          true,
 		Action:           "block",
+		AudienceType:     "everyone",
 		AutoName:         false,
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
 }
 
 func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, messageTypes []string) {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
+		ID:               policyID,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Name:             name,
@@ -111,9 +133,25 @@ func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx cont
 		MessageTypes:     messageTypes,
 		Enabled:          true,
 		Action:           "block",
+		AudienceType:     "everyone",
 		AutoName:         false,
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+}
+
+func grantRiskPolicyToAllUsers(t *testing.T, ti *testInstance, ctx context.Context, organizationID string, policyID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, authz.ReplaceGrantsForResource(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID.String(),
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   nil,
+	}))
 }
 
 // TestScanner_FanOutAcrossPoliciesIsConcurrent verifies that
@@ -136,13 +174,16 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -155,6 +196,29 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 	maxAllowed := time.Duration(n) * pii.delay / 2
 	require.Less(t, elapsed, maxAllowed,
 		"wall time %v >= half-of-sequential %v — fan-out not happening", elapsed, maxAllowed)
+}
+
+func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+		testCELEngine(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, "", *authCtx.ProjectID, "missing-user", "irrelevant text", message.User, "")
+	require.NoError(t, err)
+	require.Nil(t, result)
 }
 
 // TestScanner_FirstMatchCancelsSiblings verifies that once a policy returns a
@@ -174,19 +238,23 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	pii := &instrumentedPIIScanner{
 		delay:        2 * time.Second, // long enough that any non-cancellation would dominate
 		findOnEntity: "FAST",
+		slowStarted:  make(chan struct{}),
 	}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -197,10 +265,11 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	require.Less(t, elapsed, 1*time.Second,
 		"wall time %v suggests siblings ran to completion; expected cancellation", elapsed)
 
-	// Give the cancelled goroutines a moment to record their ctx.Err.
-	time.Sleep(100 * time.Millisecond)
-	require.GreaterOrEqual(t, pii.cancellations.Load(), int32(1),
-		"expected at least one slow policy to observe ctx cancellation")
+	// Cancelled goroutines record their ctx.Err asynchronously; poll until observed.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, pii.cancellations.Load(), int32(1),
+			"expected at least one slow policy to observe ctx cancellation")
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
@@ -215,13 +284,14 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		RuleID:         "custom.acme_token",
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		DetectionExpr:  pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
 		Severity:       "high",
 	})
 	require.NoError(t, err)
 
+	policyID := uuid.New()
 	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:                   uuid.New(),
+		ID:                   policyID,
 		ProjectID:            *authCtx.ProjectID,
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		Name:                 "custom block",
@@ -230,23 +300,29 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        []string{"custom.acme_token"},
+		MessageTypes:         nil,
 		Enabled:              true,
 		Action:               "block",
+		AudienceType:         "everyone",
 		AutoName:             false,
 		UserMessage:          pgtype.Text{},
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
 		ti.conn,
 		nil,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "custom block", result.PolicyName)
@@ -267,17 +343,20 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	userResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, userResult)
 
-	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.ToolRequest)
+	toolResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, toolResult)
 	require.Equal(t, "tool only", toolResult.PolicyName)

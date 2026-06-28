@@ -55,7 +55,7 @@ func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *ge
 	}
 	cursor, err := decodeShadowMCPCursorParam(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	result, err := s.accessStore.ListRequests(ctx, accesscontrol.RequestFilters{
@@ -67,7 +67,7 @@ func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *ge
 		Limit:          limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp approval requests").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp approval requests").LogError(ctx, s.logger)
 	}
 
 	var nextCursor *string
@@ -90,34 +90,40 @@ func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *ge
 func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *gen.CreateShadowMCPApprovalRequestPayload) (*gen.ShadowMCPApprovalRequest, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	if ac.UserID == "" {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "missing requester user").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing requester user").LogError(ctx, s.logger)
 	}
 	claims, err := parseShadowMCPApprovalRequestToken(s.jwtSecret, payload.RequestToken)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp approval request token").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp approval request token").LogError(ctx, s.logger)
 	}
 	if claims.OrganizationID != ac.ActiveOrganizationID {
-		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different organization").LogError(ctx, s.logger)
 	}
-	if claims.RequesterUserID != "" && claims.RequesterUserID != ac.UserID {
-		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different requester").Log(ctx, s.logger)
-	}
+	// Intentionally not gated on claims.RequesterUserID. The token's requester
+	// is minted from an agent-reported identity (e.g. the email Claude Code
+	// reports, resolved via resolveUserByEmail), which legitimately differs
+	// from the authenticated dashboard user under multi-domain orgs, duplicate
+	// accounts, or a shared block link. Filing a request is low-stakes — the
+	// stored requester is always the authenticated user (RequesterUserID below),
+	// and approval is org-admin gated — so binding the token to a single
+	// requester only blocked legitimate members. Org membership is enforced via
+	// the org-match check above and requireProjectInOrganization below.
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
 		return nil, err
 	}
 
 	if _, err := conv.PtrToNullUUID(claims.RiskPolicyID); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk policy id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk policy id").LogError(ctx, s.logger)
 	}
 	if _, err := conv.PtrToNullUUID(claims.RiskResultID); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk result id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk result id").LogError(ctx, s.logger)
 	}
 
 	summary := shadowMCPSummaryFromClaims(claims)
@@ -146,13 +152,13 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 		UpdatedAt:            now,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp approval request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp approval request").LogError(ctx, s.logger)
 	}
 	requestView := buildShadowMCPApprovalRequest(request)
 	if wasCreated {
 		requestUUID, err := uuid.Parse(request.ID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request id").LogError(ctx, s.logger)
 		}
 		s.logShadowMCPAuditBestEffort(ctx, "log shadow mcp approval request create", func(dbtx pgx.Tx) error {
 			return s.audit.LogShadowMCPApprovalRequestCreate(ctx, dbtx, audit.LogShadowMCPApprovalRequestEvent{
@@ -180,7 +186,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	}
 	requestID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").LogError(ctx, s.logger)
 	}
 	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
 	if err != nil {
@@ -192,11 +198,11 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		return nil, shadowMCPStoreErr(ctx, s, err, "get shadow mcp approval request")
 	}
 	if request.Status != shadowMCPRequestStatusRequested {
-		return nil, oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").LogError(ctx, s.logger)
 	}
 	requestProjectID, err := uuid.Parse(request.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request project id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request project id").LogError(ctx, s.logger)
 	}
 	ruleProjectIDs, err := s.shadowMCPRuleProjectIDs(ctx, ac.ActiveOrganizationID, payload.AccessScope, payload.ProjectIds, nil, requestProjectID)
 	if err != nil {
@@ -244,7 +250,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		if ruleResult.Created {
 			ruleUUID, err := uuid.Parse(ruleResult.Rule.ID)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").LogError(ctx, s.logger)
 			}
 			ruleAuditEvents = append(ruleAuditEvents, audit.LogShadowMCPAccessRuleEvent{
 				OrganizationID:           ac.ActiveOrganizationID,
@@ -297,11 +303,11 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 	}
 	requestID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").LogError(ctx, s.logger)
 	}
 	if payload.CreateDenyRule {
 		if payload.MatchBreadth == nil || payload.MatchValue == nil || payload.DisplayName == nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "match_breadth, match_value, and display_name are required when creating a deny rule").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "match_breadth, match_value, and display_name are required when creating a deny rule").LogError(ctx, s.logger)
 		}
 		if _, err := normalizeShadowMCPMatchValue(*payload.MatchBreadth, *payload.MatchValue); err != nil {
 			return nil, err
@@ -313,11 +319,11 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		return nil, shadowMCPStoreErr(ctx, s, err, "get shadow mcp approval request")
 	}
 	if request.Status != shadowMCPRequestStatusRequested {
-		return nil, oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").LogError(ctx, s.logger)
 	}
 	requestProjectID, err := uuid.Parse(request.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request project id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request project id").LogError(ctx, s.logger)
 	}
 
 	ruleAuditEvents := make([]audit.LogShadowMCPAccessRuleEvent, 0)
@@ -380,7 +386,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		if ruleResult.Created {
 			ruleUUID, err := uuid.Parse(ruleResult.Rule.ID)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").LogError(ctx, s.logger)
 			}
 			ruleAuditEvents = append(ruleAuditEvents, audit.LogShadowMCPAccessRuleEvent{
 				OrganizationID:           ac.ActiveOrganizationID,
@@ -441,7 +447,7 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	}
 	cursor, err := decodeShadowMCPCursorParam(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 	result, err := s.accessStore.ListRules(ctx, accesscontrol.RuleFilters{
 		OrganizationID: ac.ActiveOrganizationID,
@@ -453,7 +459,7 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 		Limit:          limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp access rules").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp access rules").LogError(ctx, s.logger)
 	}
 
 	var nextCursor *string
@@ -523,7 +529,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 		ruleView := buildShadowMCPAccessRule(rule)
 		ruleUUID, err := uuid.Parse(rule.ID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp access rule id").LogError(ctx, s.logger)
 		}
 		ruleAuditEvents = append(ruleAuditEvents, audit.LogShadowMCPAccessRuleEvent{
 			OrganizationID:           ac.ActiveOrganizationID,
@@ -559,7 +565,7 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	}
 	ruleID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule id").LogError(ctx, s.logger)
 	}
 	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
 	if err != nil {
@@ -626,7 +632,7 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 	}
 	ruleID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid rule id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid rule id").LogError(ctx, s.logger)
 	}
 
 	rule, err := s.accessStore.DeleteRule(ctx, ac.ActiveOrganizationID, shadowMCPResourceType, payload.ID)
@@ -655,7 +661,7 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -666,7 +672,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 func (s *Service) requireOrgRead(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -678,11 +684,11 @@ func (s *Service) requireProjectInOrganization(ctx context.Context, organization
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "project not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
 	case project.OrganizationID != organizationID:
-		return oops.E(oops.CodeNotFound, nil, "project not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
 	default:
 		return nil
 	}
@@ -877,19 +883,19 @@ func (s *Service) shadowMCPRuleProjectID(ctx context.Context, organizationID str
 		if projectID != nil && *projectID != "" {
 			parsed, err := uuid.Parse(*projectID)
 			if err != nil {
-				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 			}
 			id = parsed
 		}
 		if id == uuid.Nil {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id is required for project-scoped shadow mcp access rules").Log(ctx, s.logger)
+			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id is required for project-scoped shadow mcp access rules").LogError(ctx, s.logger)
 		}
 		if err := s.requireProjectInOrganization(ctx, organizationID, id); err != nil {
 			return uuid.NullUUID{}, err
 		}
 		return uuid.NullUUID{UUID: id, Valid: true}, nil
 	default:
-		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "invalid access_scope").Log(ctx, s.logger)
+		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "invalid access_scope").LogError(ctx, s.logger)
 	}
 }
 
@@ -906,7 +912,7 @@ func (s *Service) shadowMCPRuleProjectIDs(ctx context.Context, organizationID st
 			}
 			parsed, err := uuid.Parse(rawID)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 			}
 			if _, ok := seen[parsed]; ok {
 				continue
@@ -917,7 +923,7 @@ func (s *Service) shadowMCPRuleProjectIDs(ctx context.Context, organizationID st
 		if len(ids) == 0 && projectID != nil && *projectID != "" {
 			parsed, err := uuid.Parse(*projectID)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 			}
 			ids = append(ids, parsed)
 		}
@@ -925,7 +931,7 @@ func (s *Service) shadowMCPRuleProjectIDs(ctx context.Context, organizationID st
 			ids = append(ids, fallbackProjectID)
 		}
 		if len(ids) == 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "project_id is required for project-scoped shadow mcp access rules").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "project_id is required for project-scoped shadow mcp access rules").LogError(ctx, s.logger)
 		}
 
 		ruleProjectIDs := make([]uuid.NullUUID, 0, len(ids))
@@ -937,7 +943,7 @@ func (s *Service) shadowMCPRuleProjectIDs(ctx context.Context, organizationID st
 		}
 		return ruleProjectIDs, nil
 	default:
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid access_scope").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid access_scope").LogError(ctx, s.logger)
 	}
 }
 
@@ -971,15 +977,15 @@ func shadowMCPStoreErr(ctx context.Context, s *Service, err error, message strin
 
 func shadowMCPStoreErrWithConflict(ctx context.Context, s *Service, err error, message, conflictMessage string) error {
 	if errors.Is(err, accesscontrol.ErrNotFound) {
-		return oops.E(oops.CodeNotFound, nil, "%s", message).Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "%s", message).LogError(ctx, s.logger)
 	}
 	if errors.Is(err, accesscontrol.ErrRequestAlreadyDecided) {
-		return oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").Log(ctx, s.logger)
+		return oops.E(oops.CodeConflict, nil, "shadow mcp approval request has already been decided").LogError(ctx, s.logger)
 	}
 	if errors.Is(err, accesscontrol.ErrConflict) {
-		return oops.E(oops.CodeConflict, nil, "%s", conflictMessage).Log(ctx, s.logger)
+		return oops.E(oops.CodeConflict, nil, "%s", conflictMessage).LogError(ctx, s.logger)
 	}
-	return oops.E(oops.CodeUnexpected, err, "%s", message).Log(ctx, s.logger)
+	return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, s.logger)
 }
 
 func formatTimePtr(ts time.Time) *string {

@@ -309,6 +309,63 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 	return i, err
 }
 
+const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
+SELECT
+  pr.slug AS project_slug,
+  (pr.id = (
+    SELECT p2.id
+    FROM projects p2
+    WHERE p2.organization_id = pr.organization_id
+      AND p2.deleted IS FALSE
+    ORDER BY p2.id ASC
+    LIMIT 1
+  )) AS is_default_project
+FROM projects pr
+WHERE pr.id = $1
+  AND pr.deleted IS FALSE
+`
+
+type GetProjectMarketplaceNameContextRow struct {
+	ProjectSlug      string
+	IsDefaultProject bool
+}
+
+// Returns a project's slug and whether it's its org's default project (oldest by
+// id ASC), the two inputs needed to resolve its marketplace name — read from the
+// project row rather than trusting auth-context fields that some auth flows
+// (e.g. project-scoped API keys) leave unset.
+func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectID uuid.UUID) (GetProjectMarketplaceNameContextRow, error) {
+	row := q.db.QueryRow(ctx, getProjectMarketplaceNameContext, projectID)
+	var i GetProjectMarketplaceNameContextRow
+	err := row.Scan(&i.ProjectSlug, &i.IsDefaultProject)
+	return i, err
+}
+
+const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = $2
+    AND deleted IS FALSE
+) AS enabled
+`
+
+type IsOrganizationFeatureEnabledParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Reports whether an organization feature flag is enabled. Mirrors the
+// productfeatures service's read against organization_features so the generator
+// can honour org-level toggles (e.g. observability_mode) at generation time.
+func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
 FROM plugin_assignments

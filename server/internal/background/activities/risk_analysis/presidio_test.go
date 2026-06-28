@@ -207,12 +207,11 @@ func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	t.Parallel()
 	client := infra.NewPresidioClient(t)
-	scanner := risk_analysis.NewScanner()
 
 	// Message with both a secret (AWS key) and PII (email)
 	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@globex.com"
 
-	gitleaksFindings, err := scanner.Scan(content)
+	gitleaksFindings, err := risk_analysis.ScanWithGitleaks(content)
 	require.NoError(t, err)
 
 	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, nil)

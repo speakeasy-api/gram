@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -134,19 +135,33 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		}
 		apiKey = before.APIKey
 	}
-	var resetPollWatermarkAt *time.Time
-	if shouldResetUsagePollWatermark(beforeRow != nil, apiKeySupplied) {
-		watermark := initialUsagePollWatermark(time.Now())
-		resetPollWatermarkAt = &watermark
+	externalOrganizationID := payload.ExternalOrganizationID
+	if externalOrganizationID != nil {
+		trimmed := strings.TrimSpace(*externalOrganizationID)
+		externalOrganizationID = conv.PtrEmpty(trimmed)
 	}
+	if payload.ExternalOrganizationID == nil && beforeRow != nil {
+		externalOrganizationID = before.ExternalOrganizationID
+	}
+	externalOrgChanged := beforeRow != nil &&
+		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
+
+	// Start the watermark one lookback period in the past so the first poll
+	// backfills usage emitted just before the key was configured.
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	resetPollWatermarkAt := conv.Ternary(
+		beforeRow != nil && (apiKeySupplied || externalOrgChanged),
+		&watermark,
+		nil,
+	)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, resetPollWatermarkAt)
 	if err != nil {
 		return nil, err
 	}
@@ -170,11 +185,11 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		SnapshotBefore:   beforeSnap,
 		SnapshotAfter:    &afterSnap,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration upsert").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").LogError(ctx, logger)
 	}
 
 	if result.CreatedNewGeneration && cfg.Enabled {
@@ -215,7 +230,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -231,11 +246,11 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 		ActorSlug:        nil,
 		ConfigURN:        urn.NewAIIntegrationConfig(row.ID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log ai integration delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log ai integration delete").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit ai integration delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit ai integration delete").LogError(ctx, logger)
 	}
 
 	return nil
@@ -250,10 +265,6 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
-func shouldResetUsagePollWatermark(hasExistingConfig bool, apiKeySupplied bool) bool {
-	return !hasExistingConfig || apiKeySupplied
-}
-
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
 	if s.configPoller == nil {
 		return nil
@@ -266,19 +277,20 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 
 func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 	return &gen.AIIntegrationConfig{
-		ID:               nil,
-		OrganizationID:   orgID,
-		Provider:         provider,
-		ProjectID:        nil,
-		Enabled:          false,
-		HasAPIKey:        false,
-		LastPolledAt:     nil,
-		LastPollStatus:   nil,
-		LastPollError:    nil,
-		LastPollFailedAt: nil,
-		NextPollAfter:    nil,
-		CreatedAt:        nil,
-		UpdatedAt:        nil,
+		ID:                     nil,
+		OrganizationID:         orgID,
+		Provider:               provider,
+		ProjectID:              nil,
+		ExternalOrganizationID: nil,
+		Enabled:                false,
+		HasAPIKey:              false,
+		LastPolledAt:           nil,
+		LastPollStatus:         nil,
+		LastPollError:          nil,
+		LastPollFailedAt:       nil,
+		NextPollAfter:          nil,
+		CreatedAt:              nil,
+		UpdatedAt:              nil,
 	}
 }
 
@@ -308,19 +320,20 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		nextPollAfter = &formatted
 	}
 	return &gen.AIIntegrationConfig{
-		ID:               &id,
-		OrganizationID:   cfg.OrganizationID,
-		Provider:         cfg.Provider,
-		ProjectID:        &projectID,
-		Enabled:          cfg.Enabled,
-		HasAPIKey:        cfg.APIKey != "",
-		LastPolledAt:     lastPolledAt,
-		LastPollStatus:   &lastPollStatus,
-		LastPollError:    lastPollError,
-		LastPollFailedAt: lastPollFailedAt,
-		NextPollAfter:    nextPollAfter,
-		CreatedAt:        &createdAt,
-		UpdatedAt:        &updatedAt,
+		ID:                     &id,
+		OrganizationID:         cfg.OrganizationID,
+		Provider:               cfg.Provider,
+		ProjectID:              &projectID,
+		ExternalOrganizationID: conv.PtrValOrEmpty(&cfg.ExternalOrganizationID, nil),
+		Enabled:                cfg.Enabled,
+		HasAPIKey:              cfg.APIKey != "",
+		LastPolledAt:           lastPolledAt,
+		LastPollStatus:         &lastPollStatus,
+		LastPollError:          lastPollError,
+		LastPollFailedAt:       lastPollFailedAt,
+		NextPollAfter:          nextPollAfter,
+		CreatedAt:              &createdAt,
+		UpdatedAt:              &updatedAt,
 	}
 }
 

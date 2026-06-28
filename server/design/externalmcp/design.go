@@ -85,7 +85,7 @@ var _ = Service("mcpRegistries", func() {
 		})
 
 		Result(func() {
-			Attribute("servers", ArrayOf(ExternalMCPServer), "List of available MCP servers")
+			Attribute("servers", ArrayOf(ExternalMCPServerEntry), "List of available MCP servers")
 			Attribute("next_cursor", String, "Pagination cursor for the next page")
 			Required("servers")
 		})
@@ -152,7 +152,10 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
-	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection", func() {
+	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, "ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)", func() {
 		Format(FormatUUID)
 	})
 	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
@@ -170,6 +173,50 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
 	Required("registry_specifier", "version", "description")
+})
+
+// ExternalMCPServerEntry is the lightweight shape returned by the catalog list
+// endpoint. It carries everything the index view needs (header, install state,
+// usage/auth metadata, remotes) but omits the per-tool definitions, which are
+// large and unused by the list. tool_count and is_read_only are precomputed so
+// cards and the tool-behavior filter don't need the tools. The detail page
+// fetches full tools via getServerDetails (ExternalMCPServer).
+var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A summary of an MCP server from an external registry, returned by catalog listings")
+
+	Attribute("registry_specifier", String, "Server specifier used to look up in the registry (e.g., 'io.github.user/server')", func() {
+		Example("io.modelcontextprotocol.anonymous/exa")
+	})
+	Attribute("version", String, "Semantic version of the server", func() {
+		Example("1.0.0")
+	})
+	Attribute("description", String, "Description of what the server does")
+	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, "ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)", func() {
+		Format(FormatUUID)
+	})
+	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_mcp_collection_registry_id", String, "ID of the internal collection registry this server came from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("title", String, "Display name for the server")
+	Attribute("icon_url", String, "URL to the server's icon", func() {
+		Format(FormatURI)
+	})
+	Attribute("meta", Any, "Opaque metadata from the registry")
+	Attribute("tool_count", Int, "Number of tools the server exposes")
+	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
+	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
+	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
+
+	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
+	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
 })
 
 var MCPRegistry = Type("MCPRegistry", func() {

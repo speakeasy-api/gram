@@ -16,29 +16,56 @@ import (
 
 // Client is the "organizationRemoteSessionIssuers" service client.
 type Client struct {
-	CreateOrganizationRemoteSessionIssuerEndpoint goa.Endpoint
-	UpdateOrganizationRemoteSessionIssuerEndpoint goa.Endpoint
-	ListOrganizationRemoteSessionIssuersEndpoint  goa.Endpoint
-	GetOrganizationRemoteSessionIssuerEndpoint    goa.Endpoint
-	DeleteOrganizationRemoteSessionIssuerEndpoint goa.Endpoint
+	CreateIssuerEndpoint              goa.Endpoint
+	ListIssuersEndpoint               goa.Endpoint
+	GetIssuerEndpoint                 goa.Endpoint
+	GetIssuerDeletePreflightEndpoint  goa.Endpoint
+	UpdateIssuerEndpoint              goa.Endpoint
+	DeleteIssuerEndpoint              goa.Endpoint
+	MoveIssuerEndpoint                goa.Endpoint
+	ListClientsEndpoint               goa.Endpoint
+	GetClientEndpoint                 goa.Endpoint
+	GetClientDeletePreflightEndpoint  goa.Endpoint
+	ListClientMcpServersEndpoint      goa.Endpoint
+	ListClientSessionsEndpoint        goa.Endpoint
+	CreateClientEndpoint              goa.Endpoint
+	UpdateClientEndpoint              goa.Endpoint
+	DeleteClientEndpoint              goa.Endpoint
+	RemoveClientFromMcpServerEndpoint goa.Endpoint
+	RevokeSessionEndpoint             goa.Endpoint
+	RefreshSessionEndpoint            goa.Endpoint
+	RevokeAllClientSessionsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createOrganizationRemoteSessionIssuer, updateOrganizationRemoteSessionIssuer, listOrganizationRemoteSessionIssuers, getOrganizationRemoteSessionIssuer, deleteOrganizationRemoteSessionIssuer goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, updateIssuer, deleteIssuer, moveIssuer, listClients, getClient, getClientDeletePreflight, listClientMcpServers, listClientSessions, createClient, updateClient, deleteClient, removeClientFromMcpServer, revokeSession, refreshSession, revokeAllClientSessions goa.Endpoint) *Client {
 	return &Client{
-		CreateOrganizationRemoteSessionIssuerEndpoint: createOrganizationRemoteSessionIssuer,
-		UpdateOrganizationRemoteSessionIssuerEndpoint: updateOrganizationRemoteSessionIssuer,
-		ListOrganizationRemoteSessionIssuersEndpoint:  listOrganizationRemoteSessionIssuers,
-		GetOrganizationRemoteSessionIssuerEndpoint:    getOrganizationRemoteSessionIssuer,
-		DeleteOrganizationRemoteSessionIssuerEndpoint: deleteOrganizationRemoteSessionIssuer,
+		CreateIssuerEndpoint:              createIssuer,
+		ListIssuersEndpoint:               listIssuers,
+		GetIssuerEndpoint:                 getIssuer,
+		GetIssuerDeletePreflightEndpoint:  getIssuerDeletePreflight,
+		UpdateIssuerEndpoint:              updateIssuer,
+		DeleteIssuerEndpoint:              deleteIssuer,
+		MoveIssuerEndpoint:                moveIssuer,
+		ListClientsEndpoint:               listClients,
+		GetClientEndpoint:                 getClient,
+		GetClientDeletePreflightEndpoint:  getClientDeletePreflight,
+		ListClientMcpServersEndpoint:      listClientMcpServers,
+		ListClientSessionsEndpoint:        listClientSessions,
+		CreateClientEndpoint:              createClient,
+		UpdateClientEndpoint:              updateClient,
+		DeleteClientEndpoint:              deleteClient,
+		RemoveClientFromMcpServerEndpoint: removeClientFromMcpServer,
+		RevokeSessionEndpoint:             revokeSession,
+		RefreshSessionEndpoint:            refreshSession,
+		RevokeAllClientSessionsEndpoint:   revokeAllClientSessions,
 	}
 }
 
-// CreateOrganizationRemoteSessionIssuer calls the
-// "createOrganizationRemoteSessionIssuer" endpoint of the
+// CreateIssuer calls the "createIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// CreateOrganizationRemoteSessionIssuer may return the following errors:
+// CreateIssuer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -50,19 +77,18 @@ func NewClient(createOrganizationRemoteSessionIssuer, updateOrganizationRemoteSe
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateOrganizationRemoteSessionIssuer(ctx context.Context, p *CreateOrganizationRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+func (c *Client) CreateIssuer(ctx context.Context, p *CreateIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
 	var ires any
-	ires, err = c.CreateOrganizationRemoteSessionIssuerEndpoint(ctx, p)
+	ires, err = c.CreateIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
 }
 
-// UpdateOrganizationRemoteSessionIssuer calls the
-// "updateOrganizationRemoteSessionIssuer" endpoint of the
+// ListIssuers calls the "listIssuers" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// UpdateOrganizationRemoteSessionIssuer may return the following errors:
+// ListIssuers may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -74,19 +100,41 @@ func (c *Client) CreateOrganizationRemoteSessionIssuer(ctx context.Context, p *C
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, p *UpdateOrganizationRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+func (c *Client) ListIssuers(ctx context.Context, p *ListIssuersPayload) (res *ListOrganizationRemoteSessionIssuersResult, err error) {
 	var ires any
-	ires, err = c.UpdateOrganizationRemoteSessionIssuerEndpoint(ctx, p)
+	ires, err = c.ListIssuersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListOrganizationRemoteSessionIssuersResult), nil
+}
+
+// GetIssuer calls the "getIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// GetIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetIssuer(ctx context.Context, p *GetIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+	var ires any
+	ires, err = c.GetIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
 }
 
-// ListOrganizationRemoteSessionIssuers calls the
-// "listOrganizationRemoteSessionIssuers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-// ListOrganizationRemoteSessionIssuers may return the following errors:
+// GetIssuerDeletePreflight calls the "getIssuerDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+// GetIssuerDeletePreflight may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -98,19 +146,18 @@ func (c *Client) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, p *U
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListOrganizationRemoteSessionIssuers(ctx context.Context, p *ListOrganizationRemoteSessionIssuersPayload) (res *ListRemoteSessionIssuersResult, err error) {
+func (c *Client) GetIssuerDeletePreflight(ctx context.Context, p *GetIssuerDeletePreflightPayload) (res *OrganizationIssuerDeletePreflight, err error) {
 	var ires any
-	ires, err = c.ListOrganizationRemoteSessionIssuersEndpoint(ctx, p)
+	ires, err = c.GetIssuerDeletePreflightEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListRemoteSessionIssuersResult), nil
+	return ires.(*OrganizationIssuerDeletePreflight), nil
 }
 
-// GetOrganizationRemoteSessionIssuer calls the
-// "getOrganizationRemoteSessionIssuer" endpoint of the
+// UpdateIssuer calls the "updateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// GetOrganizationRemoteSessionIssuer may return the following errors:
+// UpdateIssuer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -122,19 +169,18 @@ func (c *Client) ListOrganizationRemoteSessionIssuers(ctx context.Context, p *Li
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetOrganizationRemoteSessionIssuer(ctx context.Context, p *GetOrganizationRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+func (c *Client) UpdateIssuer(ctx context.Context, p *UpdateIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
 	var ires any
-	ires, err = c.GetOrganizationRemoteSessionIssuerEndpoint(ctx, p)
+	ires, err = c.UpdateIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
 }
 
-// DeleteOrganizationRemoteSessionIssuer calls the
-// "deleteOrganizationRemoteSessionIssuer" endpoint of the
+// DeleteIssuer calls the "deleteIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// DeleteOrganizationRemoteSessionIssuer may return the following errors:
+// DeleteIssuer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -146,7 +192,294 @@ func (c *Client) GetOrganizationRemoteSessionIssuer(ctx context.Context, p *GetO
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, p *DeleteOrganizationRemoteSessionIssuerPayload) (err error) {
-	_, err = c.DeleteOrganizationRemoteSessionIssuerEndpoint(ctx, p)
+func (c *Client) DeleteIssuer(ctx context.Context, p *DeleteIssuerPayload) (err error) {
+	_, err = c.DeleteIssuerEndpoint(ctx, p)
 	return
+}
+
+// MoveIssuer calls the "moveIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// MoveIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MoveIssuer(ctx context.Context, p *MoveIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+	var ires any
+	ires, err = c.MoveIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// ListClients calls the "listClients" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// ListClients may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListClients(ctx context.Context, p *ListClientsPayload) (res *ListOrganizationRemoteSessionClientsResult, err error) {
+	var ires any
+	ires, err = c.ListClientsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListOrganizationRemoteSessionClientsResult), nil
+}
+
+// GetClient calls the "getClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// GetClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetClient(ctx context.Context, p *GetClientPayload) (res *types.RemoteSessionClient, err error) {
+	var ires any
+	ires, err = c.GetClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionClient), nil
+}
+
+// GetClientDeletePreflight calls the "getClientDeletePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+// GetClientDeletePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetClientDeletePreflight(ctx context.Context, p *GetClientDeletePreflightPayload) (res *OrganizationClientDeletePreflight, err error) {
+	var ires any
+	ires, err = c.GetClientDeletePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OrganizationClientDeletePreflight), nil
+}
+
+// ListClientMcpServers calls the "listClientMcpServers" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// ListClientMcpServers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListClientMcpServers(ctx context.Context, p *ListClientMcpServersPayload) (res *ListOrganizationMcpServersResult, err error) {
+	var ires any
+	ires, err = c.ListClientMcpServersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListOrganizationMcpServersResult), nil
+}
+
+// ListClientSessions calls the "listClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// ListClientSessions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListClientSessions(ctx context.Context, p *ListClientSessionsPayload) (res *ListOrganizationRemoteSessionsResult, err error) {
+	var ires any
+	ires, err = c.ListClientSessionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListOrganizationRemoteSessionsResult), nil
+}
+
+// CreateClient calls the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// CreateClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateClient(ctx context.Context, p *CreateClientPayload) (res *types.RemoteSessionClient, err error) {
+	var ires any
+	ires, err = c.CreateClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionClient), nil
+}
+
+// UpdateClient calls the "updateClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// UpdateClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateClient(ctx context.Context, p *UpdateClientPayload) (res *types.RemoteSessionClient, err error) {
+	var ires any
+	ires, err = c.UpdateClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionClient), nil
+}
+
+// DeleteClient calls the "deleteClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// DeleteClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteClient(ctx context.Context, p *DeleteClientPayload) (err error) {
+	_, err = c.DeleteClientEndpoint(ctx, p)
+	return
+}
+
+// RemoveClientFromMcpServer calls the "removeClientFromMcpServer" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+// RemoveClientFromMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RemoveClientFromMcpServer(ctx context.Context, p *RemoveClientFromMcpServerPayload) (err error) {
+	_, err = c.RemoveClientFromMcpServerEndpoint(ctx, p)
+	return
+}
+
+// RevokeSession calls the "revokeSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// RevokeSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeSession(ctx context.Context, p *RevokeSessionPayload) (err error) {
+	_, err = c.RevokeSessionEndpoint(ctx, p)
+	return
+}
+
+// RefreshSession calls the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// RefreshSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RefreshSession(ctx context.Context, p *RefreshSessionPayload) (res *types.RemoteSession, err error) {
+	var ires any
+	ires, err = c.RefreshSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSession), nil
+}
+
+// RevokeAllClientSessions calls the "revokeAllClientSessions" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// RevokeAllClientSessions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeAllClientSessions(ctx context.Context, p *RevokeAllClientSessionsPayload) (res *RevokeAllRemoteSessionsResult, err error) {
+	var ires any
+	ires, err = c.RevokeAllClientSessionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RevokeAllRemoteSessionsResult), nil
 }

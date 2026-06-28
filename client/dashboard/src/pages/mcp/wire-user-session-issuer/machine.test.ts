@@ -20,6 +20,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   MigrationInput,
   ResolveRemoteSessionClientInput,
   ResolveRemoteSessionIssuerInput,
@@ -91,7 +92,7 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
     id,
     projectId: "project-1",
     remoteSessionIssuerId: "rsi-1",
-    userSessionIssuerId: "usi-1",
+    userSessionIssuerIds: ["usi-1"],
     clientId: "client-id",
     clientIdIssuedAt: new Date(0),
     createdAt: new Date(0),
@@ -99,7 +100,11 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
   };
 }
 
-function happyServices(linkCalls: LinkToolsetUserSessionIssuerInput[] = []) {
+function happyServices(
+  linkCalls: LinkToolsetUserSessionIssuerInput[] = [],
+  migrateCalls: MigrateGramRegistrationsInput[] = [],
+  callOrder: string[] = [],
+) {
   return {
     resolveUserSessionIssuer: fromPromise<
       UserSessionIssuer | null,
@@ -129,10 +134,17 @@ function happyServices(linkCalls: LinkToolsetUserSessionIssuerInput[] = []) {
       remoteSessionIssuerId: input.remoteSessionIssuer.id,
       userSessionIssuerId: input.userSessionIssuerId,
     })),
+    migrateGramRegistrations: fromPromise<void, MigrateGramRegistrationsInput>(
+      async ({ input }) => {
+        callOrder.push("migrate");
+        migrateCalls.push(input);
+      },
+    ),
     linkToolsetUserSessionIssuer: fromPromise<
       void,
       LinkToolsetUserSessionIssuerInput
     >(async ({ input }) => {
+      callOrder.push("link");
       linkCalls.push(input);
     }),
   };
@@ -183,8 +195,10 @@ describe("wireUserSessionIssuerMachine", () => {
     ]);
   });
 
-  it("links Gram-managed migrations immediately after creating the user issuer", async () => {
+  it("migrates legacy registrations then links Gram-managed migrations after creating the user issuer", async () => {
     const linkCalls: LinkToolsetUserSessionIssuerInput[] = [];
+    const migrateCalls: MigrateGramRegistrationsInput[] = [];
+    const callOrder: string[] = [];
     const actor = makeActor(
       {
         ...baseInput,
@@ -194,7 +208,7 @@ describe("wireUserSessionIssuerMachine", () => {
           proxyProvider: { ...proxyProvider, providerType: "gram" },
         },
       },
-      happyServices(linkCalls),
+      happyServices(linkCalls, migrateCalls, callOrder),
     );
     actor.start();
 
@@ -202,6 +216,69 @@ describe("wireUserSessionIssuerMachine", () => {
     await waitFor(actor, (state) => state.matches("complete"));
 
     expect(selectSteps(actor.getSnapshot())).toHaveLength(1);
+    expect(migrateCalls).toEqual([
+      {
+        oauthProxyProviderId: "proxy-provider-1",
+        userSessionIssuerId: "usi-1",
+      },
+    ]);
+    expect(linkCalls).toEqual([
+      { toolsetSlug: "github", userSessionIssuerId: "usi-1" },
+    ]);
+    // Migration must lift the legacy registrations before the toolset is linked,
+    // otherwise already-connected MCP clients would be cut over before their
+    // registrations exist on the new issuer.
+    expect(callOrder).toEqual(["migrate", "link"]);
+  });
+
+  it("re-runs migration before linking when a Gram migration is retried after failure", async () => {
+    const linkCalls: LinkToolsetUserSessionIssuerInput[] = [];
+    const migrateCalls: MigrateGramRegistrationsInput[] = [];
+    const callOrder: string[] = [];
+    let migrateAttempts = 0;
+    const actor = makeActor(
+      {
+        ...baseInput,
+        paradigm: "gram",
+        defaults: {
+          ...defaults,
+          proxyProvider: { ...proxyProvider, providerType: "gram" },
+        },
+      },
+      {
+        ...happyServices(linkCalls, migrateCalls, callOrder),
+        migrateGramRegistrations: fromPromise<
+          void,
+          MigrateGramRegistrationsInput
+        >(async ({ input }) => {
+          migrateAttempts += 1;
+          if (migrateAttempts === 1) {
+            throw new Error("migrate boom");
+          }
+          callOrder.push("migrate");
+          migrateCalls.push(input);
+        }),
+      },
+    );
+    actor.start();
+
+    // First attempt: create the issuer, then the migration fails. The link must
+    // not run yet.
+    actor.send({ type: "SUBMIT" });
+    await waitFor(
+      actor,
+      (state) => selectErrorStep(state)?.key === "userSessionIssuer",
+    );
+    expect(callOrder).toEqual([]);
+    expect(linkCalls).toHaveLength(0);
+
+    // Retry: the issuer already exists, but migration must still run before the
+    // link — the retry can't skip straight to linking.
+    actor.send({ type: "SUBMIT" });
+    await waitFor(actor, (state) => state.matches("complete"));
+
+    expect(migrateAttempts).toBe(2);
+    expect(callOrder).toEqual(["migrate", "link"]);
     expect(linkCalls).toEqual([
       { toolsetSlug: "github", userSessionIssuerId: "usi-1" },
     ]);

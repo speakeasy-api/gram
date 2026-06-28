@@ -13,6 +13,7 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+import type { ObserveTypeFilterValue } from "@/components/observe/ObserveFilterBar";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useGramContext } from "@gram/client/react-query";
@@ -21,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
+const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 // Sentinel labels the hooks summary substitutes for empty values. They are
 // display-only ("local" for a missing server, "Unknown" for a missing email)
@@ -29,16 +31,23 @@ const USER_EMAIL_FILTER_PATH = "user.email";
 const SERVER_SENTINEL = "local";
 const USER_EMAIL_SENTINEL = "Unknown";
 
-function parseHookTypesParam(raw: string | null): TypesToInclude[] {
-  if (!raw) return [...DEFAULT_HOOK_TYPES];
+type UseObserveFiltersOptions<T extends ObserveTypeFilterValue> = {
+  defaultTypes?: T[];
+  validTypes?: T[];
+};
+
+function parseHookTypesParam<T extends ObserveTypeFilterValue>(
+  raw: string | null,
+  defaultTypes: T[],
+  validTypes: T[],
+): T[] {
+  if (!raw) return [...defaultTypes];
 
   const parsed = raw
     .split(",")
-    .filter((t): t is TypesToInclude =>
-      VALID_HOOK_TYPES.includes(t as TypesToInclude),
-    );
+    .filter((t): t is T => validTypes.includes(t as T));
   const unique = [...new Set(parsed)];
-  return unique.length > 0 ? unique : [...DEFAULT_HOOK_TYPES];
+  return unique.length > 0 ? unique : [...defaultTypes];
 }
 
 function parseFilterParam(raw: string | null, path: string): FilterChip | null {
@@ -62,19 +71,29 @@ function buildActiveFilters(searchParams: URLSearchParams): FilterChip[] {
   return [
     parseFilterParam(searchParams.get("server"), SERVER_FILTER_PATH),
     parseFilterParam(searchParams.get("user"), USER_EMAIL_FILTER_PATH),
+    parseFilterParam(searchParams.get("source"), HOOK_SOURCE_FILTER_PATH),
   ].filter((filter): filter is FilterChip => filter !== null);
 }
 
-function useObserveFiltersImpl() {
+function useObserveFiltersImpl<
+  T extends ObserveTypeFilterValue = TypesToInclude,
+>(options: UseObserveFiltersOptions<T> = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const defaultTypes = (options.defaultTypes ?? DEFAULT_HOOK_TYPES) as T[];
+  const validTypes = (options.validTypes ?? VALID_HOOK_TYPES) as T[];
 
   const activeFilters = useMemo(
     () => buildActiveFilters(searchParams),
     [searchParams],
   );
   const selectedHookTypes = useMemo(
-    () => parseHookTypesParam(searchParams.get("hookTypes")),
-    [searchParams],
+    () =>
+      parseHookTypesParam(
+        searchParams.get("hookTypes"),
+        defaultTypes,
+        validTypes,
+      ),
+    [searchParams, defaultTypes, validTypes],
   );
   const client = useGramContext();
   const { data: membersData, isLoading: membersLoading } = useMembers();
@@ -212,6 +231,21 @@ function useObserveFiltersImpl() {
     return [...new Set([...known, ...selected])];
   }, [filterOptionsSummary, activeFilters]);
 
+  // The hooks summary breakdown carries hook_source ("claude-code", "cursor",
+  // "codex", ...) per (user, server, source, tool) row. Collapse it to the
+  // distinct set of agents seen in the window so the dropdown only offers
+  // sources that actually have data, mirroring serverOptions/userEmailOptions.
+  const hookSourceOptions = useMemo(() => {
+    const selected = activeFilters
+      .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
+      .flatMap((f) => f.filters)
+      .filter(Boolean);
+    const known = (filterOptionsSummary?.breakdown ?? [])
+      .map((b) => b.hookSource)
+      .filter(Boolean);
+    return [...new Set([...known, ...selected])];
+  }, [filterOptionsSummary, activeFilters]);
+
   const handleUserEmailSelectionChange = useCallback(
     (values: string[]) => {
       setSearchParams(
@@ -239,6 +273,24 @@ function useObserveFiltersImpl() {
             next.set("server", values.join(","));
           } else {
             next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleHookSourceSelectionChange = useCallback(
+    (values: string[]) => {
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("source", values.join(","));
+          } else {
+            next.delete("source");
           }
           return next;
         },
@@ -278,6 +330,8 @@ function useObserveFiltersImpl() {
             next.set("server", merged.filters.join(","));
           } else if (chip.path === USER_EMAIL_FILTER_PATH) {
             next.set("user", merged.filters.join(","));
+          } else if (chip.path === HOOK_SOURCE_FILTER_PATH) {
+            next.set("source", merged.filters.join(","));
           }
           return next;
         },
@@ -289,19 +343,14 @@ function useObserveFiltersImpl() {
 
   // Passing an empty array resets to DEFAULT_HOOK_TYPES and clears the URL param.
   const handleHookTypesChange = useCallback(
-    (types: TypesToInclude[]) => {
+    (types: T[]) => {
       const nextTypes = [
-        ...new Set(
-          types.filter((t): t is TypesToInclude =>
-            VALID_HOOK_TYPES.includes(t as TypesToInclude),
-          ),
-        ),
+        ...new Set(types.filter((t): t is T => validTypes.includes(t as T))),
       ];
-      const resolved =
-        nextTypes.length === 0 ? [...DEFAULT_HOOK_TYPES] : nextTypes;
+      const resolved = nextTypes.length === 0 ? [...defaultTypes] : nextTypes;
       const isDefault =
-        resolved.length === DEFAULT_HOOK_TYPES.length &&
-        DEFAULT_HOOK_TYPES.every((t) => resolved.includes(t));
+        resolved.length === defaultTypes.length &&
+        defaultTypes.every((t) => resolved.includes(t));
 
       setSearchParams(
         (prev) => {
@@ -316,7 +365,7 @@ function useObserveFiltersImpl() {
         { replace: true },
       );
     },
-    [setSearchParams],
+    [defaultTypes, setSearchParams, validTypes],
   );
 
   return {
@@ -332,6 +381,8 @@ function useObserveFiltersImpl() {
     handleServerSelectionChange,
     userEmailOptions,
     handleUserEmailSelectionChange,
+    hookSourceOptions,
+    handleHookSourceSelectionChange,
     addFilter,
     handleHookTypesChange,
     setDateRangeParam,
@@ -339,11 +390,20 @@ function useObserveFiltersImpl() {
     clearCustomRange,
     selectedRoleIds,
     roleOptions,
+    roleEmails,
     handleRoleSelectionChange,
     roleFilterPending,
   };
 }
 
-export function useObserveFilters(): ReturnType<typeof useObserveFiltersImpl> {
-  return useObserveFiltersImpl();
+export function useObserveFilters(
+  options?: UseObserveFiltersOptions<TypesToInclude>,
+): ReturnType<typeof useObserveFiltersImpl<TypesToInclude>>;
+export function useObserveFilters<T extends ObserveTypeFilterValue>(
+  options: UseObserveFiltersOptions<T>,
+): ReturnType<typeof useObserveFiltersImpl<T>>;
+export function useObserveFilters<T extends ObserveTypeFilterValue>(
+  options?: UseObserveFiltersOptions<T>,
+): ReturnType<typeof useObserveFiltersImpl<T>> {
+  return useObserveFiltersImpl(options);
 }

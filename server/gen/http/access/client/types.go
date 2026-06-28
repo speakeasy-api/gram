@@ -158,6 +158,8 @@ type ListRolesResponseBody struct {
 type GetRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -179,6 +181,8 @@ type GetRoleResponseBody struct {
 type CreateRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -200,6 +204,8 @@ type CreateRoleResponseBody struct {
 type UpdateRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -242,6 +248,8 @@ type ListGrantsResponseBody struct {
 type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this member.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Email address.
@@ -4621,6 +4629,8 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 type RoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -4641,9 +4651,6 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -4670,9 +4677,6 @@ type SelectorResponseBody struct {
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorRequestBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -4703,12 +4707,19 @@ type ScopeDefinitionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The type of resource this scope applies to.
 	ResourceType *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The scope used to store exception rules for this scope.
+	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
 // AccessMemberResponseBody is used to define fields on response body types.
 type AccessMemberResponseBody struct {
 	// User ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this member.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Email address.
@@ -4725,9 +4736,6 @@ type AccessMemberResponseBody struct {
 type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
@@ -5281,14 +5289,15 @@ func NewListRolesGatewayError(body *ListRolesGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -5452,14 +5461,15 @@ func NewGetRoleGatewayError(body *GetRoleGatewayErrorResponseBody) *goa.ServiceE
 // result from a HTTP "Created" response.
 func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -5627,14 +5637,15 @@ func NewCreateRoleGatewayError(body *CreateRoleGatewayErrorResponseBody) *goa.Se
 // from a HTTP "OK" response.
 func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -6450,11 +6461,12 @@ func NewListGrantsGatewayError(body *ListGrantsGatewayErrorResponseBody) *goa.Se
 // "updateMemberRoles" endpoint result from a HTTP "OK" response.
 func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *access.AccessMember {
 	v := &access.AccessMember{
-		ID:       *body.ID,
-		Name:     *body.Name,
-		Email:    *body.Email,
-		PhotoURL: body.PhotoURL,
-		JoinedAt: *body.JoinedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Email:        *body.Email,
+		PhotoURL:     body.PhotoURL,
+		JoinedAt:     *body.JoinedAt,
 	}
 	v.RoleIds = make([]string, len(body.RoleIds))
 	for i, val := range body.RoleIds {
@@ -8955,6 +8967,9 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9001,6 +9016,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9046,6 +9064,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -9140,6 +9161,9 @@ func ValidateListGrantsResponseBody(body *ListGrantsResponseBody) (err error) {
 func ValidateUpdateMemberRolesResponseBody(body *UpdateMemberRolesResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -15018,6 +15042,9 @@ func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -15065,13 +15092,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
-		}
-	}
-	if body.Effect != nil {
-		if !(*body.Effect == "allow" || *body.Effect == "deny") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -15112,11 +15134,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
-	}
-	if !(body.Effect == "allow" || body.Effect == "deny") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow", "deny"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -15157,14 +15176,27 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	if body.ResourceType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "environment:read" || *body.Slug == "environment:write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	if body.ResourceType != nil {
 		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "environment" || *body.ResourceType == "risk_policy") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "environment", "risk_policy"}))
+		}
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "user_visible" || *body.Visibility == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"user_visible", "internal"}))
+		}
+	}
+	if body.ExclusionScope != nil {
+		if !(*body.ExclusionScope == "org:blocked_read" || *body.ExclusionScope == "org:blocked_admin" || *body.ExclusionScope == "project:blocked_read" || *body.ExclusionScope == "project:blocked_write" || *body.ExclusionScope == "mcp:blocked_read" || *body.ExclusionScope == "mcp:blocked_write" || *body.ExclusionScope == "mcp:blocked_connect" || *body.ExclusionScope == "environment:blocked_read" || *body.ExclusionScope == "environment:blocked_write" || *body.ExclusionScope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.exclusion_scope", *body.ExclusionScope, []any{"org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "risk_policy:bypass"}))
 		}
 	}
 	return
@@ -15175,6 +15207,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -15201,18 +15236,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
-		}
-	}
-	if body.Effect != nil {
-		if !(*body.Effect == "allow" || *body.Effect == "deny") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "environment:read" || e == "environment:write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.Selectors {

@@ -1,5 +1,8 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import { ExternalMCPServer } from "@gram/client/models/components";
+import {
+  ExternalMCPServerEntry,
+  ExternalMCPTool,
+} from "@gram/client/models/components";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query";
 import { useQuery } from "@tanstack/react-query";
 
@@ -16,16 +19,10 @@ interface ServerMeta {
     publishedAt?: string;
     updatedAt?: string;
     isLatest?: boolean;
+    // The catalog list response strips per-tool definitions from the meta blob
+    // to stay small; only the lightweight auth info is kept. Full tools come
+    // from getServerDetails (see `tools` below, populated by enrichment).
     "remotes[0]"?: {
-      tools?: Array<{
-        name: string;
-        description?: string;
-        annotations?: {
-          title?: string;
-          readOnlyHint?: boolean;
-          destructiveHint?: boolean;
-        };
-      }>;
       authOptions?: {
         type?: string;
       }[];
@@ -33,8 +30,12 @@ interface ServerMeta {
   };
 }
 
-export type PulseMCPServer = Omit<ExternalMCPServer, "meta"> & {
+// The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
+// optional and populated client-side by enrichment (getServerDetails) for the
+// add/release flow that needs per-tool URNs.
+export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
   meta: ServerMeta;
+  tools?: ExternalMCPTool[];
 };
 
 // The catalog is small and the backend returns the full list in a single

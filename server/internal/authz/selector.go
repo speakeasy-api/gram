@@ -15,12 +15,13 @@ import (
 type Selector map[string]string
 
 const (
-	SelectorKeyResourceKind = "resource_kind"
-	SelectorKeyResourceID   = "resource_id"
-	SelectorKeyTool         = "tool"
-	SelectorKeyDisposition  = "disposition"
-	SelectorKeyProjectID    = "project_id"
-	SelectorKeyServerURL    = "server_url"
+	SelectorKeyResourceKind   = "resource_kind"
+	SelectorKeyResourceID     = "resource_id"
+	SelectorKeyTool           = "tool"
+	SelectorKeyDisposition    = "disposition"
+	SelectorKeyProjectID      = "project_id"
+	SelectorKeyServerURL      = "server_url"
+	SelectorKeyServerIdentity = "server_identity"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -111,7 +112,8 @@ var allowedSelectorKeys = map[string]map[string]bool{
 		SelectorKeyProjectID: true,
 	},
 	ResourceKindRiskPolicy: {
-		SelectorKeyServerURL: true,
+		SelectorKeyServerURL:      true,
+		SelectorKeyServerIdentity: true,
 	},
 }
 

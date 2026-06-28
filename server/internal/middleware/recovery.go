@@ -44,8 +44,8 @@ func NewRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 					errID := payload.ID
 					var se *oops.ShareableError
 					if errors.As(maybeErr, &se) {
-						code = se.HTTPStatus()
-						payload = se.AsGoa()
+						code = se.HTTPStatus(ctx)
+						payload = se.AsGoa(ctx)
 						errID = payload.ID
 					}
 

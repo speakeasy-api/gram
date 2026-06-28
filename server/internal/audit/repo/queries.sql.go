@@ -98,6 +98,7 @@ SELECT
   COUNT(*)::bigint AS count
 FROM audit_logs
 WHERE organization_id = $1
+  AND subject_type <> 'assistant'
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -117,6 +118,8 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
+// Assistant activity events are excluded: facets power the platform audit
+// feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -142,6 +145,7 @@ WITH filtered_logs AS (
   SELECT actor_id, actor_display_name, seq
   FROM audit_logs
   WHERE organization_id = $1
+    AND subject_type <> 'assistant'
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
@@ -179,6 +183,8 @@ type ListAuditActorFacetsRow struct {
 	Count       int64
 }
 
+// Assistant activity events are excluded: facets power the platform audit
+// feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -220,6 +226,14 @@ WHERE a.organization_id = $1
     $5::text IS NULL
     OR a.action = $5::text
   )
+  AND (
+    ($6::text IS NULL AND a.subject_type <> 'assistant')
+    OR a.subject_type = $6::text
+  )
+  AND (
+    $7::text IS NULL
+    OR a.subject_id = $7::text
+  )
 ORDER BY a.seq DESC
 LIMIT 51
 `
@@ -230,6 +244,8 @@ type ListAuditLogsParams struct {
 	CursorSeq      pgtype.Int8
 	ActorID        pgtype.Text
 	Action         pgtype.Text
+	SubjectType    pgtype.Text
+	SubjectID      pgtype.Text
 }
 
 type ListAuditLogsRow struct {
@@ -253,6 +269,9 @@ type ListAuditLogsRow struct {
 	ProjectSlug        pgtype.Text
 }
 
+// When no subject_type filter is given, assistant activity events (one per
+// assistant tool call) are excluded so they don't drown out the platform
+// audit feed; callers fetch them explicitly with subject_type = 'assistant'.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
@@ -260,6 +279,8 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.CursorSeq,
 		arg.ActorID,
 		arg.Action,
+		arg.SubjectType,
+		arg.SubjectID,
 	)
 	if err != nil {
 		return nil, err

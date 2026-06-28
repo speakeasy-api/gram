@@ -21,7 +21,9 @@ import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -69,6 +71,8 @@ export function OrgSidebar({
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isUserSessionsEnabled =
+    telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
     orgRoutes.billing,
@@ -81,16 +85,23 @@ export function OrgSidebar({
 
   const secureActive = [
     orgRoutes.auditLogs,
-    orgRoutes.identity,
     orgRoutes.deviceAgent,
     orgRoutes.access,
+  ].some((r) => r.active);
+
+  const identityActive = [
+    orgRoutes.userSessions,
+    orgRoutes.identity,
+    orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
   const activeGroup = settingsActive
     ? "Settings"
     : secureActive
       ? "Secure"
-      : undefined;
+      : identityActive
+        ? "Identity"
+        : undefined;
 
   const allOrgNavRoutes = [
     orgRoutes.home,
@@ -103,9 +114,11 @@ export function OrgSidebar({
     orgRoutes.webhooks,
     orgRoutes.adminSettings,
     orgRoutes.auditLogs,
-    orgRoutes.identity,
     orgRoutes.deviceAgent,
     orgRoutes.access,
+    orgRoutes.userSessions,
+    orgRoutes.identity,
+    orgRoutes.remoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -113,12 +126,15 @@ export function OrgSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="gap-3 pb-3">
-        <Link
-          to={orgRoutes.home.href()}
-          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
-        >
-          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
-        </Link>
+        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Link
+            to={orgRoutes.home.href()}
+            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+          >
+            <GramLogo className="w-28" />
+          </Link>
+          <CommandPaletteTrigger />
+        </div>
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="pt-2">
@@ -127,7 +143,7 @@ export function OrgSidebar({
         ) : (
           <NavGroupProvider
             activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Secure"]}
+            defaultOpenGroups={["Settings", "Secure", "Identity"]}
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2">
@@ -187,10 +203,6 @@ export function OrgSidebar({
                   item={orgRoutes.auditLogs}
                   scope={["org:read", "org:admin"]}
                 />
-                <ScopeGatedNavItem
-                  item={orgRoutes.identity}
-                  scope={["org:read", "org:admin"]}
-                />
                 {isDeviceAgentEnabled && (
                   <ScopeGatedNavItem
                     item={orgRoutes.deviceAgent}
@@ -204,11 +216,34 @@ export function OrgSidebar({
                   />
                 )}
               </CollapsibleNavGroup>
+
+              {/* Identity group */}
+              <CollapsibleNavGroup
+                label="Identity"
+                Icon={(p) => <Icon {...p} name="fingerprint" />}
+                defaultHref={orgRoutes.identity.href()}
+              >
+                {isUserSessionsEnabled && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.userSessions}
+                    scope={["org:read", "org:admin"]}
+                  />
+                )}
+                <ScopeGatedNavItem
+                  item={orgRoutes.identity}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.remoteIdentityProviders}
+                  scope={["org:read", "org:admin"]}
+                />
+              </CollapsibleNavGroup>
             </SidebarMenu>
           </NavGroupProvider>
         )}
       </SidebarContent>
       <SidebarFooter className="border-t">
+        <OnboardingResumeButton />
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>

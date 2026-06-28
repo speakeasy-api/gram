@@ -13,10 +13,6 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "prometheus"]
     stop:
       send-keys: ["<C-c>"]
-  pi-classifier:
-    cmd: ["docker", "compose", "logs", "-f", "gram-pi-classifier"]
-    stop:
-      send-keys: ["<C-c>"]
   dev-idp:
     cmd: ["mise", "run", "start:dev-idp"]
     stop: SIGTERM
@@ -39,12 +35,11 @@ procs:
   streams:
     cmd: ["mise", "run", "start:streams"]
     stop: SIGTERM
+  pystreams-multi:
+    cmd: ["mise", "run", "start:pystreams-multi"]
+    stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
-    stop:
-      send-keys: ["<C-c>"]
-  lima:
-    cmd: ["mise", "run", "start:lima"]
     stop:
       send-keys: ["<C-c>"]
   assistant-runtime:

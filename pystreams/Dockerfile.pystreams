@@ -1,0 +1,97 @@
+# syntax=docker/dockerfile:1
+
+# Build this image from the REPO ROOT (the uv workspace root), not from
+# pystreams/. pystreams is a member of the virtual uv workspace defined in the
+# root pyproject.toml and depends on the `gram-infra` member in infra/. The
+# single uv.lock lives at the repo root, so the build context must contain the
+# root pyproject.toml, uv.lock, and both member directories.
+#
+#   docker build -f pystreams/Dockerfile.pystreams -t pystreams .
+#
+# The build-scoped ignore file (pystreams/Dockerfile.pystreams.dockerignore)
+# trims the context down to just those paths, so the rest of the monorepo is
+# never sent and no other Dockerfile's build is affected.
+
+# ---- Builder ----------------------------------------------------------------
+# Resolve dependencies and the workspace into a self-contained virtualenv. None
+# of this stage's source code ends up in the final image.
+FROM python:3.14-slim AS builder
+
+# Pin uv to a specific version for reproducible builds (matches the uv_build
+# floor in pystreams/pyproject.toml). Copied from the official distroless image
+# so we add the uv binary without any extra OS packages.
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_INSTALL_DIR=/python \
+    UV_PYTHON_PREFERENCE=only-managed
+
+WORKDIR /app
+
+# Install a uv-managed standalone CPython (python-build-standalone) into a fixed,
+# copyable location. Unlike the base image's interpreter, this build is fully
+# self-contained and relocatable, so it can be lifted into a distroless runtime
+# that has no Python of its own. `only-managed` above forces every uv sync below
+# to build the venv against THIS interpreter, not the slim base's /usr/local one.
+RUN uv python install 3.14
+
+# Layer 1: install ONLY the third-party dependencies of pystreams (and its
+# workspace dep gram-infra), isolated from the source so this expensive layer
+# stays cached across source-only changes.
+#
+# The repo root is a *virtual* workspace (package = false, no dependencies of
+# its own), so a bare `uv sync` would sync the empty root and install nothing.
+# `--package pystreams` targets the app and pulls in its full dependency tree.
+# We mount each workspace member's pyproject.toml so uv can discover the members
+# and resolve `--package`; `--no-install-workspace` skips building the members
+# themselves, and `--frozen` avoids a lock re-check in this cache layer.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=infra/pyproject.toml,target=infra/pyproject.toml \
+    --mount=type=bind,source=pystreams/pyproject.toml,target=pystreams/pyproject.toml \
+    uv sync --frozen --no-install-workspace --no-dev --package pystreams
+
+# Layer 2: bring in the workspace sources and install pystreams + gram-infra.
+# With all member sources present, `--locked` asserts the lockfile is current.
+# `--no-editable` installs both members as real wheels so the final image needs
+# no source tree; `--no-dev` drops pyrefly/pytest/ty/etc.
+COPY pyproject.toml uv.lock ./
+COPY infra ./infra
+COPY pystreams ./pystreams
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-editable --package pystreams
+
+# ---- Runtime ----------------------------------------------------------------
+# Distroless runtime: no shell, no package manager, no Python of its own — only
+# glibc + libstdc++/libgcc (the `cc` variant), which the grpcio/protobuf C
+# extensions pulled in by gram-infra need. Runs as the built-in `nonroot` user
+# (uid 65532). Pinned by digest for reproducible, tamper-evident builds.
+FROM gcr.io/distroless/cc-debian12:nonroot@sha256:b0ae8e989418b458e0f25489bc3be523718938a2b70864cc0f6a00af1ddbd985
+
+# Bring the standalone interpreter and the resolved virtualenv over from the
+# builder, at the SAME paths they were created on so the venv's interpreter
+# symlinks and console-script shebangs keep resolving. Nothing else is copied:
+# no source tree (the venv is --no-editable) and no build tooling.
+COPY --from=builder /python /python
+COPY --from=builder /app/.venv /app/.venv
+
+# numpy (pulled in transitively via presidio-analyzer -> spacy -> thinc) ships
+# manylinux wheels whose C extensions dynamically link libz.so.1. The manylinux
+# policy treats zlib as a system-provided library, so the wheel does NOT bundle
+# it — and distroless/cc ships only glibc + libstdc++/libgcc, not zlib. Copy the
+# shared object from the builder's Debian base so numpy can import at runtime.
+COPY --from=builder /usr/lib/*-linux-gnu/libz.so.1 /usr/lib/
+
+# Put the venv's bin on PATH so the `multi` console script and python resolve to
+# the project environment without activation.
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Kubernetes liveness/readiness probes hit GET /healthz and /readyz on this port
+# (override with --control-port / GRAM_PYSTREAMS_CONTROL_PORT). EXPOSE is purely
+# documentation; the kubelet reaches the probe via the pod IP regardless.
+EXPOSE 8089
+
+# pystreams exposes the `multi` console script (pystreams.cmd.multi:cli).
+ENTRYPOINT ["multi"]

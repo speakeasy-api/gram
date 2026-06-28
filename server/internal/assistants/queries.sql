@@ -1,11 +1,15 @@
 -- name: ReapStuckAssistantRuntimes :many
--- Short-horizon reaper for rows the happy-path can no longer move. Applies
--- to both v1 (per-thread VM) and v2 (single VM per assistant) rows: the
--- starting/active/expiring liveness markers it keys on are version-agnostic.
--- A v2 VM in active use updates warm_until and last_heartbeat_at via every
--- thread workflow, so an in-flight VM is never matched by the active branch;
--- only assistants whose entire thread set has gone idle past the cutoffs are
--- collected.
+-- Short-horizon reaper for rows the happy-path can no longer move — crash
+-- recovery only. Idle runtimes are deliberately not collected: a VM with no
+-- traffic stays up until its assistant is deleted. Both branches cover rows
+-- stranded by a dead process, and the next admit recreates the runtime:
+--   - 'starting' rows that never transitioned to active within the startup
+--     grace window (server crashed mid-boot).
+--   - 'expiring' rows older than the ExpireThreadRuntime activity's full
+--     retry budget (legacy expire workflows that gave up after CAS
+--     active->expiring without reaching Stop). Without this the partial
+--     unique indexes (v1 on assistant_thread_id, v2 on assistant_id) block
+--     new admits indefinitely.
 UPDATE assistant_runtimes
 SET
   state = @stopped_state,
@@ -14,16 +18,6 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
-    OR (
-      state = @active_state
-      AND warm_until IS NOT NULL
-      AND warm_until < @warm_cutoff
-      AND COALESCE(last_heartbeat_at, updated_at) < @heartbeat_cutoff
-    )
-    -- Backstop for activities that exhaust Temporal's retry budget after CAS
-    -- active->expiring without reaching Stop. Without this the partial unique
-    -- indexes (v1 on assistant_thread_id, v2 on assistant_id) block new
-    -- admits indefinitely.
     OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
@@ -363,12 +357,16 @@ WHERE project_id = @project_id
 -- name: CountActiveAssistantThreads :one
 -- Threads with last_event_at inside the warm TTL window. Excludes threads
 -- that themselves have a pending event so callers computing headroom for
--- a fresh pending admit don't double-count it.
+-- a fresh pending admit don't double-count it. The event-less warmup
+-- thread is excluded too: it holds the VM warm but never occupies a
+-- runner slot, and counting it would block max_concurrency=1 assistants
+-- from admitting their first real turn until the window lapses.
 SELECT COUNT(*)::BIGINT AS active_threads
 FROM assistant_threads t
 WHERE t.project_id = @project_id
   AND t.assistant_id = @assistant_id
   AND t.deleted IS FALSE
+  AND t.source_kind <> @warmup_source_kind
   AND t.last_event_at > @active_since
   AND NOT EXISTS (
     SELECT 1
@@ -530,6 +528,20 @@ ORDER BY (
 -- on the next coordinator kick). The unique partial index keyed on
 -- (project_id, assistant_id) means there is at most one matching row.
 SELECT id, state
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
+-- name: GetAssistantRuntimeV2 :one
+-- Full-row sibling of LookupActiveAssistantRuntimeV2 for callers that need
+-- the backend metadata to drive Ensure without a thread to join through
+-- (eager warmup at assistant creation). At most one row matches per the
+-- v2 unique partial index.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
@@ -710,7 +722,9 @@ SET
   last_heartbeat_at = clock_timestamp(),
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
-  AND project_id = @project_id;
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: UpdateAssistantRuntimeMetadata :exec
 UPDATE assistant_runtimes
@@ -745,22 +759,102 @@ WHERE assistant_id = @assistant_id
   AND backend_metadata_json <> '{}'::jsonb;
 
 -- name: ListInactiveAssistantRuntimesForReap :many
--- Returns runtime rows that still carry backend metadata whose owning
--- assistant has had no runtime activity since @inactive_before. Liveness is
--- judged solely by the EXISTS-on-updated_at join across the assistant's
--- runtime rows; row state is intentionally ignored.
+-- Returns runtime rows that still carry backend metadata and are safe to
+-- collect, in two cases:
+--   1. Orphans: finalized (soft-deleted or ended; the state value is ignored
+--      since a tombstone can carry any state, e.g. one stamped by a racing
+--      turn) or under a soft-deleted assistant, whose owning assistant has had
+--      no runtime activity since @inactive_before — i.e. Stop/Reap never
+--      completed. A live row under a live assistant is never an orphan: an
+--      idle runtime keeps its VM until the assistant is deleted.
+--   2. Superseded backend: a row on a backend the process no longer targets
+--      (backend <> @target_backend), parked at @stopped_state after its warm
+--      window. Collecting it frees the deprecated backend's resources so the
+--      next admit lands on the target backend. Active/starting/expiring rows
+--      are left to finish, so a live assistant is never disrupted mid-turn.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_runtimes r2
-    WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= @inactive_before
-      AND r2.backend_metadata_json <> '{}'::jsonb
+  AND (
+    (
+      (
+        r.deleted IS TRUE
+        OR r.ended IS TRUE
+        OR EXISTS (
+          SELECT 1
+          FROM assistants a
+          WHERE a.id = r.assistant_id
+            AND a.project_id = r.project_id
+            AND a.deleted IS TRUE
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM assistant_runtimes r2
+        WHERE r2.assistant_id = r.assistant_id
+          AND r2.updated_at >= @inactive_before
+          AND r2.backend_metadata_json <> '{}'::jsonb
+      )
+    )
+    OR (
+      r.backend <> @target_backend
+      AND r.deleted IS NOT TRUE
+      AND r.ended IS NOT TRUE
+      AND r.state = @stopped_state
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
+
+-- name: CountInFlightAssistantThreadEvents :one
+-- Counts events that are queued for or currently using the assistant's
+-- runtime. The image recycle sweep skips assistants with any in-flight
+-- events: their turns are about to hit the VM (the runner's idle clock
+-- only clears on /turn enqueue) and their admissions recycle the image
+-- lazily anyway.
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND deleted IS FALSE
+  AND status IN (@pending_status, @processing_status);
+
+-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+-- Persists post-recycle backend metadata only while the row is still live.
+-- Zero rows affected means the warm timer expired the runtime mid-recycle;
+-- the caller must undo the machine restart instead of recording it.
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = @backend_metadata_json,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @active_state
+  AND deleted IS FALSE;
+
+-- name: ListActiveAssistantRuntimesForImageRecycle :many
+-- Returns live v2 runtime rows that carry backend metadata so a deploy-time
+-- sweep can roll their machines onto the current runtime image. Only `active`
+-- rows qualify: `starting` rows are mid-boot and already pull the current
+-- image, while expiring/stopped rows are torn down or recycled lazily on the
+-- next admission. Rows orphaned by a deleted assistant are excluded: they
+-- belong to the deleted-assistant janitor, and recycling them would bump
+-- updated_at and postpone the inactivity-based reap.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.state = @active_state
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend_metadata_json <> '{}'::jsonb
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistants a
+    WHERE a.id = r.assistant_id
+      AND a.project_id = r.project_id
+      AND a.deleted IS TRUE
+  )
+ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
 -- Records that the backend resource (e.g. Fly app) for this runtime has
@@ -774,6 +868,48 @@ SET state = @reaped_state,
     deleted_at = COALESCE(deleted_at, clock_timestamp())
 WHERE id = @runtime_id
   AND project_id = @project_id;
+
+-- name: ListStoppedRuntimesForReap :many
+-- Per-thread reap candidates: rows in stopped or failed whose own updated_at
+-- has aged past @stopped_before. No assistant-wide activity check so a single
+-- still-active thread on an assistant cannot pin every dead sibling's machine
+-- indefinitely. The NOT EXISTS guard restricts the candidate to the most
+-- recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
+-- non-empty metadata into each new row, so a stale older sibling can share
+-- `machine_id` with the current owner — destroying it would yank the live
+-- machine out from under a fresher row that is still inside its own TTL.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state IN (@stopped_state, @failed_state)
+  AND r.updated_at < @stopped_before
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_thread_id = r.assistant_thread_id
+      AND r2.project_id = r.project_id
+      AND r2.created_at > r.created_at
+      AND r2.state <> @reaped_state
+  )
+ORDER BY r.updated_at ASC
+LIMIT @limit_count;
+
+-- name: MarkAssistantRuntimeMachineReaped :execrows
+-- Per-thread reap: strips the machine slot from backend metadata while
+-- preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
+-- the next admit for the same thread cold-launches into the same Fly app and
+-- keeps its allocated IP and secrets. Filters by current state so a row that
+-- raced into starting/active between selection and update is left alone — the
+-- 0-rows return signals the caller to skip the destructive backend call.
+UPDATE assistant_runtimes
+SET state = @reaped_state,
+    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state IN (@stopped_state, @failed_state);
 
 -- name: BeginExpireAssistantRuntime :one
 -- Accepts both `active` and `expiring` so a Temporal-retried attempt (after
@@ -823,7 +959,9 @@ SET
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
   AND project_id = @project_id
-  AND state = @expiring_state;
+  AND state = @expiring_state
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: CreateAssistantRuntime :exec
 -- Inserts an assistant_runtimes row with caller-controlled id, timestamps,

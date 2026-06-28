@@ -126,3 +126,9 @@ func TestNormalizeAccessEvidence_PreservesServerIdentityAsMetadataOnly(t *testin
 	require.Equal(t, "claude_ai_Calendly", got.ServerIdentity)
 	require.True(t, got.Empty())
 }
+
+func TestHumanizeServerIdentity_HandlesUnicodeWords(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "Éclair MCP", HumanizeServerIdentity("éclair_mcp"))
+}

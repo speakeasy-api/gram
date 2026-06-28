@@ -11,6 +11,7 @@ import {
   buildCreateRemoteSessionIssuerMutation,
   buildCreateUserSessionIssuerMutation,
   buildDiscoverRemoteSessionIssuerMutation,
+  buildMigrateLegacyGramRegistrationsMutation,
   buildSetToolsetUserSessionIssuerMutation,
 } from "@gram/client/react-query";
 import { fromPromise } from "xstate";
@@ -25,6 +26,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   ResolveRemoteSessionClientInput,
   ResolveRemoteSessionIssuerInput,
   ResolveUserSessionIssuerInput,
@@ -238,7 +240,7 @@ function createMigrationServicesImpl(
               cloneClientFromOAuthProxyProviderForm: {
                 oauthProxyProviderId: input.proxyProviderId,
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
               },
             },
             ...fetchOptions({ signal }),
@@ -266,7 +268,7 @@ function createMigrationServicesImpl(
             request: {
               createRemoteSessionClientForm: {
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
                 clientId: proxyRegistered.clientId,
                 clientSecret: proxyRegistered.clientSecret || undefined,
                 tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
@@ -288,7 +290,7 @@ function createMigrationServicesImpl(
             request: {
               createRemoteSessionClientForm: {
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
                 clientId: input.manualClientId.trim(),
                 clientSecret: input.manualClientSecret || undefined,
               },
@@ -297,6 +299,27 @@ function createMigrationServicesImpl(
           });
         }
       }
+    },
+  );
+
+  const migrateGramRegistrations = fromPromise(
+    async ({
+      input,
+      signal,
+    }: {
+      input: MigrateGramRegistrationsInput;
+    } & SignalArg) => {
+      const { mutationFn } =
+        buildMigrateLegacyGramRegistrationsMutation(client);
+      await mutationFn({
+        request: {
+          migrateLegacyGramRegistrationsForm: {
+            oauthProxyProviderId: input.oauthProxyProviderId,
+            userSessionIssuerId: input.userSessionIssuerId,
+          },
+        },
+        ...fetchOptions({ signal }),
+      });
     },
   );
 
@@ -327,6 +350,7 @@ function createMigrationServicesImpl(
     createUserSessionIssuer,
     createRemoteSessionIssuer,
     createRemoteSessionClient,
+    migrateGramRegistrations,
     linkToolsetUserSessionIssuer,
   };
 }

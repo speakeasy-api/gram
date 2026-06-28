@@ -12,10 +12,13 @@ import (
 	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -37,6 +40,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -54,6 +59,7 @@ type WorkerOptions struct {
 	FeatureProvider                feature.Provider
 	AssetStorage                   assets.BlobStore
 	SlackClient                    *slack_client.SlackClient
+	ChatMessageWriter              *chat.ChatMessageWriter
 	ChatClient                     *chat.Client
 	OpenRouter                     openrouter.Provisioner
 	K8sClient                      *k8s.KubernetesClients
@@ -82,6 +88,7 @@ type WorkerOptions struct {
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
+	Publishers                     *Publishers
 }
 
 func ForDeploymentProcessing(
@@ -105,6 +112,7 @@ func ForDeploymentProcessing(
 		MCPRegistryClient:              mcpRegistryClient,
 		AuditLogger:                    auditLogger,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,
@@ -129,6 +137,10 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers: &Publishers{
+			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		},
 	}
 }
 
@@ -146,6 +158,7 @@ func NewTemporalWorker(
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,
@@ -174,6 +187,7 @@ func NewTemporalWorker(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 
 	for _, o := range options {
@@ -184,6 +198,7 @@ func NewTemporalWorker(
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
@@ -212,6 +227,7 @@ func NewTemporalWorker(
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
 		}
 	}
 
@@ -234,6 +250,17 @@ func NewTemporalWorker(
 		Interceptors:                       workerInterceptors,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
+
+	// The CEL engine is immutable + thread-safe; build one for this worker's
+	// risk activities and pass it down. Construction is deterministic and only
+	// fails on a malformed descriptor (a bug caught by tests), so log and carry
+	// on rather than failing worker startup.
+	celEng, celErr := celenv.New()
+	if celErr != nil {
+		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
+	}
+
+	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
 
 	activities := NewActivities(
 		logger,
@@ -272,6 +299,10 @@ func NewTemporalWorker(
 		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
+		opts.ChatMessageWriter,
+		opts.Publishers,
+		celEng,
+		judgeRateLimiter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -279,9 +310,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
-	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
-	temporalWorker.RegisterActivity(activities.PostSlackMessage)
-	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -294,8 +322,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
-	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -307,6 +335,8 @@ func NewTemporalWorker(
 	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
+	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
+	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
@@ -314,6 +344,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -334,11 +366,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
-	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
+	aiUsageWorker.RegisterActivity(activities.PollAIData)
+	// Legacy alias for workflow histories started before the
+	// PollAIUsage -> PollAIData rename. Remove once drained.
+	aiUsageWorker.RegisterActivityWithOptions(activities.PollAIData, activity.RegisterOptions{
+		Name: "PollAIUsage",
+	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
-	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
@@ -349,8 +385,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
-	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -359,10 +395,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantRuntimeImageRecycleWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantMemoriesReaperWorkflow)
 	// WorkOS sync workflows
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
@@ -419,6 +458,18 @@ func NewTemporalWorker(
 
 	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	// One image recycle sweep per deployed runtime image: a new worker build
+	// carries a new image ref, so kicking on startup is the deploy signal.
+	// Best-effort — a failed kick just leaves runtimes to the lazy
+	// per-admission recycle.
+	if opts.AssistantsCore != nil {
+		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
+			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
+				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			}
+		}
 	}
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {

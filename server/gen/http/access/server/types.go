@@ -158,6 +158,8 @@ type ListRolesResponseBody struct {
 type GetRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -179,6 +181,8 @@ type GetRoleResponseBody struct {
 type CreateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -200,6 +204,8 @@ type CreateRoleResponseBody struct {
 type UpdateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -242,6 +248,8 @@ type ListGrantsResponseBody struct {
 type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -4621,6 +4629,8 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 type RoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -4641,9 +4651,6 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -4674,12 +4681,19 @@ type ScopeDefinitionResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// The type of resource this scope applies to.
 	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The scope used to store exception rules for this scope.
+	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
 // AccessMemberResponseBody is used to define fields on response body types.
 type AccessMemberResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -4696,9 +4710,6 @@ type AccessMemberResponseBody struct {
 type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
@@ -4880,9 +4891,6 @@ type ChallengeResolutionResponseBody struct {
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorRequestBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -4928,14 +4936,15 @@ func NewListRolesResponseBody(res *access.ListRolesResult) *ListRolesResponseBod
 // "getRole" endpoint of the "access" service.
 func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -4956,14 +4965,15 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -4984,14 +4994,15 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 // the "updateRole" endpoint of the "access" service.
 func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -5069,11 +5080,12 @@ func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResp
 // result of the "updateMemberRoles" endpoint of the "access" service.
 func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRolesResponseBody {
 	body := &UpdateMemberRolesResponseBody{
-		ID:       res.ID,
-		Name:     res.Name,
-		Email:    res.Email,
-		PhotoURL: res.PhotoURL,
-		JoinedAt: res.JoinedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Email:        res.Email,
+		PhotoURL:     res.PhotoURL,
+		JoinedAt:     res.JoinedAt,
 	}
 	if res.RoleIds != nil {
 		body.RoleIds = make([]string, len(res.RoleIds))
@@ -9246,13 +9258,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
-		}
-	}
-	if body.Effect != nil {
-		if !(*body.Effect == "allow" || *body.Effect == "deny") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.Selectors {

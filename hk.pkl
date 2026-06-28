@@ -62,6 +62,12 @@ local linters = new Mapping<String, Step> {
     check = "pnpm oxfmt --check {{files}}"
     fix = "pnpm oxfmt --write {{files}}"
   }
+  ["ruff-format"] = (Builtins.ruff_format) {
+    exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
+  }
+  ["ruff"] = (Builtins.ruff) {
+    exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
+  }
 }
 
 hooks {

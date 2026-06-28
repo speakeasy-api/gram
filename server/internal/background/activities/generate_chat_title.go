@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -42,7 +43,7 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	defaultChatTitle       = "New Chat"
+	defaultChatTitle       = chat.DefaultChatTitle
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCoworkChatTitle = "Cowork Session"
 	DefaultClaudeAmbiguous = "Claude Session"
@@ -73,6 +74,14 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("get chat: %w", err)
 	}
 
+	// A human renamed this chat — never overwrite a manually chosen title. This
+	// is a fast-path check on the snapshot we just read; a rename that lands
+	// *during* generation (below) is caught by the title_manually_set guard in
+	// the final UpdateChatTitle write, which is the authoritative protection.
+	if chat.TitleManuallySet {
+		return nil
+	}
+
 	// Already has a meaningful title — nothing to do.
 	if chat.Title.Valid && !isDefaultChatTitle(chat.Title.String) {
 		return nil
@@ -96,6 +105,8 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
+	// UpdateChatTitle only writes when title_manually_set is still false, so a
+	// manual rename that raced this generation wins and is left untouched.
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
 		ID:    chatID,
 		Title: conv.ToPGText(title),
@@ -164,7 +175,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		"Return ONLY the title text, no quotes or explanation. " +
 		"IMPORTANT: The title must directly relate to the content of the messages. " +
 		"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. " +
-		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat"
+		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: " + defaultChatTitle
 
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
 		OrgID:     orgID,

@@ -1,7 +1,12 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel } from "@/components/chart/chartUtils";
-import { InsightsConfig } from "@/components/insights-sidebar";
+import {
+  formatChartLabel,
+  formatChartZoomRangeLabel,
+} from "@/components/chart/chartUtils";
+import { useChartZoom } from "@/components/chart/useChartZoom";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
@@ -12,7 +17,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 import {
@@ -32,8 +37,10 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
 import { Line } from "react-chartjs-2";
 import { Type } from "@/components/ui/type";
+import { buildRiskTrendChartData, type TrendPoint } from "./riskTrendChartData";
 
 ChartJS.register(
   CategoryScale,
@@ -43,6 +50,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 const RISK_TREND_CHART_ID = "risk-events-trend";
@@ -67,39 +75,11 @@ const CHART_COLORS = {
   tooltipBorder: "#262626",
 } as const;
 
-const RISK_CATEGORY_CHART_COLORS = [
-  { category: "secrets", color: "#60a5fa" },
-  { category: "financial", color: "#34d399" },
-  { category: "pii", color: "#f87171" },
-  { category: "government_ids", color: "#a78bfa" },
-  { category: "healthcare", color: "#facc15" },
-  { category: "prompt_injection", color: "#22d3ee" },
-  { category: "off_policy", color: "#f472b6" },
-  { category: "shadow_mcp", color: "#a3e635" },
-  { category: "destructive_tool", color: "#818cf8" },
-  { category: "cli_destructive", color: "#fb7185" },
-  { category: "custom", color: "#94a3b8" },
-] satisfies ReadonlyArray<{ category: RuleCategory; color: string }>;
-
-const RISK_CATEGORY_CHART_COLOR_BY_CATEGORY = new Map<RuleCategory, string>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category, color }) => [category, color]),
-);
-
-const RISK_CATEGORY_CHART_ORDER = new Map<RuleCategory, number>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category }, index) => [category, index]),
-);
-
 type BarDatum = {
   key: string;
   label: string;
   value: number;
   href?: string;
-};
-
-type TrendPoint = {
-  category: string;
-  bucketStart: Date;
-  findings: number;
 };
 
 export default function SecurityOverview(): JSX.Element {
@@ -206,6 +186,12 @@ function SecurityOverviewContent() {
   });
   const overview = overviewQuery.data;
   const isOverviewLoading = overviewQuery.isLoading;
+  const handleChartRangeSelect = useCallback(
+    (from: Date, to: Date) => {
+      setCustomRangeParam(from, to, formatChartZoomRangeLabel(from, to));
+    },
+    [setCustomRangeParam],
+  );
 
   const categoriesIndexHref = useMemo(() => {
     const r = (
@@ -256,7 +242,7 @@ function SecurityOverviewContent() {
   }, [overview?.topCategories, routes.riskOverview, location.search]);
 
   const topRules = useMemo<BarDatum[]>(() => {
-    const riskEventsHref = routes.logs.riskEvents.href();
+    const riskEventsHref = routes.riskEvents.href();
     return (overview?.topRules ?? []).map((r) => {
       const label = r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)";
       const ruleParams = new URLSearchParams();
@@ -274,7 +260,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topRules, routes.logs.riskEvents, location.search]);
+  }, [overview?.topRules, routes.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
     const userDetailRoute = (
@@ -354,39 +340,12 @@ function SecurityOverviewContent() {
       ].join(" ")
     : null;
 
-  const insightsSuggestions = [
-    {
-      title: "Top rules this week",
-      label: "which rule_ids fired most",
-      prompt:
-        "Use listRiskResultsForAgent to find the top 5 rule_ids by finding count over the last 7 days. Report by source family and rule_id only — never quote any match_redacted value.",
-    },
-    {
-      title: "Shadow MCP servers",
-      label: "unapproved MCPs in use",
-      prompt:
-        "List all shadow_mcp findings across the project. For each, name the MCP server identifier (match), the chat_id, and when it was first observed. These match values are server URLs/commands and are safe to name.",
-    },
-    {
-      title: "Unique leaked secrets",
-      label: "dedupe by fingerprint",
-      prompt:
-        "Use listRiskResultsForAgent to count distinct leaked secrets by their match_redacted fingerprint (since identical secrets share a sha prefix). Group by rule_id and report counts. Do not print match_redacted values back to me.",
-    },
-    {
-      title: "Analysis backlog",
-      label: "pending messages per policy",
-      prompt:
-        "For each active policy, call getRiskPolicyStatus and report pending vs analyzed message counts and workflow state. Flag any policy whose pending count is non-zero.",
-    },
-  ];
-
   return (
     <>
       {insightsContext && (
         <InsightsConfig
           contextInfo={insightsContext}
-          suggestions={insightsSuggestions}
+          suggestions={INSIGHTS_SUGGESTIONS["risk-overview"]}
           title="Risk insights"
           subtitle="Ask about policies, findings, and shadow MCP activity. Match content is redacted before it reaches the assistant."
         />
@@ -512,12 +471,15 @@ function SecurityOverviewContent() {
               hasFindings &&
               overview.timeSeriesFindings.some((point) => point.findings > 0)
             }
+            isZoomed={customRange !== null}
+            onResetZoom={clearCustomRange}
           >
             <RiskTrendChart
               points={overview.timeSeriesFindings}
               from={overview.from}
               to={overview.to}
               height={250}
+              onRangeSelect={handleChartRangeSelect}
             />
           </ChartCard>
         )}
@@ -542,11 +504,11 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
 
   const agentsParams = new URLSearchParams(carriedRangeParams);
   agentsParams.set("has_risk", "true");
-  const agentsHref = `${routes.logs.agents.href()}?${agentsParams.toString()}`;
+  const agentsHref = `${routes.agentSessions.href()}?${agentsParams.toString()}`;
 
   const riskEventsHref = carriedRangeParams.toString()
-    ? `${routes.logs.riskEvents.href()}?${carriedRangeParams.toString()}`
-    : routes.logs.riskEvents.href();
+    ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`
+    : routes.riskEvents.href();
 
   return (
     <Page.Section>
@@ -679,16 +641,26 @@ function RiskTrendChart({
   from,
   to,
   height,
+  onRangeSelect,
 }: {
   points: TrendPoint[];
   from: Date;
   to: Date;
   height: number;
+  onRangeSelect?: (from: Date, to: Date) => void;
 }) {
   const chartData = useMemo(
     () => buildRiskTrendChartData(points, from, to),
     [points, from, to],
   );
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+    onRangeSelect,
+  });
+
+  useEffect(() => {
+    resetZoom();
+  }, [points, resetZoom]);
 
   if (chartData.labels.length === 0) {
     return <ChartEmptyState />;
@@ -709,8 +681,17 @@ function RiskTrendChart({
         padding: 12,
         boxPadding: 4,
         callbacks: {
-          title: (items) =>
-            chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+          title: (items) => {
+            const x = items[0]?.parsed.x;
+            if (x == null)
+              return chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "";
+            return new Date(x).toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            });
+          },
           label: (item) => {
             if ((item.parsed.y ?? 0) === 0) return undefined;
             return item.formattedValue
@@ -719,15 +700,21 @@ function RiskTrendChart({
           },
         },
       },
+      zoom: zoomPluginOptions,
     },
     scales: {
       x: {
+        type: "linear",
         grid: {
           display: true,
           color: CHART_COLORS.gridLineFaint,
           lineWidth: 1,
         },
-        ticks: { maxTicksLimit: 8 },
+        ticks: {
+          maxTicksLimit: 8,
+          callback: (value) =>
+            formatChartLabel(new Date(value as number), timeRangeMs),
+        },
       },
       y: {
         beginAtZero: true,
@@ -745,79 +732,11 @@ function RiskTrendChart({
       className="relative transition-all duration-200 ease-in-out"
       style={{ height }}
     >
-      <Line data={chartData} options={options} />
+      <Line
+        ref={chartRef}
+        data={{ datasets: chartData.datasets }}
+        options={options}
+      />
     </div>
   );
-}
-
-function getRiskCategoryChartColor(category: string) {
-  return RISK_CATEGORY_CHART_COLOR_BY_CATEGORY.get(category as RuleCategory);
-}
-
-function buildRiskTrendChartData(points: TrendPoint[], from: Date, to: Date) {
-  if (points.length === 0) {
-    return { labels: [], tooltipLabels: [], datasets: [] };
-  }
-
-  const timeRangeMs = to.getTime() - from.getTime();
-  const dateMap = new Map<number, Date>();
-  const seriesMap = new Map<string, Map<number, number>>();
-
-  for (const point of points) {
-    const timestamp = point.bucketStart.getTime();
-    dateMap.set(timestamp, point.bucketStart);
-    const series = seriesMap.get(point.category) ?? new Map<number, number>();
-    series.set(timestamp, point.findings);
-    seriesMap.set(point.category, series);
-  }
-
-  const timestamps = Array.from(dateMap.keys()).sort((a, b) => a - b);
-  const labels = timestamps.map((timestamp) =>
-    formatChartLabel(dateMap.get(timestamp)!, timeRangeMs),
-  );
-  const tooltipLabels = timestamps.map((timestamp) =>
-    dateMap.get(timestamp)!.toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  );
-
-  const datasets = Array.from(seriesMap.entries())
-    .sort(([left], [right]) => {
-      const leftOrder =
-        RISK_CATEGORY_CHART_ORDER.get(left as RuleCategory) ??
-        Number.MAX_SAFE_INTEGER;
-      const rightOrder =
-        RISK_CATEGORY_CHART_ORDER.get(right as RuleCategory) ??
-        Number.MAX_SAFE_INTEGER;
-
-      return leftOrder - rightOrder || left.localeCompare(right);
-    })
-    .map(([category, series], index) => {
-      const color =
-        getRiskCategoryChartColor(category) ??
-        RISK_CATEGORY_CHART_COLORS[index % RISK_CATEGORY_CHART_COLORS.length]!
-          .color;
-      const meta = RULE_CATEGORY_META[category as RuleCategory];
-      return {
-        label: meta?.label ?? category,
-        data: timestamps.map((timestamp) => series.get(timestamp) ?? 0),
-        borderColor: color,
-        backgroundColor: `${color}1a`,
-        pointBackgroundColor: color,
-        fill: false,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      };
-    });
-
-  return {
-    labels,
-    tooltipLabels,
-    datasets,
-  };
 }

@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const (
@@ -39,39 +41,35 @@ func newEnforceO11yConventionsAnalyzer(rule enforceO11yConventionsSettings) *ana
 	}
 
 	return &analysis.Analyzer{
-		Name: enforceO11yConventionsAnalyzer,
-		Doc:  enforceO11yConventionsDefaultMessage,
+		Name:     enforceO11yConventionsAnalyzer,
+		Doc:      enforceO11yConventionsDefaultMessage,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			for _, file := range pass.Files {
-				ast.Inspect(file, func(node ast.Node) bool {
-					callExpr, ok := node.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
+			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
-					selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-					if !ok {
-						return true
-					}
+			ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(node ast.Node) {
+				callExpr := node.(*ast.CallExpr)
 
-					called, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
-					if !ok || called.Pkg() == nil {
-						return true
-					}
+				selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return
+				}
 
-					if called.Signature().Recv() != nil {
-						return true
-					}
+				called, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
+				if !ok || called.Pkg() == nil {
+					return
+				}
 
-					if called.Pkg().Path() != "log/slog" || !slices.Contains(bannedSlogFuncs, called.Name()) {
-						return true
-					}
+				if called.Signature().Recv() != nil {
+					return
+				}
 
-					pass.ReportRangef(callExpr, "%s", message)
+				if called.Pkg().Path() != "log/slog" || !slices.Contains(bannedSlogFuncs, called.Name()) {
+					return
+				}
 
-					return true
-				})
-			}
+				pass.ReportRangef(callExpr, "%s", message)
+			})
 
 			return nil, nil
 		},

@@ -32,7 +32,17 @@ func DeleteChatChatPath() string {
 	return "/rpc/chat.delete"
 }
 
+// SetPinnedChatPath returns the URL path to the chat service setPinned HTTP endpoint.
+func SetPinnedChatPath() string {
+	return "/rpc/chat.setPinned"
+}
+
 // SubmitFeedbackChatPath returns the URL path to the chat service submitFeedback HTTP endpoint.
 func SubmitFeedbackChatPath() string {
 	return "/rpc/chat.submitFeedback"
+}
+
+// ListSourcesChatPath returns the URL path to the chat service listSources HTTP endpoint.
+func ListSourcesChatPath() string {
+	return "/rpc/chat.listSources"
 }

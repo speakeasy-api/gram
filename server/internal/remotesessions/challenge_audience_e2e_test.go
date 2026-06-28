@@ -92,10 +92,9 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-"+slugSuffix)
 
-			_, err = q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				RemoteSessionIssuerID:   issuer.ID,
-				UserSessionIssuerID:     userIssuer,
 				ClientID:                "aud-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 				ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -103,6 +102,12 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 				TokenEndpointAuthMethod: pgtype.Text{String: "", Valid: false},
 				Scope:                   nil,
 				Audience:                tc.audience,
+			})
+			require.NoError(t, err)
+
+			err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: client.ID,
+				UserSessionIssuerID:   userIssuer,
 			})
 			require.NoError(t, err)
 

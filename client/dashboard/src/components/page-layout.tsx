@@ -11,6 +11,7 @@ import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
+import { Toolbar } from "./ui/toolbar.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
 
@@ -192,10 +193,16 @@ const PageSection = Object.assign(PageSectionComponent, {
   MoreActions: MoreActions,
 });
 
+function PageBanner({ children }: { children: React.ReactNode }) {
+  return <div className="flex w-full shrink-0 flex-col">{children}</div>;
+}
+
 export const Page = Object.assign(PageLayout, {
   Header: PageHeader,
+  Banner: PageBanner,
   Body: PageBody,
   Section: PageSection,
+  Toolbar: Toolbar,
 });
 
 export function EmptyState({

@@ -18,6 +18,7 @@ const (
 	FeatureWebhooks              Feature = "webhooks"
 	FeatureSSO                   Feature = "sso"
 	FeatureSCIM                  Feature = "scim"
+	FeatureObservabilityMode     Feature = "observability_mode"
 )
 
 type FeatureCache struct {

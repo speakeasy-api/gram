@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
+/* Scan the elements package so Tailwind generates the utility classes its
+ * compiled components use (e.g. the dark slate JSON viewer) — they live in
+ * node_modules and aren't picked up by the default dashboard-src scan. */
+@source "../node_modules/@gram-ai/elements/dist";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -84,6 +88,157 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Radix positions every popover/select/dropdown inside a wrapper tagged
+   `data-radix-popper-content-wrapper`. shadcn content components add their own
+   `z-50`, but third-party poppers (the Elements `TimeRangePicker`) ship no
+   z-index — and Radix writes an *inline* `z-index: auto` on that wrapper, so
+   such poppers render *behind* a `z-50` Sheet/Dialog panel and look like they
+   never opened. Overriding an inline style requires `!important`; floating
+   layers must paint above panels, so lift the wrapper regardless of its
+   content classes. (shadcn poppers already carry `z-50`, so this is a no-op
+   for them.) */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
+/* Dismissable CTA "genie": each CTA pairs a dismissable surface with a sidebar
+   resume button sharing a view-transition-name (`onboarding-cta` for the setup
+   banner — see `useOnboardingCta` — and `insights-dock` for the Project
+   Assistant dock — see `useInsightsDockCta`), so dismissing/resuming morphs
+   one box into the other. The UA keeps the position/size morph on the group;
+   the snapshots get squash-and-stretch keyframes so the swap reads like the
+   macOS genie rather than a flat slide. */
+::view-transition-group(onboarding-cta),
+::view-transition-group(insights-dock) {
+  animation-duration: 500ms;
+  animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
+}
+
+/* Mid-flight sag on the snapshot pair — the whole thing droops while being
+   sucked toward the dock slot, instead of flying a straight line. Composes
+   with the UA's position/size morph on the parent group. */
+::view-transition-image-pair(onboarding-cta),
+::view-transition-image-pair(insights-dock) {
+  animation: 500ms ease-in-out both onboarding-cta-genie-sag;
+}
+
+@keyframes onboarding-cta-genie-sag {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(7%) scaleY(1.1);
+  }
+}
+
+/* Old surface: the funnel. A perspective tilt tapers the bottom edge toward
+   the dock slot while the body stretches and leans, then pours through and
+   fades. Transform + opacity only — clip-path animation here forces main-thread
+   painting every frame and visibly stutters the skew, while transforms stay on
+   the compositor. Replaces the default cross-fade, so opacity must be animated
+   here too. */
+::view-transition-old(onboarding-cta),
+::view-transition-old(insights-dock) {
+  transform-origin: 50% 0%;
+  animation: 500ms cubic-bezier(0.65, 0, 0.25, 1) both onboarding-cta-genie-out;
+}
+
+@keyframes onboarding-cta-genie-out {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  40% {
+    opacity: 1;
+    transform: perspective(500px) rotateX(28deg) scaleY(1.15);
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: perspective(500px) rotateX(40deg) skewX(-8deg) scaleY(1.3);
+  }
+}
+
+/* New surface: stays hidden while the old one pours in, then unfurls out of
+   the slot. Uniform scale only — non-uniform scale visibly stretches the
+   banner's text when resuming from the docked button; the rotateX taper
+   supplies the genie warp without distorting glyph proportions. */
+::view-transition-new(onboarding-cta),
+::view-transition-new(insights-dock) {
+  transform-origin: 50% 0%;
+  animation: 500ms cubic-bezier(0.05, 0.7, 0.1, 1) both onboarding-cta-genie-in;
+}
+
+@keyframes onboarding-cta-genie-in {
+  0%,
+  55% {
+    opacity: 0;
+    transform: perspective(500px) rotateX(28deg) scale(0.9) skewX(-4deg);
+  }
+  82% {
+    opacity: 1;
+    transform: perspective(500px) rotateX(-3deg) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Content layer: the text/icons inside both surfaces carry their own
+   view-transition-name, which excludes them from the container snapshots —
+   the genie warps an empty surface. The content layer itself must not fly:
+   its group snaps to the destination geometry immediately (near-zero
+   duration), the outgoing text vanishes on click, and the incoming text
+   fades in at its final, static position — never scaled, never stretched. */
+::view-transition-group(onboarding-cta-content),
+::view-transition-group(insights-dock-content) {
+  animation-duration: 0.001s;
+}
+
+::view-transition-old(onboarding-cta-content),
+::view-transition-old(insights-dock-content) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(onboarding-cta-content),
+::view-transition-new(insights-dock-content) {
+  animation: 500ms linear both onboarding-cta-content-in;
+}
+
+@keyframes onboarding-cta-content-in {
+  0%,
+  86% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(onboarding-cta),
+  ::view-transition-image-pair(onboarding-cta),
+  ::view-transition-old(onboarding-cta),
+  ::view-transition-new(onboarding-cta),
+  ::view-transition-group(onboarding-cta-content),
+  ::view-transition-old(onboarding-cta-content),
+  ::view-transition-new(onboarding-cta-content),
+  ::view-transition-group(insights-dock),
+  ::view-transition-image-pair(insights-dock),
+  ::view-transition-old(insights-dock),
+  ::view-transition-new(insights-dock),
+  ::view-transition-group(insights-dock-content),
+  ::view-transition-old(insights-dock-content),
+  ::view-transition-new(insights-dock-content) {
+    animation: none;
+  }
 }
 
 /* Dotted background scroll animation for catalog cards */

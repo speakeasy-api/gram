@@ -1,10 +1,6 @@
-import { Outlet } from "react-router";
-import { LogsMCPContent } from "@/components/observe/LogsMCP";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { LogsTools } from "@/components/observe/LogsTools";
-import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
-import RiskEvents from "@/pages/security/RiskEvents";
 
 export function LogsRoot(): JSX.Element {
   return (
@@ -14,35 +10,12 @@ export function LogsRoot(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
-        <ObserveTabNav base="logs" />
         <Page.Body fullWidth fullHeight overflowHidden noPadding>
-          <Outlet />
+          <RequireScope scope={["project:read", "project:write"]} level="page">
+            <LogsTools />
+          </RequireScope>
         </Page.Body>
       </Page>
     </div>
-  );
-}
-
-export function LogsToolsPage(): JSX.Element {
-  return (
-    <RequireScope scope={["project:read", "project:write"]} level="page">
-      <LogsTools />
-    </RequireScope>
-  );
-}
-
-export function LogsMCPPage(): JSX.Element {
-  return (
-    <RequireScope scope="project:read" level="page">
-      <LogsMCPContent />
-    </RequireScope>
-  );
-}
-
-export function LogsRiskEventsPage(): JSX.Element {
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <RiskEvents />
-    </RequireScope>
   );
 }

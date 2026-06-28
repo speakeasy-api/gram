@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  useAssistantsGetManaged,
   useEnsureManagedAssistantMutation,
   useGramContext,
 } from "@gram/client/react-query";
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
+import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@gram-ai/elements";
 
@@ -20,109 +24,125 @@ export interface UseServerAssistantTransportResult {
   ready: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
+  /**
+   * True when the project has no managed assistant yet and the caller lacks
+   * `project:write`. UI should surface "ask an admin to enable this" rather
+   * than the connection-error notice — `sendMessage` itself only needs
+   * `project:read`, so once an admin provisions it the same viewer can chat.
+   */
+  needsAdmin: boolean;
 }
 
 /**
- * Resolves the project's server-side Project Assistant (provisioning it on first
- * access) and exposes a transport factory wired to it. The conversation id,
- * history, and conversation list are owned by Elements' RemoteThreadListAdapter
- * (backed by the chat service), so this hook only resolves the assistant and
- * builds the send transport.
+ * Resolves the project's server-side Project Assistant and exposes a transport
+ * factory wired to it. The conversation id, history, and conversation list are
+ * owned by Elements' RemoteThreadListAdapter (backed by the chat service), so
+ * this hook only resolves the assistant and builds the send transport.
  *
- * Resolution is lazy — only once `enabled` first becomes true (the sidebar is
- * opened) — so we never provision an assistant for users who never open it. The
- * provider is expected to mount inside the sidebar, so closing and reopening
- * after a failure retries.
+ * Read (`assistantsGetManaged`) is decoupled from write
+ * (`ensureManagedAssistant`): viewers with `project:read` reach an existing
+ * managed assistant without ever hitting the write-scoped provisioning path.
+ * When the assistant is missing, only writers fire ensure; viewers see
+ * `needsAdmin` so the caller can show an "ask an admin" notice.
  */
 export function useServerAssistantTransport(
   projectSlug: string,
   enabled: boolean,
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
-  const ensureManaged = useEnsureManagedAssistantMutation();
-  const ensureManagedMutate = ensureManaged.mutate;
+  const organization = useOrganization();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
 
-  const [assistantId, setAssistantId] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  // The hook can be called with a projectSlug that differs from the URL-active
+  // project (e.g. the org audit logs route picks an arbitrary project from
+  // organization.projects). Scope the RBAC check to THAT project's id, not
+  // useProject(), so a user with project:write on the target — but not on the
+  // active one — still gets the writer path.
+  const targetProjectId =
+    organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
+  const canCreate =
+    !!targetProjectId && hasScope("project:write", targetProjectId);
 
-  // Latch invariant: `inflightSlugRef` holds the slug whose mutation is
-  // currently in flight, or null. It is set at mutate kickoff and cleared in
-  // onSettled, so a stale-slug callback never strands the latch.
-  const inflightSlugRef = useRef<string | null>(null);
-  const resolvedForSlugRef = useRef<string | null>(null);
-  const currentSlugRef = useRef(projectSlug);
-  currentSlugRef.current = projectSlug;
+  // The fetcher reads the project from the X-Gram-Project header, but react-
+  // query only differentiates by query key — pass projectSlug into the request
+  // so a project switch invalidates instead of replaying the old project's
+  // cached managed-assistant id.
+  const getQuery = useAssistantsGetManaged(
+    { gramProject: projectSlug },
+    undefined,
+    {
+      enabled: enabled && !!projectSlug,
+      retry: false,
+      throwOnError: false,
+      refetchOnWindowFocus: false,
+    },
+  );
 
-  // Project switch: drop any prior resolution so the new project resolves
-  // fresh. The InsightsProvider lives above the route outlet and persists
-  // across project navigation, so without this reset the transport would route
-  // a project-A assistant for project B → 404. We track the last slug we
-  // touched (resolved OR kicked off) so a mid-flight switch still resets.
-  const trackedSlugRef = useRef<string | null>(null);
+  const fetchedId = getQuery.data?.id ?? "";
+  const is404 = isNotFoundError(getQuery.error);
+  const isOtherError = !!getQuery.error && !is404;
+
+  const ensure = useEnsureManagedAssistantMutation();
+  const ensureMutate = ensure.mutate;
+
+  const [provisionedId, setProvisionedId] = useState<string>("");
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+
+  // Latch invariant: holds the slug whose ensure call has already fired this
+  // session, so re-renders after the read settles don't replay it. Reset when
+  // the project switches.
+  const provisionedForSlugRef = useRef<string | null>(null);
   useEffect(() => {
-    if (
-      trackedSlugRef.current !== null &&
-      trackedSlugRef.current !== projectSlug
-    ) {
-      trackedSlugRef.current = null;
-      resolvedForSlugRef.current = null;
-      setAssistantId("");
-      setError(null);
-    }
+    if (provisionedForSlugRef.current === null) return;
+    if (provisionedForSlugRef.current === projectSlug) return;
+    provisionedForSlugRef.current = null;
+    setProvisionedId("");
+    setProvisionError(null);
   }, [projectSlug]);
 
   useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    if (!projectSlug) {
-      return;
-    }
-    if (inflightSlugRef.current === projectSlug) {
-      return;
-    }
-    if (resolvedForSlugRef.current === projectSlug) {
-      return;
-    }
-    inflightSlugRef.current = projectSlug;
-    trackedSlugRef.current = projectSlug;
-    setError(null);
+    if (!enabled || !projectSlug) return;
+    if (!is404) return;
+    if (rbacLoading || !canCreate) return;
+    if (provisionedForSlugRef.current === projectSlug) return;
+    provisionedForSlugRef.current = projectSlug;
     const slugAtRequest = projectSlug;
-    ensureManagedMutate(
-      {},
+    // gramProject is explicit so the ensure targets the slug the hook was
+    // called with, not whatever the SDK client's default header resolves to
+    // — the active project may not be the same one (org-scoped routes).
+    ensureMutate(
+      { request: { gramProject: projectSlug } },
       {
         onSuccess: (assistant) => {
-          if (slugAtRequest !== currentSlugRef.current) {
-            return;
-          }
-          resolvedForSlugRef.current = slugAtRequest;
-          setAssistantId(assistant.id);
+          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          setProvisionedId(assistant.id);
         },
         onError: () => {
-          if (slugAtRequest !== currentSlugRef.current) {
-            return;
-          }
-          setError(
+          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          // Clear the latch so the next dep change (project switch, or a
+          // future caller wiring `enabled` to the sidebar toggle again) can
+          // re-fire ensure. Without this, a transient 500 or a 409 from the
+          // managed-name conflict would stick until full page reload.
+          provisionedForSlugRef.current = null;
+          setProvisionError(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
           );
         },
-        onSettled: () => {
-          if (inflightSlugRef.current === slugAtRequest) {
-            inflightSlugRef.current = null;
-          }
-        },
       },
     );
-  }, [enabled, projectSlug, ensureManagedMutate]);
+  }, [enabled, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
 
+  const assistantId = fetchedId || provisionedId;
   const ready = assistantId !== "";
+  const needsAdmin = is404 && !rbacLoading && !canCreate;
+  const error = isOtherError
+    ? "Couldn't connect to the Project Assistant. Try reopening the sidebar."
+    : provisionError;
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
-    if (!ready) {
-      return undefined;
-    }
+    if (!ready) return undefined;
     return createServerAssistantTransport({ client, assistantId, projectSlug });
   }, [ready, client, assistantId, projectSlug]);
 
-  return { transport, assistantId, ready, error };
+  return { transport, assistantId, ready, error, needsAdmin };
 }

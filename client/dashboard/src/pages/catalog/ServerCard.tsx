@@ -2,16 +2,15 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
-import { useMemo } from "react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
+import { ManualSetupBadge } from "./ManualSetupBadge";
 
 interface ServerCardProps {
   server: PulseMCPServer;
@@ -48,17 +47,13 @@ export function ServerCard({
   );
   const isAdded = !!existingMcp;
 
-  // Get tool names for the badge tooltip
-  const toolNames = useMemo(() => {
-    const tools = server.tools ?? [];
-    return tools.map((t) => t.name || "Unknown tool");
-  }, [server.tools]);
+  // The catalog list carries a precomputed tool count, not the tool defs.
+  const toolCount = server.toolCount;
 
   // Remote-only servers (auth-gated proxies like GitHub, Make) can't enumerate
   // tools until a user authenticates, so the "No Tools" badge would be
   // misleading. Hide it for them.
-  const isRemoteOnly =
-    (server.remotes?.length ?? 0) > 0 && toolNames.length === 0;
+  const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation(); // Prevent click-outside-to-deselect from firing
@@ -95,11 +90,8 @@ export function ServerCard({
         overlay={
           isAdded ? (
             <div className="absolute top-3.5 left-3.5 z-10">
-              <Badge
-                variant="outline"
-                className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
-              >
-                Added
+              <Badge variant="success">
+                <Badge.Text>Added</Badge.Text>
               </Badge>
             </div>
           ) : undefined
@@ -124,8 +116,9 @@ export function ServerCard({
           </div>
           <div className="flex items-baseline gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
+            <ManualSetupBadge server={server} className="mr-1" />
             <ToolCollectionBadge
-              toolNames={toolNames}
+              count={toolCount}
               emptyLabel={isRemoteOnly ? null : undefined}
             />
           </div>

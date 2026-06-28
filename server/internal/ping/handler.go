@@ -4,28 +4,31 @@ import (
 	"context"
 	"log/slog"
 
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type Handler struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	logLevel slog.Level
 }
 
-func NewHandler(logger *slog.Logger) *Handler {
+func NewHandler(logger *slog.Logger, level slog.Level) *Handler {
 	return &Handler{
-		logger: logger,
+		logger:   logger,
+		logLevel: level,
 	}
 }
 
-func (h *Handler) Handle(ctx context.Context, m *pingv1.Message, _ gcp.MessageMetadata) error {
+func (h *Handler) Handle(ctx context.Context, m *pingv2.Message, _ gcp.MessageMetadata) error {
 	logger := h.logger
 
-	logger.DebugContext(ctx, "ping subscriber received message", attr.SlogValueAny(map[string]any{
-		"id":      m.GetId(),
-		"type":    m.GetType(),
-		"payload": string(m.GetPayload()),
+	logger.LogAttrs(ctx, h.logLevel, "ping subscriber received message", attr.SlogValueAny(map[string]any{
+		"id":         m.GetId(),
+		"type":       m.GetType(),
+		"created_at": m.GetCreatedAt(),
+		"payload":    string(m.GetPayload()),
 	}))
 
 	return nil

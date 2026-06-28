@@ -177,10 +177,17 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.requireWithGrants(ctx, grants, checks...)
+	return e.EvaluateLoadedGrants(ctx, grants, checks...)
 }
 
-func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+// EvaluateLoadedGrants evaluates explicit grants against checks without
+// consulting ShouldEnforce or reading grants from context. Request handlers
+// should use Require so normal request enforcement semantics apply.
+func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.mapError(ctx, ErrNoChecks)
+	}
+
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {
@@ -198,13 +205,25 @@ func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks .
 			return e.mapError(ctx, err)
 		}
 
-		expanded := check.expand()
-
-		matchedGrant, matchedCheck, denied := evaluateGrants(grants, expanded)
-		if matchedGrant == nil {
+		evaluation, err := evaluateGrantCheck(grants, check)
+		if err != nil {
+			challengeLogger{
+				Operation:            authzrepo.OperationRequire,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return e.mapError(ctx, err)
+		}
+		if evaluation.Grant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
 			switch {
-			case denied:
+			case evaluation.Denied:
 				reason = authzrepo.ReasonDenyGrant
 			case len(grants) == 0:
 				reason = authzrepo.ReasonNoGrants
@@ -222,7 +241,7 @@ func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks .
 			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
-		matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
 
 	challengeLogger{
@@ -275,19 +294,33 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 
 	anyDenied := false
 	for _, check := range checks {
-		matchedGrant, matchedCheck, denied := evaluateGrants(grants, check.expand())
-		if denied {
+		evaluation, err := evaluateGrantCheck(grants, check)
+		if err != nil {
+			challengeLogger{
+				Operation:            authzrepo.OperationRequireAny,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return e.mapError(ctx, err)
+		}
+		if evaluation.Denied {
 			anyDenied = true
 			continue
 		}
-		if matchedGrant != nil {
+		if evaluation.Grant != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeAllow,
 				Reason:               authzrepo.ReasonGrantMatched,
 				Checks:               checks,
 				Focus:                &check,
-				Matches:              []grantMatch{{Grant: *matchedGrant, ViaCheck: *matchedCheck}},
+				Matches:              []grantMatch{{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check}},
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
@@ -358,13 +391,28 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			return nil, e.mapError(ctx, err)
 		}
 
-		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
-		if denied {
+		evaluation, err := evaluateGrantCheck(grants, c)
+		if err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return nil, e.mapError(ctx, err)
+		}
+		if evaluation.Denied {
 			anyDenied = true
 		}
-		if matchedGrant != nil {
+		if evaluation.Grant != nil {
 			allowed = append(allowed, c.ResourceID)
-			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 		}
 	}
 
@@ -448,13 +496,28 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			return nil, e.mapError(ctx, err)
 		}
 
-		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
-		if denied {
+		evaluation, err := evaluateGrantCheck(grants, c)
+		if err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return nil, e.mapError(ctx, err)
+		}
+		if evaluation.Denied {
 			anyDenied = true
 		}
-		if matchedGrant != nil {
+		if evaluation.Grant != nil {
 			matched[i] = true
-			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 			allowedCount++
 		}
 	}
@@ -516,7 +579,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, e.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
 	}
 
 	return enabled, nil
@@ -538,10 +601,10 @@ func (e *Engine) mapError(ctx context.Context, err error) error {
 	case errors.Is(err, ErrDenied):
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
-		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)
 	case errors.Is(err, ErrInvalidCheck), errors.Is(err, ErrNoChecks):
-		return oops.E(oops.CodeUnexpected, err, "invalid authz check").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid authz check").LogError(ctx, e.logger)
 	default:
-		return oops.E(oops.CodeUnexpected, err, "check authz").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "check authz").LogError(ctx, e.logger)
 	}
 }

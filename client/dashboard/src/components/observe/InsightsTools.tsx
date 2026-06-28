@@ -1,5 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,7 +8,23 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   FilterChip,
   ObserveFilterBar,
+  type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
+import {
+  SERVER_FILTER_PATH,
+  TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_TYPE_OPTIONS,
+  TOOL_USAGE_VALID_TYPES,
+  USER_EMAIL_FILTER_PATH,
+  buildServerOptionGroups,
+  encodeHostedServerFilter,
+  encodeShadowServerFilter,
+  parseTargetFilter,
+  selectedHookSources,
+  selectedTargetValues,
+  selectedUserEmails,
+  toTargetTypes,
+} from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -16,26 +32,25 @@ import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
-import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
+import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
+import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
 import type {
-  GetHooksSummaryResult,
-  HooksBreakdownRow,
-  HooksTimeSeriesPoint,
-  SkillBreakdownRow,
-  SkillTimeSeriesPoint,
-  HookTraceSummary as HookTrace,
-  TelemetryLogRecord,
-  TypesToInclude,
+  GetToolUsageSummaryResult,
+  ToolUsageTargetTimeSeriesPoint,
+  ToolUsageTargetToolBreakdownRow,
+  ToolUsageUserSummary,
+  ToolUsageUserTimeSeriesPoint,
+  ToolUsageUsersByTargetRow,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { formatChartLabel } from "@/components/chart/chartUtils";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { useChartZoom } from "@/components/chart/useChartZoom";
 import { useExpandedChart } from "@/hooks/useExpandedChart";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   BarElement,
   BarController,
@@ -51,15 +66,20 @@ import {
   type ChartOptions,
   type Scale,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
 import { Bar, Line } from "react-chartjs-2";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
-import { perPage } from "@/components/observe/observeFilterUtils";
-import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
+import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import {
+  bucketStartNsToMs,
+  buildToolUsageTimeSeries,
+  type TimeSeriesDataset,
+} from "./toolUsageTimeSeriesChartData";
 
 ChartJS.register(
   CategoryScale,
@@ -71,6 +91,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 const CHART_COLORS = {
@@ -108,7 +129,20 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
+const BAR_BORDER_RADIUS = 5;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
+
+function displayTargetLabel(
+  targetLabel: string,
+  targetType: string,
+  serverNameMappings: ReturnType<typeof useServerNameMappings>,
+): string {
+  if (targetType === "local_tool") return "Local Tools";
+  if (targetType === "shadow_mcp_server") {
+    return serverNameMappings.rawToDisplay.get(targetLabel) ?? targetLabel;
+  }
+  return targetLabel;
+}
 
 type _BarLegend = Exclude<
   NonNullable<ChartOptions<"bar">["plugins"]>["legend"],
@@ -176,13 +210,13 @@ export function InsightsToolsContent(): JSX.Element {
   const {
     from,
     to,
-    logFilters,
     selectedHookTypes,
     activeFilters,
     serverOptions,
     handleServerSelectionChange,
-    userEmailOptions,
     handleUserEmailSelectionChange,
+    hookSourceOptions,
+    handleHookSourceSelectionChange,
     addFilter,
     handleHookTypesChange,
     dateRange,
@@ -195,105 +229,156 @@ export function InsightsToolsContent(): JSX.Element {
     roleOptions,
     handleRoleSelectionChange,
     roleFilterPending,
-  } = useObserveFilters();
-
-  const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
-    null,
-  );
+    roleEmails,
+  } = useObserveFilters({
+    defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+    validTypes: TOOL_USAGE_VALID_TYPES,
+  });
 
   const client = useGramContext();
 
+  const serverFilters = useMemo(
+    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
+    [activeFilters],
+  );
+  const hostedToolsetSlugs = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "hosted")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
+  const shadowServerNames = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "shadow")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
+  const userFilters = useMemo(() => {
+    const emails = [
+      ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
+    ];
+    return emails.map((email) => ({ kind: "email" as const, key: email }));
+  }, [activeFilters, roleEmails]);
+  const hookSourceFilters = useMemo(
+    () => selectedHookSources(activeFilters),
+    [activeFilters],
+  );
+
   const {
-    data: tracesData,
+    data: summaryData,
     error,
-    isFetching,
-    refetch: refetchLogs,
+    isFetching: summaryFetching,
+    isPending: summaryPending,
+    isError: summaryIsError,
+    refetch: refetchSummary,
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
-    useInfiniteQuery({
+    useQuery({
       queryKey: [
-        "hooks-traces",
-        activeFilters,
-        selectedHookTypes,
-        selectedRoleIds,
+        "tool-usage-summary",
         from.toISOString(),
         to.toISOString(),
+        hostedToolsetSlugs,
+        shadowServerNames,
+        userFilters,
+        hookSourceFilters,
+        selectedHookTypes,
       ],
-      queryFn: ({ pageParam }) =>
+      queryFn: () =>
         unwrapAsync(
-          telemetryListHooksTraces(client, {
-            listHooksTracesPayload: {
+          telemetryGetToolUsageSummary(client, {
+            getToolUsageSummaryPayload: {
               from,
               to,
-              filters: logFilters,
-              typesToInclude:
-                selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
-              cursor: pageParam,
-              limit: perPage,
-              sort: "desc",
+              hostedToolsetSlugs:
+                hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
+              shadowServerNames:
+                shadowServerNames.length > 0 ? shadowServerNames : undefined,
+              targetTypes: toTargetTypes(selectedHookTypes),
+              userFilters: userFilters.length > 0 ? userFilters : undefined,
+              hookSources:
+                hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
             },
           }),
         ),
-      initialPageParam: undefined as string | undefined,
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
 
-  const groupedTraces = useMemo(() => {
-    return tracesData?.pages.flatMap((page) => page.traces) ?? [];
-  }, [tracesData]);
-
-  const {
-    data: summaryData,
-    isPending: summaryPending,
-    isError: summaryIsError,
-  } = useQuery({
+  const { data: filterOptionsData } = useQuery({
     queryKey: [
-      "hooks-summary",
+      "tool-usage-filter-options",
       from.toISOString(),
       to.toISOString(),
-      logFilters,
-      selectedHookTypes,
     ],
     queryFn: () =>
       unwrapAsync(
-        telemetryGetHooksSummary(client, {
-          getHooksSummaryPayload: {
+        telemetryGetToolUsageFilterOptions(client, {
+          getToolUsageFilterOptionsPayload: {
             from,
             to,
-            filters: logFilters,
-            typesToInclude:
-              selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
           },
         }),
       ),
-    enabled: !roleFilterPending,
     throwOnError: false,
   });
 
+  const serverOptionGroups = useMemo(
+    () =>
+      buildServerOptionGroups({
+        hostedServers: filterOptionsData?.hostedServers ?? [],
+        shadowServers: filterOptionsData?.shadowServers ?? [],
+        activeFilters,
+        serverNameMappings,
+      }),
+    [
+      activeFilters,
+      filterOptionsData?.hostedServers,
+      filterOptionsData?.shadowServers,
+      serverNameMappings,
+    ],
+  );
+
+  const toolUsageUserEmailOptions = useMemo(() => {
+    const selected = selectedUserEmails(activeFilters);
+    const known = (filterOptionsData?.users ?? [])
+      .filter((user) => user.userKind === "email")
+      .map((user) => user.userKey || user.userLabel)
+      .filter(Boolean);
+    return [...new Set([...known, ...selected])];
+  }, [activeFilters, filterOptionsData?.users]);
+
+  const displayError = error
+    ? new Error("Unable to load tool usage. Please try again.")
+    : null;
+
   const refetch = useCallback(() => {
-    void refetchLogs();
-  }, [refetchLogs]);
+    void refetchSummary();
+  }, [refetchSummary]);
 
   const isLogsDisabled = isLogsLogsDisabled;
-  const isLoading = isFetching && groupedTraces.length === 0;
+  const isLoading = summaryFetching && !summaryData;
 
   return (
     <>
       <InsightsConfig
         mcpConfig={mcpConfig}
-        title="Explore Tools"
-        subtitle="Ask me about your tools! Powered by Elements + platform MCP"
+        title="Explore MCP Servers & Tools"
+        subtitle="Ask me about your MCP servers and tools! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tools</h1>
+            <h1 className="text-xl font-semibold">
+              MCP Servers & Tool Insights
+            </h1>
             <p className="text-muted-foreground text-sm">
-              Monitor tool events across all users and agents in your project
+              Monitor MCP servers and tool events across all users and agents in
+              your project
             </p>
           </div>
           <div className="relative flex-1">
@@ -310,21 +395,22 @@ export function InsightsToolsContent(): JSX.Element {
         <HooksInnerContent
           isLogsDisabled={isLogsDisabled}
           isLoading={isLoading}
-          error={error}
-          groupedTraces={groupedTraces}
+          error={displayError}
           serverOptions={serverOptions}
+          serverOptionGroups={serverOptionGroups}
           onServerSelectionChange={handleServerSelectionChange}
-          userEmailOptions={userEmailOptions}
+          userEmailOptions={toolUsageUserEmailOptions}
           onUserEmailSelectionChange={handleUserEmailSelectionChange}
+          sourceOptions={hookSourceOptions}
+          onSourceSelectionChange={handleHookSourceSelectionChange}
           activeFilters={activeFilters}
           addFilter={addFilter}
           selectedHookTypes={selectedHookTypes}
           onHookTypesChange={handleHookTypesChange}
+          typeOptions={TOOL_USAGE_TYPE_OPTIONS}
           roleOptions={roleOptions}
           selectedRoleIds={selectedRoleIds}
           onRoleSelectionChange={handleRoleSelectionChange}
-          selectedLog={selectedLog}
-          setSelectedLog={setSelectedLog}
           dateRange={dateRange}
           customRange={customRange}
           customRangeLabel={customRangeLabel}
@@ -345,20 +431,21 @@ export function InsightsToolsContent(): JSX.Element {
 function HooksInnerContent({
   isLoading,
   error,
-  groupedTraces,
   serverOptions,
+  serverOptionGroups,
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
+  sourceOptions,
+  onSourceSelectionChange,
   activeFilters,
   addFilter,
   selectedHookTypes,
   onHookTypesChange,
+  typeOptions,
   roleOptions,
   selectedRoleIds,
   onRoleSelectionChange,
-  selectedLog,
-  setSelectedLog,
   dateRange,
   customRange,
   customRangeLabel,
@@ -374,20 +461,21 @@ function HooksInnerContent({
   isLogsDisabled: boolean;
   isLoading: boolean;
   error: Error | null;
-  groupedTraces: HookTrace[];
   serverOptions: string[];
+  serverOptionGroups: MultiSelectGroup[];
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
+  sourceOptions: string[];
+  onSourceSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
-  selectedHookTypes: TypesToInclude[];
-  onHookTypesChange: (types: TypesToInclude[]) => void;
+  selectedHookTypes: ObserveTypeFilterValue[];
+  onHookTypesChange: (types: ObserveTypeFilterValue[]) => void;
+  typeOptions: Array<{ label: string; value: ObserveTypeFilterValue }>;
   roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
-  selectedLog: TelemetryLogRecord | null;
-  setSelectedLog: (log: TelemetryLogRecord | null) => void;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
@@ -396,7 +484,7 @@ function HooksInnerContent({
   onClearCustomRange: () => void;
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  summaryData: GetHooksSummaryResult | undefined;
+  summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
 }) {
@@ -409,146 +497,174 @@ function HooksInnerContent({
   useEffect(() => {
     if (summaryPending) setExpandedChart(null);
   }, [summaryPending, setExpandedChart]);
+  const handleChartRangeSelect = useCallback(
+    (from: Date, to: Date) => {
+      onCustomRangeChange(from, to, formatChartZoomRangeLabel(from, to));
+    },
+    [onCustomRangeChange],
+  );
+  const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
 
   return (
-    <>
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tools</h1>
-              <p className="text-muted-foreground text-sm">
-                Monitor tool events across all users and agents in your project
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <HooksSetupButton />
-              <Button variant="outline" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
-            </div>
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
+        <div className="flex shrink-0 items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl font-semibold">
+              MCP Servers & Tool Insights
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              Monitor MCP servers and tool events across all users and agents in
+              your project
+            </p>
           </div>
+          <div className="flex items-center gap-2">
+            <HooksSetupButton />
+            <Button variant="outline" size="sm" asChild>
+              <Link to={orgRoutes.logs.href()}>
+                <Settings className="h-4 w-4" />
+                Configure settings
+              </Link>
+            </Button>
+          </div>
+        </div>
 
-          <ObserveFilterBar
-            serverOptions={serverOptions}
-            onServerSelectionChange={onServerSelectionChange}
-            userEmailOptions={userEmailOptions}
-            onUserEmailSelectionChange={onUserEmailSelectionChange}
-            activeFilters={activeFilters}
-            selectedTypes={selectedHookTypes}
-            onTypesChange={onHookTypesChange}
-            roleOptions={roleOptions}
-            selectedRoleIds={selectedRoleIds}
-            onRoleSelectionChange={onRoleSelectionChange}
-            dateRange={dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onDateRangeChange={onDateRangeChange}
-            onCustomRangeChange={onCustomRangeChange}
-            onClearCustomRange={onClearCustomRange}
-            projectSlug={projectSlug}
-            serverNameMappings={serverNameMappings}
-          />
+        <ObserveFilterBar
+          serverOptions={serverOptions}
+          serverOptionGroups={serverOptionGroups}
+          onServerSelectionChange={onServerSelectionChange}
+          userEmailOptions={userEmailOptions}
+          onUserEmailSelectionChange={onUserEmailSelectionChange}
+          sourceOptions={sourceOptions}
+          onSourceSelectionChange={onSourceSelectionChange}
+          activeFilters={activeFilters}
+          selectedTypes={selectedHookTypes}
+          onTypesChange={onHookTypesChange}
+          typeOptions={typeOptions}
+          roleOptions={roleOptions}
+          selectedRoleIds={selectedRoleIds}
+          onRoleSelectionChange={onRoleSelectionChange}
+          dateRange={dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onDateRangeChange={onDateRangeChange}
+          onCustomRangeChange={onCustomRangeChange}
+          onClearCustomRange={onClearCustomRange}
+          projectSlug={projectSlug}
+          serverNameMappings={serverNameMappings}
+        />
 
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-              {error ? (
-                <ErrorAlert
-                  error={error}
-                  title="Error loading hook events"
-                  className="mx-auto w-full"
-                />
-              ) : isLoading ? (
-                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                  <Spinner className="mr-0 size-5" />
-                  <span>Loading hook events...</span>
-                </div>
-              ) : groupedTraces.length === 0 &&
-                activeFilters.length === 0 &&
-                selectedRoleIds.length === 0 ? (
-                <HooksEmptyState
-                  title="No Insights Generated"
-                  subtitle="Install Observability plugin in your AI agent to start generating tool insights"
-                />
-              ) : groupedTraces.length === 0 ? (
-                <div className="py-12 text-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                      <Icon
-                        name="inbox"
-                        className="text-muted-foreground size-6"
-                      />
-                    </div>
-                    <span className="text-foreground font-medium">
-                      No matching hook events
-                    </span>
-                    <span className="text-muted-foreground max-w-sm text-sm">
-                      Try adjusting your search query or time range
-                    </span>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+            {error ? (
+              <ErrorAlert
+                error={error}
+                title="Error loading tool usage"
+                className="mx-auto w-full"
+              />
+            ) : isLoading ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                <Spinner className="mr-0 size-5" />
+                <span>Loading tool usage...</span>
+              </div>
+            ) : !hasSummaryData &&
+              activeFilters.length === 0 &&
+              selectedRoleIds.length === 0 ? (
+              <HooksEmptyState
+                title="No Insights Generated"
+                subtitle="Install Observability plugin in your AI agent to start generating tool insights"
+              />
+            ) : !hasSummaryData ? (
+              <div className="py-12 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+                    <Icon
+                      name="inbox"
+                      className="text-muted-foreground size-6"
+                    />
                   </div>
+                  <span className="text-foreground font-medium">
+                    No matching tool usage
+                  </span>
+                  <span className="text-muted-foreground max-w-sm text-sm">
+                    Try adjusting your search query or time range
+                  </span>
                 </div>
-              ) : (
-                <HooksAnalytics
-                  serverNameMappings={serverNameMappings}
-                  from={from}
-                  to={to}
-                  compact={false}
-                  addFilter={addFilter}
-                  onHookTypesChange={onHookTypesChange}
-                  summaryData={summaryData}
-                  summaryPending={summaryPending}
-                  summaryIsError={summaryIsError}
-                  expandedChart={expandedChart}
-                  onExpandedChartChange={setExpandedChart}
-                />
-              )}
-            </div>
+              </div>
+            ) : (
+              <HooksAnalytics
+                serverNameMappings={serverNameMappings}
+                from={from}
+                to={to}
+                compact={false}
+                addFilter={addFilter}
+                onHookTypesChange={onHookTypesChange}
+                summaryData={summaryData}
+                summaryPending={summaryPending}
+                summaryIsError={summaryIsError}
+                expandedChart={expandedChart}
+                onExpandedChartChange={setExpandedChart}
+                onRangeSelect={handleChartRangeSelect}
+                isZoomed={customRange !== null}
+                onResetZoom={onClearCustomRange}
+              />
+            )}
           </div>
         </div>
       </div>
-
-      <LogDetailSheet
-        log={selectedLog}
-        open={!!selectedLog}
-        onOpenChange={(open) => {
-          void (!open && setSelectedLog(null));
-        }}
-      />
-    </>
+    </div>
   );
 }
 
 type StackedBarDataset = {
   label: string;
-  data: number[];
+  data: Array<number | null>;
   backgroundColor: string;
   borderColor?: string;
   borderWidth?: number;
   barThickness: number;
+  borderRadius?: number;
+  borderSkipped?: string | boolean;
   hoverBackgroundColor?: string;
   hoverBorderColor?: string;
 };
+
+function hideZeroBarSegments(data: Array<number | null>) {
+  return data.map((value) => (value === 0 ? null : value));
+}
 
 const stackTotalPlugin = {
   id: "stackTotal",
   afterDatasetsDraw(chart: ChartJS) {
     const { ctx, data } = chart;
-    const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
     ctx.save();
     ctx.font = "12px sans-serif";
     ctx.fillStyle = CHART_COLORS.label;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    lastMeta.data.forEach((bar, i) => {
-      const total = data.datasets.reduce(
-        (sum, ds) => sum + ((ds.data[i] as number) || 0),
-        0,
-      );
-      ctx.fillText(String(total), bar.x + 4, bar.y);
-    });
+    for (let i = 0; i < (data.labels?.length ?? 0); i++) {
+      let total = 0;
+      let labelX: number | null = null;
+      let labelY: number | null = null;
+
+      data.datasets.forEach((dataset, datasetIndex) => {
+        const value = dataset.data[i];
+        if (typeof value !== "number" || value === 0) return;
+
+        total += value;
+        const bar = chart.getDatasetMeta(datasetIndex).data[i];
+        if (!bar) return;
+
+        if (labelX === null || bar.x > labelX) {
+          labelX = bar.x;
+          labelY = bar.y;
+        }
+      });
+
+      if (total > 0 && labelX !== null && labelY !== null) {
+        ctx.fillText(String(total), labelX + 4, labelY);
+      }
+    }
     ctx.restore();
   },
 };
@@ -580,9 +696,18 @@ function StackedBarChart({
   const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
   const visibleDatasets = (
     hiddenCount > 0
-      ? datasets.map((ds) => ({ ...ds, data: ds.data.slice(0, maxRows) }))
+      ? datasets.map((ds) => ({
+          ...ds,
+          data: ds.data.slice(0, maxRows),
+        }))
       : datasets
-  ).map((ds) => ({ ...ds, barThickness: thickness }));
+  ).map((ds) => ({
+    ...ds,
+    data: hideZeroBarSegments(ds.data),
+    barThickness: thickness,
+    borderRadius: BAR_BORDER_RADIUS,
+    borderSkipped: false,
+  }));
 
   const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
   const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
@@ -665,7 +790,7 @@ function UsersPerServerChart({
   onExpand,
 }: {
   title: string;
-  breakdown: HooksBreakdownRow[];
+  breakdown: ToolUsageUsersByTargetRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (userEmail: string, serverName: string) => void;
   expandedChart: string | null;
@@ -677,12 +802,12 @@ function UsersPerServerChart({
     const serverMap = new Map<string, Map<string, number>>();
     const userSet = new Set<string>();
     for (const row of breakdown) {
-      const user = row.userEmail || "unknown";
-      const displayName =
-        row.serverName === "local"
-          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
-            row.serverName);
+      const user = row.userLabel || "unknown";
+      const displayName = displayTargetLabel(
+        row.targetLabel,
+        row.targetType,
+        serverNameMappings,
+      );
       userSet.add(user);
       const inner = serverMap.get(displayName) ?? new Map<string, number>();
       inner.set(user, (inner.get(user) ?? 0) + row.eventCount);
@@ -720,7 +845,7 @@ function UsersPerServerChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings]);
 
   return (
     <ChartCard
@@ -748,13 +873,13 @@ function UsersPerServerChart({
 
 function UserEventCountsChart({
   title,
-  breakdown,
+  users,
   handleFilter,
   expandedChart,
   onExpand,
 }: {
   title: string;
-  breakdown: HooksBreakdownRow[];
+  users: ToolUsageUserSummary[];
   handleFilter?: (datasetLabel: string, userEmail: string) => void;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
@@ -762,30 +887,22 @@ function UserEventCountsChart({
   const chartId = "user-event-counts";
   const expanded = expandedChart === chartId;
   const { labels, datasets } = useMemo(() => {
-    const userMap = new Map<string, number>();
-    for (const row of breakdown) {
-      const user = row.userEmail || "unknown";
-      userMap.set(user, (userMap.get(user) ?? 0) + row.eventCount);
-    }
+    const sortedUsers = [...users].sort((a, b) => b.eventCount - a.eventCount);
 
-    const sortedUsers = Array.from(userMap.entries()).sort(
-      (a, b) => b[1] - a[1],
-    );
-
-    const chartLabels = sortedUsers.map(([user]) => user);
+    const chartLabels = sortedUsers.map((user) => user.userLabel || "unknown");
     const color = USER_SOURCE_COLORS[0]!;
     const chartDatasets = [
       {
         label: "Events",
         barThickness: 24,
-        data: sortedUsers.map(([, count]) => count),
+        data: sortedUsers.map((user) => user.eventCount),
         backgroundColor: color,
         hoverBackgroundColor: color + "cc",
       },
     ];
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown]);
+  }, [users]);
 
   return (
     <ChartCard
@@ -819,7 +936,7 @@ function ServerErrorRateChart({
   onExpand,
 }: {
   title: string;
-  breakdown: HooksBreakdownRow[];
+  breakdown: ToolUsageTargetToolBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
@@ -831,11 +948,11 @@ function ServerErrorRateChart({
     const toolSet = new Set<string>();
     for (const row of breakdown) {
       if (row.failureCount === 0) continue;
-      const displayName =
-        row.serverName === "local"
-          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
-            row.serverName);
+      const displayName = displayTargetLabel(
+        row.targetLabel,
+        row.targetType,
+        serverNameMappings,
+      );
       const tool = row.toolName || "unknown";
       toolSet.add(tool);
       const inner = serverMap.get(displayName) ?? new Map<string, number>();
@@ -874,7 +991,7 @@ function ServerErrorRateChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings]);
 
   const hiddenCount =
     !expanded && labels.length > COLLAPSED_BAR_CHART_MAX_ROWS
@@ -890,7 +1007,13 @@ function ServerErrorRateChart({
           data: ds.data.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS),
         }))
       : datasets
-  ).map((ds) => ({ ...ds, barThickness: thickness }));
+  ).map((ds) => ({
+    ...ds,
+    data: hideZeroBarSegments(ds.data),
+    barThickness: thickness,
+    borderRadius: BAR_BORDER_RADIUS,
+    borderSkipped: false,
+  }));
 
   const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
   const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
@@ -951,82 +1074,6 @@ function ServerErrorRateChart({
   );
 }
 
-type TimeSeriesDataset = {
-  label: string;
-  data: number[];
-  borderColor: string;
-  backgroundColor: string;
-  pointBackgroundColor: string;
-  fill: boolean;
-  tension: number;
-  borderWidth: number;
-  pointRadius: number;
-  pointHoverRadius: number;
-};
-
-function buildTimeSeriesFromSummary<
-  T extends { bucketStartNs: string; eventCount: number },
->(
-  timeSeries: T[],
-  keyFn: (p: T) => string,
-  timeRangeMs: number,
-  valueFn: (p: T) => number = (p) => p.eventCount,
-) {
-  if (timeSeries.length === 0)
-    return { labels: [], tooltipLabels: [], datasets: [] };
-
-  const seriesMap = new Map<string, Map<number, number>>();
-
-  for (const pt of timeSeries) {
-    const key = keyFn(pt);
-    if (!key) continue;
-    const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
-    const series = seriesMap.get(key) ?? new Map<number, number>();
-    series.set(ms, (series.get(ms) ?? 0) + valueFn(pt));
-    seriesMap.set(key, series);
-  }
-
-  if (seriesMap.size === 0)
-    return { labels: [], tooltipLabels: [], datasets: [] };
-
-  const allTimestamps = new Set<number>();
-  for (const series of seriesMap.values()) {
-    for (const ts of series.keys()) allTimestamps.add(ts);
-  }
-  const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
-  const labels = sortedTs.map((ts) =>
-    formatChartLabel(new Date(ts), timeRangeMs),
-  );
-  const tooltipLabels = sortedTs.map((ts) =>
-    new Date(ts).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  );
-
-  const datasets: TimeSeriesDataset[] = Array.from(seriesMap.entries()).map(
-    ([key, series], i) => {
-      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]!;
-      return {
-        label: key,
-        data: sortedTs.map((ts) => series.get(ts) ?? 0),
-        borderColor: color,
-        backgroundColor: color + "1a",
-        pointBackgroundColor: color,
-        fill: false,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      };
-    },
-  );
-
-  return { labels, tooltipLabels, datasets };
-}
-
 function ChartNoData({
   message = "No data in this period",
 }: {
@@ -1046,17 +1093,38 @@ function ChartNoData({
 
 function MultiLineChart({
   labels,
+  timestamps,
   tooltipLabels,
   datasets,
   tooltipAfterBody,
+  onRangeSelect,
   height = 200,
 }: {
   labels: string[];
+  timestamps: number[];
   tooltipLabels: string[];
   datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
+  onRangeSelect?: (from: Date, to: Date) => void;
   height?: number;
 }) {
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+    onRangeSelect,
+    resolveRange: (min, max) => {
+      if (timestamps.length === 0) return null;
+      const fromIndex = Math.max(0, Math.floor(min));
+      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
+      const from = timestamps[fromIndex];
+      const to = timestamps[toIndex];
+      if (from == null || to == null) return null;
+      return { from: new Date(from), to: new Date(to) };
+    },
+  });
+
+  useEffect(() => {
+    resetZoom();
+  }, [datasets, resetZoom]);
+
   if (labels.length === 0) {
     return <ChartNoData />;
   }
@@ -1085,6 +1153,7 @@ function MultiLineChart({
             : {}),
         },
       },
+      zoom: zoomPluginOptions,
     },
     scales: {
       x: {
@@ -1109,7 +1178,7 @@ function MultiLineChart({
       className="relative transition-all duration-200 ease-in-out"
       style={{ height }}
     >
-      <Line data={{ labels, datasets }} options={options} />
+      <Line ref={chartRef} data={{ labels, datasets }} options={options} />
     </div>
   );
 }
@@ -1121,43 +1190,51 @@ function ServerUsageTimeSeries({
   serverNameMappings,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
-  timeSeries: HooksTimeSeriesPoint[];
+  timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "server-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(
+      buildToolUsageTimeSeries(
         timeSeries,
-        (pt) => {
-          return pt.serverName === "local"
-            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-            : (serverNameMappings.rawToDisplay.get(pt.serverName) ??
-                pt.serverName);
-        },
+        (pt) =>
+          displayTargetLabel(pt.targetLabel, pt.targetType, serverNameMappings),
         timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
       ),
-    [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay],
+    [timeSeries, timeRangeMs, serverNameMappings],
   );
   return (
     <ChartCard
-      title="Server Usage"
+      title="Activity by Source"
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1172,19 +1249,31 @@ function UserUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
-  timeSeries: HooksTimeSeriesPoint[];
+  timeSeries: ToolUsageUserTimeSeriesPoint[];
   from: Date;
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "user-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(timeSeries, (pt) => pt.userEmail, timeRangeMs),
+      buildToolUsageTimeSeries(
+        timeSeries,
+        (pt) => pt.userLabel,
+        timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
+      ),
     [timeSeries, timeRangeMs],
   );
   return (
@@ -1194,11 +1283,15 @@ function UserUsageTimeSeries({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1213,22 +1306,30 @@ function SkillUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
-  skillTimeSeries: SkillTimeSeriesPoint[];
+  skillTimeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "skill-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(
+      buildToolUsageTimeSeries(
         skillTimeSeries,
-        (pt) => pt.skillName,
+        (pt) => pt.targetLabel,
         timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
       ),
     [skillTimeSeries, timeRangeMs],
   );
@@ -1239,11 +1340,15 @@ function SkillUsageTimeSeries({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1259,7 +1364,7 @@ function UsersPerSkillChart({
   onExpand,
 }: {
   title: string;
-  skillBreakdown: SkillBreakdownRow[];
+  skillBreakdown: ToolUsageUsersByTargetRow[];
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
 }) {
@@ -1269,11 +1374,11 @@ function UsersPerSkillChart({
     const skillMap = new Map<string, Map<string, number>>();
     const userSet = new Set<string>();
     for (const row of skillBreakdown) {
-      const user = row.userEmail || "unknown";
+      const user = row.userLabel || "unknown";
       userSet.add(user);
-      const inner = skillMap.get(row.skillName) ?? new Map<string, number>();
-      inner.set(user, (inner.get(user) ?? 0) + row.useCount);
-      skillMap.set(row.skillName, inner);
+      const inner = skillMap.get(row.targetLabel) ?? new Map<string, number>();
+      inner.set(user, (inner.get(user) ?? 0) + row.eventCount);
+      skillMap.set(row.targetLabel, inner);
     }
 
     const sortedSkills = Array.from(skillMap.entries())
@@ -1338,79 +1443,88 @@ function ErrorsOverTimeChart({
   serverNameMappings,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
-  timeSeries: HooksTimeSeriesPoint[];
+  timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets, hasErrors, perServerByIndex } =
-    useMemo(() => {
-      const built = buildTimeSeriesFromSummary(
-        timeSeries,
-        () => "errors",
-        timeRangeMs,
-        (pt) => pt.failureCount,
+  const {
+    labels,
+    timestamps,
+    tooltipLabels,
+    datasets,
+    hasErrors,
+    perServerByIndex,
+  } = useMemo(() => {
+    const built = buildToolUsageTimeSeries(
+      timeSeries,
+      () => "errors",
+      timeRangeMs,
+      (pt) => pt.failureCount,
+      ["#ef4444"],
+    );
+    const errorColor = "#ef4444";
+    const recoloredDatasets = built.datasets.map((ds) => ({
+      ...ds,
+      label: "Errors",
+      borderColor: errorColor,
+      backgroundColor: errorColor + "1a",
+      pointBackgroundColor: errorColor,
+    }));
+    const tsIndex = new Map<number, number>(
+      built.timestamps.map((ts, i): [number, number] => [ts, i]),
+    );
+    const total = built.datasets[0]?.data.reduce((s, p) => s + p, 0) ?? 0;
+
+    const accumulator = new Map<number, Map<string, number>>(
+      built.timestamps.map((_, i): [number, Map<string, number>] => [
+        i,
+        new Map<string, number>(),
+      ]),
+    );
+
+    for (const pt of timeSeries) {
+      if (pt.failureCount === 0) continue;
+      const ms = bucketStartNsToMs(pt.bucketStartNs);
+      if (ms == null) continue;
+      const idx = tsIndex.get(ms);
+      if (idx === undefined) continue;
+      const displayName = displayTargetLabel(
+        pt.targetLabel,
+        pt.targetType,
+        serverNameMappings,
       );
-      const errorColor = "#ef4444";
-      const recoloredDatasets = built.datasets.map((ds) => ({
-        ...ds,
-        label: "Errors",
-        borderColor: errorColor,
-        backgroundColor: errorColor + "1a",
-        pointBackgroundColor: errorColor,
-      }));
-      const total = built.datasets[0]?.data.reduce((s, n) => s + n, 0) ?? 0;
+      const map = accumulator.get(idx)!;
+      map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
+    }
 
-      const allTimestamps = new Set<number>();
-      for (const pt of timeSeries) {
-        allTimestamps.add(Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000)));
-      }
-      const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
-      const tsIndex = new Map<number, number>(
-        sortedTs.map((ts, i): [number, number] => [ts, i]),
-      );
+    const perServerByIndex: { name: string; count: number }[][] = [];
+    for (const [i, map] of accumulator) {
+      perServerByIndex[i] = Array.from(map.entries())
+        .filter(([, count]) => count > 0)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+    }
 
-      const accumulator = new Map<number, Map<string, number>>(
-        sortedTs.map((_, i): [number, Map<string, number>] => [
-          i,
-          new Map<string, number>(),
-        ]),
-      );
-
-      for (const pt of timeSeries) {
-        if (pt.failureCount === 0) continue;
-        const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
-        const idx = tsIndex.get(ms);
-        if (idx === undefined) continue;
-        const displayName =
-          pt.serverName === "local"
-            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-            : (serverNameMappings.rawToDisplay.get(pt.serverName) ??
-              pt.serverName);
-        const map = accumulator.get(idx)!;
-        map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
-      }
-
-      const perServerByIndex: { name: string; count: number }[][] = [];
-      for (const [i, map] of accumulator) {
-        perServerByIndex[i] = Array.from(map.entries())
-          .filter(([, count]) => count > 0)
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count);
-      }
-
-      return {
-        labels: built.labels,
-        tooltipLabels: built.tooltipLabels,
-        datasets: recoloredDatasets,
-        hasErrors: total > 0,
-        perServerByIndex,
-      };
-    }, [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay]);
+    return {
+      labels: built.labels,
+      timestamps: built.timestamps,
+      tooltipLabels: built.tooltipLabels,
+      datasets: recoloredDatasets,
+      hasErrors: total > 0,
+      perServerByIndex,
+    };
+  }, [timeSeries, timeRangeMs, serverNameMappings]);
 
   const chartId = "errors-over-time";
   const expanded = expandedChart === chartId;
@@ -1422,14 +1536,18 @@ function ErrorsOverTimeChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasErrors}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {!hasErrors ? (
         <ChartNoData message="No errors in this period" />
       ) : (
         <MultiLineChart
           labels={labels}
+          timestamps={timestamps}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
+          onRangeSelect={onRangeSelect}
           height={
             expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
           }
@@ -1456,48 +1574,80 @@ function HooksAnalytics({
   summaryIsError,
   expandedChart,
   onExpandedChartChange: setExpandedChart,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
   compact?: boolean;
   addFilter: (chip: FilterChip) => void;
-  onHookTypesChange: (types: TypesToInclude[]) => void;
-  summaryData: GetHooksSummaryResult | undefined;
+  onHookTypesChange: (types: ObserveTypeFilterValue[]) => void;
+  summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
   expandedChart: string | null;
   onExpandedChartChange: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
-  const breakdown = summaryData?.breakdown ?? [];
-  const timeSeries = summaryData?.timeSeries ?? [];
-  const skillTimeSeries = summaryData?.skillTimeSeries ?? [];
-  const skillBreakdown = summaryData?.skillBreakdown ?? [];
+  const targets = summaryData?.targets;
+  const users = summaryData?.users ?? [];
+  const timeSeries = summaryData?.targetTimeSeries ?? [];
+  const userTimeSeries = summaryData?.userTimeSeries ?? [];
+  const usersByTarget = summaryData?.usersByTarget ?? [];
+  const targetToolBreakdown = summaryData?.targetToolBreakdown ?? [];
+  const skillTimeSeries = timeSeries.filter(
+    (point) => point.targetType === "skill",
+  );
+  const skillBreakdown = usersByTarget.filter(
+    (row) => row.targetType === "skill",
+  );
 
   const kpis = useMemo(() => {
     if (!summaryData) return null;
-    const { servers, users, breakdown: bd } = summaryData;
-
-    const totalEvents = summaryData.totalEvents;
-    const totalSuccesses = servers.reduce((s, r) => s + r.successCount, 0);
-    const totalFailures = servers.reduce((s, r) => s + r.failureCount, 0);
+    const totalEvents = summaryData.totals.eventCount;
+    const totalSuccesses = summaryData.totals.successCount;
+    const totalFailures = summaryData.totals.failureCount;
     const completedEvents = totalSuccesses + totalFailures;
     const avgSuccessRate =
       completedEvents > 0 ? (totalSuccesses / completedEvents) * 100 : null;
 
-    const activeUsers = users.length;
-    const activeSources = new Set(bd.map((r) => r.hookSource).filter(Boolean))
-      .size;
-    const uniqueTools = servers.reduce((s, r) => s + r.uniqueTools, 0);
+    const activeUsers = summaryData.totals.uniqueUsers;
+    const activeTargets = summaryData.totals.uniqueTargets;
+    const uniqueTools = summaryData.totals.uniqueTools;
 
     return {
       avgSuccessRate,
       totalEvents,
       activeUsers,
-      activeSources,
+      activeTargets,
       uniqueTools,
     };
   }, [summaryData]);
+
+  const targetFiltersByLabel = useMemo(() => {
+    const filters = new Map<string, string[]>();
+    for (const target of targets ?? []) {
+      const label = displayTargetLabel(
+        target.targetLabel,
+        target.targetType,
+        serverNameMappings,
+      );
+      if (target.targetType === "hosted_mcp_server") {
+        filters.set(label, [encodeHostedServerFilter(target.targetId)]);
+      } else if (target.targetType === "shadow_mcp_server") {
+        filters.set(label, [encodeShadowServerFilter(target.targetId)]);
+      } else if (target.targetType === "local_tool") {
+        filters.set(label, ["local_tool"]);
+      } else if (target.targetType === "skill") {
+        filters.set(label, ["skill"]);
+      }
+    }
+    return filters;
+  }, [serverNameMappings, targets]);
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
@@ -1509,19 +1659,31 @@ function HooksAnalytics({
         if (!value || value === "unknown") return;
         if (filterType === "server") {
           if (value === localToolsDisplayName) {
-            onHookTypesChange(["local"]);
+            onHookTypesChange(["local_tool"]);
             return;
           }
-          const rawFilters = serverNameMappings.displayToRaws.get(value) ?? [
-            value,
-          ];
+          const targetFilter = targetFiltersByLabel.get(value);
+          if (targetFilter?.includes("local_tool")) {
+            onHookTypesChange(["local_tool"]);
+            return;
+          }
+          if (targetFilter?.includes("skill")) {
+            onHookTypesChange(["skill"]);
+            return;
+          }
+          const rawFilters = targetFilter ??
+            serverNameMappings.displayToRaws.get(value) ?? [value];
           addFilter({
             display: value,
             filters: rawFilters,
-            path: "gram.tool_call.source",
+            path: SERVER_FILTER_PATH,
           });
         } else {
-          addFilter({ display: value, filters: [value], path: "user.email" });
+          addFilter({
+            display: value,
+            filters: [value],
+            path: USER_EMAIL_FILTER_PATH,
+          });
         }
       };
       for (const [filterType, axis] of Object.entries(config) as [
@@ -1536,6 +1698,7 @@ function HooksAnalytics({
       onHookTypesChange,
       serverNameMappings.rawToDisplay,
       serverNameMappings.displayToRaws,
+      targetFiltersByLabel,
     ],
   );
 
@@ -1585,8 +1748,8 @@ function HooksAnalytics({
               accentColor="yellow"
             />
             <MetricCard
-              title="Active Sources"
-              value={kpis?.activeSources ?? 0}
+              title="Active Targets"
+              value={kpis?.activeTargets ?? 0}
               icon="monitor"
               accentColor="blue"
             />
@@ -1617,11 +1780,14 @@ function HooksAnalytics({
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UsersPerServerChart
-          title="Users per Server"
-          breakdown={breakdown}
+          title="Users by Source"
+          breakdown={usersByTarget}
           serverNameMappings={serverNameMappings}
           handleFilter={makeFilterHandler({
             server: "row",
@@ -1632,16 +1798,19 @@ function HooksAnalytics({
         />
 
         <UserUsageTimeSeries
-          timeSeries={timeSeries}
+          timeSeries={userTimeSeries}
           from={from}
           to={to}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UserEventCountsChart
           title="User Event Counts"
-          breakdown={breakdown}
+          users={users}
           handleFilter={makeFilterHandler({ user: "row" })}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
@@ -1653,6 +1822,9 @@ function HooksAnalytics({
           to={to}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UsersPerSkillChart
@@ -1669,11 +1841,14 @@ function HooksAnalytics({
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <ServerErrorRateChart
-          title="Errors per Server and Tool"
-          breakdown={breakdown}
+          title="Failures by Source and Tool"
+          breakdown={targetToolBreakdown}
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}

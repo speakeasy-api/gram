@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -16,17 +17,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func testCELEngine(t *testing.T) *celenv.Engine {
+	t.Helper()
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	return eng
+}
 
 var infra *testenv.Environment
 
@@ -58,13 +69,30 @@ func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
 	return nil
 }
 
+// syncResultsCleaner implements risk.RiskPolicyResultsCleaner synchronously for
+// tests (no Temporal worker available).
+type syncResultsCleaner struct {
+	conn *pgxpool.Pool
+}
+
+func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid.UUID) error {
+	if _, err := riskrepo.New(c.conn).DeleteRiskResultsByPolicy(ctx, riskrepo.DeleteRiskResultsByPolicyParams{
+		RiskPolicyID: policyID,
+		ProjectID:    projectID,
+	}); err != nil {
+		return fmt.Errorf("delete risk results by policy: %w", err)
+	}
+	return nil
+}
+
 type testInstance struct {
 	service        *risk.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
-	accessStore    accesscontrol.Store
+	flags          *feature.InMemory
+	cacheAdapter   cache.Cache
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -97,8 +125,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
+	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, "test-jwt-secret", false, nil, nil)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -106,7 +135,8 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
-		accessStore:    accessStore,
+		flags:          flags,
+		cacheAdapter:   cacheAdapter,
 	}
 }
 

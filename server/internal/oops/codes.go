@@ -20,6 +20,14 @@ const (
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
+	// CodeCanceled represents a request whose client disconnected mid-flight,
+	// surfacing as a context.Canceled cause while the request context is itself
+	// canceled. It is not a server fault. It is never authored directly:
+	// ShareableError.effectiveCode promotes such errors to this code so the
+	// logging, span, and HTTP status behavior is handled centrally. Server- and
+	// application-initiated cancellations, where the request context is still
+	// live, are left at their authored code.
+	CodeCanceled Code = "canceled"
 )
 
 var StatusCodes = map[Code]int{
@@ -38,6 +46,9 @@ var StatusCodes = map[Code]int{
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
+	// 499 (client closed request) is non-standard but matches the convention
+	// already used by the request access log middleware.
+	CodeCanceled: 499,
 }
 
 func (c Code) UserMessage() string {
@@ -66,6 +77,8 @@ func (c Code) UserMessage() string {
 		return "token balance exhausted"
 	case CodeRateLimitExceeded:
 		return "rate limit exceeded"
+	case CodeCanceled:
+		return "request was canceled"
 	default:
 		return "an unexpected error occurred"
 	}

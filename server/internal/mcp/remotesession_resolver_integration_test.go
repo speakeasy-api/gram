@@ -235,11 +235,16 @@ func createIssuerGatedExternalMCPFixture(
 	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(toolset.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
-		UserSessionIssuerID:   userIssuer.ID,
 		ClientID:              "resolver-extmcp-client-" + suffix,
 		ClientSecretEncrypted: pgtype.Text{},
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		ClientSecretExpiresAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: remoteClient.ID,
+		UserSessionIssuerID:   userIssuer.ID,
 	})
 	require.NoError(t, err)
 

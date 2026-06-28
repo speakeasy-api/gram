@@ -3,10 +3,11 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
-import { Approvals } from "./approvals.js";
-import { Capabilities } from "./capabilities.js";
+import { Blocks } from "./blocks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
+import { Exclusions } from "./exclusions.js";
+import { Expr } from "./expr.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
@@ -14,11 +15,6 @@ import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
-  private _approvals?: Approvals;
-  get approvals(): Approvals {
-    return (this._approvals ??= new Approvals(this._options));
-  }
-
   private _policyBypassRequests?: PolicyBypassRequests;
   get policyBypassRequests(): PolicyBypassRequests {
     return (this._policyBypassRequests ??= new PolicyBypassRequests(
@@ -26,19 +22,29 @@ export class Risk extends ClientSDK {
     ));
   }
 
-  private _capabilities?: Capabilities;
-  get capabilities(): Capabilities {
-    return (this._capabilities ??= new Capabilities(this._options));
-  }
-
   private _categories?: Categories;
   get categories(): Categories {
     return (this._categories ??= new Categories(this._options));
   }
 
+  private _expr?: Expr;
+  get expr(): Expr {
+    return (this._expr ??= new Expr(this._options));
+  }
+
+  private _exclusions?: Exclusions;
+  get exclusions(): Exclusions {
+    return (this._exclusions ??= new Exclusions(this._options));
+  }
+
   private _customRules?: CustomRules;
   get customRules(): CustomRules {
     return (this._customRules ??= new CustomRules(this._options));
+  }
+
+  private _blocks?: Blocks;
+  get blocks(): Blocks {
+    return (this._blocks ??= new Blocks(this._options));
   }
 
   private _overview?: Overview;

@@ -18,6 +18,10 @@ export type RemoteSession = {
   accessExpiresAt: Date;
   createdAt: Date;
   /**
+   * Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
+   */
+  hasRefreshToken: boolean;
+  /**
    * The remote_session id.
    */
   id: string;
@@ -33,6 +37,14 @@ export type RemoteSession = {
    * Scopes held by this session.
    */
   scopes: Array<string>;
+  /**
+   * Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   */
+  subjectDisplayName?: string | undefined;
+  /**
+   * Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   */
+  subjectEmail?: string | undefined;
   /**
    * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
    */
@@ -58,12 +70,15 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    has_refresh_token: z.boolean(),
     id: z.string(),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     remote_session_client_id: z.string(),
     scopes: z.array(z.string()),
+    subject_display_name: z.optional(z.string()),
+    subject_email: z.optional(z.string()),
     subject_urn: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -75,8 +90,11 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
       "created_at": "createdAt",
+      "has_refresh_token": "hasRefreshToken",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
+      "subject_display_name": "subjectDisplayName",
+      "subject_email": "subjectEmail",
       "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",

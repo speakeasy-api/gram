@@ -60,6 +60,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
+			idempotencyKey   *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -73,7 +74,11 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if hookHostnameRaw != "" {
 			hookHostname = &hookHostnameRaw
 		}
-		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput, hookHostname)
+		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
+		if idempotencyKeyRaw != "" {
+			idempotencyKey = &idempotencyKeyRaw
+		}
+		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
 
 		return payload, nil
 	}
@@ -276,6 +281,7 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
+			idempotencyKey   *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -289,7 +295,11 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if hookHostnameRaw != "" {
 			hookHostname = &hookHostnameRaw
 		}
-		payload = NewCursorPayload(&body, apikeyToken, projectSlugInput, hookHostname)
+		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
+		if idempotencyKeyRaw != "" {
+			idempotencyKey = &idempotencyKeyRaw
+		}
+		payload = NewCursorPayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -506,6 +516,7 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
+			idempotencyKey   *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -519,7 +530,11 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if hookHostnameRaw != "" {
 			hookHostname = &hookHostnameRaw
 		}
-		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput, hookHostname)
+		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
+		if idempotencyKeyRaw != "" {
+			idempotencyKey = &idempotencyKeyRaw
+		}
+		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1270,6 +1285,8 @@ func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordReque
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

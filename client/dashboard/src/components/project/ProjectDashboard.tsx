@@ -1,10 +1,10 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
+import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
@@ -23,24 +23,23 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Button, Card, Icon } from "@speakeasy-api/moonshine";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
-} from "@/components/insights-sidebar";
+} from "@/components/insights-dock";
 import { useInsightsState } from "@/components/insights-context";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
-import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
 export function ProjectDashboard(): JSX.Element {
   const { projectSlug } = useSlugs();
-  const project = useProject();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -309,11 +308,13 @@ export function ProjectDashboard(): JSX.Element {
     !isFeaturesPending && !isFeaturesError && !logsEnabled;
 
   const {
+    available: insightsDockAvailable,
     isExpanded: isInsightsExpanded,
     setIsExpanded: setInsightsExpanded,
     setOverride: setInsightsOverride,
     sendPrompt: sendInsightsPrompt,
   } = useInsightsState();
+  const navigate = useNavigate();
 
   const exploreWithAI = useCallback(
     (opts: InsightsConfigOptions) => {
@@ -323,11 +324,26 @@ export function ProjectDashboard(): JSX.Element {
       // on the first runtime.append call and (b) triggered a click-outside
       // crash via the unmount→cleanup chain.
       setInsightsOverride(opts);
-      setInsightsExpanded(true);
       const firstPrompt = opts.suggestions?.[0]?.prompt;
+      // When the dock is hidden (e.g. the home page provides its own chat
+      // widget), there's no panel to expand into — drop the user into the
+      // full-page chat with the prompt instead.
+      if (!insightsDockAvailable) {
+        if (firstPrompt) sendInsightsPrompt(firstPrompt);
+        void navigate(routes.chat.conversation.href("new"));
+        return;
+      }
+      setInsightsExpanded(true);
       if (firstPrompt) sendInsightsPrompt(firstPrompt);
     },
-    [setInsightsOverride, setInsightsExpanded, sendInsightsPrompt],
+    [
+      insightsDockAvailable,
+      setInsightsOverride,
+      setInsightsExpanded,
+      sendInsightsPrompt,
+      navigate,
+      routes,
+    ],
   );
 
   // Clear the per-chart override when the panel is closed so the next opening
@@ -350,11 +366,6 @@ export function ProjectDashboard(): JSX.Element {
   return (
     <Page.Section>
       <Page.Section.Title>Project Overview</Page.Section.Title>
-      <Page.Section.Description>
-        <Badge variant="neutral">
-          <Badge.Text>{project.name}</Badge.Text>
-        </Badge>
-      </Page.Section.Description>
       <Page.Section.CTA>
         {logsEnabled && (
           <TimeRangePicker
@@ -370,10 +381,6 @@ export function ProjectDashboard(): JSX.Element {
 
       <Page.Section.Body>
         <div className="space-y-8">
-          {(isProjectEmpty || showDisabledBanner) && (
-            <ProjectOnboardingBanner />
-          )}
-
           {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
           )}
@@ -458,17 +465,14 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "Dig into who is driving the most activity.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Users chart.`,
-                            suggestions: [
-                              {
-                                title: "Top users & usage patterns",
-                                label: rangeLabel,
-                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-users"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.employees.href()} />
+                      <ViewAllLink to={routes.employees.href()} />
                     </CardActions>
                   }
                 >
@@ -496,17 +500,14 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "See which MCP servers are driving the most traffic.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Servers chart.`,
-                            suggestions: [
-                              {
-                                title: "Top servers & hot tools",
-                                label: rangeLabel,
-                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-servers"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.href()} />
                     </CardActions>
                   }
                 >
@@ -544,13 +545,10 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Understand how your power users interact with agents.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
-                                suggestions: [
-                                  {
-                                    title: "Power users & agent behavior",
-                                    label: rangeLabel,
-                                    prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
-                                  },
-                                ],
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#agent-sessions"](
+                                    rangeLabel,
+                                  ),
                               })
                             }
                           />
@@ -564,7 +562,7 @@ export function ProjectDashboard(): JSX.Element {
                                   !isProjectEmpty &&
                                     overview?.summary.totalChats === 0
                                   ? routes.insights.href()
-                                  : routes.logs.agents.href()
+                                  : routes.agentSessions.href()
                             }
                           />
                         </CardActions>
@@ -618,17 +616,14 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Compare how different LLM clients exercise your tools.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
-                                suggestions: [
-                                  {
-                                    title: "LLM clients & reliability",
-                                    label: rangeLabel,
-                                    prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
-                                  },
-                                ],
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#llm-clients"](
+                                    rangeLabel,
+                                  ),
                               })
                             }
                           />
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -648,7 +643,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -666,7 +661,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -749,43 +744,6 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
         </Link>
       </Card.Content>
     </Card>
-  );
-}
-
-type RankedBarListItem = {
-  key: string;
-  label: string;
-  value: number;
-  // Optional display override for the value (e.g. "42%"); bar width still uses `value`.
-  valueLabel?: string;
-};
-
-function RankedBarList({ items }: { items: RankedBarListItem[] }) {
-  const max = items[0]?.value || 1;
-  return (
-    <ul className="my-1 space-y-3">
-      {items.map((item, i) => (
-        <li key={item.key} className="flex items-center gap-3">
-          <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-            {i + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="truncate text-sm">{item.label}</span>
-              <span className="text-muted-foreground ml-2 shrink-0 text-xs">
-                {item.valueLabel ?? item.value.toLocaleString()}
-              </span>
-            </div>
-            <div className="bg-muted h-1 w-full rounded-full">
-              <div
-                className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                style={{ width: `${(item.value / max) * 100}%` }}
-              />
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 

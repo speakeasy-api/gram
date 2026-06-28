@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 
+# Resolve the local user's email via a device agent and stamp it onto the hook
+# payload as user_email. Best-effort by design: every failure path leaves the
+# payload unchanged so a hook is never blocked on identity resolution. Set
+# GRAM_HOOKS_DEBUG=1 to surface why attribution was skipped — "my hooks show no
+# user_email" is a common support question and is otherwise invisible here.
+gram_hooks_identity_debug() {
+  if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+    printf 'gram-hooks(identity): %s\n' "$1" >&2
+  fi
+}
+
 gram_enrich_identity_payload() {
   local payload="$1"
   local email=""
-  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-device-agent,speakeasy-device-agent}"
+  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd}"
   local timeout_tenths="${GRAM_DEVICE_AGENT_TIMEOUT_TENTHS:-15}"
   local old_ifs="$IFS"
   local command output tmp pid elapsed prefix trimmed
@@ -14,11 +25,13 @@ gram_enrich_identity_payload() {
     command="${command#"${command%%[![:space:]]*}"}"
     command="${command%"${command##*[![:space:]]}"}"
     if [ -z "$command" ] || ! command -v "$command" >/dev/null 2>&1; then
+      [ -n "$command" ] && gram_hooks_identity_debug "device agent '$command' not found on PATH; trying next"
       IFS=,
       continue
     fi
 
     tmp="$(mktemp "${TMPDIR:-/tmp}/gram-device-agent-identity.XXXXXX")" || {
+      gram_hooks_identity_debug "mktemp failed while running device agent '$command'; trying next"
       IFS=,
       continue
     }
@@ -33,6 +46,7 @@ gram_enrich_identity_payload() {
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
       rm -f "$tmp"
+      gram_hooks_identity_debug "device agent '$command identity' timed out after ${timeout_tenths}00ms; killed and trying next"
       IFS=,
       continue
     fi
@@ -46,13 +60,16 @@ gram_enrich_identity_payload() {
       email="${BASH_REMATCH[2]}"
     fi
     if [ -n "$email" ]; then
+      gram_hooks_identity_debug "resolved user_email via '$command identity'"
       break
     fi
+    gram_hooks_identity_debug "device agent '$command identity' returned no parseable email; trying next"
     IFS=,
   done
   IFS="$old_ifs"
 
   if [ -z "$email" ]; then
+    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands]; sending payload without attribution (server may fall back to OTEL session metadata)"
     printf '%s' "$payload"
     return
   fi
@@ -72,6 +89,7 @@ gram_enrich_identity_payload() {
       fi
       ;;
     *)
+      gram_hooks_identity_debug "payload is not a JSON object; cannot stamp user_email, sending unchanged"
       printf '%s' "$payload"
       ;;
   esac

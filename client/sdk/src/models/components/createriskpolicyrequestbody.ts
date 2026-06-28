@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  RiskPolicyModelConfig,
+  RiskPolicyModelConfig$Outbound,
+  RiskPolicyModelConfig$outboundSchema,
+} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag or block.
@@ -18,17 +23,49 @@ export const Action = {
  */
 export type Action = ClosedEnum<typeof Action>;
 
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export const AudienceType = {
+  Everyone: "everyone",
+  Targeted: "targeted",
+} as const;
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export type AudienceType = ClosedEnum<typeof AudienceType>;
+
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+ */
+export const PolicyType = {
+  Standard: "standard",
+  PromptBased: "prompt_based",
+} as const;
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+ */
+export type PolicyType = ClosedEnum<typeof PolicyType>;
+
 export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag or block.
    */
   action?: Action | undefined;
   /**
+   * Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
+   */
+  audiencePrincipalUrns?: Array<string> | undefined;
+  /**
+   * Policy audience type: everyone or targeted.
+   */
+  audienceType?: AudienceType | undefined;
+  /**
    * Whether the policy name should be auto-generated.
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy.
+   * Custom detection rule ids to attach as detectors: a match produces a finding.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -43,18 +80,35 @@ export type CreateRiskPolicyRequestBody = {
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
   messageTypes?: Array<string> | undefined;
+  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
    */
   name?: string | undefined;
   /**
+   * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+   */
+  policyType?: PolicyType | undefined;
+  /**
    * Presidio entity types to detect.
    */
   presidioEntities?: Array<string> | undefined;
   /**
-   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+   * For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.
+   */
+  prompt?: string | undefined;
+  /**
+   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
    */
   promptInjectionRules?: Array<string> | undefined;
+  /**
+   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.
+   */
+  scopeExempt?: string | undefined;
+  /**
+   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.
+   */
+  scopeInclude?: string | undefined;
   /**
    * Detection sources to enable.
    */
@@ -71,16 +125,31 @@ export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
 );
 
 /** @internal */
+export const AudienceType$outboundSchema: z.ZodMiniEnum<typeof AudienceType> = z
+  .enum(AudienceType);
+
+/** @internal */
+export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
+  .enum(PolicyType);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
+  audience_principal_urns?: Array<string> | undefined;
+  audience_type: string;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   message_types?: Array<string> | undefined;
+  model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
+  policy_type: string;
   presidio_entities?: Array<string> | undefined;
+  prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  scope_exempt?: string | undefined;
+  scope_include?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -92,25 +161,38 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
+    audiencePrincipalUrns: z.optional(z.array(z.string())),
+    audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     messageTypes: z.optional(z.array(z.string())),
+    modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
+    policyType: z._default(PolicyType$outboundSchema, "standard"),
     presidioEntities: z.optional(z.array(z.string())),
+    prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    scopeExempt: z.optional(z.string()),
+    scopeInclude: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      audiencePrincipalUrns: "audience_principal_urns",
+      audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
+      modelConfig: "model_config",
+      policyType: "policy_type",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
       userMessage: "user_message",
     });
   }),

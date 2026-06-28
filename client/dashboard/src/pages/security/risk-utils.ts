@@ -8,6 +8,7 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["destructive_tool", "destructive_tool"],
   ["shadow_mcp", "shadow_mcp"],
   ["prompt_injection", "prompt_injection"],
+  ["llm_judge", "prompt_policy"],
   ["cli_destructive", "cli_destructive"],
   // Scanner-source fallbacks: when a rule_id doesn't carry its category
   // prefix (e.g. gitleaks' bare "generic-api-key"), classify by source so
@@ -49,4 +50,17 @@ export function getCategoryForFinding(
     return SOURCE_TO_CATEGORY.get(source) ?? null;
   }
   return null;
+}
+
+// getCategoryCodeForFinding resolves a finding to a short, uppercase,
+// customer-safe category code (e.g. "SECRETS", "PII") for use as compact
+// fine-print or badge text. It NEVER returns the raw scanner `source`
+// (`gitleaks`, `presidio`), which is an implementation detail we don't
+// expose. Falls back to "FLAGGED" when nothing classifies.
+export function getCategoryCodeForFinding(
+  source?: string,
+  ruleId?: string,
+): string {
+  const category = getCategoryForFinding(source, ruleId);
+  return category ? category.toUpperCase() : "FLAGGED";
 }

@@ -296,12 +296,12 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this backend")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch MCP install page metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch MCP install page metadata").LogError(ctx, logger)
 	}
 
 	metadata, err := ToMCPMetadata(ctx, s.repo, record)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "convert metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "convert metadata").LogError(ctx, logger)
 	}
 
 	return &gen.GetMcpMetadataResult{
@@ -322,7 +322,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "access mcp server metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "access mcp server metadata").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -359,7 +359,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	case errors.Is(err, pgx.ErrNoRows):
 		// No existing metadata, proceed with creation
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
 	default:
 		existing, err = ToMCPMetadata(ctx, mcpr, existingRow)
 		if err != nil {
@@ -371,7 +371,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if payload.LogoAssetID != nil {
 		parsedLogoID, err := uuid.Parse(*payload.LogoAssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").LogError(ctx, logger)
 		}
 		logoID = uuid.NullUUID{UUID: parsedLogoID, Valid: true}
 	}
@@ -394,12 +394,12 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	var defaultEnvironmentID uuid.NullUUID
 	if payload.DefaultEnvironmentID != nil {
 		if backend.mcpServer != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "default_environment_id is not yet supported for mcp_server-backed install pages").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "default_environment_id is not yet supported for mcp_server-backed install pages").LogError(ctx, logger)
 		}
 
 		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").LogError(ctx, logger)
 		}
 
 		envr := environments_repo.New(dbtx)
@@ -409,9 +409,9 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeBadRequest, err, "default environment not found in this project").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "default environment not found in this project").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "validate default environment ID").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "validate default environment ID").LogError(ctx, logger)
 		}
 
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
@@ -448,14 +448,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		})
 	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert MCP server metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert MCP server metadata").LogError(ctx, logger)
 	}
 
 	// Update environment entries
 	if payload.EnvironmentConfigs != nil {
 		// Delete all existing entries
 		if err := mcpr.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "delete existing environment configs").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "delete existing environment configs").LogError(ctx, logger)
 		}
 
 		for _, config := range payload.EnvironmentConfigs {
@@ -472,7 +472,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 				ProvidedBy:        config.ProvidedBy,
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "upsert environment config").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "upsert environment config").LogError(ctx, logger)
 			}
 		}
 	}
@@ -499,7 +499,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			MCPMetadataSnapshotBefore: existing,
 			MCPMetadataSnapshotAfter:  metadata,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log MCP server metadata update event").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "log MCP server metadata update event").LogError(ctx, logger)
 		}
 	default:
 		if err := s.audit.LogMCPMetadataUpdateForMcpServer(ctx, dbtx, audit.LogMCPMetadataUpdateForMcpServerEvent{
@@ -517,12 +517,12 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			MCPMetadataSnapshotBefore: existing,
 			MCPMetadataSnapshotAfter:  metadata,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log MCP server metadata update event").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "log MCP server metadata update event").LogError(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "save MCP server metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "save MCP server metadata").LogError(ctx, logger)
 	}
 
 	return metadata, nil
@@ -543,7 +543,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").LogError(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	if !toolset.McpEnabled {
@@ -562,7 +562,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe toolset").LogError(ctx, s.logger)
 	}
 
 	// Load MCP metadata (logo, docs, instructions)
@@ -592,7 +592,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 
 		metadata, err := ToMCPMetadata(ctx, s.repo, metadataRecord)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to convert metadata").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to convert metadata").LogError(ctx, s.logger)
 		}
 		for _, config := range metadata.EnvironmentConfigs {
 			variableProvidedBy[config.VariableName] = config.ProvidedBy
@@ -607,7 +607,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	// Build MCP URL
 	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").LogError(ctx, s.logger)
 	}
 
 	// Collect security inputs
@@ -726,9 +726,9 @@ func resolveMetadataBackend(
 
 	switch {
 	case !toolsetProvided && !mcpServerProvided:
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset_slug or mcp_server_id is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset_slug or mcp_server_id is required").LogError(ctx, logger)
 	case toolsetProvided && mcpServerProvided:
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset_slug and mcp_server_id are mutually exclusive").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset_slug and mcp_server_id are mutually exclusive").LogError(ctx, logger)
 	case toolsetProvided:
 		slug := conv.ToLower(string(*toolsetSlug))
 		toolset, err := toolsetQueries.GetToolset(ctx, toolsets_repo.GetToolsetParams{
@@ -737,25 +737,25 @@ func resolveMetadataBackend(
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, attr.SlogToolsetSlug(slug))
+			return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").LogError(ctx, logger, attr.SlogToolsetSlug(slug))
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "fetch toolset").Log(ctx, logger, attr.SlogToolsetSlug(slug))
+			return nil, oops.E(oops.CodeUnexpected, err, "fetch toolset").LogError(ctx, logger, attr.SlogToolsetSlug(slug))
 		}
 		return &resolvedMetadataBackend{toolset: &toolset, mcpServer: nil}, nil
 	default:
 		parsedID, err := uuid.Parse(*mcpServerID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id (not a valid UUID)").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id (not a valid UUID)").LogError(ctx, logger)
 		}
-		server, err := mcpServerQueries.GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+		server, err := mcpServerQueries.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        parsedID,
 			ProjectID: projectID,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeBadRequest, err, "mcp server not found").Log(ctx, logger, attr.SlogMcpServerID(parsedID.String()))
+			return nil, oops.E(oops.CodeBadRequest, err, "mcp server not found").LogError(ctx, logger, attr.SlogMcpServerID(parsedID.String()))
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "fetch mcp server").Log(ctx, logger, attr.SlogMcpServerID(parsedID.String()))
+			return nil, oops.E(oops.CodeUnexpected, err, "fetch mcp server").LogError(ctx, logger, attr.SlogMcpServerID(parsedID.String()))
 		}
 		return &resolvedMetadataBackend{toolset: nil, mcpServer: &server}, nil
 	}
@@ -948,7 +948,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	sessionToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
@@ -968,7 +968,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	case errors.Is(err, errToolsetNotFound):
 		return s.serveNotFoundPage(w, mcpSlug)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
+		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
 	if !ic.isPublic() {
@@ -1151,7 +1151,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, resolvedGroupID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "describe toolset").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "describe toolset").LogError(ctx, s.logger)
 	}
 
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
@@ -1266,7 +1266,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 
 	mcpURL, err := s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve toolset mcp url").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "resolve toolset mcp url").LogError(ctx, s.logger)
 	}
 
 	// Public install slug: prefer the slug from the URL path (which honours the
@@ -1304,7 +1304,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	// Belt-and-suspenders so a future change to the dispatcher can't silently
 	// nil-deref through here.
 	if mcpServer == nil || endpoint == nil {
-		return oops.E(oops.CodeUnexpected, nil, "remote mcp install context missing backend or endpoint").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "remote mcp install context missing backend or endpoint").LogError(ctx, s.logger)
 	}
 
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
@@ -1331,7 +1331,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 
 	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").Log(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
+		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
@@ -1395,7 +1395,7 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 
 	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "parse config snippet template").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "parse config snippet template").LogError(ctx, s.logger)
 	}
 
 	// buildConn assembles the connection strings for a single MCP URL, reusing
@@ -1438,7 +1438,7 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 
 	defaultConn, err := buildConn(in.MCPURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build default connection").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build default connection").LogError(ctx, s.logger)
 	}
 
 	// When filtering is enabled, build one connection variant per scope (plus the
@@ -1450,13 +1450,13 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 		for _, scope := range in.Scopes {
 			conn, err := buildConn(appendTagsQuery(in.MCPURL, scope.Tag))
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "build scope connection").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "build scope connection").LogError(ctx, s.logger)
 			}
 			variants[scope.Tag] = conn
 		}
 		encoded, err := json.Marshal(variants)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "marshal scope variants").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "marshal scope variants").LogError(ctx, s.logger)
 		}
 		// Emitted into a data-* attribute (not a <script>), so html/template's
 		// attribute auto-escaping handles it — no template.JS / nosec needed.
@@ -1484,7 +1484,7 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "parse hosted page template").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "parse hosted page template").LogError(ctx, s.logger)
 	}
 
 	buf := &bytes.Buffer{}
@@ -1574,7 +1574,7 @@ func (s *Service) ServeInstallPageScript(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write(s.installPageScriptData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -1593,7 +1593,7 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 				nil,
 				"%s scheme is not allowed",
 				dangerousScheme,
-			).Log(context.Background(), nil)
+			).LogError(context.Background(), nil)
 		}
 	}
 
@@ -1603,7 +1603,7 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 			oops.CodeBadRequest,
 			err,
 			"invalid URL",
-		).Log(context.Background(), nil)
+		).LogError(context.Background(), nil)
 	}
 
 	if u.Scheme != allowedScheme {
@@ -1612,7 +1612,7 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 			nil,
 			"invalid URL scheme: %s",
 			u.Scheme,
-		).Log(context.Background(), nil)
+		).LogError(context.Background(), nil)
 	}
 
 	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped

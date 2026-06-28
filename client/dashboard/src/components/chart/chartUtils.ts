@@ -57,6 +57,27 @@ export function formatChartLabel(date: Date, timeRangeMs: number): string {
   }
 }
 
+export function formatChartZoomRangeLabel(from: Date, to: Date): string {
+  const fmt = (date: Date) =>
+    date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return `${fmt(from)} – ${fmt(to)}`;
+}
+
+/**
+ * Convert a telemetry `bucket_time_unix_nano` string (nanoseconds since epoch,
+ * too large for a JS number) into a `Date`.
+ */
+export function unixNanoToDate(value: string): Date {
+  const nanos = BigInt(value);
+  const millis = Number(nanos / 1_000_000n);
+  return new Date(millis);
+}
+
 export type ThresholdConfig = {
   red: number;
   amber: number;

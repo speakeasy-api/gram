@@ -1,79 +1,86 @@
 import { MetricCard } from "@/components/chart/MetricCard";
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { SearchBar } from "@/components/ui/search-bar";
+import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import {
+  buildEmployees,
+  type Employee,
+  type EmployeeStatus,
+  isUnattributedEmployee,
+} from "@/components/observe/insightsEmployeesData";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  AccessMember,
-  Role,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { UserSummary } from "@gram/client/models/components";
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-} from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import {
   Badge,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
-type EmployeeFilterDimension = "all" | "user" | "role";
-type FilterOption = { id: string; label: string };
+type EmployeeView = "employees" | "unattributed";
 
-const EMPLOYEE_FILTER_DIMENSIONS: EmployeeFilterDimension[] = [
-  "all",
-  "user",
-  "role",
+const VIEW_SEARCH_PARAM = "view";
+
+const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
+const VIEW_LABELS: Record<EmployeeView, string> = {
+  employees: "Employees",
+  unattributed: "Unknown users",
+};
+const VIEW_TOOLTIPS: Record<EmployeeView, string> = {
+  employees: "Activity attributed to known organization members",
+  unattributed: "Activity that couldn't be matched to a member",
+};
+
+// Unified filter schema for the Employees page. The date range is pinned (and
+// now URL-persisted, replacing the previous local state). Status, role and user
+// map onto the old "filter dimension" dropdown: role/user are independent
+// selects that are ANDed together, and status filters on enrollment.
+const EMPLOYEE_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "status", label: "Enrollment status", kind: "multiselect" },
+  { id: "role", label: "Role", kind: "select" },
+  { id: "user", label: "User", kind: "select" },
+]);
+
+const STATUS_OPTIONS = [
+  { value: "enrolled", label: "Enrolled" },
+  { value: "not_enrolled", label: "Not enrolled" },
 ];
-const EMPLOYEE_FILTER_LABELS: Record<EmployeeFilterDimension, string> = {
-  all: "All",
-  user: "User",
-  role: "Role",
-};
-const EMPLOYEE_FILTER_PLURAL_LABELS: Record<EmployeeFilterDimension, string> = {
-  all: "Items",
-  user: "Users",
-  role: "Roles",
-};
 
 const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {
   "15m": "the last 15 minutes",
@@ -92,142 +99,30 @@ function presetRangeLabel(preset: DateRangePreset): string {
   return PRESET_RANGE_LABELS[preset] ?? "the selected range";
 }
 
-function EmployeeFilterBar({
-  dimension,
-  onDimensionChange,
-  selectedValue,
-  onValueChange,
-  options,
+// Right-aligned Employees vs Unknown-users toggle, rendered in the toolbar's
+// Actions slot. Reads/writes the `?view` URL param exactly as before.
+function EmployeeViewToggle({
+  view,
+  onViewChange,
   disabled,
 }: {
-  dimension: EmployeeFilterDimension;
-  onDimensionChange: (dimension: EmployeeFilterDimension) => void;
-  selectedValue: string | null;
-  onValueChange: (value: string | null) => void;
-  options: FilterOption[];
+  view: EmployeeView;
+  onViewChange: (view: EmployeeView) => void;
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
-  const selectedOption = options.find((o) => o.id === selectedValue);
-  const displayLabel =
-    dimension === "all"
-      ? "All"
-      : selectedOption
-        ? selectedOption.label || selectedOption.id
-        : `All ${EMPLOYEE_FILTER_PLURAL_LABELS[dimension]}`;
-
   return (
-    <div
-      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
-    >
-      <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
-        Filter by
-      </span>
-      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        {EMPLOYEE_FILTER_DIMENSIONS.map((value) => {
-          const isSelected = dimension === value;
-          return (
-            <button
-              key={value}
-              onClick={() => onDimensionChange(value)}
-              disabled={disabled}
-              className={`
-                h-8 rounded px-3 text-sm font-medium transition-all duration-150
-                ${
-                  isSelected
-                    ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-                    : "text-muted-foreground hover:text-foreground"
-                }
-                disabled:cursor-not-allowed
-              `}
-            >
-              {EMPLOYEE_FILTER_LABELS[value]}
-            </button>
-          );
-        })}
-
-        <div className="bg-border/50 mx-1 h-6 w-px" />
-        <Popover
-          open={dimension !== "all" && !disabled && open}
-          onOpenChange={setOpen}
-        >
-          <PopoverTrigger asChild>
-            <button
-              disabled={dimension === "all" || disabled}
-              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
-                dimension === "all" || disabled
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:bg-muted/50"
-              }`}
-            >
-              <span className="max-w-[120px] truncate">{displayLabel}</span>
-              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[220px] p-0" align="end">
-            <Command>
-              <CommandInput
-                placeholder={`Search ${EMPLOYEE_FILTER_PLURAL_LABELS[dimension].toLowerCase()}...`}
-                className="h-9"
-              />
-              <CommandList>
-                <CommandEmpty>No results found.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="__all__"
-                    onSelect={() => {
-                      onValueChange(null);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
-                    />
-                    <span>All {EMPLOYEE_FILTER_PLURAL_LABELS[dimension]}</span>
-                  </CommandItem>
-                  {options.map((option) => (
-                    <CommandItem
-                      key={option.id}
-                      value={option.label || option.id}
-                      onSelect={() => {
-                        onValueChange(option.id);
-                        setOpen(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
-                      />
-                      <span className="truncate">
-                        {option.label || option.id}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
+    <SegmentedControl
+      value={view}
+      onChange={onViewChange}
+      disabled={disabled}
+      options={EMPLOYEE_VIEWS.map((value) => ({
+        value,
+        label: VIEW_LABELS[value],
+        tooltip: VIEW_TOOLTIPS[value],
+      }))}
+    />
   );
 }
-
-type EmployeeStatus = "enrolled" | "not_enrolled";
-
-type Employee = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: EmployeeStatus;
-  tokenCount: number;
-  lastActivity: string;
-  lastActivityTimestamp: number | null;
-  photoUrl?: string | null;
-};
 
 const statusMeta: Record<
   EmployeeStatus,
@@ -245,7 +140,8 @@ const statusMeta: Record<
 
 export function InsightsEmployeesContent(): JSX.Element {
   const client = useGramContext();
-  const { orgSlug, projectSlug } = useSlugs();
+  const routes = useRoutes();
+  const { projectSlug } = useSlugs();
   const navigate = useNavigate();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
@@ -258,26 +154,54 @@ export function InsightsEmployeesContent(): JSX.Element {
   } = useMembers();
   const { data: rolesData, isLoading: rolesLoading } = useRoles();
 
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
-  const [customRange, setCustomRange] = useState<{
-    from: Date;
-    to: Date;
-  } | null>(null);
-  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
-  const [filterDimension, setFilterDimension] =
-    useState<EmployeeFilterDimension>("all");
-  const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
-    null,
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(EMPLOYEE_FILTERS);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: EmployeeView =
+    searchParams.get(VIEW_SEARCH_PARAM) === "unattributed"
+      ? "unattributed"
+      : "employees";
+  const isUnattributedView = view === "unattributed";
+
+  const selectedStatuses = values.status;
+  const selectedRoleId = values.role;
+  // Unknown users carry a placeholder role, so the role filter doesn't apply in
+  // that view. Derived (rather than cleared in the view-change handler) so it
+  // also holds when the view changes through the URL, e.g. back/forward nav.
+  const effectiveRoleId = isUnattributedView ? null : selectedRoleId;
+  const selectedUserId = values.user;
+
+  const handleViewChange = useCallback(
+    (next: EmployeeView) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === "employees") {
+            params.delete(VIEW_SEARCH_PARAM);
+          } else {
+            params.set(VIEW_SEARCH_PARAM, next);
+          }
+          // The selected user may not exist in the other view.
+          params.delete("user");
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
   );
 
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
+  // Bridge the unified date range back to the from/to the usage query consumes.
+  const { from, to } = useMemo(() => {
+    const d = values.date;
+    if (d.customRange) return d.customRange;
+    return getPresetRange(d.preset ?? "30d");
+  }, [values.date]);
   const rangeLabel = useMemo(() => {
-    if (customRange) return customRangeLabel ?? "the selected range";
-    return presetRangeLabel(dateRange);
-  }, [customRange, customRangeLabel, dateRange]);
+    const d = values.date;
+    if (d.customRange) return d.customLabel ?? "the selected range";
+    return presetRangeLabel(d.preset ?? "30d");
+  }, [values.date]);
 
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData]);
@@ -306,31 +230,61 @@ export function InsightsEmployeesContent(): JSX.Element {
     () => new Map(roles.map((role) => [role.id, role.name])),
     [roles],
   );
+  const viewEmployees = useMemo(
+    () =>
+      allEmployees.filter((item) =>
+        isUnattributedView
+          ? isUnattributedEmployee(item)
+          : !isUnattributedEmployee(item),
+      ),
+    [allEmployees, isUnattributedView],
+  );
+  // Apply the unified status/role/user filters to the current view's employees.
+  // role/user are independent selects that are ANDed together; status filters on
+  // enrollment. role is skipped in the unattributed view (placeholder roles).
   const employees = useMemo(() => {
-    if (filterDimension === "all" || !selectedFilterValue) return allEmployees;
-    if (filterDimension === "user") {
-      return allEmployees.filter((item) => item.id === selectedFilterValue);
-    }
-    const roleName = roleNameById.get(selectedFilterValue);
-    return allEmployees.filter((item) =>
-      roleName ? item.role === roleName : false,
-    );
-  }, [allEmployees, filterDimension, roleNameById, selectedFilterValue]);
-  const filterOptions = useMemo<FilterOption[]>(() => {
-    if (filterDimension === "user") {
-      return allEmployees.map((item) => ({
-        id: item.id,
-        label: item.name,
-      }));
-    }
-    if (filterDimension === "role") {
-      return roles.map((role) => ({
-        id: role.id,
-        label: role.name,
-      }));
-    }
-    return [];
-  }, [allEmployees, filterDimension, roles]);
+    const roleName = effectiveRoleId
+      ? roleNameById.get(effectiveRoleId)
+      : undefined;
+    return viewEmployees.filter((item) => {
+      if (
+        selectedStatuses.length > 0 &&
+        !selectedStatuses.includes(item.status)
+      )
+        return false;
+      if (selectedUserId && item.id !== selectedUserId) return false;
+      if (effectiveRoleId && item.role !== roleName) return false;
+      return true;
+    });
+  }, [
+    viewEmployees,
+    selectedStatuses,
+    selectedUserId,
+    effectiveRoleId,
+    roleNameById,
+  ]);
+
+  // Schema for the bar: role is sheet-only in the unattributed view (its options
+  // don't apply there), so it's dropped from the rendered schema then.
+  const filterSchema = useMemo(
+    () =>
+      isUnattributedView
+        ? EMPLOYEE_FILTERS.filter((d) => d.id !== "role")
+        : EMPLOYEE_FILTERS,
+    [isUnattributedView],
+  );
+
+  // Page-supplied option lists. User options reflect the current view; role
+  // options derive from the org roles (value = role id, matching the old logic).
+  const optionsById = useMemo<OptionsById>(
+    () => ({
+      status: STATUS_OPTIONS,
+      role: roles.map((role) => ({ value: role.id, label: role.name })),
+      user: viewEmployees.map((item) => ({ value: item.id, label: item.name })),
+    }),
+    [roles, viewEmployees],
+  );
+
   const totalEmployees = employees.length;
   const enrolledEmployees = employees.filter(
     (item) => item.status === "enrolled",
@@ -340,36 +294,25 @@ export function InsightsEmployeesContent(): JSX.Element {
     (sum, item) => sum + item.tokenCount,
     0,
   );
-  const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
+  const employeesBase = routes.employees.href();
   const openUser = (employee: Employee) => {
     void navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
   };
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
-  const prompt =
-    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any platform token usage.";
 
-  const handleFilterDimensionChange = (next: EmployeeFilterDimension) => {
-    setFilterDimension(next);
-    setSelectedFilterValue(null);
-  };
-  const handlePresetChange = (preset: DateRangePreset) => {
-    setDateRange(preset);
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
-  const handleCustomRangeChange = (
-    rangeFrom: Date,
-    rangeTo: Date,
-    label?: string,
-  ) => {
-    setCustomRange({ from: rangeFrom, to: rangeTo });
-    setCustomRangeLabel(label ?? null);
-  };
-  const handleClearCustomRange = () => {
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
+  // Per-table name/email search, lifted up so it can live in the toolbar's
+  // Search slot. `page` is owned by the table; resetting it on search happens
+  // there via the `search` prop changing.
+  const [search, setSearch] = useState("");
+
+  // Reset every unified filter (clearAll already does a single setSearchParams)
+  // AND the `?view` param in one shot — firing multiple synchronous
+  // setSearchParams would have react-router clobber all but the last.
+  const handleClearAll = useCallback(() => {
+    setSearch("");
+    clearAll();
+  }, [clearAll]);
 
   return (
     <>
@@ -378,42 +321,11 @@ export function InsightsEmployeesContent(): JSX.Element {
         title="What would you like to know about employee enrollment?"
         subtitle="Ask who is enrolled, who still needs setup, and how platform adoption is tracking across the team"
         contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no hooks activity and are not enrolled.`}
-        suggestions={[
-          {
-            title: "Enrollment Coverage",
-            label: "Who is enrolled?",
-            prompt,
-          },
-          {
-            title: "Not Enrolled",
-            label: "Who is not enrolled?",
-            prompt:
-              "Which employees are not enrolled because they have no platform token usage in this project?",
-          },
-          {
-            title: "Enrollment Summary",
-            label: "Summarize enrollment",
-            prompt:
-              "Summarize project employee enrollment based on whether each employee has platform token usage.",
-          },
-          {
-            title: "User Usage",
-            label: "Show user usage",
-            prompt:
-              "Show me a table of organization users' platform usage for the last 30 days, including token counts, last activity, and hook source breakdowns.",
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["insights/employees"]}
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div
-            className={cn(
-              "flex gap-4 transition-all duration-300",
-              isInsightsOpen
-                ? "flex-col items-stretch"
-                : "flex-row items-center justify-between",
-            )}
-          >
+          <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">Employee Enrollment</h1>
@@ -426,31 +338,29 @@ export function InsightsEmployeesContent(): JSX.Element {
                 not enrolled.
               </p>
             </div>
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-3",
-                isInsightsOpen ? "justify-start" : "shrink-0",
-              )}
-            >
-              <EmployeeFilterBar
-                dimension={filterDimension}
-                onDimensionChange={handleFilterDimensionChange}
-                selectedValue={selectedFilterValue}
-                onValueChange={setSelectedFilterValue}
-                options={filterOptions}
-                disabled={isLoading}
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search by name or email..."
               />
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={handlePresetChange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onClearCustomRange={handleClearCustomRange}
-                disabled={isLoading}
+              <Page.Toolbar.Filters
+                schema={filterSchema}
+                values={values}
+                optionsById={optionsById}
+                onChange={setValue as (id: string, value: FilterValue) => void}
+                onClear={clearValue as (id: string) => void}
+                onClearAll={handleClearAll}
                 projectSlug={projectSlug}
               />
-            </div>
+              <Page.Toolbar.Actions>
+                <EmployeeViewToggle
+                  view={view}
+                  onViewChange={handleViewChange}
+                  disabled={isLoading}
+                />
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
           </div>
 
           {error ? (
@@ -471,36 +381,59 @@ export function InsightsEmployeesContent(): JSX.Element {
                 )}
               >
                 <MetricCard
-                  title="Employees"
+                  title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
                   icon="user"
                   accentColor="blue"
-                  subtext="Members plus unmatched usage"
+                  subtext={
+                    isUnattributedView
+                      ? "Usage not matched to a member"
+                      : "Organization members"
+                  }
                 />
                 <MetricCard
                   title="Enrolled"
                   value={enrolledEmployees}
+                  displayValue={isUnattributedView ? "-" : undefined}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Platform activity present"
+                  subtext={
+                    isUnattributedView
+                      ? "Not applicable to unknown users"
+                      : "Platform activity present"
+                  }
                 />
                 <MetricCard
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
+                  displayValue={isUnattributedView ? "-" : undefined}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No platform activity found"
+                  subtext={
+                    isUnattributedView
+                      ? "Not applicable to unknown users"
+                      : "No platform activity found"
+                  }
                 />
                 <MetricCard
                   title="Token Count"
                   value={totalTokenCount}
                   icon="gauge"
                   accentColor="purple"
-                  subtext={`${enrollmentRate.toFixed(0)}% enrolled`}
+                  subtext={
+                    isUnattributedView
+                      ? undefined
+                      : `${enrollmentRate.toFixed(0)}% enrolled`
+                  }
                 />
               </section>
 
-              <EmployeeTable employees={employees} onSelectUser={openUser} />
+              <EmployeeTable
+                key={view}
+                employees={employees}
+                search={search}
+                onSelectUser={openUser}
+              />
               <EnrollmentLegend />
             </>
           )}
@@ -514,13 +447,14 @@ const PAGE_SIZE = 10;
 
 function EmployeeTable({
   employees,
+  search,
   onSelectUser,
 }: {
   employees: Employee[];
+  search: string;
   onSelectUser: (employee: Employee) => void;
 }) {
   const [page, setPage] = useState(0);
-  const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>(null);
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -604,13 +538,13 @@ function EmployeeTable({
       },
       {
         key: "action",
-        header: <span className="block text-right">Action</span>,
+        header: "",
         width: "auto",
         render: (item) => (
           <div className="text-right">
             <button
               type="button"
-              className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+              className="flex items-center gap-1"
               aria-label={`View ${item.name}`}
               onClick={(event) => {
                 event.stopPropagation();
@@ -618,6 +552,7 @@ function EmployeeTable({
               }}
             >
               View
+              <Icon name="arrow-right" />
             </button>
           </div>
         ),
@@ -650,10 +585,11 @@ function EmployeeTable({
     safePage * PAGE_SIZE,
     (safePage + 1) * PAGE_SIZE,
   );
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
+  // Search is owned by the page (toolbar Search slot); jump back to the
+  // first page whenever the query changes.
+  useEffect(() => {
     setPage(0);
-  };
+  }, [search]);
 
   const NoResultsMessage = () => {
     return (
@@ -669,11 +605,6 @@ function EmployeeTable({
 
   return (
     <section className="bg-card flex flex-col gap-4">
-      <SearchBar
-        value={search}
-        onChange={handleSearchChange}
-        placeholder="Search by name or email..."
-      />
       <Table
         columns={columns}
         data={pageEmployees}
@@ -718,7 +649,7 @@ function EmployeeTable({
 }
 
 function routeSegmentForEmployee(employee: Employee) {
-  if (employee.id.startsWith("usage:") && employee.name.includes("@")) {
+  if (isUnattributedEmployee(employee) && employee.name.includes("@")) {
     return encodeURIComponent(employee.name);
   }
   return slugify(employee.name);
@@ -817,84 +748,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function buildEmployees(
-  members: AccessMember[],
-  roles: Role[],
-  summaries: UserSummary[],
-): Employee[] {
-  const roleNameById = new Map(roles.map((role) => [role.id, role.name]));
-  const summaryByUserId = new Map(
-    summaries.map((summary) => [summary.userId, summary]),
-  );
-  const summaryByEmail = new Map(
-    summaries
-      .filter((summary) => summary.userId.includes("@"))
-      .map((summary) => [summary.userId.toLowerCase(), summary]),
-  );
-  const matchedSummaryIds = new Set<string>();
-
-  const employees = members.map((member) => {
-    const summary =
-      summaryByUserId.get(member.id) ??
-      summaryByEmail.get(member.email.toLowerCase());
-    if (summary) {
-      matchedSummaryIds.add(summary.userId);
-    }
-    const tokenCount =
-      (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
-    const status: EmployeeStatus =
-      summary != null ? "enrolled" : "not_enrolled";
-    const role =
-      member.roleIds
-        .map((id) => roleNameById.get(id))
-        .filter(Boolean)
-        .join(", ") || "Unknown";
-
-    return {
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      role,
-      status,
-      tokenCount,
-      photoUrl: member.photoUrl,
-      lastActivityTimestamp: summary
-        ? Number(BigInt(summary.lastSeenUnixNano) / 1_000_000n)
-        : null,
-      lastActivity: summary
-        ? formatUnixNano(summary.lastSeenUnixNano)
-        : "No activity found",
-    };
-  });
-
-  const unmatchedUsage = summaries
-    .filter((summary) => !matchedSummaryIds.has(summary.userId))
-    .map((summary) => {
-      const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
-      return {
-        id: `usage:${summary.userId}`,
-        name: summary.userId,
-        email: summary.userId.includes("@") ? summary.userId : "",
-        role: "-",
-        status: "enrolled" as const,
-        tokenCount,
-        photoUrl: null,
-        lastActivityTimestamp: Number(
-          BigInt(summary.lastSeenUnixNano) / 1_000_000n,
-        ),
-        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
-      };
-    });
-
-  return [...employees, ...unmatchedUsage].sort((a, b) => {
-    if (a.status !== b.status) {
-      return a.status === "not_enrolled" ? -1 : 1;
-    }
-
-    return a.name.localeCompare(b.name);
-  });
-}
-
 async function fetchEmployeeUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
@@ -924,11 +777,4 @@ async function fetchEmployeeUsage(
   } while (cursor);
 
   return users;
-}
-
-function formatUnixNano(value: string) {
-  const nanos = BigInt(value);
-  const millis = Number(nanos / 1_000_000n);
-
-  return dateTimeFormatters.humanize(new Date(millis));
 }

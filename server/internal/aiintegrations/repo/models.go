@@ -10,14 +10,15 @@ import (
 )
 
 type AiIntegrationConfig struct {
-	CreatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
-	ID              uuid.UUID
-	Deleted         bool
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
 }

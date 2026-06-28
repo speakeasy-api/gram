@@ -13,7 +13,11 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { GramLogo } from "./gram-logo";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { InsightsDockResumeButton } from "./insights-dock-resume-button";
+import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
@@ -21,12 +25,13 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
+import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -93,7 +98,7 @@ export function AppSidebar({
     ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
   ].some((r) => r.active);
 
-  const buildActive = [
+  const distributeActive = [
     routes.mcp,
     routes.clis,
     routes.plugins,
@@ -101,47 +106,46 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  const observeActive = [routes.insights, routes.logs].some((r) => r.active);
+  const observeActive = [
+    routes.employees,
+    routes.costs,
+    routes.insights,
+    routes.agentSessions,
+    routes.logs,
+  ].some((r) => r.active);
 
   const securityActive = [
     routes.riskOverview,
     routes.policyCenter,
+    routes.riskEvents,
     routes.approvalRequests,
     routes.detectionRules,
   ].some((r) => r.active);
 
   let activeGroup: string | undefined;
-  if (connectActive) {
-    activeGroup = "Connect";
-  } else if (buildActive) {
-    activeGroup = "Build";
-  } else if (observeActive) {
+  if (observeActive) {
     activeGroup = "Observe";
   } else if (securityActive) {
     activeGroup = "Secure";
+  } else if (connectActive) {
+    activeGroup = "Connect";
+  } else if (distributeActive) {
+    activeGroup = "Distribute";
   }
 
-  // Find the specific active route title for the sliding highlight
-  const allNavRoutes = [
-    routes.home,
-    routes.sources,
-    routes.catalog,
-    routes.playground,
-    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
-    routes.mcp,
-    ...(isAssistantsEnabled ? [routes.assistants] : []),
-    routes.clis,
-    routes.plugins,
-    routes.environments,
-    routes.insights,
-    routes.logs,
-    routes.riskOverview,
-    routes.policyCenter,
-    routes.approvalRequests,
-    routes.detectionRules,
-    routes.settings,
-  ];
-  const activeRoute = allNavRoutes.find((r) => r.active);
+  // Find the specific active route title for the sliding highlight. Shared with
+  // the command palette via useProjectNavRoutes so the two stay in sync.
+  const allNavRoutes = useProjectNavRoutes();
+  const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
+  // Single source of truth for per-page scopes, shared with the command palette
+  // via useProjectNavRoutes so nav visibility and palette visibility can't drift.
+  const navScopes = useMemo(() => {
+    const map = new Map<string, Scope[]>();
+    for (const { route, scope } of allNavRoutes) map.set(route.url, scope);
+    return map;
+  }, [allNavRoutes]);
+  const scopeFor = (route: AppRoute): Scope | Scope[] =>
+    navScopes.get(route.url) ?? "project:read";
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =
@@ -150,12 +154,15 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="gap-3 pb-3">
-        <Link
-          to={`/${orgSlug}`}
-          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
-        >
-          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
-        </Link>
+        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Link
+            to={`/${orgSlug}`}
+            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+          >
+            <GramLogo className="w-28" />
+          </Link>
+          <CommandPaletteTrigger />
+        </div>
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="pt-2">
@@ -166,14 +173,86 @@ export function AppSidebar({
             activeGroup={activeGroup}
             defaultOpenGroups={
               !activeGroup
-                ? ["Connect", "Build", "Observe", "Secure"]
+                ? ["Observe", "Secure", "Connect", "Distribute"]
                 : undefined
             }
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
               {/* Home — top-level, no group */}
-              <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
+              <ScopeGatedTopLevelItem
+                item={routes.home}
+                scope={scopeFor(routes.home)}
+              />
+
+              {/* Chat — top-level, no group; a full-page entry to the
+                  Project Assistant alongside the docked composer */}
+              <ScopeGatedTopLevelItem
+                item={routes.chat}
+                scope={scopeFor(routes.chat)}
+              />
+
+              {/* Divider: sets Home + Chat apart from the grouped nav below */}
+              <li aria-hidden="true" className="my-3 px-1">
+                <div className="border-border border-t" />
+              </li>
+
+              {/* Observe group */}
+              <CollapsibleNavGroup
+                label="Observe"
+                Icon={(p) => <Icon {...p} name="eye" />}
+                defaultHref={routes.costs.href()}
+              >
+                <ScopeGatedNavItem
+                  item={routes.costs}
+                  scope={scopeFor(routes.costs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.insights}
+                  scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.agentSessions}
+                  scope={scopeFor(routes.agentSessions)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.logs}
+                  scope={scopeFor(routes.logs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
+                />
+              </CollapsibleNavGroup>
+
+              {/* Secure group */}
+              <CollapsibleNavGroup
+                label="Secure"
+                Icon={(p) => <Icon {...p} name="shield" />}
+                defaultHref={routes.riskOverview.href()}
+                stage="beta"
+              >
+                <ScopeGatedNavItem
+                  item={routes.riskOverview}
+                  scope={scopeFor(routes.riskOverview)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.policyCenter}
+                  scope={scopeFor(routes.policyCenter)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.riskEvents}
+                  scope={scopeFor(routes.riskEvents)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.approvalRequests}
+                  scope={scopeFor(routes.approvalRequests)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.detectionRules}
+                  scope={scopeFor(routes.detectionRules)}
+                />
+              </CollapsibleNavGroup>
 
               {/* Connect group */}
               <CollapsibleNavGroup
@@ -183,113 +262,74 @@ export function AppSidebar({
               >
                 <ScopeGatedNavItem
                   item={routes.sources}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.sources)}
                 />
                 <ScopeGatedNavItem
                   item={routes.catalog}
-                  scope={["project:read", "mcp:write"]}
+                  scope={scopeFor(routes.catalog)}
                 />
                 <ScopeGatedNavItem
                   item={routes.playground}
-                  scope={["mcp:read", "mcp:write", "mcp:connect"]}
+                  scope={scopeFor(routes.playground)}
                 />
                 {isDeploymentsPageEnabled && (
                   <ScopeGatedNavItem
                     item={routes.deployments}
-                    scope={["project:read", "project:write"]}
+                    scope={scopeFor(routes.deployments)}
                   />
                 )}
               </CollapsibleNavGroup>
 
-              {/* Build group */}
+              {/* Distribute group */}
               <CollapsibleNavGroup
-                label="Build"
+                label="Distribute"
                 Icon={(p) => <Icon {...p} name="hammer" />}
                 defaultHref={routes.mcp.href()}
               >
                 <ScopeGatedNavItem
                   item={routes.mcp}
-                  scope={["mcp:read", "mcp:write"]}
+                  scope={scopeFor(routes.mcp)}
                 />
                 {isAssistantsEnabled && (
                   <ScopeGatedNavItem
                     item={routes.assistants}
-                    scope="project:read"
+                    scope={scopeFor(routes.assistants)}
                   />
                 )}
-                <ScopeGatedNavItem item={routes.clis} scope="project:read" />
+                <ScopeGatedNavItem
+                  item={routes.clis}
+                  scope={scopeFor(routes.clis)}
+                />
                 <ScopeGatedNavItem
                   item={routes.plugins}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.plugins)}
                 />
                 <ScopeGatedNavItem
                   item={routes.environments}
-                  scope={["project:read", "project:write"]}
-                />
-              </CollapsibleNavGroup>
-
-              {/* Observe group */}
-              <CollapsibleNavGroup
-                label="Observe"
-                Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.insights.href()}
-              >
-                <ScopeGatedNavItem
-                  item={routes.insights}
-                  scope="project:read"
-                />
-                <ScopeGatedNavItem item={routes.logs} scope="project:read" />
-              </CollapsibleNavGroup>
-
-              {/* Security group */}
-              <CollapsibleNavGroup
-                label="Secure"
-                Icon={(p) => <Icon {...p} name="shield" />}
-                defaultHref={routes.riskOverview.href()}
-                stage="beta"
-              >
-                <ScopeGatedNavItem
-                  item={routes.riskOverview}
-                  scope="project:read"
-                />
-                <ScopeGatedNavItem
-                  item={routes.policyCenter}
-                  scope={["project:read", "project:write"]}
-                />
-                <ScopeGatedNavItem
-                  item={routes.approvalRequests}
-                  scope={["project:read", "project:write"]}
-                />
-                <ScopeGatedNavItem
-                  item={routes.detectionRules}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.environments)}
                 />
               </CollapsibleNavGroup>
 
               {/* Settings — top-level, no group */}
               <ScopeGatedTopLevelItem
                 item={routes.settings}
-                scope="project:write"
+                scope={scopeFor(routes.settings)}
               />
             </SidebarMenu>
           </NavGroupProvider>
         )}
-
-        <div className="mt-auto px-2 py-3 group-data-[collapsible=icon]:px-0">
-          <Link
-            to={`/${orgSlug}`}
-            title="Back to org"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:no-underline"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-            <span className="group-data-[collapsible=icon]:hidden">
-              Back to org
-            </span>
-          </Link>
-        </div>
       </SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
+        <div className="mb-2 flex flex-col gap-1.5">
+          <OnboardingResumeButton />
+          <InsightsDockResumeButton />
+          <SidebarFooterAction
+            to={`/${orgSlug}`}
+            icon={Settings}
+            label="Organization settings"
+          />
+        </div>
         <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal

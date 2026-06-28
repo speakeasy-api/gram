@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -31,14 +32,18 @@ type parsedClaudeToolName struct {
 // convention; native Claude Code tools (Read, Edit, Bash, ...) return a
 // zero-value result with IsMCP=false.
 func parseClaudeToolName(rawName string) parsedClaudeToolName {
+	// Claude Code uses the "mcp__<server>__<tool>" form. Restrict to that prefix
+	// so Cursor's "MCP:" names — which the shared parser also recognizes — don't
+	// match here. With the prefix present, AttributeTool only reports isMCP when
+	// both the server and tool segments are non-empty.
 	if !strings.HasPrefix(rawName, "mcp__") {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	parts := strings.SplitN(rawName, "__", 3)
-	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
+	server, tool, isMCP := toolref.AttributeTool(rawName)
+	if !isMCP {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	return parsedClaudeToolName{Server: parts[1], Tool: parts[2], IsMCP: true}
+	return parsedClaudeToolName{Server: server, Tool: tool, IsMCP: true}
 }
 
 // mcpServerPrefix returns the tool-name prefix Claude Code derives for an
@@ -88,9 +93,14 @@ func sanitizeMCPName(name string) string {
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
 // equals serverPrefix, or nil if none match. For Cowork-shipped entries the
 // prefix Claude derives is the connector UUID rather than a sanitized name,
-// so we also accept a ConnectorUUID match on the cached entry.
+// so we also accept a ConnectorUUID match on the cached entry. Codex entries
+// carry a pre-computed ToolPrefix because Codex's sanitizer differs from
+// Claude's (every non-alphanumeric/underscore character becomes "_").
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
 	for i := range entries {
+		if entries[i].ToolPrefix != "" && entries[i].ToolPrefix == serverPrefix {
+			return &entries[i]
+		}
 		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
 			return &entries[i]
 		}
@@ -99,6 +109,34 @@ func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServ
 		}
 	}
 	return nil
+}
+
+// matchCodexCachedMCPEntry resolves a raw Codex tool name
+// (mcp__<prefix>__<tool>) against the cached inventory. Codex's sanitizer
+// preserves consecutive underscores, so the server prefix itself can contain
+// "__" (e.g. "foo--bar" sanitizes to "foo__bar") and a naive 3-way split
+// truncates it — match by the longest ToolPrefix that prefixes the
+// post-mcp__ remainder, falling back to the generic single-prefix match for
+// entries without a pre-computed prefix.
+func matchCodexCachedMCPEntry(entries []MCPServerEntry, rawToolName string) *MCPServerEntry {
+	rest, ok := strings.CutPrefix(rawToolName, "mcp__")
+	if !ok {
+		return nil
+	}
+	var best *MCPServerEntry
+	for i := range entries {
+		p := entries[i].ToolPrefix
+		if p == "" || !strings.HasPrefix(rest, p+"__") {
+			continue
+		}
+		if best == nil || len(p) > len(best.ToolPrefix) {
+			best = &entries[i]
+		}
+	}
+	if best != nil {
+		return best
+	}
+	return matchCachedMCPEntry(entries, mcpServerIdentityFromToolName(rawToolName))
 }
 
 // applyMCPInventoryAttrs decorates a telemetry attribute map with the

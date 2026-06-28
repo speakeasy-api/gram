@@ -70,7 +70,7 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
@@ -168,7 +168,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
@@ -179,13 +179,13 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 
 	result, err := core.ProcessThreadEvents(ctx, projectID, threadID)
 	require.NoError(t, err)
-	require.False(t, result.RetryAdmission, "second corruption must NOT retry — self-heal already ran")
+	require.True(t, result.RetryAdmission, "thread is re-admitted so siblings drain on the warm runtime; the failed event is not re-run")
 	require.True(t, result.RuntimeActive, "completion-fail path keeps the runtime warm")
 	require.Equal(t, int64(0), stopCalls.Load(), "second corruption must not Stop the runtime")
 
 	event, err := q.GetLatestAssistantThreadEventByThreadID(ctx, assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, eventStatusFailed, event.Status, "second corruption must terminally fail")
+	require.Equal(t, eventStatusFailed, event.Status, "second corruption must terminally fail and not be re-run")
 
 	// Only the seeded gen 0 should exist — no second self-heal generation was written.
 	gen, err := chatrepo.New(conn).GetMaxGenerationForChat(ctx, chatID)

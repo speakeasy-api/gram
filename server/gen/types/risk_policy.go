@@ -15,34 +15,56 @@ type RiskPolicy struct {
 	ProjectID string
 	// The policy name.
 	Name string
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType string
 	// Detection sources enabled for this policy.
 	Sources []string
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action string
+	// Policy audience type: everyone or targeted.
+	AudienceType string
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfig
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

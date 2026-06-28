@@ -248,6 +248,471 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetTokensUnderManagementRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getTokensUnderManagement"
+// endpoint
+func (c *Client) BuildGetTokensUnderManagementRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetTokensUnderManagementUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getTokensUnderManagement", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetTokensUnderManagementRequest returns an encoder for requests sent
+// to the usage getTokensUnderManagement server.
+func EncodeGetTokensUnderManagementRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetTokensUnderManagementPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getTokensUnderManagement", "*usage.GetTokensUnderManagementPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetTokensUnderManagementResponse returns a decoder for responses
+// returned by the usage getTokensUnderManagement endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetTokensUnderManagementResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetTokensUnderManagementResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetTokensUnderManagementResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			res := NewGetTokensUnderManagementTokensUnderManagementOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetTokensUnderManagementUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetTokensUnderManagementForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetTokensUnderManagementBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetTokensUnderManagementNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetTokensUnderManagementConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetTokensUnderManagementUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetTokensUnderManagementInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetTokensUnderManagementInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+				}
+				err = ValidateGetTokensUnderManagementInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+				}
+				return nil, NewGetTokensUnderManagementInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetTokensUnderManagementUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+				}
+				err = ValidateGetTokensUnderManagementUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+				}
+				return nil, NewGetTokensUnderManagementUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getTokensUnderManagement", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetTokensUnderManagementGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getTokensUnderManagement", err)
+			}
+			err = ValidateGetTokensUnderManagementGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getTokensUnderManagement", err)
+			}
+			return nil, NewGetTokensUnderManagementGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getTokensUnderManagement", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetBillingMetadataRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "setBillingMetadata" endpoint
+func (c *Client) BuildSetBillingMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetBillingMetadataUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "setBillingMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetBillingMetadataRequest returns an encoder for requests sent to the
+// usage setBillingMetadata server.
+func EncodeSetBillingMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.SetBillingMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "setBillingMetadata", "*usage.SetBillingMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetBillingMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("usage", "setBillingMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetBillingMetadataResponse returns a decoder for responses returned by
+// the usage setBillingMetadata endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetBillingMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetBillingMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetBillingMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			res := NewSetBillingMetadataTokensUnderManagementOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetBillingMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetBillingMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetBillingMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetBillingMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetBillingMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetBillingMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetBillingMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetBillingMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+				}
+				err = ValidateSetBillingMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+				}
+				return nil, NewSetBillingMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetBillingMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+				}
+				err = ValidateSetBillingMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+				}
+				return nil, NewSetBillingMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "setBillingMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetBillingMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingMetadata", err)
+			}
+			err = ValidateSetBillingMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingMetadata", err)
+			}
+			return nil, NewSetBillingMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "setBillingMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetUsageTiersRequest instantiates a HTTP request object with method and
 // path set to call the "usage" service "getUsageTiers" endpoint
 func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1137,6 +1602,37 @@ func DecodeCreateTopUpCheckoutResponse(decoder func(*http.Response) goahttp.Deco
 			return nil, goahttp.ErrInvalidResponse("usage", "createTopUpCheckout", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalTUMPeriodResponseBodyToUsageTUMPeriod builds a value of type
+// *usage.TUMPeriod from a value of type *TUMPeriodResponseBody.
+func unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(v *TUMPeriodResponseBody) *usage.TUMPeriod {
+	res := &usage.TUMPeriod{
+		PeriodStart: *v.PeriodStart,
+		PeriodEnd:   *v.PeriodEnd,
+		Tokens:      *v.Tokens,
+	}
+	res.Days = make([]*usage.TUMPeriodDay, len(v.Days))
+	for i, val := range v.Days {
+		if val == nil {
+			res.Days[i] = nil
+			continue
+		}
+		res.Days[i] = unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(val)
+	}
+
+	return res
+}
+
+// unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay builds a value of type
+// *usage.TUMPeriodDay from a value of type *TUMPeriodDayResponseBody.
+func unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(v *TUMPeriodDayResponseBody) *usage.TUMPeriodDay {
+	res := &usage.TUMPeriodDay{
+		Date:   *v.Date,
+		Tokens: *v.Tokens,
+	}
+
+	return res
 }
 
 // unmarshalTierLimitsResponseBodyToUsageTierLimits builds a value of type

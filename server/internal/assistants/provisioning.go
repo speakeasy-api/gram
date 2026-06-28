@@ -30,8 +30,9 @@ import (
 var managedAssistantInstructions string
 
 const (
-	// managedAssistantModel mirrors the model the sidebar used client-side.
-	managedAssistantModel = "anthropic/claude-sonnet-4.6"
+	// managedAssistantModel is the default model for the platform-managed
+	// assistant. Upgraded to Opus 4.7 for the Assistants beta (DNO-264).
+	managedAssistantModel = "anthropic/claude-opus-4.7"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.

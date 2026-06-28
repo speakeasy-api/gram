@@ -258,14 +258,36 @@
 
 /* assistant-ui streaming indicator — rainbow gradient ring matches the
    Speakeasy brand palette used elsewhere (see `INSIGHTS_AI_RAINBOW_BORDER_CLASS`
-   and the login page's BrandGradientBar). */
+   and the login page's BrandGradientBar). Shared as a variable so the inline
+   trailing dot and the standalone "thinking" dot stay in sync. */
+.gram-elements {
+  --aui-rainbow: conic-gradient(
+    from 0deg,
+    #320f1e,
+    #c83228,
+    #fb873f,
+    #d2dc91,
+    #5a8250,
+    #002314,
+    #00143c,
+    #2873d7,
+    #9bc3ff,
+    #320f1e
+  );
+  /* Spin shorthand shared by both rainbow dots so a single reduced-motion
+     override (below) stops all of them at once. */
+  --aui-spin: aui-rainbow-spin 1.6s linear infinite;
+}
+
 @keyframes aui-rainbow-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.gram-elements :where(.aui-md[data-status="running"]):empty::after,
+/* Trailing dot that follows answer text as it streams. The "before first
+   token" state is handled by <ThinkingIndicator> (cycling verbs), so there is
+   deliberately no `:empty::after` rule here. */
 .gram-elements
   :where(.aui-md[data-status="running"])
   > :where(:not(ol):not(ul):not(pre)):last-child::after,
@@ -301,19 +323,7 @@
   margin-right: 0.15rem;
   padding: 3px;
   border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    #320f1e,
-    #c83228,
-    #fb873f,
-    #d2dc91,
-    #5a8250,
-    #002314,
-    #00143c,
-    #2873d7,
-    #9bc3ff,
-    #320f1e
-  );
+  background: var(--aui-rainbow);
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -322,7 +332,36 @@
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  animation: aui-rainbow-spin 1.6s linear infinite;
+  animation: var(--aui-spin);
+}
+
+/* Standalone rainbow dot for the cycling "thinking" indicator (shown before
+   the assistant streams any answer text). Same ring as the inline dot above. */
+.gram-elements .aui-thinking-dot {
+  display: inline-block;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 0.95em;
+  height: 0.95em;
+  padding: 2.5px;
+  border-radius: 50%;
+  background: var(--aui-rainbow);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: var(--aui-spin);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Stops both the trailing streaming dot and the standalone thinking dot. */
+  .gram-elements {
+    --aui-spin: none;
+  }
 }
 
 /* Simple shimmer animation for title text */

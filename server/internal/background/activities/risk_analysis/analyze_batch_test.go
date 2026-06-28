@@ -1,23 +1,30 @@
 package risk_analysis_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -26,21 +33,54 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type recordingPromptJudge struct {
+	inputs []risk_analysis.JudgeInput
+}
+
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+	j.inputs = append(j.inputs, in)
+	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
+}
+
+// newPresidioPub returns a mock presidio publisher that accepts any publish
+// call and reports success. Tests that don't enable the "presidio" source
+// never invoke it; tests that do get a fire-and-forget success. Wiring a real
+// mock (never nil) keeps the publish path off the nil-deref cliff.
+func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+// mustCELEngine builds a real CEL engine for tests; construction is
+// deterministic so a failure is a fatal setup error.
+func mustCELEngine(t *testing.T) *celenv.Engine {
+	t.Helper()
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	return eng
+}
+
+func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), mustCELEngine(t))
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            uuid.Nil,
-		OrganizationID:       "",
-		RiskPolicyID:         uuid.Nil,
-		PolicyVersion:        0,
-		MessageIDs:           nil,
-		Sources:              []string{"gitleaks"},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        uuid.Nil,
+		OrganizationID:   "",
+		RiskPolicyID:     uuid.Nil,
+		PolicyVersion:    0,
+		MessageIDs:       nil,
+		Sources:          []string{"gitleaks"},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Processed)
@@ -81,6 +121,11 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -89,15 +134,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              []string{"gitleaks", "presidio"},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{"gitleaks", "presidio"},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err, "should not fail when presidio is down")
 
@@ -154,7 +198,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
 		EndPos:            pgtype.Int4{Int32: 5, Valid: true},
 		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
-		Tags:              nil,
+		Tags:              []string{},
 		DeadLetterReason:  pgtype.Text{},
 	}})
 	require.NoError(t, err)
@@ -168,6 +212,11 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -175,16 +224,15 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              []string{"gitleaks"},
-		MessageTypes:         []string{message.ToolRequest},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{"gitleaks"},
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
@@ -227,6 +275,170 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	require.Equal(t, shadowmcp.SourceDestructiveTool, rows[0].Source)
 	require.Equal(t, "destructive.tool", rows[0].RuleID.String)
 	require.Equal(t, "delete_records", rows[0].Match.String)
+}
+
+func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		MessageTypes:   []string{message.ToolRequest},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block destructive shell commands", Valid: true},
+	})
+	require.NoError(t, err)
+	td.policyID = policy.ID
+	td.policyVersion = policy.Version
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf /tmp/data"})
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	judge := &recordingPromptJudge{}
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		judge,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          nil,
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+	require.Len(t, judge.inputs, 1)
+	msg := judge.inputs[0].Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Equal(t, "Bash", msg.ToolName)
+	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
+	require.Empty(t, msg.MCPFunction)
+	require.Contains(t, msg.Body, "rm -rf /tmp/data")
+}
+
+func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		MessageTypes:   []string{message.ToolRequest},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block destructive operations", Valid: true},
+	})
+	require.NoError(t, err)
+	td.policyID = policy.ID
+	td.policyVersion = policy.Version
+
+	// An assistant message that issued two tool calls — one MCP, one native.
+	msgID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "mcp__github__delete_repo", args: map[string]any{"repo": "prod"}},
+		{name: "Bash", args: map[string]any{"command": "rm -rf /tmp/data"}},
+	})
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	judge := &recordingPromptJudge{}
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		judge,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          nil,
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, judge.inputs, 1)
+
+	// The judge sees both calls, each with its own attribution — not an opaque blob.
+	msg := judge.inputs[0].Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
+	require.Len(t, msg.ToolCalls, 2)
+
+	require.Equal(t, "github", msg.ToolCalls[0].MCPServer)
+	require.Equal(t, "delete_repo", msg.ToolCalls[0].MCPFunction)
+	require.Contains(t, msg.ToolCalls[0].Arguments, "prod")
+
+	require.Equal(t, "Bash", msg.ToolCalls[1].ToolName)
+	require.Empty(t, msg.ToolCalls[1].MCPServer)
+	require.Contains(t, msg.ToolCalls[1].Arguments, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
@@ -407,7 +619,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -463,6 +675,36 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// A CEL detection rule targeting the tool server flags a tool-request message
+// whose MCP server matches, exercising the DB → customRuleMessageView → engine
+// path.
+func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tool_calls.exists(t, t.server.matchExact("mise"))`)
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].Found)
+	assert.Equal(t, risk_analysis.SourceCustom, rows[0].Source)
+	assert.Equal(t, "custom.mise_tool", rows[0].RuleID.String)
+	assert.Equal(t, "mise", rows[0].Match.String)
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
@@ -531,6 +773,75 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	return uuid.Nil
 }
 
+// insertAssistantToolCallsWithArgs inserts an assistant message that issued
+// multiple tool calls, mirroring insertAssistantToolCallWithArgs for the
+// multi-call judge path. Each entry is (tool name, arguments map).
+func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, calls []struct {
+	name string
+	args map[string]any
+}) uuid.UUID {
+	t.Helper()
+
+	recorded := make([]map[string]any, 0, len(calls))
+	for i, c := range calls {
+		args, err := json.Marshal(c.args)
+		require.NoError(t, err)
+		recorded = append(recorded, map[string]any{
+			"id":   fmt.Sprintf("call_%d", i+1),
+			"type": "function",
+			"function": map[string]any{
+				"name":      c.name,
+				"arguments": string(args),
+			},
+		})
+	}
+	toolCalls, err := json.Marshal(recorded)
+	require.NoError(t, err)
+
+	messageID := "msg-" + uuid.NewString()
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		ChatID:           td.chatID,
+		Role:             "assistant",
+		ProjectID:        td.projectID,
+		Content:          "",
+		ContentRaw:       nil,
+		ContentAssetUrl:  pgtype.Text{},
+		StorageError:     pgtype.Text{},
+		Model:            pgtype.Text{},
+		MessageID:        pgtype.Text{String: messageID, Valid: true},
+		ToolCallID:       pgtype.Text{},
+		UserID:           pgtype.Text{},
+		ExternalUserID:   pgtype.Text{},
+		FinishReason:     pgtype.Text{String: "tool_calls", Valid: true},
+		ToolCalls:        toolCalls,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		Origin:           pgtype.Text{},
+		UserAgent:        pgtype.Text{},
+		IpAddress:        pgtype.Text{},
+		Source:           pgtype.Text{},
+		ContentHash:      nil,
+		Generation:       0,
+	}})
+	require.NoError(t, err)
+
+	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
+		ChatID:    td.chatID,
+		ProjectID: td.projectID,
+	})
+	require.NoError(t, err)
+	for _, msg := range messages {
+		if msg.MessageID.String == messageID {
+			return msg.ID
+		}
+	}
+	require.FailNow(t, "inserted multi-tool-call message not found")
+	return uuid.Nil
+}
+
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
@@ -545,6 +856,11 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		shadowMCPClient,
 		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -552,15 +868,14 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           messageIDs,
-		Sources:              sources,
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       messageIDs,
+		Sources:          sources,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
@@ -569,12 +884,12 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	return result
 }
 
-func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string) testData {
+func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, detectionExpr string) testData {
 	t.Helper()
 
-	regexValue := pgtype.Text{}
-	if regex != "" {
-		regexValue = pgtype.Text{String: regex, Valid: true}
+	detectionValue := pgtype.Text{}
+	if detectionExpr != "" {
+		detectionValue = pgtype.Text{String: detectionExpr, Valid: true}
 	}
 	_, err := riskrepo.New(conn).CreateCustomDetectionRule(t.Context(), riskrepo.CreateCustomDetectionRuleParams{
 		ProjectID:      td.projectID,
@@ -582,7 +897,7 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		RuleID:         ruleID,
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          regexValue,
+		DetectionExpr:  detectionValue,
 		Severity:       "high",
 	})
 	require.NoError(t, err)
@@ -602,8 +917,10 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
+		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
+		AudienceType:         policy.AudienceType,
 		AutoName:             policy.AutoName,
 		UserMessage:          policy.UserMessage,
 	})

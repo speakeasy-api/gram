@@ -26,6 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import {
   useListChats,
@@ -41,15 +42,21 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   BUILTIN_RULES_BY_CATEGORY,
+  DETECTION_CEL_EXAMPLES,
   SEVERITY_LEVELS,
+  effectiveDetectionExpr,
+  ruleSummary,
   useDetectionRulesStore,
   validateCustomRuleId,
-  validateRegex,
   type BuiltinRule,
   type CustomDetectionRule,
+  type CustomRuleDraft,
   type SeverityLevel,
 } from "./detection-rules-data";
+import { CelExpressionField } from "./cel-field";
+import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getCategoryCodeForFinding } from "./risk-utils";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
  *  so users see the two surfaces in the same shape. */
@@ -105,14 +112,48 @@ function DetectionRulesContent() {
     null,
   );
 
+  // Deep-link support: `?rule=<id>` opens that rule's detail sheet (and expands
+  // its category). The command palette uses this since rules have no per-item
+  // route. The `custom.` prefix distinguishes custom rules from built-ins, so
+  // no separate kind param is needed.
+  const [ruleParam, setRuleParam] = useQueryState("rule");
+  const openedRuleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ruleParam || openedRuleRef.current === ruleParam) return;
+    if (ruleParam.startsWith(CUSTOM_RULE_ID_PREFIX)) {
+      if (customRulesLoading) return;
+      const rule = customRules.find((r) => r.id === ruleParam);
+      // Mark handled regardless of match so a stale/invalid id doesn't re-run
+      // the lookup on every `customRules` re-render (it's a fresh array ref).
+      openedRuleRef.current = ruleParam;
+      if (rule) {
+        setSelected({ kind: "custom", rule });
+        setExpanded("custom");
+      }
+    } else {
+      const rule = Object.values(BUILTIN_RULES_BY_CATEGORY)
+        .flat()
+        .find((r) => r.id === ruleParam);
+      openedRuleRef.current = ruleParam;
+      if (rule) {
+        setSelected({ kind: "builtin", rule });
+        setExpanded(rule.category);
+      }
+    }
+  }, [ruleParam, customRules, customRulesLoading]);
+
+  const clearRuleDeepLink = () => {
+    openedRuleRef.current = null;
+    void setRuleParam(null);
+  };
+
   return (
     <>
       <Page.Section>
         <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
         <Page.Section.Description>
-          Built-in detection rules grouped by category. Click a rule to view its
-          description and try it against pasted text, or add your own custom
-          regex rule.
+          Reusable built-in and custom rules your policies use to flag — or
+          exempt — messages.
         </Page.Section.Description>
         <Page.Section.CTA>
           <Button onClick={() => setCreateOpen(true)}>
@@ -154,11 +195,15 @@ function DetectionRulesContent() {
 
       <RuleDetailSheet
         selection={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null);
+          clearRuleDeepLink();
+        }}
         onUpdateCustomRule={updateCustomRule}
         onDeleteCustomRule={(id) => {
           removeCustomRule(id);
           setSelected(null);
+          clearRuleDeepLink();
           toast.success("Custom detection rule deleted");
         }}
       />
@@ -201,7 +246,7 @@ function CustomRulesSection({
       <div className="border-border divide-border divide-y rounded-lg border">
         <CategoryHeader
           icon={meta.icon as IconName}
-          label="Custom Patterns"
+          label={meta.label}
           description={`${rules.length} organization-defined rule${rules.length === 1 ? "" : "s"}`}
           expanded={expanded}
           onClick={onToggle}
@@ -213,7 +258,7 @@ function CustomRulesSection({
               <RuleRow
                 key={rule.id}
                 title={rule.title || rule.id}
-                subtitle={rule.id}
+                subtitle={ruleSummary(rule)}
                 onClick={() => onSelect(rule)}
               />
             ))}
@@ -415,7 +460,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
           <p className="text-sm leading-relaxed">{rule.description}</p>
         </DetailField>
 
-        <RulePlayground ruleId={rule.id} regex={null} />
+        <RulePlayground ruleId={rule.id} detectionExpr={null} />
       </div>
     </>
   );
@@ -427,29 +472,37 @@ function CustomRuleDetail({
   onDelete,
 }: {
   rule: CustomDetectionRule;
-  onUpdate: (
-    patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
-  ) => Promise<void>;
+  onUpdate: (patch: Partial<Omit<CustomRuleDraft, "id">>) => Promise<void>;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
-  const [regex, setRegex] = useState(rule.regex);
+  const [detectionExpr, setDetectionExpr] = useState(() =>
+    effectiveDetectionExpr(rule),
+  );
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const savedTimerRef = useRef<number | undefined>(undefined);
-  const savedValuesRef = useRef({
+  const savedRef = useRef({
     title: rule.title,
     description: rule.description,
-    regex: rule.regex,
+    matcher: effectiveDetectionExpr(rule),
   });
 
-  const regexError = useMemo(() => validateRegex(regex), [regex]);
+  const celStatus = useCelStatus(detectionExpr);
+  // Block save until the expression is non-empty and compiles (the backend is
+  // authoritative; this just mirrors its gate so we don't round-trip a failure).
+  const celError =
+    detectionExpr.trim() === ""
+      ? "Add a detection expression"
+      : celStatus.kind === "error"
+        ? "Fix the detection expression"
+        : null;
   const dirty =
-    title !== savedValuesRef.current.title ||
-    description !== savedValuesRef.current.description ||
-    regex !== savedValuesRef.current.regex;
+    title !== savedRef.current.title ||
+    description !== savedRef.current.description ||
+    detectionExpr !== savedRef.current.matcher;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -467,10 +520,22 @@ function CustomRuleDetail({
   );
 
   const handleSave = async () => {
+    if (celError) {
+      toast.error(celError);
+      return;
+    }
     setSaveState("saving");
     try {
-      await onUpdate({ title, description, regex });
-      savedValuesRef.current = { title, description, regex };
+      await onUpdate({
+        title,
+        description,
+        detectionExpr,
+      });
+      savedRef.current = {
+        title,
+        description,
+        matcher: detectionExpr,
+      };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
@@ -515,19 +580,18 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Regex</Label>
-          <TextArea
-            value={regex}
-            onChange={setRegex}
-            rows={3}
-            className="font-mono text-xs"
+          <Label className="text-sm font-medium">Detection expression</Label>
+          <CelExpressionField
+            value={detectionExpr}
+            onChange={setDetectionExpr}
+            examples={DETECTION_CEL_EXAMPLES}
           />
-          {regexError && (
-            <p className="text-destructive text-xs">{regexError}</p>
-          )}
         </div>
 
-        <RulePlayground ruleId={rule.id} regex={regex} />
+        <RulePlayground
+          ruleId={rule.id}
+          detectionExpr={celStatus.kind === "ok" ? detectionExpr : null}
+        />
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
@@ -545,7 +609,11 @@ function CustomRuleDetail({
           )}
           <Button
             disabled={
-              !dirty || !!regexError || !title.trim() || saveState === "saving"
+              !dirty ||
+              !!celError ||
+              celStatus.kind === "validating" ||
+              !title.trim() ||
+              saveState === "saving"
             }
             onClick={() => void handleSave()}
           >
@@ -567,10 +635,10 @@ function CustomRuleDetail({
 
 function RulePlayground({
   ruleId,
-  regex,
+  detectionExpr,
 }: {
   ruleId: string;
-  regex: string | null;
+  detectionExpr: string | null;
 }) {
   const [mode, setMode] = useState<"sample" | "chat">("sample");
 
@@ -602,9 +670,9 @@ function RulePlayground({
       </RadioGroup>
 
       {mode === "sample" ? (
-        <SamplePlayground ruleId={ruleId} regex={regex} />
+        <SamplePlayground ruleId={ruleId} detectionExpr={detectionExpr} />
       ) : (
-        <ChatPlayground ruleId={ruleId} regex={regex} />
+        <ChatPlayground ruleId={ruleId} detectionExpr={detectionExpr} />
       )}
     </DetailField>
   );
@@ -612,10 +680,10 @@ function RulePlayground({
 
 function SamplePlayground({
   ruleId,
-  regex,
+  detectionExpr,
 }: {
   ruleId: string;
-  regex: string | null;
+  detectionExpr: string | null;
 }) {
   const [sample, setSample] = useState("");
   const [matches, setMatches] = useState<TestDetectionRuleMatch[] | null>(null);
@@ -640,7 +708,7 @@ function SamplePlayground({
         testDetectionRuleRequestBody: {
           ruleId,
           text: sample,
-          ...(regex ? { regex } : {}),
+          ...(detectionExpr ? { detectionExpr } : {}),
         },
       },
     });
@@ -698,7 +766,7 @@ function MatchList({
                 <span>{m.ruleId}</span>
                 <span>
                   {m.startPos}–{m.endPos} · conf {m.confidence.toFixed(2)} ·{" "}
-                  {m.source}
+                  {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
               <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
@@ -735,10 +803,10 @@ type ChatMessageResult = {
 
 function ChatPlayground({
   ruleId,
-  regex,
+  detectionExpr,
 }: {
   ruleId: string;
-  regex: string | null;
+  detectionExpr: string | null;
 }) {
   const client = useSdkClient();
   const chatsQuery = useListChats(undefined, undefined, {
@@ -834,7 +902,7 @@ function ChatPlayground({
             testDetectionRuleRequestBody: {
               ruleId,
               text: item.fullText,
-              ...(regex ? { regex } : {}),
+              ...(detectionExpr ? { detectionExpr } : {}),
             },
           });
           setResults((prev) =>
@@ -1135,20 +1203,14 @@ function CreateCustomRuleSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingCustomIds: string[];
-  onCreate: (rule: {
-    id: string;
-    title: string;
-    description: string;
-    regex: string;
-    severity: SeverityLevel;
-  }) => void;
+  onCreate: (rule: CustomRuleDraft) => void;
 }) {
   const [step, setStep] = useState<CreateStep>("prompt");
   const [askPrompt, setAskPrompt] = useState("");
   const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [regex, setRegex] = useState("");
+  const [detectionExpr, setDetectionExpr] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1157,7 +1219,7 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setRegex("");
+    setDetectionExpr("");
     setSeverity("medium");
   };
 
@@ -1167,7 +1229,7 @@ function CreateCustomRuleSheet({
       setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
-      setRegex(next.regex);
+      setDetectionExpr(next.detectionExpr ?? "");
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
           ? (next.severity as SeverityLevel)
@@ -1202,7 +1264,7 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setRegex("");
+    setDetectionExpr("");
     setSeverity("medium");
     setStep("review");
   };
@@ -1217,13 +1279,20 @@ function CreateCustomRuleSheet({
         : null,
     [idSuffix, existingCustomIds],
   );
-  const regexError = useMemo(
-    () => (regex ? validateRegex(regex) : null),
-    [regex],
-  );
+  const celStatus = useCelStatus(detectionExpr);
+  const celError =
+    detectionExpr.trim() === ""
+      ? "Add a detection expression"
+      : celStatus.kind === "error"
+        ? "Fix the detection expression"
+        : null;
 
   const canSubmit =
-    idSuffix.trim() && title.trim() && regex.trim() && !idError && !regexError;
+    idSuffix.trim() &&
+    title.trim() &&
+    !idError &&
+    !celError &&
+    celStatus.kind !== "validating";
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);
@@ -1232,16 +1301,15 @@ function CreateCustomRuleSheet({
       toast.error(finalIdError);
       return;
     }
-    const finalRegexError = validateRegex(regex);
-    if (finalRegexError) {
-      toast.error(finalRegexError);
+    if (celError) {
+      toast.error(celError);
       return;
     }
     onCreate({
       id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
-      regex: regex.trim(),
+      detectionExpr,
       severity,
     });
     reset();
@@ -1255,12 +1323,12 @@ function CreateCustomRuleSheet({
         if (!next) reset();
       }}
     >
-      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
+      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>New Custom Detection Rule</SheetTitle>
           <SheetDescription>
             {step === "prompt"
-              ? "Describe what you want to detect. We'll suggest the rule ID, regex, and severity, you tweak before saving."
+              ? "Describe what you want to detect. We'll suggest the rule ID, detection expression, and severity, you tweak before saving."
               : "Review the suggested rule. Adjust any field before saving."}
           </SheetDescription>
         </SheetHeader>
@@ -1279,8 +1347,8 @@ function CreateCustomRuleSheet({
                   placeholder="e.g. internal Acme service tokens that look like acme_ followed by 32 lowercase hex characters"
                 />
                 <p className="text-muted-foreground text-xs">
-                  Tip: include a sample value or the format so the model picks a
-                  tight regex.
+                  Tip: include a sample value or the format so the model writes
+                  a tight expression.
                 </p>
               </div>
             </div>
@@ -1349,22 +1417,14 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Regex</Label>
-                <TextArea
-                  value={regex}
-                  onChange={setRegex}
-                  rows={3}
-                  className="font-mono text-xs"
-                  placeholder="e.g. acme_[a-z0-9]{32}"
+                <Label className="text-sm font-medium">
+                  Detection expression
+                </Label>
+                <CelExpressionField
+                  value={detectionExpr}
+                  onChange={setDetectionExpr}
+                  examples={DETECTION_CEL_EXAMPLES}
                 />
-                {regexError ? (
-                  <p className="text-destructive text-xs">{regexError}</p>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    Anchors are not required, the pattern is matched against the
-                    full scanned payload.
-                  </p>
-                )}
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">

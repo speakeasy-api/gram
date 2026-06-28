@@ -7,8 +7,8 @@
 
 package types
 
-// RemoteSessionIssuer is the result type of the remoteSessionIssuers service
-// createRemoteSessionIssuer method.
+// RemoteSessionIssuer is the result type of the
+// organizationRemoteSessionIssuers service createIssuer method.
 type RemoteSessionIssuer struct {
 	// The remote_session_issuer id.
 	ID string
@@ -20,6 +20,10 @@ type RemoteSessionIssuer struct {
 	Slug string
 	// Issuer URL; matches the iss claim.
 	Issuer string
+	// Optional display name; null when unset.
+	Name *string
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

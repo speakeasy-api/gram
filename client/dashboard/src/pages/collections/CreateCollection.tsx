@@ -27,6 +27,18 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
+// A selectable server in the create form, sourced from either a toolset
+// (Hosted) or an mcp_server (Remote MCP-backed). The backend kind determines
+// whether it is submitted as a toolset_id or an mcp_server_id.
+type ServerOption = {
+  kind: "toolset" | "mcpServer";
+  id: string;
+  name: string;
+  description?: string;
+  projectName: string;
+  projectSlug: string;
+};
+
 export default function CreateCollection(): JSX.Element {
   return (
     <Page>
@@ -64,6 +76,9 @@ function CreateCollectionForm() {
   const [selectedToolsetIds, setSelectedToolsetIds] = useState<Set<string>>(
     new Set(),
   );
+  const [selectedMcpServerIds, setSelectedMcpServerIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [serverSearch, setServerSearch] = useState("");
   const createCollection = useCreateCollection();
 
@@ -76,24 +91,32 @@ function CreateCollectionForm() {
     })),
   });
 
-  const toolsetsLoading = toolsetQueries.some((q) => q.isLoading);
+  // Fetch Remote MCP-backed mcp_servers from every project. Toolset-backed
+  // mcp_servers don't exist yet (AGE-1902), so today this only surfaces
+  // remote-backed servers.
+  const mcpServerQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["mcpServers", "list", project.slug],
+      queryFn: () => client.mcpServers.list({ gramProject: project.slug }),
+      enabled: !!project.slug,
+    })),
+  });
 
-  // Merge toolsets from all projects, excluding catalog-installed ones
-  const toolsets = useMemo(() => {
-    const all: Array<{
-      id: string;
-      name: string;
-      description?: string;
-      projectName: string;
-      projectSlug: string;
-    }> = [];
+  const serversLoading =
+    toolsetQueries.some((q) => q.isLoading) ||
+    mcpServerQueries.some((q) => q.isLoading);
+
+  // Merge toolsets (excluding catalog-installed ones) and Remote MCP-backed
+  // mcp_servers from all projects into one selectable list.
+  const servers = useMemo(() => {
+    const all: ServerOption[] = [];
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i];
-      const data = toolsetQueries[i]?.data;
-      for (const t of data?.toolsets ?? []) {
+      for (const t of toolsetQueries[i]?.data?.toolsets ?? []) {
         if (t.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")))
           continue;
         all.push({
+          kind: "toolset",
           id: t.id,
           name: t.name,
           description: t.description ?? undefined,
@@ -101,20 +124,34 @@ function CreateCollectionForm() {
           projectSlug: project!.slug!,
         });
       }
+      for (const s of mcpServerQueries[i]?.data?.mcpServers ?? []) {
+        // Only remote-backed, non-disabled servers are publishable today.
+        if (!s.remoteMcpServerId || s.visibility === "disabled") continue;
+        all.push({
+          kind: "mcpServer",
+          id: s.id,
+          name: s.name ?? s.slug ?? "Untitled server",
+          description: undefined,
+          projectName: project!.name!,
+          projectSlug: project!.slug!,
+        });
+      }
     }
     return all;
-  }, [projects, toolsetQueries]);
+  }, [projects, toolsetQueries, mcpServerQueries]);
 
-  const filteredToolsets = useMemo(() => {
-    if (!serverSearch) return toolsets;
+  const filteredServers = useMemo(() => {
+    if (!serverSearch) return servers;
     const q = serverSearch.toLowerCase();
-    return toolsets.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (t.description && t.description.toLowerCase().includes(q)) ||
-        t.projectName.toLowerCase().includes(q),
+    return servers.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        s.projectName.toLowerCase().includes(q),
     );
-  }, [toolsets, serverSearch]);
+  }, [servers, serverSearch]);
+
+  const selectedCount = selectedToolsetIds.size + selectedMcpServerIds.size;
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
@@ -127,13 +164,22 @@ function CreateCollectionForm() {
     }
   };
 
-  const toggleToolset = (id: string) => {
-    setSelectedToolsetIds((prev) => {
+  const isServerSelected = (server: ServerOption) =>
+    server.kind === "toolset"
+      ? selectedToolsetIds.has(server.id)
+      : selectedMcpServerIds.has(server.id);
+
+  const toggleServer = (server: ServerOption) => {
+    const setSelected =
+      server.kind === "toolset"
+        ? setSelectedToolsetIds
+        : setSelectedMcpServerIds;
+    setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(server.id)) {
+        next.delete(server.id);
       } else {
-        next.add(id);
+        next.add(server.id);
       }
       return next;
     });
@@ -143,6 +189,7 @@ function CreateCollectionForm() {
     e.preventDefault();
 
     const toolsetIds = Array.from(selectedToolsetIds);
+    const mcpServerIds = Array.from(selectedMcpServerIds);
 
     await createCollection.mutateAsync({
       request: {
@@ -153,6 +200,7 @@ function CreateCollectionForm() {
           description: description || undefined,
           visibility,
           toolsetIds: toolsetIds.length > 0 ? toolsetIds : undefined,
+          mcpServerIds: mcpServerIds.length > 0 ? mcpServerIds : undefined,
         },
       },
     });
@@ -283,7 +331,7 @@ function CreateCollectionForm() {
 
             <div>
               <label className="mb-2 block text-sm font-medium">
-                MCP Servers ({selectedToolsetIds.size} selected)
+                MCP Servers ({selectedCount} selected)
               </label>
               <div className="rounded-md border">
                 <div className="relative border-b">
@@ -297,11 +345,11 @@ function CreateCollectionForm() {
                   />
                 </div>
                 <div className="max-h-64 overflow-y-auto">
-                  {toolsetsLoading ? (
+                  {serversLoading ? (
                     <div className="flex items-center justify-center p-4">
                       <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                     </div>
-                  ) : filteredToolsets.length === 0 ? (
+                  ) : filteredServers.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                       <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
                       <Type small muted>
@@ -311,31 +359,39 @@ function CreateCollectionForm() {
                       </Type>
                     </div>
                   ) : (
-                    filteredToolsets.map((toolset) => (
+                    filteredServers.map((server) => (
                       <label
-                        key={toolset.id}
+                        key={`${server.kind}:${server.id}`}
                         className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
                       >
                         <Checkbox
-                          checked={selectedToolsetIds.has(toolset.id)}
-                          onCheckedChange={() => toggleToolset(toolset.id)}
+                          checked={isServerSelected(server)}
+                          onCheckedChange={() => toggleServer(server)}
                           className="mt-0.5"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-sm font-medium">
-                              {toolset.name}
+                              {server.name}
                             </span>
+                            {server.kind === "mcpServer" && (
+                              <Badge
+                                variant="secondary"
+                                className="shrink-0 text-xs"
+                              >
+                                Remote MCP
+                              </Badge>
+                            )}
                             <Badge
                               variant="secondary"
                               className="shrink-0 text-xs"
                             >
-                              {toolset.projectName}
+                              {server.projectName}
                             </Badge>
                           </div>
-                          {toolset.description && (
+                          {server.description && (
                             <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                              {toolset.description}
+                              {server.description}
                             </div>
                           )}
                         </div>

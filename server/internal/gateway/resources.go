@@ -52,7 +52,7 @@ func (tp *ToolProxy) ReadResource(
 
 	switch plan.Kind {
 	case "":
-		return oops.E(oops.CodeInvariantViolation, nil, "resource kind is not set").Log(ctx, tp.logger)
+		return oops.E(oops.CodeInvariantViolation, nil, "resource kind is not set").LogError(ctx, tp.logger)
 	case ResourceKindFunction:
 		return tp.doFunctionResource(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, attrRecorder)
 	default:
@@ -73,28 +73,28 @@ func (tp *ToolProxy) doFunctionResource(
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").LogError(ctx, logger)
 	}
 	projectID, err := uuid.Parse(descriptor.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function resource call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function resource call").LogError(ctx, logger)
 	}
 	deploymentID, err := uuid.Parse(descriptor.DeploymentID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function resource call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function resource call").LogError(ctx, logger)
 	}
 	functionID, err := uuid.Parse(plan.FunctionID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function resource call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function resource call").LogError(ctx, logger)
 	}
 	accessID, err := uuid.Parse(plan.FunctionsAccessID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function resource call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function resource call").LogError(ctx, logger)
 	}
 
 	var input json.RawMessage
 	if err := json.NewDecoder(requestBody).Decode(&input); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
 
 	payloadEnv := make(map[string]string)
@@ -129,7 +129,7 @@ func (tp *ToolProxy) doFunctionResource(
 		ResourceName: descriptor.Name,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create function resource call request").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create function resource call request").LogError(ctx, logger)
 	}
 
 	var responseStatusCode int
@@ -169,6 +169,7 @@ func (tp *ToolProxy) doFunctionResource(
 			}
 			return nil
 		},
+		RetryConfig:      functionRunnerRetryConfig(),
 		ID:               descriptor.ID,
 		Name:             descriptor.Name,
 		DeploymentID:     descriptor.DeploymentID,

@@ -9,15 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -27,18 +26,16 @@ const (
 )
 
 type UsagePollService struct {
-	users           *usersrepo.Queries
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
 	heartbeat       func(ctx context.Context, page int)
 }
 
-func NewUsagePollService(db *pgxpool.Pool, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *UsagePollService {
+func NewUsagePollService(telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *UsagePollService {
 	if heartbeat == nil {
 		panic("ai integration usage poll service requires heartbeat")
 	}
 	return &UsagePollService{
-		users:           usersrepo.New(db),
 		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
 		heartbeat:       heartbeat,
@@ -101,46 +98,12 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 
 	g.Go(func() error {
 		logParams := make([]telemetry.LogParams, 0)
-		userIDsByEmail := make(map[string]string)
 		for event := range rawEvents {
 			logParams = append(logParams, s.buildCursorUsageEvent(cfg, event))
-
-			email := strings.ToLower(strings.TrimSpace(event.UserEmail))
-			if email == "" {
-				continue
-			}
-			if _, ok := userIDsByEmail[email]; ok {
-				continue
-			}
-			userIDsByEmail[email] = ""
 		}
 
 		if err := <-fetchErr; err != nil {
 			return err
-		}
-
-		emails := make([]string, 0, len(userIDsByEmail))
-		for email := range userIDsByEmail {
-			emails = append(emails, email)
-		}
-
-		users, err := s.users.GetConnectedUsersByEmails(gctx, usersrepo.GetConnectedUsersByEmailsParams{
-			Emails:         emails,
-			OrganizationID: cfg.OrganizationID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "internal error hydrating events")
-		}
-
-		for _, user := range users {
-			userIDsByEmail[strings.ToLower(strings.TrimSpace(user.Email))] = user.ID
-		}
-
-		for _, logParam := range logParams {
-			userEmail, _ := logParam.Attributes[attr.UserEmailKey].(string)
-			if userID := userIDsByEmail[userEmail]; userID != "" {
-				logParam.Attributes[attr.UserIDKey] = userID
-			}
 		}
 
 		if err := s.writeCursorUsageTelemetry(gctx, logParams); err != nil {
@@ -156,7 +119,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
-	userEmail := strings.ToLower(strings.TrimSpace(event.UserEmail))
+	userEmail := conv.NormalizeEmail(event.UserEmail)
 
 	return telemetry.LogParams{
 		Timestamp: event.Timestamp,
@@ -169,6 +132,7 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
+		UserInfo: telemetry.UserInfoByEmail(userEmail),
 		Attributes: map[attr.Key]any{
 			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
 			attr.LogBodyKey:                            "Cursor usage metrics",
@@ -183,7 +147,6 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
 			attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
 			attr.GenAIResponseModelKey:                 event.Model,
-			attr.UserEmailKey:                          userEmail,
 			attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
 			attr.CursorChargedCentsKey:                 event.ChargedCents,
 		},
@@ -226,7 +189,7 @@ func calculateCursorRateLimitSleep(retryAfter time.Duration) time.Duration {
 func generateCursorUsageEventHash(event cursorapi.UsageEvent) string {
 	fields := []string{
 		strconv.FormatInt(event.Timestamp.UTC().UnixMilli(), 10),
-		strings.ToLower(strings.TrimSpace(event.UserEmail)),
+		conv.NormalizeEmail(event.UserEmail),
 		event.Model,
 		event.Kind,
 		strconv.FormatFloat(event.ChargedCents, 'f', -1, 64),

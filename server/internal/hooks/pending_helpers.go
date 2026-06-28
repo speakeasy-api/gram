@@ -12,11 +12,65 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
+
+// hookDuplicateContextKey marks a request whose idempotency token was already
+// claimed by an earlier delivery (a retry). Write side-effects that run outside
+// the persistence path — block-reason telemetry, shadow-MCP findings — check it
+// so a retried *blocked* hook doesn't duplicate dashboard rows even though it
+// still re-derives and returns the same block decision.
+type hookDuplicateContextKey struct{}
+
+// withHookDuplicate tags ctx as a redelivery so downstream write side-effects
+// can skip themselves.
+func withHookDuplicate(ctx context.Context) context.Context {
+	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
+}
+
+// isHookDuplicate reports whether ctx was tagged as a redelivery.
+func (s *Service) isHookDuplicate(ctx context.Context) bool {
+	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
+	return dup
+}
+
+// claimHookIdempotency reports whether this delivery should be persisted. The
+// sender stamps one idempotency token per hook invocation and reuses it across
+// retries, so a transient reset that triggers a retry re-sends the same token.
+// The first delivery wins the set-if-absent guard and persists; every repeat
+// is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
+// there is nothing to dedupe on. A cache error fails open: dropping a hook is
+// worse than the rare duplicate a backend blip might cause.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return true
+	}
+	// The claim must outlive the request: a transient reset cancels the request
+	// context, and the retry that re-sends the same token would otherwise also
+	// find an unwritten marker (the canceled SETNX returns an error → fail open
+	// → true) and persist a second time. WithoutCancel keeps the marker write
+	// running so the retry actually loses the guard.
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
+			attr.SlogEvent("hook_idempotency_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
+			attr.SlogEvent("hook_idempotency_duplicate"),
+		)
+	}
+	return claimed
+}
 
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
@@ -37,7 +91,7 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 // resolveUserByEmail looks up a connected user by email within an org.
 // Returns the user ID if found, or empty string if not found or if email is empty.
 func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) string {
-	lookup := strings.ToLower(strings.TrimSpace(email))
+	lookup := conv.NormalizeEmail(email)
 	if lookup == "" {
 		return ""
 	}
@@ -86,6 +140,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
 
@@ -127,16 +182,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
 	}
-	if metadata.UserID == "" {
+	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-	}
-	if metadata.UserID != "" {
-		attrs[attr.UserIDKey] = metadata.UserID
 	}
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
@@ -149,12 +200,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	// Parse MCP tool names
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
-		}
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
+		attrs[attr.ToolCallSourceKey] = server
+		attrs[attr.ToolNameKey] = fn
 	}
 
 	// Annotate every MCP-routed tool call with the resolved server
@@ -254,7 +302,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	// data points sharing the same email don't each trigger a DB round-trip.
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
-		email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+		email := conv.NormalizeEmail(m.UserEmail)
 		if email == "" {
 			continue
 		}
@@ -308,12 +356,6 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if m.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = m.Model
 		}
-		if m.UserEmail != "" {
-			attrs[attr.UserEmailKey] = m.UserEmail
-			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(m.UserEmail))]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID
 		}
@@ -328,9 +370,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

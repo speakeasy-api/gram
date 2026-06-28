@@ -8,7 +8,7 @@ use agentkit_tools_core::{
 use async_trait::async_trait;
 use futures::future::join_all;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::sync::oneshot;
 
 use crate::runtime::{McpCmd, RuntimeHost};
@@ -21,9 +21,11 @@ pub struct McpForceReconnectTool {
 }
 
 impl McpForceReconnectTool {
-    pub fn new(host: Arc<RuntimeHost>, server_ids: Vec<String>) -> Self {
-        let spec = build_spec(&server_ids);
-        Self { host, spec }
+    pub fn new(host: Arc<RuntimeHost>) -> Self {
+        Self {
+            host,
+            spec: build_spec(),
+        }
     }
 }
 
@@ -32,43 +34,29 @@ struct McpForceReconnectInput {
     server_id: String,
 }
 
-fn build_spec(server_ids: &[String]) -> ToolSpec {
-    // The model only sees tools advertised in /tools/list. Without the enum,
-    // the assistant has to guess server_id from the `mcp_<id>_<tool>` prefix
-    // — which fails the moment the server is disconnected (no prefixed tools
-    // exposed). Baking the configured server IDs into the schema keeps the
-    // tool callable even when MCP is fully offline.
-    let server_ids_json: Vec<Value> = server_ids.iter().cloned().map(Value::String).collect();
-
-    let server_id_property = if server_ids_json.is_empty() {
-        json!({
-            "type": "string",
-            "description": "ID of the MCP server to reconnect.",
-        })
-    } else {
-        json!({
-            "type": "string",
-            "description": "ID of the MCP server to reconnect.",
-            "enum": server_ids_json,
-        })
-    };
-
+fn build_spec() -> ToolSpec {
+    // server_id is intentionally not enumerated. The set of registered MCP
+    // servers can drift mid-thread (assistant toolset edits flow in via
+    // /turn reconcile), so any frozen enum becomes stale as soon as the
+    // user attaches a new integration. The model discovers live server
+    // ids from the `mcp_<id>_<tool>` prefix of catalog entries and from
+    // the `assistant_mcp_auth` event context.
     let input_schema = json!({
         "type": "object",
-        "properties": { "server_id": server_id_property },
+        "properties": {
+            "server_id": {
+                "type": "string",
+                "description": "ID of the MCP server to reconnect.",
+            },
+        },
         "required": ["server_id"],
         "additionalProperties": false,
     });
 
-    let description = if server_ids.is_empty() {
-        "Disconnect and reconnect a registered MCP server. No MCP servers are \
-configured for this assistant; calling this tool will fail."
-    } else {
-        "Disconnect and reconnect a registered MCP server. Use this when an \
+    let description = "Disconnect and reconnect a registered MCP server. Use this when an \
 MCP-backed tool returns a connection-related error (timeout, transport closed, \
 auth failure that the backend has since refreshed) or when no MCP-backed tools \
-appear in the catalog."
-    };
+appear in the catalog.";
 
     ToolSpec::new(TOOL_NAME, description, input_schema)
         .with_annotations(ToolAnnotations::default().with_idempotent(true))
@@ -101,7 +89,10 @@ impl Tool for McpForceReconnectTool {
         let total = senders.len();
         let (text, is_error) = if total == 0 {
             (
-                format!("no live threads to reconnect mcp server {}", input.server_id),
+                format!(
+                    "no live threads to reconnect mcp server {}",
+                    input.server_id
+                ),
                 true,
             )
         } else {

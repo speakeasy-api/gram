@@ -44,11 +44,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/speakeasy-api/gram/infra/gen"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -67,10 +71,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+func noopShutdown(context.Context) error { return nil }
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
@@ -107,7 +114,7 @@ func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (pol
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	logger = logger.With(attr.SlogComponent("clickhouse"))
-	nilFunc := func(context.Context) error { return nil }
+	nilFunc := noopShutdown
 
 	host := c.String("clickhouse-host")
 	database := c.String("clickhouse-database")
@@ -315,7 +322,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = func(context.Context) error { return nil }
+	var nilShutdownFunc = noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -556,7 +563,7 @@ func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -624,7 +631,7 @@ func newFunctionOrchestrator(
 	tigrisStore *assets.TigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -733,6 +740,8 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	db *pgxpool.Pool,
+	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -745,7 +754,9 @@ func newTelemetryLogger(
 		return nil
 	}
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
+
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(
@@ -756,6 +767,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -780,11 +792,13 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
+				UserInfo:   telemetry.UserInfo{},
 				Attributes: entry.Attributes,
 			})
 		}),
 		auditLogger,
 		serverURL,
+		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }
@@ -845,7 +859,7 @@ func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trac
 
 func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*svix.Svix, func(context.Context) error, error) {
 	var svixAPIURL *url.URL
-	shutdownFunc := func(context.Context) error { return nil }
+	shutdownFunc := noopShutdown
 	hasAPIKey := c.String("svix-api-key") != "" && c.String("svix-api-key") != "unset"
 	if c.String("environment") == "local" && !hasAPIKey {
 		logger.InfoContext(c.Context, "no svix api key provided in local environment, using stub svix server")
@@ -879,11 +893,18 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 	return svixClient, shutdownFunc, nil
 }
 
-func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, func(ctx context.Context) error, error) {
+type pubSubBroker interface {
+	gcp.PublisherBroker
+	gcp.SubscriberBroker
+}
+
+func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
+	var emulated bool
 	var projectID string
-	opts := []option.ClientOption{option.WithLogger(logger)}
+	opts := []option.ClientOption{option.WithLogger(logger.With(attr.SlogComponent("gcp-pubsub-client")))}
 	switch {
 	case c.String("pubsub-emulator-host") != "":
+		emulated = true
 		// The emulator speaks plaintext gRPC, so we must use insecure transport
 		// credentials. The pubsub library only injects these automatically when
 		// the PUBSUB_EMULATOR_HOST env var is set; supplying the host via the CLI
@@ -900,8 +921,63 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 
 	client, err := pubsub.NewClient(ctx, projectID, opts...)
 	if err != nil {
-		return nil, func(context.Context) error { return nil }, fmt.Errorf("failed to create pubsub client: %w", err)
+		return nil, nil, noopShutdown, fmt.Errorf("failed to create pubsub client: %w", err)
 	}
 
-	return client, func(context.Context) error { return client.Close() }, nil
+	var broker pubSubBroker
+	if emulated {
+		broker = gcp.NewEmulatedPubSub(logger.With(attr.SlogComponent("gcp-emulated-pubsub-broker")), projectID, client, gen.Descriptors)
+	} else {
+		broker = gcp.NewPubSubBroker(logger.With(attr.SlogComponent("gcp-pubsub-broker")), client, gen.Descriptors)
+	}
+
+	return client, broker, func(context.Context) error { return client.Close() }, nil
+}
+
+type labelledStop struct {
+	label string
+	pub   interface {
+		Stop(ctx context.Context) error
+	}
+}
+
+func (l labelledStop) Stop(ctx context.Context) error {
+	err := l.pub.Stop(ctx)
+	if err != nil {
+		return fmt.Errorf("stop publisher %s: %w", l.label, err)
+	}
+	return nil
+}
+
+func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publishers, func(ctx context.Context) error, error) {
+	pubs := make([]interface {
+		Stop(ctx context.Context) error
+	}, 0, 1)
+
+	presidioAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "presidioAnalysis", pub: presidioAnalysis})
+
+	gitleaksAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.GitleaksAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for gitleaks analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
+
+	shutdown := func(ctx context.Context) error {
+		var err error
+		for _, pub := range pubs {
+			if e := pub.Stop(ctx); e != nil && err == nil {
+				err = errors.Join(err, e)
+			}
+		}
+		return err
+	}
+
+	return &background.Publishers{
+		PresidioAnalysis: presidioAnalysis,
+		GitleaksAnalysis: gitleaksAnalysis,
+	}, shutdown, nil
 }

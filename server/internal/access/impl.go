@@ -222,12 +222,13 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-// ListScopes exposes the stable set of grantable scopes so clients can build
-// role editing UX without hardcoding permission definitions.
+// ListScopes exposes the stable scope catalog so clients can build role editing
+// UX without hardcoding permission definitions. Clients should use visibility
+// to decide whether a scope is shown directly or only used as storage metadata.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -237,19 +238,60 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
-		{Slug: string(authz.ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
-		{Slug: string(authz.ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(authz.ScopeProjectRead), Description: "View projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeProjectWrite), Description: "Create and modify projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
-		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
-	}}, nil
+	scopes := []scopeDefinitionInput{
+		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
+		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
+		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
+		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
+		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
+		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
+		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+	}
+	result := make([]*gen.ScopeDefinition, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, scopeDefinition(scope))
+	}
+
+	return &gen.ListScopesResult{Scopes: result}, nil
+}
+
+type scopeDefinitionInput struct {
+	scope        authz.Scope
+	description  string
+	resourceType string
+}
+
+func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+	var exclusionScope *string
+	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+		exclusionScopeValue := string(exclusion)
+		exclusionScope = &exclusionScopeValue
+	}
+	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	if !ok {
+		visibility = authz.ScopeVisibilityInternal
+	}
+
+	return &gen.ScopeDefinition{
+		Slug:           string(input.scope),
+		Description:    input.description,
+		ResourceType:   input.resourceType,
+		Visibility:     visibility,
+		ExclusionScope: exclusionScope,
+	}
 }
 
 // ListMembers follows the original access API contract by returning WorkOS user
@@ -284,7 +326,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, err
 	}
 	if !enforce {
-		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -297,7 +339,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// the MembershipSyncGuard doesn't block the dashboard.
 	if ac.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 		}
 	}
 
@@ -315,16 +357,16 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
 	case errors.Is(err, authz.ErrPrincipalInvalid):
-		return nil, oops.E(oops.CodeUnauthorized, err, "invalid user principal").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid user principal").LogError(ctx, logger)
 	case errors.Is(err, authz.ErrPrincipalNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
 	}
 
 	grants, err := authz.LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").LogError(ctx, logger)
 	}
 
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
@@ -342,7 +384,7 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		return nil, err
 	}
 	if len(payload.RoleIds) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").LogError(ctx, s.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -377,15 +419,15 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, s.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -417,13 +459,9 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
-		effect := authz.PolicyEffect(grant.Effect)
-		if effect == "" {
-			effect = authz.PolicyEffectAllow
-		}
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    effect,
+			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -480,12 +518,12 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	for _, sel := range g.Selectors {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
-	return &gen.RoleGrant{Scope: g.Scope, Effect: string(g.Effect), Selectors: selectors}
+	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
 }
 
-// allScopesGrants returns unrestricted grants for every known scope.
-// Used when RBAC is not enforced or for admin impersonation.
-func allScopesGrants() []*gen.ListRoleGrant {
+// userVisibleScopeGrants returns unrestricted grants for every first-class
+// permission scope. Used when RBAC is not enforced or for admin impersonation.
+func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
 		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
@@ -509,7 +547,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, Effect: string(g.Effect), SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }
@@ -545,7 +583,7 @@ func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload
 		FeatureName:    string(productfeatures.FeatureRBAC),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").LogError(ctx, s.logger)
 	}
 
 	return &gen.RBACStatus{RbacEnabled: enabled}, nil
@@ -559,7 +597,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
 	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "seed system role grants").LogError(ctx, logger)
 	}
 
 	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
@@ -572,7 +610,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").LogError(ctx, logger)
 	}
 
 	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
@@ -594,7 +632,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 			// Already disabled — no active feature row to soft-delete.
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
 	}
 
 	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
@@ -610,7 +648,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	email := ""
 	if ac.Email != nil {
@@ -621,7 +659,7 @@ func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthCon
 	}
 	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").LogError(ctx, s.logger)
 	}
 	if !user.Admin {
 		return nil, oops.C(oops.CodeForbidden)
@@ -632,6 +670,22 @@ func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthCon
 type challengeUserInfo struct {
 	email    string
 	photoURL *string
+}
+
+// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// organization. The challenge UI uses it to suppress challenges raised by users
+// outside the organization — e.g. Speakeasy staff impersonating a customer org,
+// whose entries otherwise clutter the list while they switch accounts. Always
+// returns a non-nil slice so callers unconditionally apply the suppression.
+func (s *Service) activeOrgMemberUserIDs(ctx context.Context, orgID string) ([]string, error) {
+	ids, err := orgrepo.New(s.db).ListActiveOrganizationUserIDs(ctx, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active org member ids").LogError(ctx, s.logger)
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, nil
 }
 
 func (s *Service) fetchChallengeUserInfo(ctx context.Context, userIDs []string) map[string]challengeUserInfo {
@@ -678,7 +732,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	if len(payload.Ids) > 0 {
 		challenges, err := chQueries.ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, payload.Ids)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list challenges by ids from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list challenges by ids from clickhouse").LogError(ctx, s.logger)
 		}
 		return s.buildChallengeResult(ctx, authCtx, challenges, len(challenges))
 	}
@@ -686,6 +740,13 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	// When resolved filter is active, skip CH-side pagination – fetch all matching rows,
 	// apply the resolved filter in Go, then slice for the requested page.
 	skipPagination := payload.Resolved != nil
+
+	// Suppress challenges from users outside the org so counts and pagination
+	// stay correct (filtering happens in ClickHouse, before grouping/paging).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
 
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -696,13 +757,14 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
 	if !skipPagination {
 		count, err := chQueries.CountChallenges(ctx, filters)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").LogError(ctx, s.logger)
 		}
 		if count == 0 {
 			return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: 0}, nil
@@ -712,7 +774,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	challenges, err := chQueries.ListChallenges(ctx, filters)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(challenges) == 0 {
@@ -760,7 +822,7 @@ func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenge
 		ChallengeIds:   ids,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
 	}
 	m := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
@@ -890,6 +952,12 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	skipPagination := payload.Resolved != nil
 
+	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      payload.ProjectID,
@@ -899,6 +967,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	chQueries := chrepo.New(s.chConn)
@@ -907,7 +976,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	if !skipPagination {
 		count, err := chQueries.CountChallengeBuckets(ctx, filters)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").LogError(ctx, s.logger)
 		}
 		if count == 0 {
 			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
@@ -917,7 +986,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(buckets) == 0 {
@@ -935,7 +1004,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		ChallengeIds:   allChallengeIDs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
 	}
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
@@ -1079,15 +1148,15 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	)
 
 	if len(payload.ChallengeIds) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").LogError(ctx, s.logger)
 	}
 
 	// Validate: role_assigned requires role_slug.
 	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
-		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").LogError(ctx, s.logger)
 	}
 	if payload.ResolutionType == "dismissed" && payload.RoleSlug != nil && *payload.RoleSlug != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").LogError(ctx, s.logger)
 	}
 
 	resolvedBy := fmt.Sprintf("user:%s", authCtx.UserID)
@@ -1103,7 +1172,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -1119,7 +1188,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		ResolvedBy:     resolvedBy,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
 	}
 
 	resolutions := make([]*gen.ChallengeResolution, 0, len(rows))
@@ -1148,12 +1217,12 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 			ResolutionType:   row.ResolutionType,
 			RoleSlug:         payload.RoleSlug,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").LogError(ctx, s.logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil

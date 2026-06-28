@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -23,19 +24,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -60,11 +67,16 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// testServerURL is the default-domain base URL the test service derives MCP
+// URLs from when migrating legacy client registrations.
+const testServerURL = "https://app.getgram.ai"
+
 type testInstance struct {
 	service        *remotesessions.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	envEntries     *environments.EnvironmentEntries
+	redisCache     *cache.RedisCacheAdapter
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -94,6 +106,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	envEntries := environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn))
 
+	serverURL, err := url.Parse(testServerURL)
+	require.NoError(t, err)
+
+	redisCache := cache.NewRedisCacheAdapter(redisClient)
+
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
@@ -104,6 +121,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		envEntries,
 		guardianPolicy,
 		audit.NewLogger(),
+		serverURL,
+		redisCache,
 	)
 
 	return ctx, &testInstance{
@@ -111,6 +130,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		envEntries:     envEntries,
+		redisCache:     redisCache,
 	}
 }
 
@@ -156,7 +176,7 @@ func createRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, iss
 	t.Helper()
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -183,6 +203,20 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	})
 	require.NoError(t, err)
 	return row
+}
+
+// seedUser inserts a users row so a `user:<id>` subject URN resolves to a
+// display name and email when listing remote sessions.
+func seedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id, email, displayName string) {
+	t.Helper()
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          id,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
 }
 
 func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
@@ -283,6 +317,40 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return issuer.ID
 }
 
+// seedMCPServerInOrg creates a project in the supplied organization and an MCP
+// server within it, returning the MCP server id. Used to exercise cross-org
+// isolation on org-admin MCP server lookups.
+func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
+	t.Helper()
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	// MCP servers require exactly one backend; seed a remote MCP server to satisfy
+	// the backend-exclusivity constraint.
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     project.ID,
+		TransportType: "sse",
+		Url:           "https://mcp.example.com",
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         project.ID,
+		Name:              conv.ToPGText(slug),
+		Slug:              conv.ToPGText(slug),
+		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID),
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+	return server.ID
+}
+
 // createOrganization seeds a second organization_metadata row so tests can
 // exercise cross-organization isolation. Returns the new organization id.
 func createOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) string {
@@ -335,8 +403,9 @@ func withAdmin(t *testing.T, ctx context.Context) context.Context {
 }
 
 // insertProxyProvider seeds an oauth_proxy_server + oauth_proxy_provider row
-// with the supplied secrets JSONB for the clone tests.
-func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, providerType string, secrets []byte) uuid.UUID {
+// with the supplied secrets JSONB for the clone tests. Returns the provider
+// id and the oauth_proxy_server id (the latter for attaching toolsets).
+func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, providerType string, secrets []byte) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -367,7 +436,66 @@ func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		Secrets:                           secrets,
 	})
 	require.NoError(t, err)
-	return prov.ID
+	return prov.ID, srv.ID
+}
+
+// attachToolsetToProxyServer seeds a toolset routed through the given
+// oauth_proxy_server under the given MCP slug. When customDomain is non-empty
+// a custom_domains row is created and bound to the toolset, making the MCP
+// server reachable on both the default domain and the custom domain.
+func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proxyServerID uuid.UUID, mcpSlug, customDomain string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	q := toolsetsrepo.New(conn)
+	_, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   mcpSlug,
+		Slug:                   mcpSlug,
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	_, err = q.UpdateToolsetOAuthProxyServer(ctx, toolsetsrepo.UpdateToolsetOAuthProxyServerParams{
+		OauthProxyServerID: uuid.NullUUID{UUID: proxyServerID, Valid: true},
+		Slug:               mcpSlug,
+		ProjectID:          *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	if customDomain != "" {
+		domainRow, err := customdomainsrepo.New(conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			Domain:          customDomain,
+			IngressName:     pgtype.Text{},
+			CertSecretName:  pgtype.Text{},
+			ProvisionerKind: "ingress",
+			IpAllowlist:     []string{},
+		})
+		require.NoError(t, err)
+
+		err = q.SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+			CustomDomainID: uuid.NullUUID{UUID: domainRow.ID, Valid: true},
+			Slug:           mcpSlug,
+			ProjectID:      *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+	}
+}
+
+// seedLegacyRegistration stores a legacy OAuth proxy client registration in
+// Redis through the real oauth typed cache — the same write path as the
+// legacy DCR endpoint — pinning the wire format the clone migration reads.
+func seedLegacyRegistration(t *testing.T, ctx context.Context, ti *testInstance, info oauth.OauthProxyClientInfo) {
+	t.Helper()
+	typed := cache.NewTypedObjectCache[oauth.OauthProxyClientInfo](testenv.NewLogger(t), ti.redisCache, cache.SuffixNone)
+	require.NoError(t, typed.Store(ctx, info))
 }
 
 // seedEnvironmentWithEntries creates an environment + entries via the same
