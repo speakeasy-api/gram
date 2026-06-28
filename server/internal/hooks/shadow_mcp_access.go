@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -81,10 +82,16 @@ func (s *Service) canBypassPolicy(
 // URL rather than just the name.
 func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.CodexPayload) (shadowmcp.AccessEvidence, *MCPServerEntry) {
 	rawToolName := conv.PtrValOr(payload.ToolName, "")
+	serverIdentity := mcpServerIdentityFromToolName(rawToolName)
+	if serverIdentity == "" {
+		if metaToolServer, ok := codexMCPMetaToolServer(payload); ok {
+			serverIdentity = metaToolServer
+		}
+	}
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
-		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
+		ServerIdentity: serverIdentity,
 	}
 	sessionID := conv.PtrValOr(payload.SessionID, "")
 	if evidence.ServerIdentity == "" || sessionID == "" {
@@ -94,9 +101,14 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 	if err != nil {
 		return evidence, nil
 	}
-	matched := matchCodexCachedMCPEntry(entries, rawToolName)
+	var matched *MCPServerEntry
+	if strings.HasPrefix(rawToolName, "mcp__") {
+		matched = matchCodexCachedMCPEntry(entries, rawToolName)
+	} else {
+		matched = matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity)
+	}
 	if matched != nil {
-		if matched.ToolPrefix != "" {
+		if matched.ToolPrefix != "" && strings.HasPrefix(rawToolName, "mcp__") {
 			// The naive 3-way split truncates prefixes containing "__"; the
 			// matched entry carries the full sanitized prefix.
 			evidence.ServerIdentity = matched.ToolPrefix
@@ -111,6 +123,43 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 		}
 	}
 	return evidence, matched
+}
+
+func codexMCPMetaToolServer(payload *gen.CodexPayload) (string, bool) {
+	if payload == nil {
+		return "", false
+	}
+	switch conv.PtrValOr(payload.ToolName, "") {
+	case "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource":
+	default:
+		return "", false
+	}
+	input, ok := payload.ToolInput.(map[string]any)
+	if !ok {
+		return "", true
+	}
+	server, _ := input["server"].(string)
+	return strings.TrimSpace(server), true
+}
+
+// codexInventoryProvenanceDetail reports why a Codex MCP call should be
+// denied based on where the SessionStart inventory says the matched server
+// actually routes: an external (non-Gram) URL or a local stdio server. An
+// empty string means the inventory raises no objection — either the entry is
+// Gram-hosted or there is nothing to cross-check (nil entry). Mirrors the
+// target checks of the Claude PreToolUse guard.
+func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, orgID string) string {
+	if matched == nil {
+		return ""
+	}
+	switch {
+	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
+		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
+	case matched.URL == "" && matched.Command != "":
+		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)
+	default:
+		return ""
+	}
 }
 
 func cursorShadowMCPEvidence(payload *gen.CursorPayload) shadowmcp.AccessEvidence {
@@ -129,9 +178,10 @@ func claudeShadowMCPEvidence(rawToolName string) shadowmcp.AccessEvidence {
 	}
 }
 
-// mcpServerIdentityFromToolName extracts the MCP server identity from a Codex
-// or Claude tool name. Both hosts emit the "mcp__<server>__<tool>" form, so the
-// shared parser's Cursor "MCP:" branch never fires here.
+// mcpServerIdentityFromToolName extracts the MCP server identity from a
+// Claude-style mcp__ tool name. Some Codex MCP calls arrive as built-in
+// meta-tools with the server name in tool_input.server; those are handled by
+// codexMCPMetaToolServer.
 func mcpServerIdentityFromToolName(rawName string) string {
 	return toolref.MCPServerOf(rawName)
 }

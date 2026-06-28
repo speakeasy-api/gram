@@ -113,17 +113,50 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			if policy != nil {
 				toolName := ev.ToolName
 				evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
-				detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, toolName, evidence)
-				if denied && matched == nil {
-					// Older Codex installs ship no inventory snapshot, so no
-					// server URL resolves; fall back to the echoed id rather
-					// than hard-block them.
-					if _, idDenied := s.shadowMCPClient.ValidateToolsetCall(ctx, ev.ToolInput, toolName, orgID); !idDenied {
-						detail, denied = "", false
+				codexMetaServer, isCodexMetaTool := codexMCPMetaToolServer(payload)
+				var detail string
+				var denied bool
+				if isCodexMetaTool {
+					// Codex's built-in MCP resource tools are not Gram
+					// toolset calls, so they never carry x-gram-toolset-id.
+					// Enforce them from the inventory target instead.
+					if codexMetaServer == "" {
+						detail = fmt.Sprintf("Codex MCP meta-tool %q is missing required tool_input.server", toolName)
+					} else {
+						detail = s.codexInventoryProvenanceDetail(ctx, matched, orgID)
 					}
+					if detail == "" && matched == nil {
+						detail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
+					}
+					if detail != "" {
+						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+							denied = true
+						}
+					}
+				} else {
+					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, toolName, evidence)
+				}
+				if !denied && !isCodexMetaTool {
+					// The inventory snapshot pins where the call actually
+					// routes: deny when it points at a non-Gram target, or
+					// when the active inventory cannot uniquely prove the
+					// target.
+					inventoryDetail := s.codexInventoryProvenanceDetail(ctx, matched, orgID)
+					if inventoryDetail != "" {
+						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+							detail, denied = inventoryDetail, true
+						}
+					} else if evidence.ServerIdentity != "" && matched == nil {
+						inventoryDetail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
+						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+							detail, denied = inventoryDetail, true
+						}
+					}
+				} else if denied && !isCodexMetaTool && evidence.ServerIdentity != "" && matched == nil {
+					detail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
 				}
 				if denied {
-					logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
+					logger.InfoContext(ctx, "denying codex tool call: failed shadow mcp validation",
 						attr.SlogEvent("codex_hook_denied"),
 						attr.SlogHookBlockReason(detail),
 						attr.SlogRiskPolicyID(policy.ID),
@@ -376,7 +409,6 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		}
 	}
 
-	// Parse MCP tool names using the mcp__<server>__<tool> convention.
 	if server, fn, ok := toolref.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
@@ -395,6 +427,20 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 						attrs[attr.ToolNameKey] = rest
 					}
 				}
+				if v := resolvedMCPMatch(matched, server); v != "" {
+					attrs[attr.MCPMatchKey] = v
+				}
+				applyMCPInventoryAttrs(attrs, matched)
+			}
+		}
+	} else if server, ok := codexMCPMetaToolServer(payload); ok {
+		if server == "" {
+			return attrs
+		}
+		attrs[attr.ToolCallSourceKey] = server
+		if metadata.SessionID != "" {
+			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+				matched := matchCodexCachedMCPServerEntry(entries, server)
 				if v := resolvedMCPMatch(matched, server); v != "" {
 					attrs[attr.MCPMatchKey] = v
 				}
