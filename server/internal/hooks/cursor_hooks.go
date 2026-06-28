@@ -158,7 +158,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		}
 		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, ev.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),

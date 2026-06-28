@@ -113,18 +113,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			if policy != nil {
 				toolName := ev.ToolName
 				evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
-				detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, ev.ToolInput, toolName, evidence)
-				if !denied {
-					// Toolset validation proves a valid x-gram-toolset-id was
-					// echoed, but a shadow server's schema can coach the client
-					// into copying one. The inventory snapshot pins where the
-					// call actually routes — deny when it points at a non-Gram
-					// target. Unmatched prefixes and missing snapshots stay
-					// allowed: older plugin installs ship no inventory.
-					if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
-						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
-							detail, denied = d, true
-						}
+				detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, toolName, evidence)
+				if denied && matched == nil {
+					// Older Codex installs ship no inventory snapshot, so no
+					// server URL resolves; fall back to the echoed id rather
+					// than hard-block them.
+					if _, idDenied := s.shadowMCPClient.ValidateToolsetCall(ctx, ev.ToolInput, toolName, orgID); !idDenied {
+						detail, denied = "", false
 					}
 				}
 				if denied {
