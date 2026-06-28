@@ -214,3 +214,54 @@ func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
 	require.False(t, allowed)
 	require.Nil(t, target)
 }
+
+func TestEnforceShadowMCPToolAccess_GramHostedURLAllowedWithoutEchoedID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// A Gram-hosted server URL is trusted on the URL alone: the tool input
+	// carries no x-gram-toolset-id, yet the call is allowed.
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		uuid.NewString(),
+		map[string]any{},
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "https://app.getgram.ai/mcp/example", URLHost: "", ServerIdentity: "example"},
+	)
+
+	require.False(t, denied)
+	require.Empty(t, detail)
+}
+
+func TestEnforceShadowMCPToolAccess_NonGramURLBlockedDespiteEchoedID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Even when the agent echoes a x-gram-toolset-id, a non-Gram-hosted URL is
+	// denied: the URL is the trust signal, not the echoed constant a shadow
+	// server can coach the client into copying.
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		uuid.NewString(),
+		map[string]any{shadowmcp.XGramToolsetIDField: uuid.NewString()},
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "https://mcp.shadow.example/mcp", URLHost: "", ServerIdentity: "mcp.shadow.example"},
+	)
+
+	require.True(t, denied)
+	require.Contains(t, detail, "not Gram-hosted")
+}

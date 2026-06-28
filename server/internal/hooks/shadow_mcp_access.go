@@ -22,10 +22,21 @@ func (s *Service) enforceShadowMCPToolAccess(
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
 ) (string, bool) {
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
-	if !denied {
-		return "", false
+	var detail string
+	switch {
+	case evidence.FullURL != "":
+		if s.isGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
+			return "", false
+		}
+		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
+	default:
+		d, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
+		if !denied {
+			return "", false
+		}
+		detail = d
 	}
+
 	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
