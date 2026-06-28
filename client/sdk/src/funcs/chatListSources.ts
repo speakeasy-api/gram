@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listChats chat
+ * listSources chat
  *
  * @remarks
- * List all chats for a project
+ * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
  */
-export function chatList(
+export function chatListSources(
   client: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: operations.ListChatSourcesRequest | undefined,
+  security?: operations.ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListChatsResult,
+    components.ListSourcesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function chatList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: operations.ListChatSourcesRequest | undefined,
+  security?: operations.ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListChatsResult,
+      components.ListSourcesResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,7 +85,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(operations.ListChatsRequest$outboundSchema), value),
+      z.parse(
+        z.optional(operations.ListChatSourcesRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -94,23 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/chat.list")();
-
-  const query = encodeFormQuery({
-    "assistant_id": payload?.assistant_id,
-    "external_user_id": payload?.external_user_id,
-    "from": payload?.from,
-    "has_risk": payload?.has_risk,
-    "limit": payload?.limit,
-    "min_risk_score": payload?.min_risk_score,
-    "offset": payload?.offset,
-    "pinned": payload?.pinned,
-    "search": payload?.search,
-    "sort_by": payload?.sort_by,
-    "sort_order": payload?.sort_order,
-    "source": payload?.source,
-    "to": payload?.to,
-  });
+  const path = pathToFunc("/rpc/chat.listSources")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -154,7 +141,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listChats",
+    operationID: "listChatSources",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -172,7 +159,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -210,7 +196,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListChatsResult,
+    components.ListSourcesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -221,7 +207,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListChatsResult$inboundSchema),
+    M.json(200, components.ListSourcesResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

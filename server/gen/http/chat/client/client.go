@@ -45,6 +45,10 @@ type Client struct {
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
 
+	// ListSources Doer is the HTTP client used to make requests to the listSources
+	// endpoint.
+	ListSourcesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -72,6 +76,7 @@ func NewClient(
 		DeleteChatDoer:      doer,
 		SetPinnedDoer:       doer,
 		SubmitFeedbackDoer:  doer,
+		ListSourcesDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -243,6 +248,30 @@ func (c *Client) SubmitFeedback() goa.Endpoint {
 		resp, err := c.SubmitFeedbackDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "submitFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSources returns an endpoint that makes HTTP requests to the chat service
+// listSources server.
+func (c *Client) ListSources() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSourcesRequest(c.encoder)
+		decodeResponse = DecodeListSourcesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSourcesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSourcesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "listSources", err)
 		}
 		return decodeResponse(resp)
 	}

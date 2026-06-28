@@ -175,6 +175,7 @@ export * from "./listauditlogs.js";
 export * from "./listchallengebuckets.js";
 export * from "./listchallenges.js";
 export * from "./listchats.js";
+export * from "./listchatsources.js";
 export * from "./listcollections.js";
 export * from "./listcollectionservers.js";
 export * from "./listcustomdetectionrules.js";

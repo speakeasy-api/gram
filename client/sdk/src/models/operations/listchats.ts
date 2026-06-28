@@ -80,6 +80,10 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
+   * Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+   */
+  source?: string | undefined;
+  /**
    * Filter to chats produced by this assistant
    */
   assistantId?: string | undefined;
@@ -248,6 +252,7 @@ export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
 export type ListChatsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
+  source?: string | undefined;
   assistant_id?: string | undefined;
   has_risk?: string | undefined;
   pinned?: string | undefined;
@@ -271,6 +276,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
+    source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
     pinned: z.optional(Pinned$outboundSchema),

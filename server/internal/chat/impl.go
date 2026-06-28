@@ -204,37 +204,6 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An assistant principal is set only on the assistant runtime path and
-	// only the managed-assistant platform toolset surfaces chat tools, so
-	// treat it as admin-equivalent for project-wide visibility.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-
-	// Whether the caller sees all project sessions or only their own is decided
-	// by the org:admin RBAC scope — this is a visibility choice, never a gate on
-	// the route, so a caller without org:admin (or when the check can't be made)
-	// still gets a successful response scoped to their own sessions.
-	//
-	// When RBAC is not enforced for the org we must NOT fall through to "see
-	// all" — Require short-circuits to allow when enforcement is off, so check
-	// ShouldEnforce explicitly and treat the disabled case as non-admin.
-	isOrgAdmin := false
-	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
-		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
-	} else if enforce {
-		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
-		var shareableErr *oops.ShareableError
-		switch {
-		case err == nil:
-			isOrgAdmin = true
-		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
-			// Forbidden simply means not an org admin — show own sessions.
-		default:
-			// Any other error is unexpected; log it but still serve own
-			// sessions rather than failing the listing.
-			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
-		}
-	}
-
 	var fromTime, toTime pgtype.Timestamptz
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
@@ -262,18 +231,12 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
 	}
 
-	// Payload filters only apply for org admins and the managed-assistant runtime.
-	var externalUserID, userID string
-	switch {
-	case authCtx.ExternalUserID != "":
-		externalUserID = authCtx.ExternalUserID
-	case isOrgAdmin, isAssistantCall:
-		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
-	default:
-		if authCtx.UserID == "" {
-			return nil, oops.C(oops.CodeUnauthorized)
-		}
-		userID = authCtx.UserID
+	// Visibility scoping: org admins and the managed-assistant runtime see all
+	// project sessions (optionally narrowed by an explicit external user id);
+	// everyone else is restricted to their own sessions.
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID)
+	if err != nil {
+		return nil, err
 	}
 
 	baseParams := repo.CountChatsParams{
@@ -287,6 +250,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		HasRiskFilter:  hasRiskFilter,
 		MinRiskScore:   minRiskScore,
 		Pinned:         conv.PtrValOr(payload.Pinned, ""),
+		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -305,6 +269,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		HasRiskFilter:  baseParams.HasRiskFilter,
 		MinRiskScore:   baseParams.MinRiskScore,
 		Pinned:         baseParams.Pinned,
+		Sources:        baseParams.Sources,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -344,6 +309,107 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+// ListSources returns the distinct agent sources present in the project's chats
+// so the dashboard can populate the agent-type filter from real data instead of
+// a hardcoded catalog. Honors the same visibility scoping as ListChats.
+func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPayload) (*gen.ListSourcesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListChatSources(ctx, repo.ListChatSourcesParams{
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
+	}
+
+	sources := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Valid {
+			sources = append(sources, row.String)
+		}
+	}
+
+	return &gen.ListSourcesResult{Sources: sources}, nil
+}
+
+// parseSourceFilter splits the comma-separated `source` filter into the list of
+// exact source strings matched against each chat's inferred source. It always
+// returns a non-nil slice so the no-filter case sends an empty text[]
+// (cardinality 0 disables the filter) rather than SQL NULL, which would drop
+// every row.
+func parseSourceFilter(source string) []string {
+	seen := make(map[string]struct{})
+	sources := []string{}
+	for raw := range strings.SplitSeq(source, ",") {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		sources = append(sources, s)
+	}
+	return sources
+}
+
+// chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
+// the chat listing endpoints. Org admins and the managed-assistant runtime see
+// all project sessions (optionally narrowed by an explicit external user id);
+// everyone else is restricted to their own sessions. Both empty means "all
+// chats in the project". Visibility is never a hard gate on the route — when the
+// admin check can't be made we fall back to own-sessions rather than failing.
+func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID *string) (string, string, error) {
+	// An assistant principal is set only on the assistant runtime path and only
+	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// admin-equivalent for project-wide visibility.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+
+	// When RBAC is not enforced for the org we must NOT fall through to "see
+	// all" — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as non-admin.
+	isOrgAdmin := false
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
+	} else if enforce {
+		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+		var shareableErr *oops.ShareableError
+		switch {
+		case err == nil:
+			isOrgAdmin = true
+		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
+			// Forbidden simply means not an org admin — show own sessions.
+		default:
+			// Any other error is unexpected; log it but still serve own sessions
+			// rather than failing the listing.
+			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+		}
+	}
+
+	switch {
+	case authCtx.ExternalUserID != "":
+		return authCtx.ExternalUserID, "", nil
+	case isOrgAdmin, isAssistantCall:
+		return conv.PtrValOr(payloadExternalUserID, ""), "", nil
+	default:
+		if authCtx.UserID == "" {
+			return "", "", oops.C(oops.CodeUnauthorized)
+		}
+		return "", authCtx.UserID, nil
+	}
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {

@@ -270,6 +270,17 @@ candidate_chats AS (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
+    )
 ),
 chat_activity AS (
   SELECT
@@ -347,6 +358,17 @@ candidate_chats AS (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
+    )
 ),
 chat_stats AS (
   SELECT
@@ -408,6 +430,27 @@ SELECT
   lc.last_message_timestamp,
   lc.risk_findings_count
 FROM limited_chats lc;
+
+-- name: ListChatSources :many
+-- Distinct inferred source (the latest non-null message source) across the
+-- project's chats, honoring the same visibility scoping as ListChats. Feeds the
+-- agent-type filter options on the Agent Sessions page so the list reflects the
+-- sources actually present in the data rather than a hardcoded catalog.
+WITH latest_sources AS (
+  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
+  FROM chats c
+  JOIN chat_messages cm ON cm.chat_id = c.id
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+    AND cm.source IS NOT NULL
+  ORDER BY cm.chat_id, cm.created_at DESC
+)
+SELECT DISTINCT source
+FROM latest_sources
+WHERE source IS NOT NULL
+ORDER BY source;
 
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
@@ -957,6 +1000,14 @@ RETURNING id;
 -- instead of relying on wall-clock gaps between inserts.
 INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageWithSource :one
+-- Test fixture: insert a chat message carrying a specific source. The per-chat
+-- inferred source (used by the agent-type filter and ListChatSources) is the
+-- latest non-null message source, so source-filter tests seed messages this way.
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedChatMessageContent :one
