@@ -29,6 +29,13 @@ type UpdateServerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// RotateServerKeyRequestBody is the type of the "tunnelledMcp" service
+// "rotateServerKey" endpoint HTTP request body.
+type RotateServerKeyRequestBody struct {
+	// The ID of the tunnelled MCP server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // CreateServerResponseBody is the type of the "tunnelledMcp" service
 // "createServer" endpoint HTTP response body.
 type CreateServerResponseBody struct {
@@ -103,6 +110,14 @@ type UpdateServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the tunnelled MCP server source was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RotateServerKeyResponseBody is the type of the "tunnelledMcp" service
+// "rotateServerKey" endpoint HTTP response body.
+type RotateServerKeyResponseBody struct {
+	Server *TunnelledMcpServerResponseBody `form:"server" json:"server" xml:"server"`
+	// Plaintext tunnel key. Only returned after rotation.
+	TunnelKey string `form:"tunnel_key" json:"tunnel_key" xml:"tunnel_key"`
 }
 
 // CreateServerUnauthorizedResponseBody is the type of the "tunnelledMcp"
@@ -839,6 +854,195 @@ type UpdateServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RotateServerKeyUnauthorizedResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "unauthorized"
+// error.
+type RotateServerKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyForbiddenResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "forbidden"
+// error.
+type RotateServerKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyBadRequestResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "bad_request"
+// error.
+type RotateServerKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyNotFoundResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "not_found"
+// error.
+type RotateServerKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyConflictResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "conflict"
+// error.
+type RotateServerKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyUnsupportedMediaResponseBody is the type of the
+// "tunnelledMcp" service "rotateServerKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RotateServerKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyInvalidResponseBody is the type of the "tunnelledMcp" service
+// "rotateServerKey" endpoint HTTP response body for the "invalid" error.
+type RotateServerKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyInvariantViolationResponseBody is the type of the
+// "tunnelledMcp" service "rotateServerKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RotateServerKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyUnexpectedResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the "unexpected"
+// error.
+type RotateServerKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateServerKeyGatewayErrorResponseBody is the type of the "tunnelledMcp"
+// service "rotateServerKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type RotateServerKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteServerUnauthorizedResponseBody is the type of the "tunnelledMcp"
 // service "deleteServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1172,6 +1376,18 @@ func NewUpdateServerResponseBody(res *types.TunnelledMcpServer) *UpdateServerRes
 		}
 	} else {
 		body.Connections = []*TunnelledMcpConnectionResponseBody{}
+	}
+	return body
+}
+
+// NewRotateServerKeyResponseBody builds the HTTP response body from the result
+// of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyResponseBody(res *tunnelledmcp.RotateTunnelledMcpServerKeyResult) *RotateServerKeyResponseBody {
+	body := &RotateServerKeyResponseBody{
+		TunnelKey: res.TunnelKey,
+	}
+	if res.Server != nil {
+		body.Server = marshalTypesTunnelledMcpServerToTunnelledMcpServerResponseBody(res.Server)
 	}
 	return body
 }
@@ -1736,6 +1952,150 @@ func NewUpdateServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateServe
 	return body
 }
 
+// NewRotateServerKeyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "rotateServerKey" endpoint of the "tunnelledMcp"
+// service.
+func NewRotateServerKeyUnauthorizedResponseBody(res *goa.ServiceError) *RotateServerKeyUnauthorizedResponseBody {
+	body := &RotateServerKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyForbiddenResponseBody builds the HTTP response body from
+// the result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyForbiddenResponseBody(res *goa.ServiceError) *RotateServerKeyForbiddenResponseBody {
+	body := &RotateServerKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyBadRequestResponseBody builds the HTTP response body from
+// the result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyBadRequestResponseBody(res *goa.ServiceError) *RotateServerKeyBadRequestResponseBody {
+	body := &RotateServerKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyNotFoundResponseBody builds the HTTP response body from
+// the result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyNotFoundResponseBody(res *goa.ServiceError) *RotateServerKeyNotFoundResponseBody {
+	body := &RotateServerKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyConflictResponseBody builds the HTTP response body from
+// the result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyConflictResponseBody(res *goa.ServiceError) *RotateServerKeyConflictResponseBody {
+	body := &RotateServerKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "rotateServerKey" endpoint of the "tunnelledMcp"
+// service.
+func NewRotateServerKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *RotateServerKeyUnsupportedMediaResponseBody {
+	body := &RotateServerKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyInvalidResponseBody(res *goa.ServiceError) *RotateServerKeyInvalidResponseBody {
+	body := &RotateServerKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "rotateServerKey" endpoint of the "tunnelledMcp"
+// service.
+func NewRotateServerKeyInvariantViolationResponseBody(res *goa.ServiceError) *RotateServerKeyInvariantViolationResponseBody {
+	body := &RotateServerKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyUnexpectedResponseBody builds the HTTP response body from
+// the result of the "rotateServerKey" endpoint of the "tunnelledMcp" service.
+func NewRotateServerKeyUnexpectedResponseBody(res *goa.ServiceError) *RotateServerKeyUnexpectedResponseBody {
+	body := &RotateServerKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateServerKeyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "rotateServerKey" endpoint of the "tunnelledMcp"
+// service.
+func NewRotateServerKeyGatewayErrorResponseBody(res *goa.ServiceError) *RotateServerKeyGatewayErrorResponseBody {
+	body := &RotateServerKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteServerUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteServer" endpoint of the "tunnelledMcp" service.
 func NewDeleteServerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteServerUnauthorizedResponseBody {
@@ -1925,6 +2285,19 @@ func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string,
 	return v
 }
 
+// NewRotateServerKeyPayload builds a tunnelledMcp service rotateServerKey
+// endpoint payload.
+func NewRotateServerKeyPayload(body *RotateServerKeyRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunnelledmcp.RotateServerKeyPayload {
+	v := &tunnelledmcp.RotateServerKeyPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeleteServerPayload builds a tunnelledMcp service deleteServer endpoint
 // payload.
 func NewDeleteServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunnelledmcp.DeleteServerPayload {
@@ -1954,6 +2327,18 @@ func ValidateUpdateServerRequestBody(body *UpdateServerRequestBody) (err error) 
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRotateServerKeyRequestBody runs the validations defined on
+// RotateServerKeyRequestBody
+func ValidateRotateServerKeyRequestBody(body *RotateServerKeyRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

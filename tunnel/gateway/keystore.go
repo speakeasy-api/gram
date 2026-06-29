@@ -13,6 +13,14 @@ type KeyResolver interface {
 	Resolve(ctx context.Context, bearer string) (string, bool, error)
 }
 
+type ConnectionRecorder interface {
+	MarkConnected(ctx context.Context, tunnelID, keyHash, agentVersion string) error
+}
+
+type ActiveTunnelChecker interface {
+	IsActive(ctx context.Context, tunnelID, keyHash string) (bool, error)
+}
+
 // StaticKeyStore is a process-local key resolver for tests and single-process
 // local harnesses. Production gateways use PostgresKeyResolver.
 type StaticKeyStore struct {

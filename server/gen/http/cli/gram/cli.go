@@ -119,7 +119,7 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"tunnelled-mcp (create-server|list-servers|get-server|update-server|delete-server)",
+		"tunnelled-mcp (create-server|list-servers|get-server|update-server|rotate-server-key|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
@@ -2051,6 +2051,12 @@ func ParseEndpoint(
 		tunnelledMcpUpdateServerApikeyTokenFlag      = tunnelledMcpUpdateServerFlags.String("apikey-token", "", "")
 		tunnelledMcpUpdateServerProjectSlugInputFlag = tunnelledMcpUpdateServerFlags.String("project-slug-input", "", "")
 
+		tunnelledMcpRotateServerKeyFlags                = flag.NewFlagSet("rotate-server-key", flag.ExitOnError)
+		tunnelledMcpRotateServerKeyBodyFlag             = tunnelledMcpRotateServerKeyFlags.String("body", "REQUIRED", "")
+		tunnelledMcpRotateServerKeySessionTokenFlag     = tunnelledMcpRotateServerKeyFlags.String("session-token", "", "")
+		tunnelledMcpRotateServerKeyApikeyTokenFlag      = tunnelledMcpRotateServerKeyFlags.String("apikey-token", "", "")
+		tunnelledMcpRotateServerKeyProjectSlugInputFlag = tunnelledMcpRotateServerKeyFlags.String("project-slug-input", "", "")
+
 		tunnelledMcpDeleteServerFlags                = flag.NewFlagSet("delete-server", flag.ExitOnError)
 		tunnelledMcpDeleteServerIDFlag               = tunnelledMcpDeleteServerFlags.String("id", "REQUIRED", "")
 		tunnelledMcpDeleteServerSessionTokenFlag     = tunnelledMcpDeleteServerFlags.String("session-token", "", "")
@@ -2635,6 +2641,7 @@ func ParseEndpoint(
 	tunnelledMcpListServersFlags.Usage = tunnelledMcpListServersUsage
 	tunnelledMcpGetServerFlags.Usage = tunnelledMcpGetServerUsage
 	tunnelledMcpUpdateServerFlags.Usage = tunnelledMcpUpdateServerUsage
+	tunnelledMcpRotateServerKeyFlags.Usage = tunnelledMcpRotateServerKeyUsage
 	tunnelledMcpDeleteServerFlags.Usage = tunnelledMcpDeleteServerUsage
 
 	usageFlags.Usage = usageUsage
@@ -3970,6 +3977,9 @@ func ParseEndpoint(
 			case "update-server":
 				epf = tunnelledMcpUpdateServerFlags
 
+			case "rotate-server-key":
+				epf = tunnelledMcpRotateServerKeyFlags
+
 			case "delete-server":
 				epf = tunnelledMcpDeleteServerFlags
 
@@ -5275,6 +5285,9 @@ func ParseEndpoint(
 			case "update-server":
 				endpoint = c.UpdateServer()
 				data, err = tunnelledmcpc.BuildUpdateServerPayload(*tunnelledMcpUpdateServerBodyFlag, *tunnelledMcpUpdateServerSessionTokenFlag, *tunnelledMcpUpdateServerApikeyTokenFlag, *tunnelledMcpUpdateServerProjectSlugInputFlag)
+			case "rotate-server-key":
+				endpoint = c.RotateServerKey()
+				data, err = tunnelledmcpc.BuildRotateServerKeyPayload(*tunnelledMcpRotateServerKeyBodyFlag, *tunnelledMcpRotateServerKeySessionTokenFlag, *tunnelledMcpRotateServerKeyApikeyTokenFlag, *tunnelledMcpRotateServerKeyProjectSlugInputFlag)
 			case "delete-server":
 				endpoint = c.DeleteServer()
 				data, err = tunnelledmcpc.BuildDeleteServerPayload(*tunnelledMcpDeleteServerIDFlag, *tunnelledMcpDeleteServerSessionTokenFlag, *tunnelledMcpDeleteServerApikeyTokenFlag, *tunnelledMcpDeleteServerProjectSlugInputFlag)
@@ -13593,6 +13606,7 @@ func tunnelledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    list-servers: List all tunnelled MCP server sources for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get a tunnelled MCP server by ID`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunnelled MCP server source`)
+	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunnelled MCP server source key. Returns the new tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunnelled MCP server source`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -13690,6 +13704,30 @@ func tunnelledMcpUpdateServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunnelled-mcp update-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunnelledMcpRotateServerKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunnelled-mcp rotate-server-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate a tunnelled MCP server source key. Returns the new tunnel key once.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunnelled-mcp rotate-server-key --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunnelledMcpDeleteServerUsage() {

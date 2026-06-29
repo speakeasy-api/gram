@@ -6,6 +6,7 @@ import { tunnelledMcpCreateServer } from "../funcs/tunnelledMcpCreateServer.js";
 import { tunnelledMcpDeleteServer } from "../funcs/tunnelledMcpDeleteServer.js";
 import { tunnelledMcpGetServer } from "../funcs/tunnelledMcpGetServer.js";
 import { tunnelledMcpListServers } from "../funcs/tunnelledMcpListServers.js";
+import { tunnelledMcpRotateServerKey } from "../funcs/tunnelledMcpRotateServerKey.js";
 import { tunnelledMcpUpdateServer } from "../funcs/tunnelledMcpUpdateServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -82,6 +83,25 @@ export class TunnelledMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListTunnelledMcpServersResult> {
     return unwrapAsync(tunnelledMcpListServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateServerKey tunnelledMcp
+   *
+   * @remarks
+   * Rotate a tunnelled MCP server source key. Returns the new tunnel key once.
+   */
+  async rotateServerKey(
+    request: operations.RotateTunnelledMcpServerKeyRequest,
+    security?: operations.RotateTunnelledMcpServerKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RotateTunnelledMcpServerKeyResult> {
+    return unwrapAsync(tunnelledMcpRotateServerKey(
       this,
       request,
       security,

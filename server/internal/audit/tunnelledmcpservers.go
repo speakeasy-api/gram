@@ -16,6 +16,7 @@ import (
 const (
 	ActionTunnelledMcpServerCreate Action = "tunnelled-mcp:create"
 	ActionTunnelledMcpServerUpdate Action = "tunnelled-mcp:update"
+	ActionTunnelledMcpServerRotate Action = "tunnelled-mcp:rotate_key"
 	ActionTunnelledMcpServerDelete Action = "tunnelled-mcp:delete"
 )
 
@@ -91,6 +92,55 @@ func (l *Logger) LogTunnelledMcpServerUpdate(ctx context.Context, dbtx repo.DBTX
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
 		Action: string(ActionTunnelledMcpServerUpdate),
+
+		SubjectID:          event.TunnelledMcpServerURN.ID.String(),
+		SubjectType:        string(subjectTypeTunnelledMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.TunnelledMcpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TunnelledMcpServerV1})
+}
+
+type LogTunnelledMcpServerRotateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	TunnelledMcpServerURN            urn.TunnelledMcpServer
+	TunnelledMcpServerName           string
+	TunnelledMcpServerSnapshotBefore *types.TunnelledMcpServer
+	TunnelledMcpServerSnapshotAfter  *types.TunnelledMcpServer
+}
+
+func (l *Logger) LogTunnelledMcpServerRotate(ctx context.Context, dbtx repo.DBTX, event LogTunnelledMcpServerRotateEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.TunnelledMcpServerSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionTunnelledMcpServerRotate, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.TunnelledMcpServerSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionTunnelledMcpServerRotate, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionTunnelledMcpServerRotate),
 
 		SubjectID:          event.TunnelledMcpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeTunnelledMcpServer),

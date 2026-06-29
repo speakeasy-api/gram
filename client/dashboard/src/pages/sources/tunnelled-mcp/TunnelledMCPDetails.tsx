@@ -40,11 +40,23 @@ import {
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Network, Plus, Server, Trash2 } from "lucide-react";
+import {
+  KeyRound,
+  Loader2,
+  Network,
+  Plus,
+  RotateCcw,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { useLinkMcpServerToTunnelled } from "./hooks";
+import {
+  useLinkMcpServerToTunnelled,
+  useRotateTunnelledMcpServerKey,
+  type RotateTunnelledMcpServerKeyData,
+} from "./hooks";
 import { RemoveTunnelledMcpDialogContent } from "./RemoveTunnelledMcpDialog";
 
 const VALID_TABS = ["overview", "setup", "mcp-servers", "settings"] as const;
@@ -604,6 +616,7 @@ function SettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       <NameSection tunnelledMcpServer={tunnelledMcpServer} />
+      <TunnelKeySection tunnelledMcpServer={tunnelledMcpServer} />
       <DangerZoneSection
         tunnelledMcpServer={tunnelledMcpServer}
         linkedMcpServers={linkedMcpServers}
@@ -693,6 +706,152 @@ function NameSection({
           </RequireScope>
         </Stack>
       </Stack>
+    </div>
+  );
+}
+
+function TunnelKeySection({
+  tunnelledMcpServer,
+}: {
+  tunnelledMcpServer: TunnelledMcpServer;
+}) {
+  const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
+  const [rotatedKey, setRotatedKey] =
+    useState<RotateTunnelledMcpServerKeyData>();
+  const rotate = useRotateTunnelledMcpServerKey();
+
+  const handleOpenChange = (open: boolean) => {
+    setRotateDialogOpen(open);
+    if (!open) {
+      setRotatedKey(undefined);
+      rotate.reset();
+    }
+  };
+
+  const handleRotate = async () => {
+    try {
+      const result = await rotate.mutateAsync({
+        tunnelledMcpServerId: tunnelledMcpServer.id,
+      });
+      setRotatedKey(result);
+      toast.success("Tunnel key rotated");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to rotate tunnel key";
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border p-6">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Type variant="subheading" className="mb-1">
+            Tunnel Key
+          </Type>
+          <Type muted small>
+            Current key prefix:{" "}
+            <span className="font-mono">{tunnelledMcpServer.keyPrefix}</span>
+          </Type>
+        </div>
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setRotateDialogOpen(true)}
+          >
+            <Button.LeftIcon>
+              <RotateCcw className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Rotate</Button.Text>
+          </Button>
+        </RequireScope>
+      </div>
+      <Type muted small>
+        Rotation replaces the key used by tunnel agents for this source.
+      </Type>
+
+      <Dialog open={rotateDialogOpen} onOpenChange={handleOpenChange}>
+        <Dialog.Content className="max-w-xl!">
+          {rotatedKey ? (
+            <>
+              <Dialog.Header>
+                <Dialog.Title>Tunnel Key Rotated</Dialog.Title>
+                <Dialog.Description>
+                  Copy the new key now. It will not be shown again.
+                </Dialog.Description>
+              </Dialog.Header>
+              <Alert variant="warning" dismissible={false}>
+                Restart tunnel agents with the new key to reconnect this source.
+              </Alert>
+              <div className="bg-muted flex items-center gap-2 rounded-md p-3">
+                <code className="min-w-0 flex-1 break-all text-sm">
+                  {rotatedKey.tunnelKey}
+                </code>
+                <CopyButton
+                  text={rotatedKey.tunnelKey}
+                  size="icon-sm"
+                  tooltip="Copy tunnel key"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <KeyRound className="text-muted-foreground h-4 w-4" />
+                <Type small muted>
+                  Prefix: {rotatedKey.tunnelledMcpServer.keyPrefix}
+                </Type>
+              </div>
+              <Dialog.Footer>
+                <Button onClick={() => handleOpenChange(false)}>
+                  <Button.Text>Close</Button.Text>
+                </Button>
+              </Dialog.Footer>
+            </>
+          ) : (
+            <>
+              <Dialog.Header>
+                <Dialog.Title>Rotate Tunnel Key</Dialog.Title>
+                <Dialog.Description>
+                  The current key will stop working for new tunnel connections.
+                </Dialog.Description>
+              </Dialog.Header>
+              <Alert variant="warning" dismissible={false}>
+                Running agents using the old key will be disconnected shortly
+                and must be restarted with the replacement key.
+              </Alert>
+              {rotate.isError && (
+                <Alert variant="error" dismissible={false}>
+                  {rotate.error.message}
+                </Alert>
+              )}
+              <Dialog.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleOpenChange(false)}
+                  disabled={rotate.isPending}
+                >
+                  <Button.Text>Cancel</Button.Text>
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  onClick={() => void handleRotate()}
+                  disabled={rotate.isPending}
+                >
+                  {rotate.isPending ? (
+                    <>
+                      <Button.LeftIcon>
+                        <Loader2 className="size-4 animate-spin" />
+                      </Button.LeftIcon>
+                      <Button.Text>Rotating</Button.Text>
+                    </>
+                  ) : (
+                    <Button.Text>Rotate</Button.Text>
+                  )}
+                </Button>
+              </Dialog.Footer>
+            </>
+          )}
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }

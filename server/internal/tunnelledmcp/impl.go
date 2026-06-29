@@ -2,8 +2,6 @@ package tunnelledmcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,9 +34,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tunnelledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-const tunnelKeyPrefix = "gram_tunnel_"
+const routeCacheKeyPrefix = "tunnel_routes:"
 
 type Service struct {
 	tracer trace.Tracer
@@ -110,13 +109,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
 	}
 
-	tunnelKey, err := generateTunnelKey()
+	tunnelKey, keyHash, err := wire.NewKey()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate tunnel key").LogError(ctx, logger)
-	}
-	keyHash, err := auth.GetAPIKeyHash(tunnelKey)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "hash tunnel key").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -147,7 +142,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		ProjectID: *authCtx.ProjectID,
 		Name:      name,
 		KeyHash:   keyHash,
-		KeyPrefix: tunnelKey[:len(tunnelKeyPrefix)+5],
+		KeyPrefix: tunnelKey[:len(wire.KeyPrefix)+5],
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -307,6 +302,83 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	return afterView, nil
 }
 
+func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServerKeyPayload) (*gen.RotateTunnelledMcpServerKeyResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
+	}
+
+	tunnelKey, keyHash, err := wire.NewKey()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate tunnel key").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "tunnelled mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get tunnelled mcp server").LogError(ctx, logger)
+	}
+
+	beforeView := mv.BuildTunnelledMcpServerView(existing, s.connectionsForServer(ctx, existing.ID))
+	rotated, err := txRepo.RotateServerKey(ctx, repo.RotateServerKeyParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+		KeyHash:   keyHash,
+		KeyPrefix: tunnelKey[:len(wire.KeyPrefix)+5],
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "rotate tunnelled mcp server key").LogError(ctx, logger)
+	}
+
+	afterView := mv.BuildTunnelledMcpServerView(rotated, nil)
+	if err := s.audit.LogTunnelledMcpServerRotate(ctx, dbtx, audit.LogTunnelledMcpServerRotateEvent{
+		OrganizationID:                   authCtx.ActiveOrganizationID,
+		ProjectID:                        *authCtx.ProjectID,
+		Actor:                            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:                 authCtx.Email,
+		ActorSlug:                        nil,
+		TunnelledMcpServerURN:            urn.NewTunnelledMcpServer(rotated.ID),
+		TunnelledMcpServerName:           rotated.Name,
+		TunnelledMcpServerSnapshotBefore: beforeView,
+		TunnelledMcpServerSnapshotAfter:  afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log tunnelled mcp server key rotation").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	s.deleteRouteState(ctx, logger, serverID)
+
+	return &gen.RotateTunnelledMcpServerKeyResult{
+		Server:    afterView,
+		TunnelKey: tunnelKey,
+	}, nil
+}
+
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -356,11 +428,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	if s.cache != nil {
-		if err := s.cache.Delete(ctx, connectionCacheKey(serverID)); err != nil {
-			logger.WarnContext(ctx, "delete tunnelled mcp connection cache", attr.SlogError(err))
-		}
-	}
+	s.deleteRouteState(ctx, logger, serverID)
 
 	return nil
 }
@@ -386,13 +454,20 @@ func connectionCacheKey(serverID uuid.UUID) string {
 	return "tunnel_connections:" + serverID.String()
 }
 
-func generateTunnelKey() (string, error) {
-	const randomKeyLength = 64
-	randomBytes := make([]byte, randomKeyLength/2)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return "", fmt.Errorf("generate random token bytes: %w", err)
+func routeCacheKey(serverID uuid.UUID) string {
+	return routeCacheKeyPrefix + serverID.String()
+}
+
+func (s *Service) deleteRouteState(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
+	if s.cache == nil {
+		return
 	}
-	return tunnelKeyPrefix + hex.EncodeToString(randomBytes), nil
+	if err := s.cache.Delete(ctx, connectionCacheKey(serverID)); err != nil {
+		logger.WarnContext(ctx, "delete tunnelled mcp connection cache", attr.SlogError(err))
+	}
+	if err := s.cache.Delete(ctx, routeCacheKey(serverID)); err != nil {
+		logger.WarnContext(ctx, "delete tunnelled mcp route cache", attr.SlogError(err))
+	}
 }
 
 func effectiveTunnelledMcpServerLimit(accountType string, configured pgtype.Int4) int64 {

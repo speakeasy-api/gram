@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -42,7 +43,7 @@ func (r *PostgresKeyResolver) Resolve(ctx context.Context, bearer string) (strin
 SELECT id::text
 FROM tunnelled_mcp_servers
 WHERE key_hash = $1
-  AND status = 'active'
+  AND status IN ('created', 'active')
   AND deleted IS FALSE
 LIMIT 1
 `, wire.HashKey(key)).Scan(&tunnelID)
@@ -55,4 +56,46 @@ LIMIT 1
 	return tunnelID, true, nil
 }
 
+func (r *PostgresKeyResolver) MarkConnected(ctx context.Context, tunnelID, keyHash, agentVersion string) error {
+	tag, err := r.db.Exec(ctx, `
+UPDATE tunnelled_mcp_servers
+SET
+  status = 'active',
+  agent_version = NULLIF($3, ''),
+  last_seen_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE id = $1::uuid
+  AND key_hash = $2
+  AND status IN ('created', 'active')
+  AND deleted IS FALSE
+`, tunnelID, keyHash, agentVersion)
+	if err != nil {
+		return fmt.Errorf("mark tunnel connected: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (r *PostgresKeyResolver) IsActive(ctx context.Context, tunnelID, keyHash string) (bool, error) {
+	var ok bool
+	err := r.db.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM tunnelled_mcp_servers
+  WHERE id = $1::uuid
+    AND key_hash = $2
+    AND status = 'active'
+    AND deleted IS FALSE
+)
+`, tunnelID, keyHash).Scan(&ok)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
 var _ KeyResolver = (*PostgresKeyResolver)(nil)
+var _ ConnectionRecorder = (*PostgresKeyResolver)(nil)
+var _ ActiveTunnelChecker = (*PostgresKeyResolver)(nil)

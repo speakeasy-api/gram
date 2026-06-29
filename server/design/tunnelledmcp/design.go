@@ -120,6 +120,32 @@ var _ = Service("tunnelledMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateTunnelledMcpServer"}`)
 	})
 
+	Method("rotateServerKey", func() {
+		Description("Rotate a tunnelled MCP server source key. Returns the new tunnel key once.")
+
+		Payload(func() {
+			Extend(TunnelledMcpRotateServerKeyForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RotateServerKeyResult)
+
+		HTTP(func() {
+			POST("/rpc/tunnelledMcp.rotateServerKey")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(TunnelledMcpRotateServerKeyForm)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateTunnelledMcpServerKey")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotateServerKey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateTunnelledMcpServerKey"}`)
+	})
+
 	Method("deleteServer", func() {
 		Description("Delete a tunnelled MCP server source")
 
@@ -168,6 +194,18 @@ var TunnelledMcpUpdateServerForm = Type("UpdateTunnelledMcpServerForm", func() {
 	Attribute("name", String, "Human-readable display name for the tunnelled MCP server")
 
 	Required("id", "name")
+})
+
+var TunnelledMcpRotateServerKeyForm = Type("RotateTunnelledMcpServerKeyForm", func() {
+	Meta("openapi:typename", "RotateTunnelledMcpServerKeyForm")
+
+	Description("Form for rotating a tunnelled MCP server source key")
+
+	Attribute("id", String, "The ID of the tunnelled MCP server", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id")
 })
 
 var TunnelledMcpLifecycleStatus = Type("TunnelledMcpLifecycleStatus", String, func() {
@@ -246,6 +284,15 @@ var CreateServerResult = Type("CreateTunnelledMcpServerResult", func() {
 
 	Attribute("server", TunnelledMcpServer)
 	Attribute("tunnel_key", String, "Plaintext tunnel key. Only returned at creation time.")
+
+	Required("server", "tunnel_key")
+})
+
+var RotateServerKeyResult = Type("RotateTunnelledMcpServerKeyResult", func() {
+	Description("Rotated tunnelled MCP server plus the one-time replacement tunnel key")
+
+	Attribute("server", TunnelledMcpServer)
+	Attribute("tunnel_key", String, "Plaintext tunnel key. Only returned after rotation.")
 
 	Required("server", "tunnel_key")
 })

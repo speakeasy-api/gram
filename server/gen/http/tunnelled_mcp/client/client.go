@@ -33,6 +33,10 @@ type Client struct {
 	// updateServer endpoint.
 	UpdateServerDoer goahttp.Doer
 
+	// RotateServerKey Doer is the HTTP client used to make requests to the
+	// rotateServerKey endpoint.
+	RotateServerKeyDoer goahttp.Doer
+
 	// DeleteServer Doer is the HTTP client used to make requests to the
 	// deleteServer endpoint.
 	DeleteServerDoer goahttp.Doer
@@ -61,6 +65,7 @@ func NewClient(
 		ListServersDoer:     doer,
 		GetServerDoer:       doer,
 		UpdateServerDoer:    doer,
+		RotateServerKeyDoer: doer,
 		DeleteServerDoer:    doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -161,6 +166,30 @@ func (c *Client) UpdateServer() goa.Endpoint {
 		resp, err := c.UpdateServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("tunnelledMcp", "updateServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RotateServerKey returns an endpoint that makes HTTP requests to the
+// tunnelledMcp service rotateServerKey server.
+func (c *Client) RotateServerKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateServerKeyRequest(c.encoder)
+		decodeResponse = DecodeRotateServerKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateServerKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateServerKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("tunnelledMcp", "rotateServerKey", err)
 		}
 		return decodeResponse(resp)
 	}

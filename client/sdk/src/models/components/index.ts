@@ -380,6 +380,8 @@ export * from "./riskuserbreakdownresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";
 export * from "./rolesummary.js";
+export * from "./rotatetunnelledmcpserverkeyform.js";
+export * from "./rotatetunnelledmcpserverkeyresult.js";
 export * from "./scopedefinition.js";
 export * from "./searchchatsfilter.js";
 export * from "./searchchatspayload.js";

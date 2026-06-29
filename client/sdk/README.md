@@ -602,6 +602,7 @@ run();
 * [deleteServer](docs/sdks/tunnelledmcp/README.md#deleteserver) - deleteServer tunnelledMcp
 * [getServer](docs/sdks/tunnelledmcp/README.md#getserver) - getServer tunnelledMcp
 * [listServers](docs/sdks/tunnelledmcp/README.md#listservers) - listServers tunnelledMcp
+* [rotateServerKey](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
 * [updateServer](docs/sdks/tunnelledmcp/README.md#updateserver) - updateServer tunnelledMcp
 
 ### [Usage](docs/sdks/usage/README.md)
@@ -982,6 +983,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`tunnelledMcpDeleteServer`](docs/sdks/tunnelledmcp/README.md#deleteserver) - deleteServer tunnelledMcp
 - [`tunnelledMcpGetServer`](docs/sdks/tunnelledmcp/README.md#getserver) - getServer tunnelledMcp
 - [`tunnelledMcpListServers`](docs/sdks/tunnelledmcp/README.md#listservers) - listServers tunnelledMcp
+- [`tunnelledMcpRotateServerKey`](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
 - [`tunnelledMcpUpdateServer`](docs/sdks/tunnelledmcp/README.md#updateserver) - updateServer tunnelledMcp
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -1302,6 +1304,7 @@ To learn about this feature and how to get started, check
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
+- [`useRotateTunnelledMcpServerKeyMutation`](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry

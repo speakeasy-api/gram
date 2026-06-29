@@ -88,7 +88,9 @@ func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 // client session over it, registers the session, and keeps the route fresh
 // until the session closes.
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
-	tunnelID, ok, err := g.keys.Resolve(r.Context(), r.Header.Get("Authorization"))
+	authHeader := r.Header.Get("Authorization")
+	presentedKeyHash := hashBearerKey(authHeader)
+	tunnelID, ok, err := g.keys.Resolve(r.Context(), authHeader)
 	if err != nil {
 		g.logger.ErrorContext(r.Context(), "tunnel connect key lookup failed", slog.Any("error", err))
 		http.Error(w, "tunnel key lookup failed", http.StatusServiceUnavailable)
@@ -120,6 +122,14 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), status)
 		return
+	}
+	if recorder, ok := g.keys.(ConnectionRecorder); ok {
+		if err := recorder.MarkConnected(r.Context(), tunnelID, presentedKeyHash, agentVersion); err != nil {
+			g.logger.ErrorContext(r.Context(), "tunnel connect activation failed",
+				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+			http.Error(w, "tunnel activation failed", http.StatusServiceUnavailable)
+			return
+		}
 	}
 
 	ws, err := g.upgrader.Upgrade(w, r, nil)
@@ -169,7 +179,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	// Refresh the route until the session dies.
 	stop := make(chan struct{})
-	go g.refreshSessionState(tunnelID, stop)
+	go g.refreshSessionState(tunnelID, presentedKeyHash, session, stop)
 
 	// Block until the session closes (agent disconnect / network drop).
 	<-session.CloseChan()
@@ -188,7 +198,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		slog.Int("active", g.reg.activeSessions()))
 }
 
-func (g *Gateway) refreshSessionState(tunnelID string, stop <-chan struct{}) {
+func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.Session, stop <-chan struct{}) {
 	t := time.NewTicker(routeTTL / 2)
 	defer t.Stop()
 	for {
@@ -196,6 +206,20 @@ func (g *Gateway) refreshSessionState(tunnelID string, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-t.C:
+			if checker, ok := g.keys.(ActiveTunnelChecker); ok {
+				active, err := checker.IsActive(context.Background(), tunnelID, keyHash)
+				if err != nil {
+					g.logger.WarnContext(context.Background(), "tunnel active check failed",
+						slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+					continue
+				}
+				if !active {
+					g.logger.InfoContext(context.Background(), "tunnel session no longer active",
+						slog.String("tunnel_id", tunnelID))
+					_ = session.Close()
+					return
+				}
+			}
 			if err := g.routes.Publish(context.Background(), tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
 				g.logger.WarnContext(context.Background(), "tunnel route refresh failed",
 					slog.String("tunnel_id", tunnelID), slog.Any("error", err))
@@ -203,6 +227,11 @@ func (g *Gateway) refreshSessionState(tunnelID string, stop <-chan struct{}) {
 			g.publishConnectionSnapshot(context.Background(), tunnelID, time.Now().UTC())
 		}
 	}
+}
+
+func hashBearerKey(bearer string) string {
+	key := strings.TrimSpace(strings.TrimPrefix(bearer, "Bearer "))
+	return wire.HashKey(key)
 }
 
 func (g *Gateway) publishConnectionSnapshot(ctx context.Context, tunnelID string, heartbeatAt time.Time) {

@@ -273,6 +273,7 @@ export * from "./revokeriskpolicybypassrequest.js";
 export * from "./revokeusersession.js";
 export * from "./revokeusersessionclient.js";
 export * from "./revokeusersessionconsent.js";
+export * from "./rotatetunnelledmcpserverkey.js";
 export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";

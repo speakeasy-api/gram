@@ -6,6 +6,7 @@ import type {
   TunnelledMcpServer,
 } from "@gram/client/models/components";
 import {
+  invalidateAllGetTunnelledMcpServer,
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
   invalidateAllTunnelledMcpServers,
@@ -147,6 +148,46 @@ export function useLinkMcpServerToTunnelled(): UseMutationResult<
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
+export type RotateTunnelledMcpServerKeyVariables = {
+  tunnelledMcpServerId: string;
+};
+
+export type RotateTunnelledMcpServerKeyData = {
+  tunnelledMcpServer: TunnelledMcpServer;
+  tunnelKey: string;
+};
+
+export function useRotateTunnelledMcpServerKey(): UseMutationResult<
+  RotateTunnelledMcpServerKeyData,
+  Error,
+  RotateTunnelledMcpServerKeyVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tunnelledMcpServerId }) => {
+      const result = await client.tunnelledMcp.rotateServerKey({
+        rotateTunnelledMcpServerKeyForm: {
+          id: tunnelledMcpServerId,
+        },
+      });
+      return {
+        tunnelledMcpServer: result.server,
+        tunnelKey: result.tunnelKey,
+      };
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllGetTunnelledMcpServer(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllTunnelledMcpServers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
