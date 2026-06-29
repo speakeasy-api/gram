@@ -6829,6 +6829,13 @@ paths:
                     description: Filter by external user ID
                     type: string
                 - allowEmptyValue: true
+                  description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+                  in: query
+                  name: source
+                  schema:
+                    description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+                    type: string
+                - allowEmptyValue: true
                   description: Filter to chats produced by this assistant
                   in: query
                   name: assistant_id
@@ -6842,6 +6849,17 @@ paths:
                   name: has_risk
                   schema:
                     description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                    enum:
+                        - ""
+                        - "true"
+                        - "false"
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Filter by pinned state: ''true'' for pinned chats, ''false'' for unpinned, or empty for no filter.'
+                  in: query
+                  name: pinned
+                  schema:
+                    description: 'Filter by pinned state: ''true'' for pinned chats, ''false'' for unpinned, or empty for no filter.'
                     enum:
                         - ""
                         - "true"
@@ -7008,6 +7026,104 @@ paths:
             x-speakeasy-react-hook:
                 name: ListChats
                 type: query
+    /rpc/chat.listSources:
+        get:
+            description: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
+            operationId: listChatSources
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSourcesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: listSources chat
+            tags:
+                - chat
+            x-speakeasy-name-override: listSources
+            x-speakeasy-react-hook:
+                name: ListChatSources
+                type: query
     /rpc/chat.load:
         get:
             description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).'
@@ -7068,19 +7184,19 @@ paths:
                     description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
                     type: boolean
                 - allowEmptyValue: true
-                  description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+                  description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
                   in: query
                   name: risk_only
                   schema:
                     default: false
-                    description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+                    description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
                     type: boolean
                 - allowEmptyValue: true
-                  description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+                  description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
                   in: query
                   name: query
                   schema:
-                    description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+                    description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
                     maxLength: 200
                     minLength: 1
                     type: string
@@ -7176,6 +7292,95 @@ paths:
             x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadChat
+    /rpc/chat.setPinned:
+        post:
+            description: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
+            operationId: setChatPinned
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetPinnedRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setPinned chat
+            tags:
+                - chat
+            x-speakeasy-name-override: setPinned
     /rpc/chat.submitFeedback:
         post:
             description: Submit user feedback for a chat (success/failure)
@@ -24225,6 +24430,98 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskDenyPolicyBypassRequest
                 type: mutation
+    /rpc/risk.getBlock:
+        get:
+            description: Get a tool call block by its risk result ID for the durable block page.
+            operationId: getRiskBlock
+            parameters:
+                - allowEmptyValue: true
+                  description: The block ID (the underlying risk result ID).
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskBlock'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRiskBlock risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.blocks
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetBlock
+                type: query
     /rpc/risk.listExclusions:
         get:
             description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -26213,6 +26510,95 @@ paths:
             x-speakeasy-name-override: test
             x-speakeasy-react-hook:
                 name: RiskTestDetectionRule
+                type: mutation
+    /rpc/risk.submitBlockFeedback:
+        put:
+            description: Record thumbs-up/thumbs-down feedback for a tool call block from the block page.
+            operationId: submitRiskBlockFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitRiskBlockFeedbackRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskBlock'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: submitRiskBlockFeedback risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.blocks
+            x-speakeasy-name-override: submitFeedback
+            x-speakeasy-react-hook:
+                name: RiskSubmitBlockFeedback
                 type: mutation
     /rpc/risk.updateExclusions:
         put:
@@ -34963,6 +35349,9 @@ components:
                     type: string
                     description: Creation timestamp.
                     format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The ID of the user who created the assistant, if known.
                 id:
                     type: string
                     description: The assistant ID.
@@ -35647,12 +36036,6 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskSegment'
                     description: 'Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment''s cursors to expand it.'
-                match_seqs:
-                    type: array
-                    items:
-                        type: integer
-                        format: int64
-                    description: 'Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.'
                 max_generation:
                     type: integer
                     description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
@@ -35740,6 +36123,9 @@ components:
                 id:
                     type: string
                     description: The ID of the message
+                is_risk:
+                    type: boolean
+                    description: 'Present only in `risk_only` mode: true when this message has an active risk finding, false for the surrounding-context messages padded around it.'
                 model:
                     type: string
                     description: The model that generated the message
@@ -40986,6 +41372,16 @@ components:
                         $ref: '#/components/schemas/ShadowMCPApprovalRequest'
             required:
                 - requests
+        ListSourcesResult:
+            type: object
+            properties:
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
+            required:
+                - sources
         ListToolFiltersResult:
             type: object
             properties:
@@ -44161,6 +44557,42 @@ components:
             description: Result type for revoking all of a client's remote_sessions.
             required:
                 - revoked_count
+        RiskBlock:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the block occurred.
+                    format: date-time
+                feedback:
+                    type: string
+                    description: Existing feedback sentiment recorded for this block, when any.
+                    enum:
+                        - up
+                        - down
+                id:
+                    type: string
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                policy_name:
+                    type: string
+                    description: Name of the risk policy that blocked the call.
+                project_id:
+                    type: string
+                    description: The project the block belongs to.
+                    format: uuid
+                reason:
+                    type: string
+                    description: Human-readable reason the tool call was blocked.
+                tool_name:
+                    type: string
+                    description: Name of the tool that was blocked, when known.
+            required:
+                - id
+                - project_id
+                - reason
+                - policy_name
+                - created_at
         RiskCategoriesResult:
             type: object
             properties:
@@ -44718,6 +45150,10 @@ components:
         RiskResult:
             type: object
             properties:
+                block_id:
+                    type: string
+                    description: ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
+                    format: uuid
                 chat_id:
                     type: string
                     description: The chat session containing the message.
@@ -46033,6 +46469,18 @@ components:
             required:
                 - organization_id
                 - whitelisted
+        SetPinnedRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the chat to pin or unpin
+                pinned:
+                    type: boolean
+                    description: True to pin the chat, false to unpin it
+            required:
+                - id
+                - pinned
         SetPluginAssignmentsForm:
             type: object
             properties:
@@ -46467,6 +46915,22 @@ components:
             required:
                 - id
                 - feedback
+        SubmitRiskBlockFeedbackRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                sentiment:
+                    type: string
+                    description: Feedback sentiment.
+                    enum:
+                        - up
+                        - down
+            required:
+                - id
+                - sentiment
         SuggestCustomDetectionRuleRequestBody:
             type: object
             properties:

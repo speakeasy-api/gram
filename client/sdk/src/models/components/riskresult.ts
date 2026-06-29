@@ -11,6 +11,10 @@ import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
 
 export type RiskResult = {
   /**
+   * ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
+   */
+  blockId?: string | undefined;
+  /**
    * The chat session containing the message.
    */
   chatId?: string | undefined;
@@ -84,6 +88,7 @@ export type RiskResult = {
 export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
   .pipe(
     z.object({
+      block_id: z.optional(z.string()),
       chat_id: z.optional(z.string()),
       chat_message_id: z.string(),
       chat_title: z.optional(z.string()),
@@ -107,6 +112,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "block_id": "blockId",
         "chat_id": "chatId",
         "chat_message_id": "chatMessageId",
         "chat_title": "chatTitle",

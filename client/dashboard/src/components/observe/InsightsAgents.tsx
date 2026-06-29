@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
@@ -116,14 +117,6 @@ function formatCost(value: number): string {
 
 function formatValue(value: number, mode: ValueMode): string {
   return mode === "cost" ? formatCost(value) : formatCompact(value);
-}
-
-function formatPlatform(value: string): string {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part[0]!.toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function initials(name: string): string {

@@ -173,6 +173,9 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
 		Format(FormatUUID)
 	})

@@ -20,18 +20,22 @@ type Client struct {
 	GenerateTitleEndpoint  goa.Endpoint
 	CreditUsageEndpoint    goa.Endpoint
 	DeleteChatEndpoint     goa.Endpoint
+	SetPinnedEndpoint      goa.Endpoint
 	SubmitFeedbackEndpoint goa.Endpoint
+	ListSourcesEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, loadChat, generateTitle, creditUsage, deleteChat, submitFeedback goa.Endpoint) *Client {
+func NewClient(listChats, loadChat, generateTitle, creditUsage, deleteChat, setPinned, submitFeedback, listSources goa.Endpoint) *Client {
 	return &Client{
 		ListChatsEndpoint:      listChats,
 		LoadChatEndpoint:       loadChat,
 		GenerateTitleEndpoint:  generateTitle,
 		CreditUsageEndpoint:    creditUsage,
 		DeleteChatEndpoint:     deleteChat,
+		SetPinnedEndpoint:      setPinned,
 		SubmitFeedbackEndpoint: submitFeedback,
+		ListSourcesEndpoint:    listSources,
 	}
 }
 
@@ -141,6 +145,24 @@ func (c *Client) DeleteChat(ctx context.Context, p *DeleteChatPayload) (err erro
 	return
 }
 
+// SetPinned calls the "setPinned" endpoint of the "chat" service.
+// SetPinned may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetPinned(ctx context.Context, p *SetPinnedPayload) (err error) {
+	_, err = c.SetPinnedEndpoint(ctx, p)
+	return
+}
+
 // SubmitFeedback calls the "submitFeedback" endpoint of the "chat" service.
 // SubmitFeedback may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -161,4 +183,26 @@ func (c *Client) SubmitFeedback(ctx context.Context, p *SubmitFeedbackPayload) (
 		return
 	}
 	return ires.(*SubmitFeedbackResult), nil
+}
+
+// ListSources calls the "listSources" endpoint of the "chat" service.
+// ListSources may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSources(ctx context.Context, p *ListSourcesPayload) (res *ListSourcesResult, err error) {
+	var ires any
+	ires, err = c.ListSourcesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSourcesResult), nil
 }

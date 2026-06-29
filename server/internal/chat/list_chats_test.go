@@ -93,6 +93,47 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 	require.NoError(t, err)
 }
 
+// seedChatWithSource inserts a chat owned by externalUserID with a single
+// message carrying the given source, so the chat's inferred source (the latest
+// non-null message source) is `source`.
+func seedChatWithSource(t *testing.T, ctx context.Context, ti *chatTestInstance, externalUserID, source string) uuid.UUID {
+	t.Helper()
+	chatID := seedChat(t, ctx, ti, "", externalUserID, "chat for "+source)
+	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:    pgtype.Text{String: source, Valid: true},
+	})
+	require.NoError(t, err)
+	return chatID
+}
+
+// seedRiskOnChatDisabledPolicy seeds a found risk result whose policy is
+// disabled. The finding row is real, but every risk surface must treat it as
+// absent because the policy is off (mirrors a policy disabled after detection).
+func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
+	t.Helper()
+	r := repo.New(ti.conn)
+	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	policyID, err := r.SeedDisabledRiskPolicy(ctx, repo.SeedDisabledRiskPolicyParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		RiskPolicyID:   policyID,
+		ChatMessageID:  msgID,
+		Found:          true,
+	})
+	require.NoError(t, err)
+}
+
 // initSessionCtx creates a session-authenticated context and overrides ProjectID
 // to ti.projectID so that ListChats scopes to the same project as seeded chats.
 func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
@@ -653,6 +694,40 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
 }
 
+// TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk
+// result under a disabled policy is excluded from the per-chat count and from
+// the has_risk filter — matching the risk.results.list detail view, so the
+// chat-list "N risk" badge can't disagree with an empty detail panel.
+func TestListChats_DisabledPolicyFinding_NotCounted(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-disabled")
+
+	chatID := seedChat(t, ctx, ti, "", "ext-disabled", "chat with disabled-policy finding")
+	seedRiskOnChatDisabledPolicy(t, ctx, ti, chatID)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 0, *result.Chats[0].RiskFindingsCount, "disabled-policy finding must not count")
+
+	// has_risk=true must not surface the chat; has_risk=false must.
+	hasRisk := "true"
+	pTrue := defaultPayload()
+	pTrue.HasRisk = &hasRisk
+	resTrue, err := ti.service.ListChats(ctx, pTrue)
+	require.NoError(t, err)
+	require.Empty(t, resTrue.Chats, "disabled-policy finding must not match has_risk=true")
+
+	noRisk := "false"
+	pFalse := defaultPayload()
+	pFalse.HasRisk = &noRisk
+	resFalse, err := ti.service.ListChats(ctx, pFalse)
+	require.NoError(t, err)
+	require.Len(t, resFalse.Chats, 1, "chat with only a disabled-policy finding reads as no-risk")
+}
+
 // TestListChats_InvalidFromTimestamp verifies that a malformed from timestamp returns a bad-request error.
 func TestListChats_InvalidFromTimestamp(t *testing.T) {
 	t.Parallel()
@@ -665,4 +740,64 @@ func TestListChats_InvalidFromTimestamp(t *testing.T) {
 
 	_, err := ti.service.ListChats(ctx, payload)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestListChats_Filter_Source verifies the source filter matches chats by their
+// inferred (latest non-null) message source and accepts a comma-separated list.
+func TestListChats_Filter_Source(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	claude := seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	_ = seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+	playground := seedChatWithSource(t, ctx, ti, "ext-src", "playground")
+
+	source := "claude-code,playground"
+	payload := defaultPayload()
+	payload.Source = &source
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	got := map[string]bool{}
+	for _, c := range result.Chats {
+		got[c.ID] = true
+	}
+	require.True(t, got[claude.String()], "expected claude-code chat in results")
+	require.True(t, got[playground.String()], "expected playground chat in results")
+}
+
+// TestListChats_Filter_Source_EmptyReturnsAll guards against the regression
+// where an empty source filter sent SQL NULL and dropped every row.
+func TestListChats_Filter_Source_EmptyReturnsAll(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+
+	empty := ""
+	payload := defaultPayload()
+	payload.Source = &empty
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+}
+
+// TestListSources returns the distinct inferred sources present in the project.
+func TestListSources(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code") // duplicate collapses
+
+	result, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
 }

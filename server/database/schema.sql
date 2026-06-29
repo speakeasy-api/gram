@@ -1205,6 +1205,9 @@ CREATE TABLE IF NOT EXISTS chats (
   -- True when a human explicitly renamed the chat. Auto title generation skips
   -- these so it never overwrites a manually chosen name.
   title_manually_set boolean NOT NULL DEFAULT false,
+  -- When a human pinned the chat (NULL = not pinned). Pinned chats surface in a
+  -- dedicated section above recents; the timestamp orders them by pin time.
+  pinned_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3058,6 +3061,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   policy_type TEXT NOT NULL DEFAULT 'standard',
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
+  -- Per-analyzer scanner configuration as opaque JSON, namespaced by analyzer.
+  -- presidio.score_threshold (0.0-1.0): minimum Presidio confidence a PII match
+  -- must clear to surface; absent means the scanner applies its default (0.5).
+  -- New per-scanner options live here rather than as a column each.
+  analyzer_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   prompt_injection_rules TEXT[],
   -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
   -- the policy author has unchecked within an otherwise-enabled category.
@@ -3348,6 +3356,13 @@ CREATE TABLE IF NOT EXISTS tool_call_blocks (
   risk_result_id uuid,
   chat_id uuid,
   chat_message_id uuid,
+
+  -- The Gram user whose agent triggered the block, captured at deny time.
+  -- Used to authorize the durable block page (the owner may view their own
+  -- block). Stored directly rather than derived via chat_id so it is available
+  -- even when session capture is disabled and no chat row was persisted. Empty
+  -- string when the user could not be resolved at deny time.
+  user_id TEXT NOT NULL,
 
   feedback TEXT,
   feedback_user_id TEXT,

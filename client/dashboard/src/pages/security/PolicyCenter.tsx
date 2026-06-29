@@ -253,6 +253,16 @@ const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
 ]);
 
+/** Built-in detectors that run at the category level and have no individual
+ *  sub-rules in DETECTION_RULES (their rule list is intentionally empty).
+ *  Selecting one of these is enough to enable the policy on its own. */
+const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
+  "prompt_injection",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+]);
+
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
  *  a side-sheet to pick which rules in the category are active. */
 function DetectorCard({
@@ -1173,8 +1183,13 @@ function PolicyCenterContent() {
       const userMessagePayload = formUserMessage.trim()
         ? { userMessage: formUserMessage }
         : {};
+      // In CEL scope mode the include predicate is the sole scope: send no
+      // message-type filter so a stale subset can't intersect it (the two are a
+      // mutex). The selection is preserved in form state for a mode switch-back.
       const promptMessageTypes =
-        policyMessageTypesForPayload(selectedMessageTypes);
+        scopeMode === "cel"
+          ? []
+          : policyMessageTypesForPayload(selectedMessageTypes);
       if (editingPolicy) {
         updateMutation.mutate({
           request: {
@@ -1213,7 +1228,12 @@ function PolicyCenterContent() {
       return;
     }
 
-    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
+    // CEL scope mode replaces the message-type selection; send no message-type
+    // filter so a stale subset can't intersect the include predicate.
+    const messageTypes =
+      scopeMode === "cel"
+        ? []
+        : policyMessageTypesForPayload(selectedMessageTypes);
     const {
       sources,
       presidioEntities,
@@ -1588,11 +1608,14 @@ function PolicyCenterContent() {
       ? selectedMessageTypes.size === 0
       : scopeInclude.trim() === "";
   // A standard policy needs at least one detector that will actually run: a
-  // custom rule, or a selected category with at least one of its rules enabled.
+  // custom rule, a category-level detector (no sub-rules to enable), or a
+  // selected category with at least one of its rules enabled.
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
-    [...selectedCategories].some((c) =>
-      DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
+    [...selectedCategories].some(
+      (c) =>
+        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
   const continueDisabled =
     (wizardStep === 0 &&
@@ -1833,6 +1856,12 @@ function PolicyCenterContent() {
                       setFormTemperature={setFormTemperature}
                       formFailOpen={formFailOpen}
                       setFormFailOpen={setFormFailOpen}
+                      scopeInclude={scopeInclude}
+                      setScopeInclude={setScopeInclude}
+                      scopeExempt={scopeExempt}
+                      setScopeExempt={setScopeExempt}
+                      scopeMode={scopeMode}
+                      setScopeMode={setScopeMode}
                       selectedMessageTypes={selectedMessageTypes}
                       setSelectedMessageTypes={setSelectedMessageTypes}
                     />
@@ -1984,6 +2013,12 @@ function PromptPolicySheetBody({
   setFormTemperature,
   formFailOpen,
   setFormFailOpen,
+  scopeInclude,
+  setScopeInclude,
+  scopeExempt,
+  setScopeExempt,
+  scopeMode,
+  setScopeMode,
   selectedMessageTypes,
   setSelectedMessageTypes,
 }: {
@@ -2006,6 +2041,12 @@ function PromptPolicySheetBody({
   setFormTemperature: (v: number) => void;
   formFailOpen: boolean;
   setFormFailOpen: (v: boolean) => void;
+  scopeInclude: string;
+  setScopeInclude: (v: string) => void;
+  scopeExempt: string;
+  setScopeExempt: (v: string) => void;
+  scopeMode: "messageTypes" | "cel";
+  setScopeMode: (v: "messageTypes" | "cel") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
 }) {
@@ -2020,12 +2061,14 @@ function PromptPolicySheetBody({
   };
 
   const prompt = formPromptInstruction.trim();
-  const summaryScopes =
+  const messageTypeScopeLabels =
     selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
       ? ["All session parts"]
       : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
           selectedMessageTypes.has(t as PolicyMessageType),
         ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+  const summaryScopes =
+    scopeMode === "cel" ? ["CEL expression"] : messageTypeScopeLabels;
 
   // One-line view of the judge config shown on the collapsed Advanced card, so
   // authors can see the (sensible) defaults at a glance without expanding it.
@@ -2118,29 +2161,98 @@ function PromptPolicySheetBody({
             title="Where should it evaluate?"
             description="Narrow the scope to control cost — a prompt policy runs the LLM judge on each in-scope message."
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-              <ScopeCard
-                key={type}
-                type={type as PolicyMessageType}
-                checked={selectedMessageTypes.has(type as PolicyMessageType)}
-                onToggle={(checked) => {
-                  const updated = new Set(selectedMessageTypes);
-                  if (checked) {
-                    updated.add(type as PolicyMessageType);
-                  } else {
-                    updated.delete(type as PolicyMessageType);
-                  }
-                  setSelectedMessageTypes(updated);
-                }}
-              />
-            ))}
-          </div>
-          {selectedMessageTypes.size === 0 && (
-            <p className="text-destructive text-xs">
-              Select at least one session part.
+          {/* Scope is a mutex: message-type cards (coarse) XOR a CEL include
+              predicate (fine). The segmented control conveys that. */}
+          <div className="space-y-3">
+            <div className="border-border inline-flex rounded-md border p-0.5">
+              {(
+                [
+                  { key: "messageTypes", label: "Message types" },
+                  { key: "cel", label: "CEL expression" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setScopeMode(opt.key)}
+                  className={cn(
+                    "rounded px-3 py-1 text-xs font-medium transition-colors",
+                    scopeMode === opt.key
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {scopeMode === "messageTypes"
+                ? "Run the judge on whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
+                : "Run the judge only on messages matching the expression below — this replaces the message-type selection."}
             </p>
+          </div>
+
+          {scopeMode === "messageTypes" ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                  <ScopeCard
+                    key={type}
+                    type={type as PolicyMessageType}
+                    checked={selectedMessageTypes.has(
+                      type as PolicyMessageType,
+                    )}
+                    onToggle={(checked) => {
+                      const updated = new Set(selectedMessageTypes);
+                      if (checked) {
+                        updated.add(type as PolicyMessageType);
+                      } else {
+                        updated.delete(type as PolicyMessageType);
+                      }
+                      setSelectedMessageTypes(updated);
+                    }}
+                  />
+                ))}
+              </div>
+              {selectedMessageTypes.size === 0 && (
+                <p className="text-destructive text-xs">
+                  Select at least one session part.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Evaluate messages matching
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                The judge runs on a message only when this expression is true.
+              </p>
+              <CelExpressionField
+                value={scopeInclude}
+                onChange={setScopeInclude}
+                examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+              />
+            </div>
           )}
+
+          {/* Exemptions — always available and additive (not part of the
+              scope mutex). A match here skips the whole policy. */}
+          <div className="border-border space-y-4 border-t pt-6">
+            <div>
+              <Label className="text-sm font-medium">Exemptions</Label>
+              <p className="text-muted-foreground text-xs">
+                Skip the whole policy for any message matching this expression —
+                an allowlist, regardless of the scope above.
+              </p>
+            </div>
+            <CelExpressionField
+              value={scopeExempt}
+              onChange={setScopeExempt}
+              examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+            />
+          </div>
         </div>
       )}
 

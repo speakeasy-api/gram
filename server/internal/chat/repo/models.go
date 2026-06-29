@@ -19,6 +19,7 @@ type Chat struct {
 	ExternalChatID   pgtype.Text
 	Title            pgtype.Text
 	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz

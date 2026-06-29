@@ -92,6 +92,7 @@ type testInstance struct {
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
 	flags          *feature.InMemory
+	cacheAdapter   cache.Cache
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -126,7 +127,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -135,6 +136,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
 		flags:          flags,
+		cacheAdapter:   cacheAdapter,
 	}
 }
 
