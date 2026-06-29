@@ -80,6 +80,16 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 	}
 }
 
+// ChatReadCheck builds a Check authorizing read access to agent chat sessions.
+// It is satisfied only by an unrestricted chat:read grant (held by admins).
+// Members hold no chat:read grant; their access to sessions they own is granted
+// by owner-matching in the chat handlers, not by this scope. resourceID is a
+// placeholder that does not affect matching — every chat:read grant wildcards
+// resource_id — so any concrete value (the chat or project id) works.
+func ChatReadCheck(resourceID string) Check {
+	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+}
+
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 	var dimensions map[string]string
 	if dims.ServerURL != "" {

@@ -40794,6 +40794,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         selectors:
           type: array
           items:
@@ -40824,6 +40825,7 @@ components:
               - environment:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
+              - chat:read
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -45098,6 +45100,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         selectors:
           type: array
           items:
@@ -45182,6 +45185,7 @@ components:
             - mcp
             - environment
             - risk_policy
+            - chat
         slug:
           type: string
           description: Unique scope identifier.
@@ -45206,6 +45210,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -45634,6 +45639,7 @@ components:
             - org
             - environment
             - risk_policy
+            - chat
             - '*'
         server_url:
           type: string

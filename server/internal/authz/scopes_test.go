@@ -114,6 +114,20 @@ func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {
 	require.NotContains(t, adminScopes, string(ScopeRiskPolicyBypass))
 }
 
+// chat:read is not a default for any system role — it must be granted
+// explicitly. Admins read their own sessions via owner-matching like everyone
+// else; reading other members' transcripts requires an explicit chat:read.
+func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		require.NotEqual(t, string(ScopeChatRead), grant.Scope)
+	}
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeChatRead), grant.Scope)
+	}
+}
+
 func TestCheckExpand_orgRead(t *testing.T) {
 	t.Parallel()
 
