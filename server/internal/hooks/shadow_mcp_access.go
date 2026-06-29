@@ -28,10 +28,8 @@ func (s *Service) enforceShadowMCPToolAccess(
 			return "", false
 		}
 		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
-	case evidence.ServerIdentity != "":
-		detail = fmt.Sprintf("MCP server %q is not Gram-hosted", evidence.ServerIdentity)
 	default:
-		detail = "MCP tool call has no recognizable server target"
+		detail = "MCP server is not Gram-hosted"
 	}
 
 	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
