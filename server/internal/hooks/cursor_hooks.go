@@ -129,8 +129,26 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       strings.TrimPrefix(ev.ToolName, "MCP:"),
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			// Surface the reason to the agent (not just the user) so it can
+			// self-correct instead of treating the deny as an opaque sandbox
+			// rejection.
+			result.AgentMessage = &userReason
 			break
 		}
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, actorUserID)
@@ -160,6 +178,20 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				RiskPolicyID:    policy.ID,
 			})
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
 			result.AgentMessage = &userReason
@@ -182,8 +214,23 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		} else {
 			result.Permission = new("allow")
 		}
@@ -194,6 +241,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		}
 	default:
 		// nothing to do

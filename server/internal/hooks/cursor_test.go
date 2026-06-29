@@ -284,8 +284,8 @@ func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.
 	require.NotNil(t, result.Permission)
 	assert.Equal(t, "deny", *result.Permission)
 	require.NotNil(t, result.UserMessage)
-	assert.Contains(t, *result.UserMessage, "Request access:\nhttps://app.example.test/risk-policy-bypass/request#request_token=rpbr1.",
-		"shadow-MCP deny messages should include a signed risk policy bypass request link")
+	assert.Contains(t, *result.UserMessage, "Request access:\nhttps://app.example.test/risk-policy-bypass/request#request_token=rpbr2.",
+		"shadow-MCP deny messages should include a cache-backed risk policy bypass request link")
 	assert.Contains(t, *result.UserMessage, shadowMCPApprovalRequestPrompt)
 	require.NotNil(t, result.AgentMessage)
 	assert.Equal(t, *result.UserMessage, *result.AgentMessage)

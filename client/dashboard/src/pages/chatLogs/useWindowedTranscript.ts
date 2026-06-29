@@ -37,8 +37,9 @@ interface WindowState {
   hasMoreAfter: boolean;
 }
 
-/** The initial windowed request (everything but the chat id), e.g.
- * `{ riskOnly: true }` or `{ query }`. */
+/** The initial windowed request (everything but the chat id). Exactly one mode
+ * is used: `{ riskOnly: true }` windows around risk findings, `{ query }`
+ * windows around text-search matches. */
 export interface WindowedRequest {
   riskOnly?: boolean;
   query?: string;
@@ -67,19 +68,22 @@ function buildInitial(chat: Chat, segments: RiskSegment[]): WindowState {
   };
 }
 
-// useWindowedTranscript loads a windowed slice of a chat (messages around risk
-// findings, or around text-search matches) plus surrounding context, then lets
-// the user expand the edges and fill the gaps between disjoint windows. The mode
-// is decided by `request` (the initial load) and `segmentsOf` (which response
-// field carries the window segments). The incremental expansion is identical for
-// both modes: plain before_seq/after_seq page loads merged into the window.
+// useWindowedTranscript loads a windowed slice of a chat plus surrounding
+// context, then lets the user expand the edges and fill the gaps between
+// disjoint windows. The mode is decided by `request`: `{ riskOnly: true }`
+// windows around risk findings (segments in `risk_segments`), `{ query }`
+// windows around text-search matches (segments in `match_segments`). The
+// incremental expansion is identical for both modes: plain before_seq/after_seq
+// page loads merged into the window.
 export function useWindowedTranscript(
   chatId: string,
   enabled: boolean,
   request: WindowedRequest,
-  segmentsOf: (chat: Chat) => RiskSegment[] | undefined,
 ): WindowedTranscript {
   const client = useSdkClient();
+  // Which response field carries the window segments depends on the mode. A
+  // primitive (not a derived array) so it's a stable effect dependency.
+  const riskOnly = request.riskOnly ?? false;
   const base = useLoadChat(
     { id: chatId, limit: WINDOW_INITIAL_LIMIT, ...request },
     undefined,
@@ -115,10 +119,12 @@ export function useWindowedTranscript(
   // or refetch). User expansions and any prior incremental-load error are reset.
   useEffect(() => {
     if (base.data) {
-      setState(buildInitial(base.data, segmentsOf(base.data) ?? []));
+      const segments =
+        (riskOnly ? base.data.riskSegments : base.data.matchSegments) ?? [];
+      setState(buildInitial(base.data, segments));
       setLoadError(false);
     }
-  }, [base.data, segmentsOf]);
+  }, [base.data, riskOnly]);
 
   // Runs one incremental page load: ignores the result if the active request
   // changed mid-flight (chat switch or new query), and records failures so they

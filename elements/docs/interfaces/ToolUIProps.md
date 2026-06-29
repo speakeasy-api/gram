@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.38.2**](../README.md)
 
 ***
 
@@ -89,12 +89,13 @@ tool name — e.g. a thread search for "customer" lights up `get_customer`.
 
 ***
 
-### searchActive?
+### nameActiveOccurrence?
 
-> `optional` **searchActive**: `boolean`
+> `optional` **nameActiveOccurrence**: `number` \| `null`
 
-Whether this tool holds the active thread-search match: bright highlights
-(name + sections) when true, pale when false.
+Index of the active query occurrence within the tool name (the unified
+navigator's current target), or null when the active occurrence isn't in the
+name. Per-section args/output active occurrences ride their `*Highlight`.
 
 ***
 

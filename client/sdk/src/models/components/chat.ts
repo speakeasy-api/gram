@@ -47,10 +47,6 @@ export type Chat = {
    */
   matchSegments?: Array<RiskSegment> | undefined;
   /**
-   * Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.
-   */
-  matchSeqs?: Array<number> | undefined;
-  /**
    * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
@@ -126,7 +122,6 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
-    match_seqs: z.optional(z.array(z.int())),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
@@ -154,7 +149,6 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "has_more_before": "hasMoreBefore",
       "last_message_timestamp": "lastMessageTimestamp",
       "match_segments": "matchSegments",
-      "match_seqs": "matchSeqs",
       "max_generation": "maxGeneration",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",

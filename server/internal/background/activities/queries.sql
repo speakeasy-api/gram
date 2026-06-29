@@ -88,14 +88,18 @@ WHERE d.organization_id = ANY($1::text[])
   );
 
 -- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
-SELECT id, content, created_at
+-- Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
+-- row to detect whether another drain pass is needed.
+SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = @chat_id
   AND (project_id IS NULL OR project_id = @project_id)
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
-ORDER BY seq ASC, created_at ASC;
+  AND seq > @after_message_seq
+ORDER BY seq ASC, created_at ASC
+LIMIT @limit_count;
 
 -- name: BackfillClaudeUserMessagePromptID :exec
 UPDATE chat_messages
