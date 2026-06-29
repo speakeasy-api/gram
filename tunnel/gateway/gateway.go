@@ -63,17 +63,26 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	}
 }
 
-// Handler returns the gateway's HTTP routes: /connect for agent upgrades, and a
-// catch-all forward handler (keyed by the tunnel-ID header) for internal
-// pod-to-pod requests from gram-server.
-func (g *Gateway) Handler() http.Handler {
+// PublicHandler returns the externally reachable agent routes. It intentionally
+// does not mount the forward handler: public clients may connect agents, but
+// only the internal listener may forward MCP traffic into a tunnel.
+func (g *Gateway) PublicHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/connect", g.handleConnect)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	mux.HandleFunc("/healthz", healthz)
+	return mux
+}
+
+// ForwardHandler returns the internal gram-server -> gateway forwarding routes.
+func (g *Gateway) ForwardHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthz)
 	mux.HandleFunc("/", g.handleForward)
 	return mux
+}
+
+func healthz(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 // ActiveSessions exposes the registered session count for metrics/tests.

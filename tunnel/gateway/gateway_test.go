@@ -1,13 +1,32 @@
 package gateway
 
 import (
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
+
+func TestPublicHandlerDoesNotForward(t *testing.T) {
+	t.Parallel()
+
+	gw := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewMemory(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+
+	gw.PublicHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+}
 
 func TestParseServiceMetadata(t *testing.T) {
 	t.Parallel()

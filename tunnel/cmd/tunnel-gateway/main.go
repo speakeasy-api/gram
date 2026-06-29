@@ -25,21 +25,22 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	listenAddr := envOr("TUNNEL_GATEWAY_ADDR", ":8090")
+	publicListenAddr := envOr("TUNNEL_GATEWAY_PUBLIC_ADDR", envOr("TUNNEL_GATEWAY_ADDR", ":8090"))
+	forwardListenAddr := envOr("TUNNEL_GATEWAY_FORWARD_ADDR", ":8091")
 	// AdvertiseAddr is what gram-server uses to reach this pod; in k8s set it to
 	// the pod IP + port via the downward API. Public agent traffic is expected to
 	// reach this service through TLS-terminating ingress; this address is the
 	// internal gram-server -> gateway route.
-	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "http://tunnel-gateway:8090")
+	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "http://tunnel-gateway-forward:8091")
 
 	routes, err := buildRouteStore(logger)
 	if err != nil {
-		logger.Error("tunnel-gateway route store init failed", slog.Any("error", err))
+		logger.ErrorContext(context.Background(), "tunnel-gateway route store init failed", slog.Any("error", err))
 		os.Exit(2)
 	}
 	keys, err := buildKeyResolver(context.Background())
 	if err != nil {
-		logger.Error("tunnel-gateway key resolver init failed", slog.Any("error", err))
+		logger.ErrorContext(context.Background(), "tunnel-gateway key resolver init failed", slog.Any("error", err))
 		os.Exit(2)
 	}
 	defer keys.Close()
@@ -49,9 +50,14 @@ func main() {
 		MaxStreamsPerTunnel: 256,
 	}, keys, routes, logger)
 
-	srv := &http.Server{
-		Addr:              listenAddr,
-		Handler:           gw.Handler(),
+	publicSrv := &http.Server{
+		Addr:              publicListenAddr,
+		Handler:           gw.PublicHandler(),
+		ReadHeaderTimeout: 15 * time.Second,
+	}
+	forwardSrv := &http.Server{
+		Addr:              forwardListenAddr,
+		Handler:           gw.ForwardHandler(),
 		ReadHeaderTimeout: 15 * time.Second,
 	}
 
@@ -62,15 +68,38 @@ func main() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(shutCtx)
+		_ = publicSrv.Shutdown(shutCtx)
+		_ = forwardSrv.Shutdown(shutCtx)
 	}()
 
-	logger.Info("tunnel-gateway listening",
-		slog.String("addr", listenAddr), slog.String("advertise", advertiseAddr))
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("tunnel-gateway server error", slog.Any("error", err))
-		os.Exit(1)
+	errCh := make(chan error, 2)
+	go serveHTTP(ctx, errCh, logger, "public", publicSrv)
+	go serveHTTP(ctx, errCh, logger, "forward", forwardSrv)
+
+	logger.InfoContext(ctx, "tunnel-gateway listening",
+		slog.String("public_addr", publicListenAddr),
+		slog.String("forward_addr", forwardListenAddr),
+		slog.String("advertise", advertiseAddr))
+	for range 2 {
+		if err := <-errCh; err != nil {
+			stop()
+			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			_ = publicSrv.Shutdown(shutCtx)
+			_ = forwardSrv.Shutdown(shutCtx)
+			cancel()
+			logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", err))
+			os.Exit(1)
+		}
 	}
+}
+
+func serveHTTP(ctx context.Context, errCh chan<- error, logger *slog.Logger, name string, srv *http.Server) {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		errCh <- err
+		return
+	}
+	logger.InfoContext(ctx, "tunnel-gateway listener stopped", slog.String("listener", name))
+	errCh <- nil
 }
 
 func buildRouteStore(logger *slog.Logger) (route.Store, error) {
@@ -82,7 +111,7 @@ func buildRouteStore(logger *slog.Logger) (route.Store, error) {
 		Addr:     addr,
 		Password: os.Getenv("TUNNEL_REDIS_PASSWORD"),
 	})
-	logger.Info("tunnel-gateway using redis route store", slog.String("addr", addr))
+	logger.InfoContext(context.Background(), "tunnel-gateway using redis route store", slog.String("addr", addr))
 	return route.NewRedis(client), nil
 }
 

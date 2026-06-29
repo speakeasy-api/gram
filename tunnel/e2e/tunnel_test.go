@@ -54,12 +54,14 @@ func TestTunnelEndToEnd(t *testing.T) {
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 	gw := gateway.New(gateway.Config{}, keys, routes, logger)
 
-	gwServer := httptest.NewServer(gw.Handler())
-	defer gwServer.Close()
-	gw.SetAdvertiseAddr(gwServer.Listener.Addr().String())
+	publicServer := httptest.NewServer(gw.PublicHandler())
+	defer publicServer.Close()
+	forwardServer := httptest.NewServer(gw.ForwardHandler())
+	defer forwardServer.Close()
+	gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
 
 	// Agent dials the gateway and pins the stub MCP as its upstream.
-	wsURL := "ws" + strings.TrimPrefix(gwServer.URL, "http") + "/connect"
+	wsURL := "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect"
 	ag, err := agent.New(agent.Config{
 		GatewayURL:     wsURL,
 		APIKey:         plaintext,
@@ -79,7 +81,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 
 	// Forward through the gateway (as gram-server does, pod-to-pod) by setting
 	// the tunnel-ID header. Must round-trip to the stub MCP via the substream.
-	req, err := http.NewRequest(http.MethodPost, gwServer.URL+"/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
 	require.NoError(t, err)
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
 	req.Header.Set("Content-Type", "application/json")
@@ -93,7 +95,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		req, err := http.NewRequest(http.MethodPost, gwServer.URL+"/mcp/slow", strings.NewReader(`{"jsonrpc":"2.0"}`))
+		req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp/slow", strings.NewReader(`{"jsonrpc":"2.0"}`))
 		if err != nil {
 			errCh <- err
 			return
@@ -131,7 +133,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	})
 
 	// Tenant isolation: an unknown tunnel yields the distinct 502, never a leak.
-	req2, err := http.NewRequest(http.MethodGet, gwServer.URL+"/mcp/x", nil)
+	req2, err := http.NewRequest(http.MethodGet, forwardServer.URL+"/mcp/x", nil)
 	require.NoError(t, err)
 	req2.Header.Set(wire.HeaderTunnelID, "does-not-exist")
 	resp2, err := http.DefaultClient.Do(req2)
@@ -155,12 +157,14 @@ func TestTunnelRevoke(t *testing.T) {
 	require.NoError(t, err)
 	routes := route.NewMemory()
 	gw := gateway.New(gateway.Config{}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
-	gwServer := httptest.NewServer(gw.Handler())
-	defer gwServer.Close()
-	gw.SetAdvertiseAddr(gwServer.Listener.Addr().String())
+	publicServer := httptest.NewServer(gw.PublicHandler())
+	defer publicServer.Close()
+	forwardServer := httptest.NewServer(gw.ForwardHandler())
+	defer forwardServer.Close()
+	gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
 
 	ag, err := agent.New(agent.Config{
-		GatewayURL:     "ws" + strings.TrimPrefix(gwServer.URL, "http") + "/connect",
+		GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
 		APIKey:         plaintext,
 		LocalMCPURL:    mcp.URL,
 		ServiceID:      "stub-mcp",
