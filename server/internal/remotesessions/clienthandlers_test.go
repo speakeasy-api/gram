@@ -60,6 +60,38 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestCreateRemoteSessionClient_PersistsOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-org", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-org").String()
+
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "org-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	clientUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+
+	// The dual-write sets organization_id to the caller's organization, which is
+	// the owning project's organization.
+	gotOrg := remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, clientUUID)
+	require.Equal(t, authCtx.ActiveOrganizationID, gotOrg)
+}
+
 func TestCreateRemoteSessionClient_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {
 	t.Parallel()
 
@@ -845,6 +877,13 @@ func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
 	require.Equal(t, "upstream-cid", result.ClientID, "preserves upstream client_id so existing registrations keep working")
 	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
 	require.Equal(t, []string{userIssuerID}, result.UserSessionIssuerIds)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	clonedUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, clonedUUID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)

@@ -177,6 +177,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuerID,
 		ClientID:                clientID,
 		ClientSecretEncrypted:   secretCiphertext,
@@ -347,6 +348,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuerID,
 		ClientID:                clientID,
 		ClientSecretEncrypted:   conv.ToPGText(encrypted),

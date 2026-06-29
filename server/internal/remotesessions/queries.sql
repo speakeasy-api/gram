@@ -177,6 +177,7 @@ ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHIN
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,
+    organization_id,
     remote_session_issuer_id,
     client_id,
     client_secret_encrypted,
@@ -189,6 +190,7 @@ INSERT INTO remote_session_clients (
 )
 VALUES (
     @project_id,
+    @organization_id,
     @remote_session_issuer_id,
     @client_id,
     @client_secret_encrypted,

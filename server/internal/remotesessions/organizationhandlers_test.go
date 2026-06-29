@@ -893,6 +893,10 @@ func TestCreateClient_ProjectSpecificIssuerInheritsProject(t *testing.T) {
 	require.Equal(t, authCtx.ProjectID.String(), created.ProjectID)
 	require.Empty(t, created.UserSessionIssuerIds, "standalone client has no attachments")
 
+	createdUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, createdUUID))
+
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
@@ -934,6 +938,10 @@ func TestCreateClient_OrganizationalIssuerDownscope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pid, created.ProjectID)
 	require.Equal(t, orgIssuer.ID, created.RemoteSessionIssuerID)
+
+	createdUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, createdUUID))
 }
 
 // TestCreateClient_ProjectMismatchForProjectIssuer rejects downscoping a client
