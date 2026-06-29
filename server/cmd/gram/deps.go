@@ -941,7 +941,12 @@ func newBigQueryClient(ctx context.Context, c *cli.Context, logger *slog.Logger)
 		return bq.NewNoopClient(), noopShutdown, nil
 	}
 
-	client, err := bigquery.NewClient(ctx, c.String("gcp-project-id"), option.WithLogger(logger.With(attr.SlogComponent("gcp-bigquery-client"))))
+	// Fall back to auto-detecting the project from ADC / the GKE metadata
+	// server when the flag is unset, mirroring how the Pub/Sub client behaves.
+	// Without this, an empty project ID yields invalid table references and
+	// every insert fails with a googleapi 400.
+	projectID := conv.Default(c.String("gcp-project-id"), bigquery.DetectProjectID)
+	client, err := bigquery.NewClient(ctx, projectID, option.WithLogger(logger.With(attr.SlogComponent("gcp-bigquery-client"))))
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create bigquery client: %w", err)
 	}
