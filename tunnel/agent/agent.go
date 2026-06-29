@@ -60,6 +60,11 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	if strings.TrimSpace(cfg.ServiceID) == "" || strings.TrimSpace(cfg.ServiceSlug) == "" || strings.TrimSpace(cfg.ServiceVersion) == "" {
 		return nil, errors.New("tunnel service identity is required")
 	}
+	gatewayURL, err := normalizeGatewayURL(cfg.GatewayURL)
+	if err != nil {
+		return nil, err
+	}
+	cfg.GatewayURL = gatewayURL
 	target, err := url.Parse(cfg.LocalMCPURL)
 	if err != nil {
 		return nil, err
@@ -155,7 +160,56 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
-	return srv.Serve(session)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shutdownCtx)
+			_ = session.Close()
+		case <-done:
+		}
+	}()
+	err = srv.Serve(session)
+	close(done)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func normalizeGatewayURL(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", err
+	}
+	switch u.Scheme {
+	case "wss":
+		return u.String(), nil
+	case "https":
+		u.Scheme = "wss"
+		return u.String(), nil
+	case "ws":
+		if isLocalGatewayHost(u.Hostname()) {
+			return u.String(), nil
+		}
+		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost or host.docker.internal")
+	default:
+		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// or https://")
+	}
+}
+
+func isLocalGatewayHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "localhost", "host.docker.internal":
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // buildHandler routes control paths to the agent itself and everything else to

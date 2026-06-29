@@ -21,7 +21,7 @@ func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
 	defer upstream.Close()
 
 	agent, err := New(Config{
-		GatewayURL:     "ws://example.test/connect",
+		GatewayURL:     "wss://example.test/connect",
 		APIKey:         "gram_tunnel_test",
 		LocalMCPURL:    upstream.URL + "/mcp",
 		ServiceID:      "postgres-mcp",
@@ -39,4 +39,27 @@ func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "/mcp", gotPath)
+}
+
+func TestNormalizeGatewayURLRejectsInsecureNonLocalHosts(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeGatewayURL("ws://example.test/connect")
+	require.Error(t, err)
+}
+
+func TestNormalizeGatewayURLAllowsLocalInsecureHosts(t *testing.T) {
+	t.Parallel()
+
+	got, err := normalizeGatewayURL("ws://127.0.0.1:8090/connect")
+	require.NoError(t, err)
+	require.Equal(t, "ws://127.0.0.1:8090/connect", got)
+}
+
+func TestNormalizeGatewayURLConvertsHTTPS(t *testing.T) {
+	t.Parallel()
+
+	got, err := normalizeGatewayURL("https://tunnel.example.test/connect")
+	require.NoError(t, err)
+	require.Equal(t, "wss://tunnel.example.test/connect", got)
 }

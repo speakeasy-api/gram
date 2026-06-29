@@ -38,3 +38,54 @@ func TestSingleUpstreamToken_MultipleEntriesFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, token)
 }
+
+func TestTunnelGatewayURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		addr    string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "host port defaults to http",
+			addr: "10.0.0.5:8090",
+			want: "http://10.0.0.5:8090",
+		},
+		{
+			name: "http url preserved",
+			addr: "http://tunnel-gateway:8090",
+			want: "http://tunnel-gateway:8090",
+		},
+		{
+			name: "https url preserved",
+			addr: "https://tunnel-gateway.internal:8443",
+			want: "https://tunnel-gateway.internal:8443",
+		},
+		{
+			name:    "missing host rejected",
+			addr:    "https:///missing-host",
+			wantErr: true,
+		},
+		{
+			name:    "unsupported scheme rejected",
+			addr:    "ftp://tunnel-gateway:8090",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tunnelGatewayURL(tt.addr)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

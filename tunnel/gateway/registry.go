@@ -95,7 +95,7 @@ func (r *registry) connections(tunnelID string, heartbeatAt time.Time) []route.C
 
 // beginForward returns one live session for the tunnel, round-robining across
 // agents and accounting for the forwarded request in the management snapshot.
-func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time) (*sessEntry, bool) {
+func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time, maxStreamsPerSession int) (*sessEntry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -108,6 +108,9 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time)
 	for i := range list {
 		entry := list[(start+i)%len(list)]
 		if entry.session.IsClosed() {
+			continue
+		}
+		if maxStreamsPerSession > 0 && entry.activeSubstreams >= maxStreamsPerSession {
 			continue
 		}
 		entry.activeSubstreams++

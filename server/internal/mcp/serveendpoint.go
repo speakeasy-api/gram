@@ -450,7 +450,11 @@ func (s *Service) serveTunnelledBackend(
 		return oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogError(ctx, logger)
 	}
 
-	gatewayURL := (&url.URL{Scheme: "http", Host: addr}).String()
+	gatewayURL, err := tunnelGatewayURL(addr)
+	if err != nil {
+		w.Header().Set("X-Gram-Tunnel-Error", "invalid-route")
+		return oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
+	}
 	headers := []proxy.ConfiguredHeader{
 		{
 			IsRequired:             true,
@@ -470,6 +474,29 @@ func (s *Service) serveTunnelledBackend(
 	p := s.remoteProxyManager.BuildTarget(logger, tunnelID, gatewayURL, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+func tunnelGatewayURL(addr string) (string, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", fmt.Errorf("empty tunnel route address")
+	}
+	u, err := url.Parse(addr)
+	if err == nil && u.Scheme != "" {
+		if u.Host == "" {
+			return "", fmt.Errorf("tunnel route URL %q is missing a host", addr)
+		}
+		switch u.Scheme {
+		case "http", "https":
+			return u.String(), nil
+		default:
+			return "", fmt.Errorf("unsupported tunnel route URL scheme %q", u.Scheme)
+		}
+	}
+	if strings.Contains(addr, "://") {
+		return "", fmt.Errorf("invalid tunnel route URL %q", addr)
+	}
+	return (&url.URL{Scheme: "http", Host: addr}).String(), nil
 }
 
 func tunnelConsumerSessionKey(r *http.Request) string {

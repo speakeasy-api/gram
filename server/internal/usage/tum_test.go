@@ -443,6 +443,24 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	require.Nil(t, afterSnapshot["tunnelled_mcp_server_limit"])
 }
 
+func TestSetBillingMetadata_RejectsOversizedTunnelledMcpServerLimit(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-tum-oversized-tunnel-limit"
+	svc, _, _, _ := newTUMTestService(t, orgID)
+	tooLarge := maxTunnelledMcpServerLimit + 1
+
+	_, err := svc.SetBillingMetadata(testAdminAuthContext(orgID), &gen.SetBillingMetadataPayload{
+		TunnelledMcpServerLimit: &tooLarge,
+		BillingCycleAnchorDay:   1,
+	})
+
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
 func TestGetTokensUnderManagement_AlertEmailAdminOnly(t *testing.T) {
 	t.Parallel()
 
