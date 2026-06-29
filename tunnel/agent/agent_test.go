@@ -70,3 +70,10 @@ func TestNormalizeGatewayURLRejectsMissingHost(t *testing.T) {
 	_, err := normalizeGatewayURL("wss:///connect")
 	require.Error(t, err)
 }
+
+func TestNormalizeGatewayURLRejectsEmptyHostname(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeGatewayURL("wss://:443/connect")
+	require.Error(t, err)
+}
