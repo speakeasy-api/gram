@@ -89,7 +89,7 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 		UserEmail:           userEmail,
 		UserID:              userID,
 		Provider:            providerAnthropic,
-		ExternalOrgID:       orgID,
+		ExternalOrgID:       "",
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
