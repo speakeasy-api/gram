@@ -57,6 +57,7 @@ import { MessageFeedback } from "@/components/assistant-ui/message-feedback";
 import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { UserMessageText } from "@/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
@@ -1191,7 +1192,7 @@ const UserMessage: FC = () => {
               r("xl"),
             )}
           >
-            <MessagePrimitive.Parts />
+            <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
           </div>
           {allowEdit && (
             <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
