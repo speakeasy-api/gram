@@ -165,8 +165,8 @@ export function MemberFacepile({
                         : { type: "tween", duration: 0.3, ease: "easeOut" }
                     }
                   >
-                    <div className="ring-background bg-muted text-muted-foreground flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-medium whitespace-nowrap ring-2">
-                      View all
+                    <div className="ring-background bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-full text-[11px] font-medium ring-2">
+                      +{overflow}
                     </div>
                   </motion.div>
                 );
