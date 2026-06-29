@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.80.0
+
+### Minor Changes
+
+- fc47698: Allow editing the permissions of system roles (`admin`/`member`) per organization, while keeping their name and description platform-managed. The Admin role is guarded against losing the `org:admin` permission to prevent org lockout. The roles tab is reworked: the whole role row opens the edit sheet (gated on `org:admin`), scope groups no longer auto-expand and show a description when collapsed, and the members column uses a new interactive member facepile (hover focus, click to view all members) that also replaces the facepile on the org home projects list. Adds Directory Sync (SCIM) info alerts on the team, roles, and identity pages explaining that members and roles are managed by the identity provider while SCIM is enabled.
+- c637f6b: Risk policies: configurable detection sensitivity. Adds a per-policy minimum
+  match-confidence threshold with a "Sensitivity" slider in the policy wizard, and
+  lowers the default to 0.5.
+
+### Patch Changes
+
+- c6ddf0e: Fixed the MCP catalog listing duplicate servers (count doubling) when loading more
+
 ## 0.79.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # server
 
+## 0.77.0
+
+### Minor Changes
+
+- fc47698: Allow editing the permissions of system roles (`admin`/`member`) per organization, while keeping their name and description platform-managed. The Admin role is guarded against losing the `org:admin` permission to prevent org lockout. The roles tab is reworked: the whole role row opens the edit sheet (gated on `org:admin`), scope groups no longer auto-expand and show a description when collapsed, and the members column uses a new interactive member facepile (hover focus, click to view all members) that also replaces the facepile on the org home projects list. Adds Directory Sync (SCIM) info alerts on the team, roles, and identity pages explaining that members and roles are managed by the identity provider while SCIM is enabled.
+
+### Patch Changes
+
+- 8116a4c: Improved Codex shadow MCP enforcement so calls are checked against the session MCP server inventory.
+- efe6163: Fix Cursor shadow MCP enforcement wrongly blocking Gram-hosted MCP servers when a shadow MCP risk policy is enabled — access is now decided by the server URL rather than requiring the agent to echo an internal identifier.
+- c6ddf0e: Fixed the MCP catalog listing duplicate servers (count doubling) when loading more
+
 ## 0.76.0
 
 ### Minor Changes
