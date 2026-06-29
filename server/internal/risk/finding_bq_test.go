@@ -2,10 +2,8 @@ package risk_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -61,13 +59,23 @@ func newWriter(t *testing.T, features feature.Provider) (*risk.FindingBQWriter, 
 	return w, ins
 }
 
+// testPepperVersion / testPepperKey are the raw keyring material backing the
+// Fingerprinter the writer uses in these tests. Expected fingerprints are
+// recomputed from this same material via the wantHMAC / wantTenantedHMAC
+// helpers in fingerprint_test.go (same package).
+const testPepperVersion = "v1"
+
+var testPepperKey = []byte("finding-bq-test-pepper-key-material")
+
 func newWriterWithMeter(t *testing.T, features feature.Provider, mp metric.MeterProvider) (*risk.FindingBQWriter, *fakeInserter, *fakeTableHandle) {
 	t.Helper()
 	ins := &fakeInserter{}
 	table := &fakeTableHandle{inserter: ins}
-	// The writer keeps a Fingerprinter but HandleBatch does not consult it, so
-	// a zero value is sufficient here.
-	w := risk.NewFindingBQWriter(testenv.NewLogger(t), mp, table, features, risk.Fingerprinter{})
+	// HandleBatch now fingerprints matches, so the writer needs a usable
+	// keyring rather than a zero-value Fingerprinter.
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingBQWriter(testenv.NewLogger(t), mp, table, features, fp)
 	return w, ins, table
 }
 
@@ -82,11 +90,17 @@ func rows(t *testing.T, ins *fakeInserter) []risk.FindingBQRow {
 	return out
 }
 
-// upperSHA256 mirrors the writer's fingerprint encoding: uppercase hex of the
-// sha256 digest.
-func upperSHA256(s string) string {
-	sum := sha256.Sum256([]byte(s))
-	return strings.ToUpper(hex.EncodeToString(sum[:]))
+// wantGlobalFingerprint mirrors the writer's global fingerprint encoding:
+// base64url(HMAC-SHA256(pepper, match)).
+func wantGlobalFingerprint(match string) string {
+	return base64.RawURLEncoding.EncodeToString(wantHMAC(testPepperKey, []byte(match)))
+}
+
+// wantTenantFingerprint mirrors the tenant-scoped fingerprint: base64url of an
+// HMAC keyed by the per-tenant key derived from the pepper via HKDF.
+func wantTenantFingerprint(t *testing.T, tenantID, match string) string {
+	t.Helper()
+	return base64.RawURLEncoding.EncodeToString(wantTenantedHMAC(t, testPepperKey, tenantID, []byte(match)))
 }
 
 // finding builds a Finding with every field populated except the dead-letter
@@ -169,8 +183,8 @@ func TestFindingBQWriter_HandleBatch_ComputesFingerprints(t *testing.T) {
 
 	row := rows(t, ins)[0]
 
-	wantGlobal := upperSHA256("hunter2")
-	wantTenant := upperSHA256("org-1:hunter2")
+	wantGlobal := wantGlobalFingerprint("hunter2")
+	wantTenant := wantTenantFingerprint(t, "org-1", "hunter2")
 
 	require.Equal(t, bigquery.NullString{StringVal: wantGlobal, Valid: true}, row.FingerprintGlobalHS256)
 	require.Equal(t, bigquery.NullString{StringVal: wantTenant, Valid: true}, row.FingerprintTenantHS256)
@@ -194,7 +208,7 @@ func TestFindingBQWriter_HandleBatch_TenantFingerprintRequiresOrg(t *testing.T) 
 	row := rows(t, ins)[0]
 
 	// Global fingerprint only needs the match.
-	require.Equal(t, bigquery.NullString{StringVal: upperSHA256("hunter2"), Valid: true}, row.FingerprintGlobalHS256)
+	require.Equal(t, bigquery.NullString{StringVal: wantGlobalFingerprint("hunter2"), Valid: true}, row.FingerprintGlobalHS256)
 	// Without an org id there is no tenant-qualified fingerprint.
 	require.Equal(t, bigquery.NullString{Valid: false}, row.FingerprintTenantHS256)
 }
