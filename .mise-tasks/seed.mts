@@ -2050,6 +2050,7 @@ async function seedPersonalAccounts(init: {
     log.warn(
       `Failed to seed personal-account data: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
+    return;
   }
 
   // ClickHouse usage telemetry: token-usage rows per account, stamped with the
