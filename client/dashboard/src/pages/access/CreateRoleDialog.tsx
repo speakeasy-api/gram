@@ -24,15 +24,16 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Alert, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
+import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
   Ban,
   Check,
   ChevronDown,
   ChevronRight,
-  Info,
   Loader2,
   Plus,
   X,
@@ -148,6 +149,7 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -168,12 +170,36 @@ export function CreateRoleDialog({
   );
 
   const scopeGroups = useMemo(() => {
-    const groupOrder: { label: string; resourceType: string }[] = [
-      { label: "Organization", resourceType: "org" },
-      { label: "Build & Deploy", resourceType: "project" },
-      { label: "Environments", resourceType: "environment" },
-      { label: "MCP Servers", resourceType: "mcp" },
-      { label: "Agent Sessions", resourceType: "chat" },
+    const groupOrder: {
+      label: string;
+      resourceType: string;
+      description: string;
+    }[] = [
+      {
+        label: "Organization",
+        resourceType: "org",
+        description: "Organization metadata, members, and access settings.",
+      },
+      {
+        label: "Build & Deploy",
+        resourceType: "project",
+        description: "Projects and their related resources.",
+      },
+      {
+        label: "Environments",
+        resourceType: "environment",
+        description: "Environments and their entries within projects.",
+      },
+      {
+        label: "MCP Servers",
+        resourceType: "mcp",
+        description: "MCP server configuration and connections.",
+      },
+      {
+        label: "Agent Sessions",
+        resourceType: "chat",
+        description: "Access to members' agent session transcripts.",
+      },
     ];
     return groupOrder.map((g) => ({
       ...g,
@@ -188,13 +214,9 @@ export function CreateRoleDialog({
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
-    const grantedScopes = new Set(Object.keys(roleGrants));
-    const autoExpanded = new Set(
-      scopeGroups
-        .filter((g) => g.scopes.some((s) => grantedScopes.has(s.slug)))
-        .map((g) => g.label),
-    );
-    setExpandedGroups(autoExpanded);
+    // Keep all groups collapsed on open; auto-expanding granted groups makes
+    // the sheet scroll on load.
+    setExpandedGroups(new Set());
     setGrants(roleGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
@@ -461,8 +483,10 @@ export function CreateRoleDialog({
         request: {
           updateRoleForm: {
             id: editingRole.id,
+            // System role name/description are platform-managed; permissions
+            // (grants) are per-org and editable.
             ...(isSystemRole
-              ? {}
+              ? { addGrants, removeGrants }
               : { name, description, addGrants, removeGrants }),
             memberIds:
               selectedMembers.size > 0
@@ -577,6 +601,18 @@ export function CreateRoleDialog({
           >
             {/* ─── Panel 1: Role form ─── */}
             <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4 pt-3">
+              {organization.scimEnabled && (
+                <Alert variant="info" dismissible={false} className="text-sm">
+                  Assign this role from{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="whitespace-nowrap underline underline-offset-2"
+                  >
+                    Identity → SCIM → Configure
+                  </Link>
+                  .
+                </Alert>
+              )}
               <InputField
                 label="Name"
                 placeholder="e.g., Project Manager"
@@ -626,13 +662,6 @@ export function CreateRoleDialog({
 
                 {showPermissions && (
                   <div className="mt-3 space-y-3">
-                    {isSystemRole && (
-                      <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
-                        <Info className="h-3.5 w-3.5 shrink-0" />
-                        System role permissions are managed by the platform and
-                        cannot be changed.
-                      </div>
-                    )}
                     {scopeGroups.map((group) => {
                       const selectedInGroup = group.scopes.filter(
                         (s) => grants[s.slug],
@@ -659,11 +688,10 @@ export function CreateRoleDialog({
                                 toggleGroup(group.label);
                               }
                             }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 rounded-t-md px-3 py-2"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-start gap-2">
                               <Checkbox
-                                disabled={isSystemRole}
                                 checked={
                                   allSelected
                                     ? true
@@ -675,24 +703,33 @@ export function CreateRoleDialog({
                                   e.stopPropagation();
                                   toggleGroupCheckbox(group.label);
                                 }}
-                                className="cursor-pointer"
+                                className="mt-0.5 cursor-pointer"
                               />
-                              <Type
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {group.label}
-                              </Type>
-                              <Type
-                                variant="body"
-                                className="text-muted-foreground text-sm"
-                              >
-                                ({selectedInGroup}/{group.scopes.length})
-                              </Type>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Type
+                                    variant="body"
+                                    className="text-sm font-medium"
+                                  >
+                                    {group.label}
+                                  </Type>
+                                  <Type
+                                    variant="body"
+                                    className="text-muted-foreground text-sm"
+                                  >
+                                    ({selectedInGroup}/{group.scopes.length})
+                                  </Type>
+                                </div>
+                                {!isExpanded && (
+                                  <Type muted small className="mt-0.5 text-xs">
+                                    {group.description}
+                                  </Type>
+                                )}
+                              </div>
                             </div>
                             <ChevronRight
                               className={cn(
-                                "text-muted-foreground h-3.5 w-3.5 transition-transform",
+                                "text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform",
                                 isExpanded && "rotate-90",
                               )}
                             />
@@ -712,22 +749,9 @@ export function CreateRoleDialog({
                                 const row = (
                                   <div key={scopeDef.slug}>
                                     {/* Scope checkbox row */}
-                                    <div
-                                      className={cn(
-                                        "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
-                                        isSystemRole && "cursor-default",
-                                      )}
-                                    >
-                                      <label
-                                        className={cn(
-                                          "flex min-w-0 flex-1 items-start gap-3",
-                                          isSystemRole
-                                            ? "cursor-default"
-                                            : "cursor-pointer",
-                                        )}
-                                      >
+                                    <div className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5">
+                                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                                         <Checkbox
-                                          disabled={isSystemRole}
                                           checked={isChecked}
                                           onCheckedChange={() =>
                                             toggleScope(scopeDef.slug)
@@ -781,31 +805,20 @@ export function CreateRoleDialog({
                                               scopeDef.resourceType,
                                               projectList,
                                             )}
-                                            onClick={
-                                              isSystemRole
-                                                ? undefined
-                                                : () =>
-                                                    openRuleEditor(
-                                                      scopeDef.slug,
-                                                      ruleIdx,
-                                                    )
+                                            onClick={() =>
+                                              openRuleEditor(
+                                                scopeDef.slug,
+                                                ruleIdx,
+                                              )
                                             }
-                                            onRemove={
-                                              isSystemRole
-                                                ? undefined
-                                                : () =>
-                                                    removeRule(
-                                                      scopeDef.slug,
-                                                      ruleIdx,
-                                                    )
+                                            onRemove={() =>
+                                              removeRule(scopeDef.slug, ruleIdx)
                                             }
-                                            readOnly={isSystemRole}
                                           />
                                         ))}
-                                        {!isSystemRole &&
-                                          !grant.rules.some(
-                                            (r) => r.effect === "deny",
-                                          ) &&
+                                        {!grant.rules.some(
+                                          (r) => r.effect === "deny",
+                                        ) &&
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
                                           ).length > 0 && (
@@ -829,22 +842,6 @@ export function CreateRoleDialog({
                                     )}
                                   </div>
                                 );
-
-                                if (isSystemRole) {
-                                  return (
-                                    <Tooltip key={scopeDef.slug}>
-                                      <TooltipTrigger asChild>
-                                        {row}
-                                      </TooltipTrigger>
-                                      <TooltipContent
-                                        side="right"
-                                        className="max-w-48"
-                                      >
-                                        Cannot edit system role permissions
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  );
-                                }
 
                                 return row;
                               })}
