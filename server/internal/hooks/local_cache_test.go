@@ -103,12 +103,12 @@ func TestLocalSessionCache_EnrichesCachedMetadataMissingUserID(t *testing.T) {
 	localCache := NewLocalSessionCache(cache.NewRedisCacheAdapter(ti.redisClient), ti.conn)
 	sessionID := uuid.NewString()
 	require.NoError(t, localCache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   *authCtx.Email,
-		ClaudeOrgID: authCtx.ActiveOrganizationID,
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     *authCtx.Email,
+		ExternalOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}, time.Hour))
 
 	var metadata SessionMetadata

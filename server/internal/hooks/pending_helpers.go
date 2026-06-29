@@ -189,6 +189,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
+	// Carry the account attribution (provider, external_org_id, account_type,
+	// device_id) onto every hook event row so per-tool-call telemetry can be
+	// split by personal vs team account, not just the OTEL log stream.
+	stampAccountAttribution(attrs, *metadata)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -335,6 +339,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    urn,
 			attr.HookSourceKey:     "claude-code",
+			attr.ProviderKey:       providerAnthropic,
 		}
 
 		// Only include non-zero values
