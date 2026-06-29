@@ -8,7 +8,11 @@ export function LinkedMcpServerRow({
 }: {
   server: McpServer;
 }): JSX.Element {
-  const { data: endpoints, isLoading } = useMcpEndpoints({
+  const {
+    data: endpoints,
+    isError,
+    isLoading,
+  } = useMcpEndpoints({
     mcpServerId: server.id,
   });
   const shortId = server.id.slice(0, 8);
@@ -26,6 +30,10 @@ export function LinkedMcpServerRow({
       {isLoading ? (
         <Type small muted>
           Loading endpoints...
+        </Type>
+      ) : isError ? (
+        <Type small muted>
+          Unable to load endpoints
         </Type>
       ) : endpoints && endpoints.mcpEndpoints.length > 0 ? (
         <Type small muted>

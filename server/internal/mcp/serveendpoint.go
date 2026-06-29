@@ -452,10 +452,7 @@ func tunnelGatewayURL(addr string) (string, error) {
 		return "", fmt.Errorf("empty tunnel route address")
 	}
 	u, err := url.Parse(addr)
-	if err == nil && u.Scheme != "" {
-		if u.Host == "" {
-			return "", fmt.Errorf("tunnel route URL %q is missing a host", addr)
-		}
+	if err == nil && u.Scheme != "" && u.Host != "" {
 		switch u.Scheme {
 		case "http", "https":
 			return u.String(), nil
