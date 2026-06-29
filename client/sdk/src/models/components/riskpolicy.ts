@@ -108,6 +108,10 @@ export type RiskPolicy = {
    */
   presidioEntities?: Array<string> | undefined;
   /**
+   * Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.75).
+   */
+  presidioScoreThreshold?: number | undefined;
+  /**
    * The project ID.
    */
   projectId: string;
@@ -189,6 +193,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       pending_messages: z.int(),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
+      presidio_score_threshold: z.optional(z.number()),
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
@@ -216,6 +221,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "pending_messages": "pendingMessages",
         "policy_type": "policyType",
         "presidio_entities": "presidioEntities",
+        "presidio_score_threshold": "presidioScoreThreshold",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
         "scope_exempt": "scopeExempt",

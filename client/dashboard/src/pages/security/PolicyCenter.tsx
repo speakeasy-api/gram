@@ -949,6 +949,11 @@ function PolicyCenterContent() {
   const [formTemperature, setFormTemperature] = useState(
     DEFAULT_JUDGE_TEMPERATURE,
   );
+  // Per-policy Presidio detection-sensitivity threshold for standard policies.
+  // Only persisted when at least one Presidio category is active.
+  const [formPresidioThreshold, setFormPresidioThreshold] = useState<number>(
+    DEFAULT_PRESIDIO_THRESHOLD,
+  );
   // Fail-open (true) is the server default: allow the message when the judge errors.
   const [formFailOpen, setFormFailOpen] = useState(true);
   const [formAudienceType, setFormAudienceType] =
@@ -1050,6 +1055,7 @@ function PolicyCenterContent() {
     setFormUserMessage("");
     setFormModel("");
     setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
+    setFormPresidioThreshold(DEFAULT_PRESIDIO_THRESHOLD);
     setFormFailOpen(true);
     setFormAudienceType("everyone");
     setSelectedAudiencePrincipalUrns(new Set<string>());
@@ -1104,6 +1110,9 @@ function PolicyCenterContent() {
       categories.add("custom");
     }
     setSelectedCategories(categories);
+    setFormPresidioThreshold(
+      policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
+    );
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1232,6 +1241,11 @@ function PolicyCenterContent() {
         : formAction;
     const audiencePrincipalUrns =
       formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
+    // Only persist the Presidio threshold when a Presidio category is active, so
+    // non-Presidio policies don't carry a stray threshold value.
+    const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+      selectedCategories.has(c),
+    );
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -1251,6 +1265,9 @@ function PolicyCenterContent() {
             audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
+            ...(presidioActive
+              ? { presidioScoreThreshold: formPresidioThreshold }
+              : {}),
           },
         },
       });
@@ -1272,6 +1289,9 @@ function PolicyCenterContent() {
             audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
+            ...(presidioActive
+              ? { presidioScoreThreshold: formPresidioThreshold }
+              : {}),
           },
         },
       });
@@ -1783,6 +1803,8 @@ function PolicyCenterContent() {
                       setFormEnabled={setFormEnabled}
                       selectedCategories={selectedCategories}
                       setSelectedCategories={setSelectedCategories}
+                      formPresidioThreshold={formPresidioThreshold}
+                      setFormPresidioThreshold={setFormPresidioThreshold}
                       disabledRules={disabledRules}
                       setDisabledRules={setDisabledRules}
                       customRules={customRules}
@@ -2232,6 +2254,15 @@ const TEMPERATURE_TICKS = Array.from(
   (_, i) => Math.round(i * TEMPERATURE_STEP * 10) / 10,
 );
 
+// Presidio detection-sensitivity threshold: the minimum confidence score a
+// Presidio PII match must clear to be flagged. Applies to all Presidio rules in
+// a standard risk policy.
+const PRESIDIO_THRESHOLD_MIN = 0;
+const PRESIDIO_THRESHOLD_MAX = 1;
+const PRESIDIO_THRESHOLD_STEP = 0.05;
+const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
+const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
+
 // JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
 // The recommended option uses the empty value, which follows the server's
 // default judge model. Its label names that model and must stay in sync with
@@ -2479,6 +2510,8 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  formPresidioThreshold,
+  setFormPresidioThreshold,
   disabledRules,
   setDisabledRules,
   customRules,
@@ -2511,6 +2544,8 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  formPresidioThreshold: number;
+  setFormPresidioThreshold: (v: number) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
@@ -2563,6 +2598,10 @@ function PolicySheetBody({
     }
   };
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
+  );
+  // The detection-sensitivity slider only applies when a Presidio detector is on.
+  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
     selectedCategories.has(c),
   );
 
@@ -2626,6 +2665,50 @@ function PolicySheetBody({
                 ))}
               </div>
             </div>
+
+            {presidioActive && (
+              <div className="border-border space-y-4 rounded-lg border p-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">
+                      Detection sensitivity
+                    </Label>
+                    <span className="text-muted-foreground text-xs tabular-nums">
+                      {formPresidioThreshold.toFixed(2)}
+                      {formPresidioThreshold === DEFAULT_PRESIDIO_THRESHOLD
+                        ? " · default"
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-foreground text-xs tabular-nums">
+                      0
+                    </span>
+                    <div className="flex-1">
+                      <Slider
+                        value={formPresidioThreshold}
+                        onChange={(v) =>
+                          setFormPresidioThreshold(Math.round(v * 20) / 20)
+                        }
+                        min={PRESIDIO_THRESHOLD_MIN}
+                        max={PRESIDIO_THRESHOLD_MAX}
+                        step={PRESIDIO_THRESHOLD_STEP}
+                        ticks={PRESIDIO_THRESHOLD_TICKS}
+                      />
+                    </div>
+                    <span className="text-foreground text-xs tabular-nums">
+                      1
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Minimum Presidio confidence a PII match must clear to be
+                    flagged. Higher = fewer false positives but may miss
+                    borderline matches. Applies to all Presidio rules in this
+                    policy.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {customRules.length > 0 && (
               <RuleSelectList
