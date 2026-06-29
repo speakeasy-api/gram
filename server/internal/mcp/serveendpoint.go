@@ -555,14 +555,13 @@ func (s *Service) prepareProxyBackendContext(
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 
-		// Non-issuer-gated callers get an upfront mcp:connect fail-fast before
-		// the proxy. Issuer-gated callers rely on the per-tool response/request
-		// interceptors instead, which is acceptable since the JWT
-		// audience/issuer is already bound to the endpoint's project.
-		if !issuerGated {
-			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: mcpServer.ID.String(), Dimensions: nil}); err != nil {
-				return nil, err
-			}
+		// All private proxy-backed MCP servers require mcp:connect before the
+		// request reaches the upstream. The proxy's tools/list and tools/call
+		// interceptors still apply the narrower per-tool checks for interaction
+		// methods, but initialize and other non-tool methods need the same
+		// server-level fail-fast as toolset-backed private MCPs.
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
+			return nil, err
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the
