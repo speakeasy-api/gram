@@ -77,6 +77,10 @@ WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message
   AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
 -- name: InsertShadowMCPBlockResult :exec
+-- Dedupe live hook-time block findings across duplicate plugin installs: each
+-- install delivers its own block with a distinct id and idempotency token, but
+-- they resolve to the same (project, policy, version, chat_message). The
+-- NOT EXISTS guard collapses them using risk_results_project_policy_version_message_idx.
 INSERT INTO risk_results (
     id
   , project_id
@@ -91,7 +95,7 @@ INSERT INTO risk_results (
   , match
   , confidence
 )
-VALUES (
+SELECT
     sqlc.arg(id)
   , sqlc.arg(project_id)
   , sqlc.arg(organization_id)
@@ -104,4 +108,12 @@ VALUES (
   , sqlc.arg(description)
   , sqlc.arg(match)
   , sqlc.arg(confidence)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM risk_results existing
+  WHERE existing.project_id = sqlc.arg(project_id)
+    AND existing.risk_policy_id = sqlc.arg(risk_policy_id)
+    AND existing.risk_policy_version = sqlc.arg(risk_policy_version)
+    AND existing.chat_message_id = sqlc.arg(chat_message_id)
+    AND existing.source = 'shadow_mcp'
 );

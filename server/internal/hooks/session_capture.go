@@ -163,13 +163,20 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-			// ClickHouse always gets the technical reason; the user_message
-			// override only changes what the agent / end user sees.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
-			}
-			if payload.HookVersion != nil && *payload.HookVersion >= claudeHookStopCollectionVersion {
-				s.persistBlockedClaudePrompt(ctx, payload)
+			// The scan re-runs on a retry so the user stays blocked, but the
+			// block side-effects must not double-write — a retry re-sends the
+			// same idempotency token, which tags the context as a duplicate.
+			// Resolve metadata once and reuse it for both writes.
+			if !s.isHookDuplicate(ctx) {
+				if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, conv.PtrValOr(payload.UserEmail, "")); err == nil {
+					// ClickHouse always gets the technical reason; the
+					// user_message override only changes what the agent / end
+					// user sees.
+					s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+					if payload.HookVersion != nil && *payload.HookVersion >= claudeHookStopCollectionVersion {
+						s.persistBlockedClaudePrompt(ctx, &metadata, payload)
+					}
+				}
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -177,20 +184,12 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	return makeHookResult(ev.RawEventType), nil
 }
 
-func (s *Service) persistBlockedClaudePrompt(ctx context.Context, payload *gen.ClaudePayload) {
+func (s *Service) persistBlockedClaudePrompt(ctx context.Context, metadata *SessionMetadata, payload *gen.ClaudePayload) {
 	if payload == nil || payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, conv.PtrValOr(payload.UserEmail, ""))
-	if err != nil {
-		s.logger.WarnContext(ctx, "skipping blocked claude prompt persistence without session metadata",
-			attr.SlogEvent("claude_blocked_prompt_no_metadata"),
-			attr.SlogError(err),
-		)
-		return
-	}
-	if err := s.persistConversationEvent(ctx, payload, &metadata); err != nil {
+	if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to persist blocked claude prompt",
 			attr.SlogEvent("claude_blocked_prompt_persist_failed"),
 			attr.SlogError(err),

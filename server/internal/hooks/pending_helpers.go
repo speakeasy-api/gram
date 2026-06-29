@@ -21,6 +21,24 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
+const (
+	// shadowMCPBlockFindingBufferTTL bounds how long a live block finding waits
+	// for its chat_message to land before it ages out. For stop-collection
+	// plugins the chat_message arrives with the Stop batch, so this must outlast
+	// a long agentic turn rather than the few-minute buffers used for metadata.
+	shadowMCPBlockFindingBufferTTL = time.Hour
+
+	// maxPendingClaudeMessagesFlushRetries caps how many times a failing Stop
+	// batch is re-buffered before it is dropped. Re-buffering resets the item
+	// TTL, so without a cap a permanently-failing (poison) batch never ages out
+	// while the session keeps generating flush triggers.
+	maxPendingClaudeMessagesFlushRetries = 5
+
+	// pendingClaudeMessagesFlushRetryTTL bounds the lifetime of the retry
+	// counter so it self-cleans on idle sessions.
+	pendingClaudeMessagesFlushRetryTTL = time.Hour
+)
+
 // hookDuplicateContextKey marks a request whose idempotency token was already
 // claimed by an earlier delivery (a retry). Write side-effects that run outside
 // the persistence path — block-reason telemetry, shadow-MCP findings — check it
@@ -628,6 +646,12 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 	}
 
 	if len(failedPayloads) > 0 {
+		if !s.allowClaudeMessagesFlushRetry(ctx, sessionID) {
+			logger.ErrorContext(ctx, "dropping pending claude message capture after exhausting flush retries",
+				attr.SlogEvent("claude_messages_pending_flush_exhausted"),
+			)
+			return
+		}
 		for i := range failedPayloads {
 			if err := s.bufferClaudeMessages(ctx, sessionID, &failedPayloads[i]); err != nil {
 				logger.ErrorContext(ctx, "Failed to restore pending claude message capture", attr.SlogError(err))
@@ -639,7 +663,32 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 		return
 	}
 
+	if err := s.cache.Delete(ctx, claudeMessagesFlushRetryCounterCacheKey(sessionID)); err != nil {
+		s.logger.DebugContext(ctx, "failed to clear claude messages flush retry counter", attr.SlogError(err))
+	}
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending claude message captures", len(payloads)))
+}
+
+// allowClaudeMessagesFlushRetry reports whether a failing Stop batch may be
+// re-buffered for another flush attempt. It counts attempts per session and
+// returns false once the cap is exceeded so a poison batch is dropped instead
+// of looping forever (each re-buffer resets the item TTL). The counter is
+// cleared on the first successful flush.
+func (s *Service) allowClaudeMessagesFlushRetry(ctx context.Context, sessionID string) bool {
+	key := claudeMessagesFlushRetryCounterCacheKey(sessionID)
+	var attempts int
+	_ = s.cache.Get(ctx, key, &attempts)
+	attempts++
+	if attempts > maxPendingClaudeMessagesFlushRetries {
+		if err := s.cache.Delete(ctx, key); err != nil {
+			s.logger.DebugContext(ctx, "failed to clear claude messages flush retry counter", attr.SlogError(err))
+		}
+		return false
+	}
+	if err := s.cache.Set(ctx, key, attempts, pendingClaudeMessagesFlushRetryTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to persist claude messages flush retry counter", attr.SlogError(err))
+	}
+	return true
 }
 
 func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID string, finding pendingShadowMCPBlockFinding) error {
@@ -661,18 +710,8 @@ func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID str
 		"description":         finding.Description,
 		"match":               finding.Match,
 	}
-	if err := s.cache.ListAppend(context.WithoutCancel(ctx), shadowMCPBlockFindingsPendingCacheKey(sessionID), item, 5*time.Minute); err != nil {
+	if err := s.cache.ListAppend(context.WithoutCancel(ctx), shadowMCPBlockFindingsPendingCacheKey(sessionID), item, shadowMCPBlockFindingBufferTTL); err != nil {
 		return fmt.Errorf("append shadow-mcp block finding to list: %w", err)
-	}
-	return nil
-}
-
-func (s *Service) bufferSubagentClaudeMessages(ctx context.Context, sessionID string, payload *gen.ClaudeMessagesPayload) error {
-	if sessionID == "" || payload == nil || len(payload.Messages) == 0 {
-		return nil
-	}
-	if err := s.cache.ListAppend(context.WithoutCancel(ctx), claudeSubagentMessagesPendingCacheKey(sessionID), payload, 5*time.Minute); err != nil {
-		return fmt.Errorf("append claude subagent messages to list: %w", err)
 	}
 	return nil
 }

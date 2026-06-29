@@ -372,7 +372,11 @@ func TestClaudeMessages_FlushesPendingShadowMCPBlockFinding(t *testing.T) {
 	require.Empty(t, pending)
 }
 
-func TestClaudeMessages_MergesSubagentMessagesIntoParentStopOrder(t *testing.T) {
+// SubagentStop batches persist on arrival rather than waiting for the parent
+// Stop, so subagent tool capture survives even if the parent Stop never lands.
+// The subagent message still orders correctly within the parent chat because it
+// carries its own timestamp.
+func TestClaudeMessages_PersistsSubagentBatchImmediately(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -409,13 +413,14 @@ func TestClaudeMessages_MergesSubagentMessagesIntoParentStopOrder(t *testing.T) 
 		}},
 	}))
 
-	require.Never(t, func() bool {
+	// The subagent batch must land without a parent Stop.
+	require.Eventually(t, func() bool {
 		got, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 			ChatID:    chatID,
 			ProjectID: *authCtx.ProjectID,
 		})
-		return err == nil && len(got) > 0
-	}, 300*time.Millisecond, 50*time.Millisecond, "SubagentStop must wait for parent Stop before inserting")
+		return err == nil && len(got) == 1 && got[0].ExternalMessageID.String == "subagent-tool-call"
+	}, time.Second, 50*time.Millisecond, "SubagentStop must persist on arrival")
 
 	userContent := "parent prompt"
 	assistantContent := "parent response"
@@ -438,13 +443,22 @@ func TestClaudeMessages_MergesSubagentMessagesIntoParentStopOrder(t *testing.T) 
 		})
 		return err == nil && len(msgs) == 3
 	}, time.Second, 50*time.Millisecond)
-	require.Equal(t, "parent-user", msgs[0].ExternalMessageID.String)
-	require.Equal(t, "subagent-tool-call", msgs[1].ExternalMessageID.String)
-	require.Equal(t, "parent-assistant", msgs[2].ExternalMessageID.String)
 
-	var pending []gen.ClaudeMessagesPayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, claudeSubagentMessagesPendingCacheKey(sessionID), 0, -1, &pending))
-	require.Empty(t, pending)
+	// All three messages are captured exactly once across the independent
+	// batches (no loss, no duplication from the ON CONFLICT external_id write).
+	byExternalID := make(map[string]chatRepo.ChatMessage, len(msgs))
+	for _, m := range msgs {
+		byExternalID[m.ExternalMessageID.String] = m
+	}
+	require.Contains(t, byExternalID, "parent-user")
+	require.Contains(t, byExternalID, "subagent-tool-call")
+	require.Contains(t, byExternalID, "parent-assistant")
+
+	// created_at is stamped from each message's own transcript timestamp, so the
+	// true transcript order is preserved in created_at even though the seq-ordered
+	// list reflects arrival order now that batches persist independently.
+	require.True(t, byExternalID["parent-user"].CreatedAt.Time.Before(byExternalID["subagent-tool-call"].CreatedAt.Time))
+	require.True(t, byExternalID["subagent-tool-call"].CreatedAt.Time.Before(byExternalID["parent-assistant"].CreatedAt.Time))
 }
 
 // TestClaudeHookVersion_StopCollectionSkipsPerEventPersist verifies the version

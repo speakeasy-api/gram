@@ -102,7 +102,7 @@ INSERT INTO risk_results (
   , match
   , confidence
 )
-VALUES (
+SELECT
     $1
   , $2
   , $3
@@ -115,6 +115,14 @@ VALUES (
   , $7
   , $8
   , $9
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM risk_results existing
+  WHERE existing.project_id = $2
+    AND existing.risk_policy_id = $4
+    AND existing.risk_policy_version = $5
+    AND existing.chat_message_id = $6
+    AND existing.source = 'shadow_mcp'
 )
 `
 
@@ -130,6 +138,10 @@ type InsertShadowMCPBlockResultParams struct {
 	Confidence        pgtype.Float8
 }
 
+// Dedupe live hook-time block findings across duplicate plugin installs: each
+// install delivers its own block with a distinct id and idempotency token, but
+// they resolve to the same (project, policy, version, chat_message). The
+// NOT EXISTS guard collapses them using risk_results_project_policy_version_message_idx.
 func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) error {
 	_, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
 		arg.ID,

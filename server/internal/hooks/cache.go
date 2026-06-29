@@ -21,16 +21,17 @@ func claudeMessagesPendingCacheKey(sessionID string) string {
 	return fmt.Sprintf("hook:pending:claude-messages:%s", sessionID)
 }
 
-// claudeSubagentMessagesPendingCacheKey returns the Redis key for SubagentStop
-// batches waiting to be merged into the parent Stop transcript.
-func claudeSubagentMessagesPendingCacheKey(sessionID string) string {
-	return fmt.Sprintf("hook:pending:claude-subagent-messages:%s", sessionID)
-}
-
 // shadowMCPBlockFindingsPendingCacheKey returns the Redis key for live
 // shadow-MCP block findings that are waiting for the matching chat_message.
 func shadowMCPBlockFindingsPendingCacheKey(sessionID string) string {
 	return fmt.Sprintf("hook:pending:shadow-mcp-block-findings:%s", sessionID)
+}
+
+// claudeMessagesFlushRetryCounterCacheKey returns the Redis key tracking how
+// many times a failing Stop batch has been re-buffered for a session, so a
+// poison batch can be dropped instead of retried forever.
+func claudeMessagesFlushRetryCounterCacheKey(sessionID string) string {
+	return fmt.Sprintf("hook:pending:claude-messages-flush-retries:%s", sessionID)
 }
 
 // sessionMCPListCacheKey returns the Redis key for the parsed `claude mcp list`
