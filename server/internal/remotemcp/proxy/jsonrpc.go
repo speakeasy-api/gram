@@ -35,7 +35,9 @@ func readJSONRPCBody(r io.Reader, maxBytes int64) ([]byte, jsonrpc.Message, erro
 	}
 	msg, err := jsonrpc.DecodeMessage(body)
 	if err != nil {
-		return body, nil, fmt.Errorf("decode jsonrpc message: %w", err)
+		// Return the raw body alongside the wrapped sentinel so the caller can
+		// relay a non-JSON-RPC payload verbatim rather than failing the request.
+		return body, nil, fmt.Errorf("%w: decode jsonrpc message: %w", ErrUndecodableJSONRPCBody, err)
 	}
 	return body, msg, nil
 }
