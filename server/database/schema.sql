@@ -1800,6 +1800,11 @@ WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx
 ON user_accounts (organization_id, user_id);
 
+-- Classification looks accounts up by provider org (CountEmployeesForExternalOrg
+-- and the enterprise-org disambiguation), so index the lookup key.
+CREATE INDEX IF NOT EXISTS user_accounts_org_provider_external_org_idx
+ON user_accounts (organization_id, provider, external_org_id);
+
 -- device_owners is the linking mechanism that lets us attribute a personal account
 -- to an employee. A per-device anonymous id (e.g. Claude's user.id) is stable across
 -- the accounts logged in on one machine, so a team session (email resolves to an org

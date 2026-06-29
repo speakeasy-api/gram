@@ -1,4 +1,4 @@
-h1:LcsBespE+DLj84YNd5U3GZpsJFzfoJw9JdgMVpokiKQ=
+h1:wFwx1xPouaoLBQwI+1GOSUjV3BcI46Wrnv13zs1sloY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -233,4 +233,4 @@ h1:LcsBespE+DLj84YNd5U3GZpsJFzfoJw9JdgMVpokiKQ=
 20260626152018_chats-add-pinned-at.sql h1:GeYCKutkPKW+wiILObCtoHI62pR60gSQhUelef/5xLc=
 20260626175057_add_user_id_to_tool_call_blocks.sql h1:+Mf+8EEzJOBLXgsupc+p4uJ+O7Mx871veaeEYyEAqHE=
 20260629082301_risk-policies-analyzer-config.sql h1:RcX/MVJeVwIUIWxh02Z9WyAF1cfnelNLrYStdv+xrh8=
-20260629202206_add-personal-account-tracking.sql h1:7JQr3xKXYMxK6RQqskGEnX7Q0sCIZgnFU3O3eejPpI8=
+20260629215311_add-personal-account-tracking.sql h1:h9gGKAfEoYa7g1cup/mf4ukQeNiKeZ6IQvxjfcNALKQ=

@@ -43,5 +43,7 @@ CREATE TABLE "user_accounts" (
 );
 -- Create index "user_accounts_org_provider_external_account_uuid_key" to table: "user_accounts"
 CREATE UNIQUE INDEX "user_accounts_org_provider_external_account_uuid_key" ON "user_accounts" ("organization_id", "provider", "external_account_uuid") WHERE (deleted_at IS NULL);
+-- Create index "user_accounts_org_provider_external_org_idx" to table: "user_accounts"
+CREATE INDEX "user_accounts_org_provider_external_org_idx" ON "user_accounts" ("organization_id", "provider", "external_org_id");
 -- Create index "user_accounts_organization_id_user_id_idx" to table: "user_accounts"
 CREATE INDEX "user_accounts_organization_id_user_id_idx" ON "user_accounts" ("organization_id", "user_id");
