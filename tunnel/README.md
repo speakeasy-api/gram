@@ -22,13 +22,13 @@ Postgres. Redis is the live routing table and connection snapshot store.
 
 ## Pieces
 
-| Piece       | Code                                          | Responsibility                                                                                   |
-| ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and proxies substream HTTP to one pinned local MCP URL. |
-| Gateway     | `tunnel/gateway`, `tunnel/cmd/tunnel-gateway` | Accepts agent WebSockets, owns yamux sessions, and forwards requests by tunnel ID.               |
-| MCP serve   | `server/internal/mcp/serveendpoint.go`        | Resolves the tunnel route, injects `X-Gram-Tunnel-Id`, and runs the remote MCP proxy path.       |
-| Management  | `server/internal/tunnelledmcp`                | Goa service backed by Postgres plus Redis connection metadata.                                   |
-| Shared wire | `tunnel/wire`, `tunnel/route`                 | Key format, control frames, WS `net.Conn`, Redis route and connection stores.                    |
+| Piece       | Code                                          | Responsibility                                                                                                                     |
+| ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and proxies substream HTTP to one pinned local MCP URL.                                   |
+| Gateway     | `tunnel/gateway`, `tunnel/cmd/tunnel-gateway` | Accepts agent WebSockets on the public listener, owns yamux sessions, and forwards requests by tunnel ID on the internal listener. |
+| MCP serve   | `server/internal/mcp/serveendpoint.go`        | Resolves the tunnel route, injects `X-Gram-Tunnel-Id`, and runs the remote MCP proxy path.                                         |
+| Management  | `server/internal/tunnelledmcp`                | Goa service backed by Postgres plus Redis connection metadata.                                                                     |
+| Shared wire | `tunnel/wire`, `tunnel/route`                 | Key format, control frames, WS `net.Conn`, Redis route and connection stores.                                                      |
 
 ## Request Path
 
@@ -36,7 +36,7 @@ Postgres. Redis is the live routing table and connection snapshot store.
 MCP client
   -> gram-server /mcp/<slug>
   -> mcp_servers row resolves tunnelled_mcp_server_id
-  -> Redis lookup: tunnel_routes:<tunnelID> -> gateway address
+  -> Redis lookup: tunnel_routes:<tunnelID> -> internal gateway forward address
   -> gram-server proxies to gateway with X-Gram-Tunnel-Id
   -> gateway opens yamux substream to a live agent
   -> agent proxies to TUNNEL_LOCAL_MCP_URL
@@ -73,7 +73,7 @@ docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
 
 Two madprocs entries wrap the same local path:
 
-- `tunnel-gateway`: local gateway on `:8090`, using Redis for routes.
+- `tunnel-gateway`: local gateway with agent `/connect` on `:8090` and internal forwarding on `:8091`, using Redis for routes.
 - `tunnel-postgres-mcp`: starts Postgres MCP and the companion tunnel agent.
 
 The seed task writes the local tunnel ID and key to `mise.local.toml`:
