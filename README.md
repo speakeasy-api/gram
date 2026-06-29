@@ -50,7 +50,7 @@ A single control layer for connecting your agents to MCPs for your SaaS vendors,
 
 ## Secure
 
-Every prompt, response, and agent action is inspected and enforced in real time. Sensitive data is blocked, redacted, or logged before it leaves your environment. Create and enforce flexible policies to prevent prompt injection, log shadow use and detect PII secrets and other sensitive data types. 
+Every prompt, response, and agent action is inspected and enforced in real time. Sensitive data is blocked, redacted, or logged before it leaves your environment. Create and enforce flexible policies to prevent prompt injection, log shadow use and detect PII secrets and other sensitive data types.
 
 ## Control
 
