@@ -187,17 +187,16 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
   }
 `;
 
-// Assistant replies render links with Moonshine's <Link> (`text-link-primary`),
-// but that token's value (--text-link-primary) is defined on Moonshine's theme
-// roots, which aren't in the Elements shadow root — so the link would inherit
-// the body text color. Define it on the Elements root so entity links render in
-// the Moonshine brand blue, matching the rest of the app (light/dark).
+// Assistant replies render links with Moonshine's <Link> (class
+// `text-link-primary`), but Moonshine's stylesheet — which carries the rule
+// `.text-link-primary { color: var(--text-link-primary) }` — isn't loaded in
+// the Elements shadow root, so the class has no effect and the link inherits
+// the body text color. Color the link directly with the Moonshine brand blue
+// (light/dark); the inner text span inherits it.
 const CHAT_LINK_CSS = `
-  .gram-elements { --text-link-primary: #1e5aae; --text-link-visited: #1e5aae; }
-  .gram-elements.dark, .dark .gram-elements {
-    --text-link-primary: #619aea;
-    --text-link-visited: #619aea;
-  }
+  .gram-elements a.text-link-primary { color: #1e5aae; }
+  .gram-elements.dark a.text-link-primary,
+  .dark .gram-elements a.text-link-primary { color: #619aea; }
 `;
 
 function DockSubmitButton() {
