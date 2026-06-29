@@ -255,6 +255,11 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
 		},
 		&cli.StringFlag{
+			Name:    "tunnel-forward-token",
+			Usage:   "Shared secret presented to the tunnel gateway forward listener to authenticate gram-server",
+			EnvVars: []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+		},
+		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
@@ -824,6 +829,7 @@ func newStartCommand() *cli.Command {
 				remoteChallengeManager,
 				remoteProxyManager,
 				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
 			)
 
 			chatClient := chat.NewAgenticChatClient(
