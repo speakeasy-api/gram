@@ -137,9 +137,6 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelRoutes       route.Store
-	// tunnelForwardToken is the shared secret presented to the tunnel gateway's
-	// forward listener to authenticate gram-server as the caller. Empty disables
-	// the header (the gateway then runs without forward-token enforcement).
 	tunnelForwardToken string
 }
 

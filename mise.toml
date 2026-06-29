@@ -126,7 +126,6 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
-## Shared secret authenticating gram-server -> tunnel gateway forward requests.
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 OPENROUTER_DEV_KEY = "unset"

@@ -162,6 +162,8 @@ services:
     build:
       context: https://github.com/crystaldba/postgres-mcp.git#07eb329c8c48e49640e0d1b5b35465d4d024c3ee
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DATABASE_URI: postgresql://${DB_USER}:${DB_PASSWORD}@gram-db:5432/${DB_NAME}
     command:
@@ -183,8 +185,6 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       TUNNEL_GATEWAY_URL: ${TUNNEL_AGENT_GATEWAY_URL:-ws://host.docker.internal:8090/connect}
       TUNNEL_KEY: ${TUNNEL_LOCAL_KEY:-}

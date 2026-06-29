@@ -23,3 +23,10 @@ CGO_ENABLED=0 go \
     -ldflags="-s -w -X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${git_sha} -X github.com/speakeasy-api/gram/server/cmd/gram.AssistantRuntimeImageHash=${runtime_image_hash} -X goa.design/clue/health.Version=${git_sha}" \
     -o bin/gram \
     ./main.go
+
+CGO_ENABLED=0 go \
+    build \
+    "${args[@]}" \
+    -trimpath \
+    -o bin/tunnel-gateway \
+    ../tunnel/cmd/tunnel-gateway

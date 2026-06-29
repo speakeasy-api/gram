@@ -64,8 +64,7 @@ func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
-	// Token accepted: the request advances past the gate to the registry
-	// lookup, which has no live session and returns the distinct 502.
+	// 502 (not 403) means the token passed the gate and reached the no-session lookup.
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "no-live-session", rec.Header().Get("X-Gram-Tunnel-Error"))
 	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
@@ -82,7 +81,6 @@ func TestForwardHandlerAllowsAllWhenTokenUnset(t *testing.T) {
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
-	// No token configured: enforcement disabled, request reaches the lookup.
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "no-live-session", rec.Header().Get("X-Gram-Tunnel-Error"))
 }
