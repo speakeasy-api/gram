@@ -20,6 +20,7 @@ type Chat struct {
 	Title            pgtype.Text
 	TitleManuallySet bool
 	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz

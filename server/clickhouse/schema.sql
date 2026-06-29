@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
-    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
+    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -92,6 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
