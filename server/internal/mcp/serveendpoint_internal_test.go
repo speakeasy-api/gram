@@ -54,6 +54,11 @@ func TestTunnelGatewayURL(t *testing.T) {
 			want: "http://10.0.0.5:8090",
 		},
 		{
+			name: "dns host port defaults to http",
+			addr: "tunnel-gateway:8090",
+			want: "http://tunnel-gateway:8090",
+		},
+		{
 			name: "http url preserved",
 			addr: "http://tunnel-gateway:8090",
 			want: "http://tunnel-gateway:8090",

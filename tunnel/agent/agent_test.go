@@ -63,3 +63,10 @@ func TestNormalizeGatewayURLConvertsHTTPS(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "wss://tunnel.example.test/connect", got)
 }
+
+func TestNormalizeGatewayURLRejectsMissingHost(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeGatewayURL("wss:///connect")
+	require.Error(t, err)
+}
