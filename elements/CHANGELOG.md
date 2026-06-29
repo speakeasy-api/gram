@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.39.0
+
+### Minor Changes
+
+- f193c77: Project Assistant: fold the app-injected `<…context>` block in a user turn into a collapsed "Additional context" disclosure (chevron, expand to inspect) instead of rendering the raw tags. The expanded block wraps to the message-bubble width, so opening it no longer widens the bubble.
+
 ## 1.38.2
 
 ### Patch Changes
