@@ -578,3 +578,50 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call: %s", callResp.Body.String())
 	decodeMCPResult(t, callResp.Body.Bytes())
 }
+
+func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresConnectForInitialize(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
+		GramAccountType: "enterprise",
+		ID:              authCtx.ActiveOrganizationID,
+	}))
+
+	upstreamHit := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHit <- struct{}{}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	endpointSlug := "endpoint-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
+
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
+		urn.NewUserSubject(mockidp.MockUserID),
+		urn.NewUserSessionIssuer(issuerID).String(),
+		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
+		time.Hour,
+	)
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	select {
+	case <-upstreamHit:
+		t.Fatal("upstream must not be reached without mcp:connect")
+	default:
+	}
+}
