@@ -319,8 +319,14 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			}
 		}
 		for _, g := range addGrants {
+			// An org:admin add only counts if it actually writes a grant row:
+			// nil selectors flatten to a wildcard row, a non-empty slice writes
+			// the listed rows. An empty (non-nil) selector slice flattens to
+			// zero rows (see grants.go), so pairing such a no-op add with an
+			// org:admin removal must not satisfy the guardrail — that would
+			// strip org:admin from the Admin role and lock the org out.
 			if g.Scope == string(authz.ScopeOrgAdmin) {
-				addingOrgAdmin = true
+				addingOrgAdmin = addingOrgAdmin || g.Selectors == nil || len(g.Selectors) > 0
 			}
 		}
 		if removingOrgAdmin && !addingOrgAdmin {

@@ -245,6 +245,28 @@ func TestService_UpdateRole_SystemRole_AdminMustKeepOrgAdmin(t *testing.T) {
 	require.Contains(t, err.Error(), "the Admin role must keep the org:admin permission")
 }
 
+func TestService_UpdateRole_SystemRole_AdminOrgAdminEmptySelectorAddRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+
+	// A removal paired with an org:admin add whose selectors are an empty
+	// (non-nil) slice must not satisfy the guardrail: an empty selector slice
+	// flattens to zero grant rows, so org:admin would be removed and never
+	// re-added — locking the org out. The add must be ignored here.
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:           roleID,
+		RemoveGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeOrgAdmin)}},
+		AddGrants:    []*gen.RoleGrant{{Scope: string(authz.ScopeOrgAdmin), Selectors: []*gen.Selector{}}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "the Admin role must keep the org:admin permission")
+}
+
 func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 	t.Parallel()
 
