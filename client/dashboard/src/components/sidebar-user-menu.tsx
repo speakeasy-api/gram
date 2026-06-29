@@ -1,4 +1,4 @@
-import { useIsPlatformAdmin, useSession, useUser } from "@/contexts/Auth";
+import { useSession, useUser } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -14,7 +14,6 @@ import {
 } from "@speakeasy-api/moonshine";
 import {
   ActivityIcon,
-  ArrowRightLeftIcon,
   BookOpenIcon,
   BuildingIcon,
   CreditCardIcon,
@@ -33,7 +32,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const session = useSession();
-  const isAdmin = useIsPlatformAdmin();
   const navigate = useNavigate();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
@@ -146,12 +144,6 @@ export function SidebarUserMenu(): JSX.Element {
               <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
                 <CreditCardIcon className="mr-2 h-4 w-4" />
                 Billing
-              </DropdownMenuItem>
-            )}
-            {isAdmin && (
-              <DropdownMenuItem onClick={() => orgRoutes.adminSettings.goTo()}>
-                <ArrowRightLeftIcon className="mr-2 h-4 w-4" />
-                Organization Override
               </DropdownMenuItem>
             )}
             {isMultiOrg && (

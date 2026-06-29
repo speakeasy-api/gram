@@ -1,6 +1,11 @@
 import { ReactElement } from "react";
-import { useIsPlatformAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+} from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
+import { PlatformAdminPanel } from "./platform-admin-panel";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -547,42 +552,52 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                   </span>
                 )}
               </button>
-              {import.meta.env.DEV && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("platformadmin")}
-                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
-                    activeTab === "platformadmin"
-                      ? "border-foreground text-foreground"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
-                  }`}
-                >
-                  <Crown className="h-3 w-3" />
-                  Platform Admin
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab("platformadmin")}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
+                  activeTab === "platformadmin"
+                    ? "border-foreground text-foreground"
+                    : "text-muted-foreground hover:text-foreground border-transparent"
+                }`}
+              >
+                <Crown className="h-3 w-3" />
+                Platform Admin
+              </button>
             </div>
 
-            {/* RBAC tab */}
+            {/* Platform Admin tab */}
             {activeTab === "platformadmin" && (
-              <div className="flex items-center justify-between px-3.5 py-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
-                  />
-                  <span className="text-foreground text-xs font-medium">
-                    {platformAdmin ? "Platform admin active" : "Platform admin off"}
-                  </span>
-                </div>
-                <Switch
-                  checked={platformAdmin}
-                  onCheckedChange={(checked) => {
-                    setPlatformAdmin(checked);
-                    localStorage.setItem(PLATFORM_ADMIN_KEY, checked ? "1" : "0");
-                    invalidate();
-                  }}
-                  aria-label="Toggle platform admin"
-                />
+              <div className="max-h-[440px] space-y-2 overflow-y-auto px-3 py-3">
+                {/* Dev-only impersonation toggle: flips useIsPlatformAdmin
+                    locally so non-admins can exercise admin-gated UI. */}
+                {import.meta.env.DEV && (
+                  <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                      />
+                      <span className="text-foreground text-xs font-medium">
+                        {platformAdmin
+                          ? "Platform admin active"
+                          : "Platform admin off"}
+                      </span>
+                    </div>
+                    <Switch
+                      checked={platformAdmin}
+                      onCheckedChange={(checked) => {
+                        setPlatformAdmin(checked);
+                        localStorage.setItem(
+                          PLATFORM_ADMIN_KEY,
+                          checked ? "1" : "0",
+                        );
+                        invalidate();
+                      }}
+                      aria-label="Toggle platform admin"
+                    />
+                  </div>
+                )}
+                <PlatformAdminPanel />
               </div>
             )}
 
