@@ -122,5 +122,11 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		remoteReq.Header.Set(h.Name, value)
 	}
 
+	// Strip last so configured headers can't reintroduce Accept-Encoding after
+	// the user-header filter: the Go transport must own content-encoding
+	// negotiation, otherwise a gzipped upstream body reaches readJSONRPCBody
+	// undecoded and bypasses response interception.
+	remoteReq.Header.Del("Accept-Encoding")
+
 	return nil
 }
