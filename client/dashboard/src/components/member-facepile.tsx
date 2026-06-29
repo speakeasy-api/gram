@@ -125,7 +125,7 @@ export function MemberFacepile({
                   transition={
                     isHovered
                       ? { type: "spring", stiffness: 400, damping: 20 }
-                      : { type: "tween", duration: 0.5, ease: "easeOut" }
+                      : { type: "tween", duration: 0.3, ease: "easeOut" }
                   }
                 >
                   <Tooltip>
@@ -161,7 +161,7 @@ export function MemberFacepile({
                     transition={
                       isHovered
                         ? { type: "spring", stiffness: 400, damping: 20 }
-                        : { type: "tween", duration: 0.5, ease: "easeOut" }
+                        : { type: "tween", duration: 0.3, ease: "easeOut" }
                     }
                   >
                     <div className="ring-background bg-muted text-muted-foreground flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-medium whitespace-nowrap ring-2">
