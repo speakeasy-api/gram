@@ -52,6 +52,11 @@ Reference these guidelines when:
   - Suggest running `mise db:diff <migration-name>` after making schema changes to generate a migration file. Replace `<migration-name>` with a clear snake-case migration id such as `users-add-email-column`.
   - If you need to undo a migration then run: 1. `mise run db:reset` 2. `mise run db:migrate` to re-run all migrations from the beginning.
 
+- **Migrations ship in their own PR:**
+  - A migration goes in a dedicated PR — no application/business-logic code, no backfills, and no unrelated changes alongside it. Shipping migrations with business logic risks outages (the server can query a schema that has not rolled out yet) and makes the PR hard to revert.
+  - Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise db:diff`) and contain only DDL. Never hand-edit, rename, or rehash them.
+  - Migration files are never the place for backfills or other DML — data migrations belong in application code, not migration files.
+
 <relevant-tasks>
 
 - `mise run db:diff <name-of-migrations>`: Create a database migration
