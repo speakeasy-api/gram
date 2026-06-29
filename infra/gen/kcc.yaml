@@ -82,6 +82,7 @@ pubsub:
           string reply_urn = 8;
           string content = 9;
           repeated string entities = 10;
+          double score_threshold = 11;
         }
       type: PROTOCOL_BUFFER
   subscriptions:

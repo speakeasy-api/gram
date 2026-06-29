@@ -11,7 +11,7 @@ from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
 
-from pystreams.risk.scanner import Detection, Scanner
+from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, Scanner
 
 # Source label stamped on every finding this handler emits, so all findings
 # from the Presidio path are attributed identically downstream.
@@ -58,6 +58,8 @@ class PresidioHandler:
     ) -> None:
         # An empty list means "analyze every entity Presidio knows about".
         requested = list(message.entities) or None
+        # Zero/unset on the request means "use the default floor".
+        score_threshold = message.score_threshold or DEFAULT_SCORE_THRESHOLD
 
         # The scan (CPU/GIL-bound spaCy + Presidio work plus the false-positive
         # filter and byte-offset conversion) runs off the event loop inside the
@@ -66,7 +68,9 @@ class PresidioHandler:
         # under load (not the scan itself) can dominate per-message ACK latency.
         try:
             scan_started = time.perf_counter()
-            detections = await self._scanner.scan(message.content, requested)
+            detections = await self._scanner.scan(
+                message.content, requested, score_threshold
+            )
             scan_ms = (time.perf_counter() - scan_started) * 1000
         except Exception as exc:
             # This is best-effort shadow processing, and the PresidioAnalyzer
