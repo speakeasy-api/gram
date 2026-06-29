@@ -1,50 +1,57 @@
-<a href="https://www.speakeasy.com/product/gram" target="_blank">
-   <picture>
-       <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/1812f171-1650-4045-ac35-21bdd7b103a6">
-       <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/3f14e446-0dec-4b8a-b36e-fd92efc25751">
-       <img src="https://github.com/user-attachments/assets/3f14e446-0dec-4b8a-b36e-fd92efc25751#gh-dark-mode-only" alt="Gram">
-   </picture>
- </a>
-
-<h3 align="center">Gram - The MCP Cloud Platform</h3>
 <p align="center">
-    <br />
-    <a href="https://www.speakeasy.com/product/gram"><strong>Learn more »</strong></a>
-    <br />
-    <br />
-    <a href="https://speakeasy.com/"><img alt="Built by Speakeasy" src="https://www.speakeasy.com/assets/badges/built-by-speakeasy.svg" />
-    <br />
+  <a href="https://www.speakeasy.com/product/gram" target="_blank">
+    <img src="./.github/og-image.png" alt="Gram by Speakeasy" width="100%">
   </a>
-    <a href="#Support"><strong>Documentation</strong></a> ·
-    <a href="#Techstack"><strong>Tech Stack</strong></a> ·
-    <a href="/CONTRIBUTING.md"><strong>Contributing</strong></a> ·
-    <a href="https://app.getgram.ai/"><strong>Login</strong></a>
+</p>
+
+<h3 align="center">Gram — Speakeasy's AI Control Plane</h3>
+
+<p align="center">
+  <strong>Securely scale AI usage. Bring every MCP server behind one gateway.</strong>
+  <br />
+  <a href="https://www.speakeasy.com/product/gram"><strong>Learn more »</strong></a>
 </p>
 
 <p align="center">
+  <a href="https://speakeasy.com/"><img alt="Built by Speakeasy" src="https://www.speakeasy.com/assets/badges/built-by-speakeasy.svg" /></a>
+</p>
 
+<p align="center">
+  <a href="https://www.getgram.ai/docs/introduction"><strong>Documentation</strong></a> ·
+  <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
+  <a href="./CONTRIBUTING.md"><strong>Contributing</strong></a> ·
+  <a href="https://app.getgram.ai/"><strong>Login</strong></a>
 </p>
 
 <hr />
 
 # Introduction
 
-[Gram](https://app.getgram.ai) is a platform for creating, curating, and hosting Model Context Protocol (MCP) servers with ease. We currently support both OpenAPI documents as well as custom TypeScript functions as sources for tools.
+[Gram](https://app.getgram.ai) is an MCP gateway and AI control plane. Connect your APIs, MCP servers, and TypeScript functions to any AI agent — then secure, govern, and observe every tool call from one place. Turn OpenAPI documents or custom TypeScript functions into tools, group them into toolsets, and serve each toolset as a hosted, secure MCP server.
 
-## What can you do with Gram?
+To get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
 
-With Gram you can empower your LLM and Agents to access the right data at the right time. Gram provides a high-level TypeScript SDK and OpenAPI support to define tools, compose higher order custom tools and group tools together into toolsets. Every toolset is instantly available as a hosted and secure MCP server.
+## Secure
 
-If you are looking to get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
+One identity surface for every MCP. Scope access by team and role with SSO and RBAC at the gateway, enforce runtime guardrails, and keep credentials out of users' DMs. OAuth 2.1, DCR, and PKCE out of the box.
+
+## Connect
+
+Every AI agent, every MCP server. Universal client support for Claude, Cursor, ChatGPT, Copilot, and any MCP client. Import existing MCP servers, generate new ones from your OpenAPI specs, or build tools with TypeScript functions — all with versioned rollouts.
+
+## Observe
+
+Every tool call, every agent, every team. Real-time logs, distributed tracing, cost and usage by team, and anomaly detection.
 
 ## Features
 
-└ Minimal, lightweight, and open source.  
-└ High-level TypeScript framework that makes working with MCP easy.  
-└ Use a custom tool builder to create higher-order tools by chaining lower level tools.  
-└ OAuth support out-of-the-box: DCR, BYO Authorisation, and standard flows.  
-└ First class support for OpenAPI `3.0.X` and `3.1.X`.  
-└ Follows the [MCP](https://modelcontextprotocol.io/docs/getting-started/intro) specification.
+- Minimal, lightweight, and open source.
+- High-level TypeScript framework that makes working with MCP easy.
+- Custom tool builder to create higher-order tools by chaining lower-level tools.
+- SSO and role-based access control to govern who can reach which tools.
+- OAuth out of the box: OAuth 2.1, DCR, PKCE, BYO authorization, and standard flows.
+- First-class support for OpenAPI `3.0.X` and `3.1.X`.
+- Follows the [MCP](https://modelcontextprotocol.io/docs/getting-started/intro) specification.
 
 ## Gram Functions
 
@@ -89,10 +96,10 @@ In addition you get a:
 
 ### Common use cases include:
 
-└ Host one or more remote MCP servers at a custom domain like `mcp.{your-company}.com`.  
-└ Power your in-application chat by exposing context from your internal APIs or 3rd Party APIs through tools.  
-└ Add data to your AI workflows in Zapier, N8N and other workflow platforms  
-└ Manage and secure MCP servers for your entire organization through a unified control plane.
+- Host one or more remote MCP servers at a custom domain like `mcp.{your-company}.com`.
+- Power your in-application chat by exposing context from your internal or 3rd-party APIs through tools.
+- Add data to your AI workflows in Zapier, n8n, and other workflow platforms.
+- Manage and secure MCP servers for your entire organization through a unified control plane.
 
 Check out the `examples` folder in this repo for working examples. Or open a pull request if you have one to share!
 
@@ -123,12 +130,12 @@ Contributions are welcome! Please open an issue or discussion for questions or s
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed contribution guidelines.
 
-## Techstack
+## Tech Stack
 
-└ [TypeScript](https://www.typescriptlang.org/) – dashboard language.  
-└ [Golang](https://go.dev/) - backend language.  
-└ [Goa](https://github.com/goadesign/goa) - design-first API framework.  
-└ [Temporal](https://temporal.io/) - workflow engine.  
-└ [Polar](https://polar.sh/) - usage based billing.  
-└ [OpenRouter](https://openrouter.ai/) - LLM gateway.  
-└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
+- [TypeScript](https://www.typescriptlang.org/) — dashboard language.
+- [Golang](https://go.dev/) — backend language.
+- [Goa](https://github.com/goadesign/goa) — design-first API framework.
+- [Temporal](https://temporal.io/) — workflow engine.
+- [Polar](https://polar.sh/) — usage-based billing.
+- [OpenRouter](https://openrouter.ai/) — LLM gateway.
+- [Speakeasy](https://www.speakeasy.com/) — generated SDKs. Spec hosted [here](https://app.getgram.ai/openapi.yaml).
