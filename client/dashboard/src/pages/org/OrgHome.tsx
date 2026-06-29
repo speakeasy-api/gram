@@ -1,5 +1,6 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -534,8 +535,15 @@ function ProjectRow({
         </div>
       </div>
 
-      <div className="pointer-events-none">
-        <Facepile members={facepile} />
+      <div
+        className="relative z-10 hidden md:flex"
+        onClick={(e) => {
+          // Keep clicks on the facepile from triggering the row's Link overlay.
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <MemberFacepile members={facepile} maxFaces={5} />
       </div>
 
       <ProjectRowActions
@@ -597,8 +605,14 @@ function ProjectCard({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <div className="pointer-events-none">
-          <Facepile members={facepile} />
+        <div
+          className="relative z-10"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <MemberFacepile members={facepile} maxFaces={5} />
         </div>
         <ProjectRowActions
           project={project}
@@ -785,39 +799,6 @@ function TimestampDetail({ date }: { date: Date }) {
           {tzAbbr}
         </span>
         <span>{local}</span>
-      </div>
-    </div>
-  );
-}
-
-function Facepile({ members }: { members: AccessMember[] }) {
-  if (members.length === 0) return null;
-  const visible = members.slice(0, FACEPILE_LIMIT);
-  const overflow = Math.max(0, members.length - FACEPILE_LIMIT);
-
-  return (
-    <div className="relative z-10 hidden shrink-0 items-center md:flex">
-      <div className="flex -space-x-1.5">
-        {visible.map((member) => (
-          <Tooltip key={member.id}>
-            <TooltipTrigger asChild>
-              <Avatar className="ring-background size-6 ring-2">
-                {member.photoUrl ? (
-                  <AvatarImage src={member.photoUrl} alt={member.name} />
-                ) : null}
-                <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-medium">
-                  {getInitials(member.email)}
-                </AvatarFallback>
-              </Avatar>
-            </TooltipTrigger>
-            <TooltipContent>{member.name || member.email}</TooltipContent>
-          </Tooltip>
-        ))}
-        {overflow > 0 && (
-          <div className="bg-muted text-muted-foreground ring-background flex size-6 items-center justify-center rounded-full text-[10px] font-medium ring-2">
-            +{overflow}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -14,21 +14,21 @@ import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
-  Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
+import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
 
@@ -44,43 +44,127 @@ function RoleActionsMenu({
   const [open, setOpen] = useState(false);
 
   return (
+    // Render-prop form: the dropdown content is portaled to <body>, so it
+    // escapes the pointer-events containment of the node form. Disabling the
+    // Radix trigger directly is what actually prevents the menu from opening.
     <RequireScope scope="org:admin" level="component">
-      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
-              open && "bg-accent text-foreground",
-            )}
-          >
-            <Ellipsis className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={() => {
-              void setTimeout(onEdit, 0);
-            }}
-          >
-            Edit
-          </DropdownMenuItem>
-          {!role.isSystem && (
+      {({ disabled }) => (
+        <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+          <DropdownMenuTrigger asChild disabled={disabled}>
+            <button
+              type="button"
+              disabled={disabled}
+              className={cn(
+                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                open && "bg-accent text-foreground",
+                disabled && "cursor-not-allowed",
+              )}
+            >
+              <Ellipsis className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
             <DropdownMenuItem
               onSelect={() => {
-                void setTimeout(onDelete, 0);
+                void setTimeout(onEdit, 0);
               }}
             >
-              Delete
+              Edit
             </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {!role.isSystem && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  void setTimeout(onDelete, 0);
+                }}
+              >
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </RequireScope>
   );
 }
 
+type RowMember = {
+  id: string;
+  name: string;
+  email: string;
+  photoUrl?: string;
+  roleIds: string[];
+};
+
+function RoleRow({
+  role,
+  members,
+  canManageRoles,
+  onEdit,
+  onDelete,
+}: {
+  role: Role;
+  members: RowMember[];
+  canManageRoles: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const roleMembers = members
+    .filter((m) => m.roleIds.includes(role.id))
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      photoUrl: m.photoUrl,
+    }));
+
+  return (
+    <div
+      role={canManageRoles ? "button" : undefined}
+      tabIndex={canManageRoles ? 0 : undefined}
+      onClick={canManageRoles ? onEdit : undefined}
+      onKeyDown={
+        canManageRoles
+          ? (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onEdit();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
+        canManageRoles && "hover:bg-muted/50 cursor-pointer",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Type variant="body" className="font-medium">
+          {role.name}
+        </Type>
+        {role.isSystem && (
+          <Badge variant="outline" size="sm">
+            System
+          </Badge>
+        )}
+      </div>
+      <Type variant="body" className="text-muted-foreground min-w-0 truncate">
+        {role.description}
+      </Type>
+      <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+      <MemberFacepile members={roleMembers} />
+      <div aria-hidden />
+      <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+        <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+      </div>
+    </div>
+  );
+}
+
 export function RolesTab(): JSX.Element {
+  const { hasAnyScope } = useRBAC();
+  // Mirror the row-actions menu gate (org:admin): without it, the row is not
+  // clickable and shows no affordance.
+  const canManageRoles = hasAnyScope(["org:admin"]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
@@ -126,62 +210,6 @@ export function RolesTab(): JSX.Element {
     },
   });
 
-  const columns: Column<Role>[] = [
-    {
-      key: "name",
-      header: "Name",
-      width: "180px",
-      render: (role) => (
-        <div className="flex items-center gap-2">
-          <Type variant="body" className="font-medium">
-            {role.name}
-          </Type>
-          {role.isSystem && (
-            <Badge variant="outline" size="sm">
-              System
-            </Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "description",
-      header: "Description",
-      width: "1fr",
-      render: (role) => (
-        <Type variant="body" className="text-muted-foreground">
-          {role.description}
-        </Type>
-      ),
-    },
-    {
-      key: "permissions",
-      header: "Permissions",
-      width: "120px",
-      render: (role) => (
-        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
-      ),
-    },
-    {
-      key: "members",
-      header: "Members",
-      width: "100px",
-      render: (role) => <Type variant="body">{role.memberCount}</Type>,
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "80px",
-      render: (role) => (
-        <RoleActionsMenu
-          role={role}
-          onEdit={() => setEditingRole(role)}
-          onDelete={() => setDeletingRole(role)}
-        />
-      ),
-    },
-  ];
-
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
@@ -206,15 +234,36 @@ export function RolesTab(): JSX.Element {
           <SkeletonTable />
         </div>
       ) : (
-        <Table
-          columns={columns}
-          data={roles}
-          rowKey={(row) => row.id}
-          className="mt-4"
-          noResultsMessage={
-            <div className="p-4">No roles have been created yet.</div>
-          }
-        />
+        // Grid table: the parent owns the column tracks and each row is a
+        // subgrid spanning them, so cells align across rows. Description uses
+        // minmax(0,1fr) (shrinks, absorbs slack); Members uses max-content
+        // (sizes to the bounded facepile) — neither can overflow the table.
+        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden rounded-lg border">
+          <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5 text-sm">
+            <div>Name</div>
+            <div>Description</div>
+            <div>Permissions</div>
+            <div>Members</div>
+            <div aria-hidden />
+            <div className="sr-only">Actions</div>
+          </div>
+          {roles.length === 0 ? (
+            <div className="text-muted-foreground col-span-full p-4">
+              No roles have been created yet.
+            </div>
+          ) : (
+            roles.map((role) => (
+              <RoleRow
+                key={role.id}
+                role={role}
+                members={members}
+                canManageRoles={canManageRoles}
+                onEdit={() => setEditingRole(role)}
+                onDelete={() => setDeletingRole(role)}
+              />
+            ))
+          )}
+        </div>
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">

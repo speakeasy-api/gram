@@ -288,11 +288,11 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	sysRole := isSystemRole(currentRole.Slug)
-	if sysRole && (payload.Name != nil || payload.Description != nil || payload.AddGrants != nil || payload.RemoveGrants != nil) {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").LogError(ctx, r.logger)
-	}
-	if sysRole && payload.MemberIds == nil {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role update requires member_ids").LogError(ctx, r.logger)
+	// System role names/descriptions are platform-managed and shared globally
+	// (global_roles), so they stay immutable. Grants are stored per-org and may
+	// be customized, so grant and member changes are allowed below.
+	if sysRole && (payload.Name != nil || payload.Description != nil) {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role name and description cannot be changed").LogError(ctx, r.logger)
 	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
@@ -350,17 +350,6 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			MemberCount:  int(updatedRow.MemberCount),
 		}
 
-		if payload.AddGrants != nil || payload.RemoveGrants != nil {
-			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
-			if err != nil {
-				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
-			}
-			updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
-			for _, grant := range syncedGrants {
-				updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
-			}
-		}
-
 		workosSyncs = append(workosSyncs, func(ctx context.Context) {
 			r.syncWorkOS(ctx, "update role in workos", func() error {
 				_, err := r.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
@@ -373,6 +362,34 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 				return fmt.Errorf("update role in workos: %w", err)
 			})
 		})
+	}
+
+	// Grants live in the per-org grant store and are patched the same way for
+	// custom and system roles. WorkOS only tracks role identity/membership, not
+	// gram scopes, so no grant sync to WorkOS is needed.
+	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
+		if err != nil {
+			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+		}
+		// Lockout guardrail: the Admin system role must always retain an allow
+		// grant for org:admin, otherwise no one could administer the org.
+		if currentRole.Slug == authz.SystemRoleAdmin {
+			hasOrgAdmin := false
+			for _, grant := range syncedGrants {
+				if grant.Scope == string(authz.ScopeOrgAdmin) && grant.Effect == authz.PolicyEffectAllow {
+					hasOrgAdmin = true
+					break
+				}
+			}
+			if !hasOrgAdmin {
+				return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
+			}
+		}
+		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
+		for _, grant := range syncedGrants {
+			updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
+		}
 	}
 
 	if payload.MemberIds != nil {
