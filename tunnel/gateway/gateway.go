@@ -309,7 +309,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	consumerSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelConsumerSession))
-	entry, ok := g.reg.beginForward(tunnelID, consumerSession, time.Now().UTC())
+	entry, ok := g.reg.beginForward(tunnelID, consumerSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
 	if !ok {
 		// Distinct 502 variant: tunnel known but no live agent session.
 		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")

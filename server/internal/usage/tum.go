@@ -58,7 +58,13 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	}
 	tunnelledMcpServerLimit := pgtype.Int4{Int32: 0, Valid: false}
 	if payload.TunnelledMcpServerLimit != nil {
-		tunnelledMcpServerLimit = pgtype.Int4{Int32: conv.SafeInt32(*payload.TunnelledMcpServerLimit), Valid: true}
+		if *payload.TunnelledMcpServerLimit < 0 {
+			return nil, oops.E(oops.CodeInvalid, nil, "tunnelled_mcp_server_limit must be at least 0").LogError(ctx, s.logger)
+		}
+		if *payload.TunnelledMcpServerLimit > maxTunnelledMcpServerLimit {
+			return nil, oops.E(oops.CodeInvalid, nil, "tunnelled_mcp_server_limit must be at most %d", maxTunnelledMcpServerLimit).LogError(ctx, s.logger)
+		}
+		tunnelledMcpServerLimit = pgtype.Int4{Int32: int32(*payload.TunnelledMcpServerLimit), Valid: true}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -112,6 +118,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 // one) the TUM endpoint reports. Bounded by the 2-year retention of
 // chat_token_summaries; older cycles simply come back empty.
 const tumHistoryCycles = 12
+const maxTunnelledMcpServerLimit = 1<<31 - 1
 
 // buildTokensUnderManagement computes TUM consumption per billing cycle for
 // the trailing cycles and combines it with the organization's contract terms.

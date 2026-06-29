@@ -1,8 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
+import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components";
-import { useMcpEndpoints } from "@gram/client/react-query/index.js";
-import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -118,41 +118,5 @@ export function RemoveRemoteMcpDialogContent({
         </Button>
       </Dialog.Footer>
     </>
-  );
-}
-
-function LinkedMcpServerRow({ server }: { server: McpServer }) {
-  // Each linked mcp_server may have its own endpoints; surface them so the
-  // user understands the full delete fan-out before confirming.
-  const { data: endpoints, isLoading } = useMcpEndpoints({
-    mcpServerId: server.id,
-  });
-  const shortId = server.id.slice(0, 8);
-  return (
-    <li className="flex flex-col gap-1 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <Type small className="font-mono" title={server.id}>
-          {shortId}…
-        </Type>
-        <Badge variant="neutral">
-          <Badge.Text>{server.visibility}</Badge.Text>
-        </Badge>
-      </div>
-      {isLoading ? (
-        <Type small muted>
-          Loading endpoints…
-        </Type>
-      ) : endpoints && endpoints.mcpEndpoints.length > 0 ? (
-        <Type small muted>
-          {endpoints.mcpEndpoints.length} endpoint
-          {endpoints.mcpEndpoints.length === 1 ? "" : "s"}:{" "}
-          {endpoints.mcpEndpoints.map((e) => e.slug).join(", ")}
-        </Type>
-      ) : (
-        <Type small muted>
-          No endpoints attached
-        </Type>
-      )}
-    </li>
   );
 }

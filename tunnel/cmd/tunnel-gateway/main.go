@@ -27,8 +27,10 @@ func main() {
 
 	listenAddr := envOr("TUNNEL_GATEWAY_ADDR", ":8090")
 	// AdvertiseAddr is what gram-server uses to reach this pod; in k8s set it to
-	// the pod IP + port via the downward API (see the manifest).
-	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "tunnel-gateway:8090")
+	// the pod IP + port via the downward API. Public agent traffic is expected to
+	// reach this service through TLS-terminating ingress; this address is the
+	// internal gram-server -> gateway route.
+	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "http://tunnel-gateway:8090")
 
 	routes, err := buildRouteStore(logger)
 	if err != nil {

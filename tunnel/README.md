@@ -63,7 +63,7 @@ Redis is live data-plane state:
 
 ## Local Validation
 
-Run `mise run seed`, then start the normal Gram stack with `mprocs`. The local
+Run `mise run seed`, then start the normal Gram stack with `madprocs`. The local
 Postgres MCP server and agent are declared in `compose.yml` under the `tunnel`
 profile:
 
@@ -71,7 +71,7 @@ profile:
 docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
 ```
 
-Two mprocs entries wrap the same local path:
+Two madprocs entries wrap the same local path:
 
 - `tunnel-gateway`: local gateway on `:8090`, using Redis for routes.
 - `tunnel-postgres-mcp`: starts Postgres MCP and the companion tunnel agent.
@@ -91,7 +91,7 @@ normal tunnelled MCP endpoint seeded in the dashboard.
 ## Tests
 
 ```bash
-go test ./tunnel/... ./server/internal/tunnels/... ./server/internal/tunnelledmcp/...
+go test ./tunnel/... ./server/internal/tunnelledmcp/...
 ```
 
 `server/internal/mcp` covers the production MCP serve path that routes tunnelled

@@ -121,6 +121,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if len(outputContent) == 0 && call.Error != nil {
 		if encodedError, err := json.Marshal(call.Error); err == nil {
 			outputContent = encodedError
+			outputBytes = int64(len(encodedError))
 		}
 	}
 
