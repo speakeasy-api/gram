@@ -187,7 +187,7 @@ func normalizeGatewayURL(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if u.Host == "" {
+	if u.Hostname() == "" {
 		return "", errors.New("TUNNEL_GATEWAY_URL must include a host")
 	}
 	switch u.Scheme {

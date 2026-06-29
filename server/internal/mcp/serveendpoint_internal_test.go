@@ -74,6 +74,16 @@ func TestTunnelGatewayURL(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "http opaque URL rejected",
+			addr:    "http:tunnel-gateway:8090",
+			wantErr: true,
+		},
+		{
+			name:    "http empty hostname rejected",
+			addr:    "http://:8090",
+			wantErr: true,
+		},
+		{
 			name:    "unsupported scheme rejected",
 			addr:    "ftp://tunnel-gateway:8090",
 			wantErr: true,
