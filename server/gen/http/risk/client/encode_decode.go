@@ -3696,6 +3696,474 @@ func DecodeCreateRiskPolicyBypassRequestResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildGetRiskBlockRequest instantiates a HTTP request object with method and
+// path set to call the "risk" service "getRiskBlock" endpoint
+func (c *Client) BuildGetRiskBlockRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRiskBlockRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getRiskBlock", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRiskBlockRequest returns an encoder for requests sent to the risk
+// getRiskBlock server.
+func EncodeGetRiskBlockRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetRiskBlockPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getRiskBlock", "*risk.GetRiskBlockPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRiskBlockResponse returns a decoder for responses returned by the
+// risk getRiskBlock endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetRiskBlockResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRiskBlockResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRiskBlockResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			res := NewGetRiskBlockRiskBlockOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRiskBlockUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRiskBlockForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRiskBlockBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRiskBlockNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRiskBlockConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRiskBlockUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRiskBlockInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRiskBlockInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+				}
+				err = ValidateGetRiskBlockInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+				}
+				return nil, NewGetRiskBlockInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRiskBlockUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+				}
+				err = ValidateGetRiskBlockUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+				}
+				return nil, NewGetRiskBlockUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getRiskBlock", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRiskBlockGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskBlock", err)
+			}
+			err = ValidateGetRiskBlockGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskBlock", err)
+			}
+			return nil, NewGetRiskBlockGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getRiskBlock", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSubmitRiskBlockFeedbackRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "submitRiskBlockFeedback"
+// endpoint
+func (c *Client) BuildSubmitRiskBlockFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SubmitRiskBlockFeedbackRiskPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "submitRiskBlockFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSubmitRiskBlockFeedbackRequest returns an encoder for requests sent to
+// the risk submitRiskBlockFeedback server.
+func EncodeSubmitRiskBlockFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.SubmitRiskBlockFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "submitRiskBlockFeedback", "*risk.SubmitRiskBlockFeedbackPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSubmitRiskBlockFeedbackRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "submitRiskBlockFeedback", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSubmitRiskBlockFeedbackResponse returns a decoder for responses
+// returned by the risk submitRiskBlockFeedback endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSubmitRiskBlockFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSubmitRiskBlockFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SubmitRiskBlockFeedbackResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			res := NewSubmitRiskBlockFeedbackRiskBlockOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SubmitRiskBlockFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SubmitRiskBlockFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SubmitRiskBlockFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SubmitRiskBlockFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SubmitRiskBlockFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SubmitRiskBlockFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SubmitRiskBlockFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SubmitRiskBlockFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+				}
+				err = ValidateSubmitRiskBlockFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+				}
+				return nil, NewSubmitRiskBlockFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SubmitRiskBlockFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+				}
+				err = ValidateSubmitRiskBlockFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+				}
+				return nil, NewSubmitRiskBlockFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "submitRiskBlockFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SubmitRiskBlockFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "submitRiskBlockFeedback", err)
+			}
+			err = ValidateSubmitRiskBlockFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "submitRiskBlockFeedback", err)
+			}
+			return nil, NewSubmitRiskBlockFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "submitRiskBlockFeedback", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRiskPolicyBypassRequestsRequest instantiates a HTTP request object
 // with method and path set to call the "risk" service
 // "listRiskPolicyBypassRequests" endpoint
@@ -7661,6 +8129,7 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		ID:            *v.ID,
 		PolicyID:      *v.PolicyID,
 		PolicyVersion: *v.PolicyVersion,
+		BlockID:       v.BlockID,
 		ChatMessageID: *v.ChatMessageID,
 		ChatID:        v.ChatID,
 		ChatTitle:     v.ChatTitle,

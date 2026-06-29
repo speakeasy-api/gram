@@ -2,7 +2,6 @@ package gram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -17,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
@@ -265,6 +265,44 @@ type receiverGroup struct {
 	broker     gcp.SubscriberBroker
 }
 
+// setupSubscriber resolves the subscriber for a message/subscription pair and
+// stamps the shared pubsub subscriber context. It holds the prologue common to
+// receive and receiveBatch so the wiring (logger option, name validation,
+// context values) cannot drift between the single-message and batch paths. The
+// returned msgName/subName are validated proto message names for use as
+// span/log attributes.
+func setupSubscriber[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	options ...gcp.SubscriberOption,
+) (sub gcp.Subscriber[M], msgName, subName protoreflect.FullName, ctx context.Context, err error) {
+	ctx = g.getContext()
+	// Prepend so callers can still override the logger via options if needed.
+	options = append([]gcp.SubscriberOption{gcp.WithSubscriberLogger(g.logger)}, options...)
+	sub, err = gcp.PubSubSubscriberForMessage(ctx, g.broker, msg, subscription, options...)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("get subscriber for message %T: %T: %w", subscription, msg, err)
+	}
+
+	msgName = proto.MessageName(msg)
+	if !msgName.IsValid() {
+		return nil, "", "", nil, fmt.Errorf("invalid proto message name: %T: %s", msg, msgName)
+	}
+
+	subName = proto.MessageName(subscription)
+	if !subName.IsValid() {
+		return nil, "", "", nil, fmt.Errorf("invalid proto message name: %T: %s", subscription, subName)
+	}
+
+	ctx = contextvalues.SetPubSubSubscriberContext(ctx, contextvalues.PubSubSubscriberContext{
+		TopicProtoName:        string(msgName),
+		SubscriptionProtoName: string(subName),
+	})
+
+	return sub, msgName, subName, ctx, nil
+}
+
 func receive[M proto.Message](
 	g receiverGroup,
 	msg M,
@@ -272,28 +310,10 @@ func receive[M proto.Message](
 	handler streams.Handler[M],
 	options ...gcp.SubscriberOption,
 ) error {
-	ctx := g.getContext()
-	// Prepend so callers can still override the logger via options if needed.
-	options = append([]gcp.SubscriberOption{gcp.WithSubscriberLogger(g.logger)}, options...)
-	sub, err := gcp.PubSubSubscriberForMessage(ctx, g.broker, msg, subscription, options...)
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
 	if err != nil {
-		return fmt.Errorf("get subscriber for message %T: %T: %w", subscription, msg, err)
+		return err
 	}
-
-	msgName := proto.MessageName(msg)
-	if !msgName.IsValid() {
-		return fmt.Errorf("invalid proto message name: %T: %s", msg, msgName)
-	}
-
-	subName := proto.MessageName(subscription)
-	if !subName.IsValid() {
-		return fmt.Errorf("invalid proto message name: %T: %s", subscription, subName)
-	}
-
-	ctx = contextvalues.SetPubSubSubscriberContext(ctx, contextvalues.PubSubSubscriberContext{
-		TopicProtoName:        string(msgName),
-		SubscriptionProtoName: string(subName),
-	})
 
 	g.group.Go(func() error {
 		if err := sub.Receive(ctx, func(ctx context.Context, m M, meta gcp.MessageMetadata) (err error) {
@@ -333,15 +353,15 @@ func receive[M proto.Message](
 				}
 			}()
 
+			// A context.Canceled here means the handler was interrupted (e.g. by
+			// shutdown) before finishing, so the message was not processed. Return
+			// the error so it is nacked and redelivered rather than acked: mapping
+			// cancellation to success would silently drop the in-flight message.
 			err = handler.Handle(ctx, m, meta)
-			switch {
-			case err == nil:
-				return nil
-			case errors.Is(err, context.Canceled):
-				return nil
-			default:
+			if err != nil {
 				return fmt.Errorf("handle message: %w", err)
 			}
+			return nil
 		}); err != nil {
 			return fmt.Errorf("subscriber receive error: %w", err)
 		}
@@ -360,4 +380,90 @@ func mustReceive[M proto.Message](
 	options ...gcp.SubscriberOption,
 ) {
 	must.Nil(receive(g, msg, subscription, handler, options...))
+}
+
+// receiveBatch is the batch counterpart to receive: it registers a
+// streams.BatchHandler that processes messages in groups. It is part of the
+// streams runner surface so consumers can opt into batch processing; register
+// one with mustReceiveBatch in the receivers block alongside the single-message
+// handlers.
+//
+//nolint:unused // wiring kept available for batch consumers registered later
+func receiveBatch[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchHandler[M],
+	options ...gcp.SubscriberOption,
+) error {
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
+	if err != nil {
+		return err
+	}
+
+	g.group.Go(func() error {
+		if err := sub.ReceiveBatch(ctx, settings, func(ctx context.Context, msgs []M, metas []gcp.MessageMetadata) (err error) {
+			// Unlike the single-message path we do not extract per-message trace
+			// context: a batch can aggregate messages from different producer
+			// traces, so there is no single parent span to continue. Start a fresh
+			// span for the batch instead.
+			ctx, span := g.tracer.Start(ctx, "stream.handleBatch", trace.WithAttributes(
+				attr.TopicProtoName(msgName),
+				attr.SubscriptionProtoName(subName),
+				attr.SubscriberBatchSize(len(msgs)),
+			))
+
+			defer func() {
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			// Recover from panics in the handler so a single bad batch returns an
+			// error (triggering a nack and eventual dead-lettering) instead of
+			// crashing the receive goroutine. Registered after the span defer so it
+			// runs first and sets err before the span records it.
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic recovered in batch message handler: %v", r)
+					g.logger.ErrorContext(ctx, "panic recovered in batch message handler",
+						attr.SlogError(err),
+						attr.SlogErrorStack(string(debug.Stack())),
+					)
+				}
+			}()
+
+			// A context.Canceled here means the handler was interrupted (e.g. by
+			// shutdown) before finishing, so the batch was not fully processed.
+			// Return the error so the batch is nacked and redelivered rather than
+			// acked: mapping cancellation to success would silently drop every
+			// un-processed message in the batch.
+			err = handler.HandleBatch(ctx, msgs, metas)
+			if err != nil {
+				return fmt.Errorf("handle message batch: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("subscriber receive batch error: %w", err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+//nolint:unused // registration helper for batch consumers added later
+func mustReceiveBatch[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchHandler[M],
+	options ...gcp.SubscriberOption,
+) {
+	must.Nil(receiveBatch(g, msg, subscription, settings, handler, options...))
 }

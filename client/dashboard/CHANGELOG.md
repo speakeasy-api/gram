@@ -1,5 +1,35 @@
 # dashboard
 
+## 0.78.0
+
+### Minor Changes
+
+- 0cd8e96: Add an agent type filter to the Agent Sessions page, populated from the agent sources actually present in each project's chats via a new `chat.listSources` endpoint.
+- 7763a1b: Tool-call blocks are now durable, first-class entities with a stable `/blocks/<id>` URL and 👍/👎 feedback. When the risk engine blocks a tool call, the block is persisted and its reason is injected into the agent-facing response (Claude `PermissionDecisionReason`, Cursor `AgentMessage`, Codex `reason`) along with a link to the block page, so the agent can reason about the denial instead of hallucinating one. New session-scoped, org-admin-gated `getRiskBlock` and `submitRiskBlockFeedback` endpoints back an in-app `BlockDetailPage` (under `AppLayout`) and a slug-free redirect resolver for the agent's external link, with a "More Info" link from the Risk Events modal.
+
+### Patch Changes
+
+- 0405ac9: Distribute → MCP → Tools now shows the same text permission labels (Read-only, Destructive, Idempotent) as Connect → Catalog → MCP, instead of icon-only badges, for quicker at-a-glance access to a tool's behavior hints.
+- 3464cb8: Show the assistant's creator as its owner. Assistants already recorded who created them; that attribution is now surfaced as a profile avatar (reusing the org-home member avatar treatment) on both the assistant card and the assistant setup page's overview panel. The owner resolves to one of three states: the creating member (avatar + name, full name on hover), "No owner" when the assistant was never attributed, or "Orphaned, no owner" when the creator is no longer a member of the organization. Backed by a new optional `created_by_user_id` field on the `Assistant` API type.
+- dd03a11: Plugin detail now shows an explicit "Up to date" badge and surfaces the last-published time even when there are unpublished changes, rounding out the publish-freshness affordance.
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+- b6a94ad: Fix the risk policy creation Detect step so the Continue button enables when only category-level detectors (Prompt Injection, Shadow MCP, Destructive Tools, Destructive CLI Commands) are selected. These categories have no individual sub-rules, so the previous `hasEnabledDetector` check treated them as empty and kept Continue/Save disabled.
+- Updated dependencies [a5d57cb]
+  - @gram-ai/elements@1.38.2
+
+## 0.77.1
+
+### Patch Changes
+
+- 24b41d9: Improve tool observability filter performance by returning hosted MCP server display names from telemetry filter options, allowing the logs and insights pages to avoid hydrating full toolset resources for server filter labels.
+- 1751a59: Publish plugins straight from the plugin detail page. After adding or removing a server, or editing a plugin's metadata, a "Publish now" prompt offers a one-click republish — or opens the first-publish dialog for projects not yet connected to GitHub — so there's no need to return to the plugins list to re-publish. The detail page now also shows publish freshness: an "Unpublished changes" badge when the project's current plugin state differs from what was last published, or the last published time when up to date, alongside a durable publish button and a marketplace install banner.
+
+  This is backed by new `up_to_date` and `last_published_at` fields on the `plugins.getPublishStatus` API, which compare the project's live plugin fingerprint against the fingerprint last pushed to GitHub. Both fields are absent when the project has no GitHub connection.
+
+- 045b0ae: Stop chat-conversation search from erroring on long queries. The `chat.load` API caps `query` at 200 characters, but the find-in-conversation bar sent whatever was typed, so a long query failed with a hard validation error. The bar now gates the request at 200 characters and flags the over-limit state inline: the search icon turns into a red warning icon (with a tooltip) and the match counter shows the live `length/200` count in red.
+- 1751a59: Fix toast notifications rendering twice. A second `<Toaster>` was mounted at the app root in addition to the one inside the provider tree, so every toast appeared (and dismissed) as a duplicate. Removed the redundant root-level Toaster.
+- bbdda53: Pinned chats: pin/unpin conversations on the /chat page. Pinned chats surface in a dedicated "Pinned" section above Recent Chats. Adds a `setPinned` chat API and a `pinned` filter on `listChats`, backed by the `chats.pinned_at` column.
+
 ## 0.77.0
 
 ### Minor Changes

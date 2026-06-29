@@ -90,6 +90,26 @@ func ToNullUUID(id uuid.UUID) uuid.NullUUID {
 	return uuid.NullUUID{UUID: id, Valid: true}
 }
 
+// StringToNullUUID parses a string into a uuid.NullUUID. A blank or
+// unparseable value yields an invalid NullUUID rather than an error, for
+// callers that treat a missing or malformed id as simply absent.
+func StringToNullUUID(s string) uuid.NullUUID {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
+// NilableToNullUUID converts a UUID into a uuid.NullUUID, treating the zero
+// value (uuid.Nil) as absent — i.e. an invalid NullUUID.
+func NilableToNullUUID(id uuid.UUID) uuid.NullUUID {
+	if id == uuid.Nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 // FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
 // not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {

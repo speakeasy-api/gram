@@ -81,6 +81,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}
 
 	var blockReason, userReason string
+	// Tracks a tool-call block (vs a prompt/permission block) so we can attach a
+	// durable block page link to the agent-facing reason below.
+	var isToolCallBlock bool
+	var blockToolName, blockPolicyID string
 
 	hookEvent, err := codexevents.Normalize(authCtx, payload, hookevents.EventContext{
 		OrganizationID: orgID,
@@ -100,6 +104,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				isToolCallBlock = true
+				blockToolName = ev.ToolName
+				blockPolicyID = scanResult.PolicyID
 				break
 			}
 			policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
@@ -139,6 +146,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 						ToolInput:       ev.ToolInput,
 						RiskPolicyID:    policy.ID,
 					})
+					isToolCallBlock = true
+					blockToolName = toolName
+					blockPolicyID = policy.ID
 				}
 			}
 		case *hookevents.PermissionRequest:
@@ -153,6 +163,25 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			}
 		default:
 			// Non-blocking events: telemetry only.
+		}
+	}
+
+	// Tool-call blocks get a durable block page; mint its URL and attach it to
+	// the agent-facing reason, persisting the row off the hot path.
+	if isToolCallBlock && blockReason != "" {
+		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+			Provider:       "codex",
+			OrganizationID: orgID,
+			ProjectID:      *authCtx.ProjectID,
+			Reason:         blockReason,
+			ToolName:       blockToolName,
+			UserID:         metadata.UserID,
+			RiskPolicyID:   conv.StringToNullUUID(blockPolicyID),
+			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ChatID:         chatIDForBlock(metadata.SessionID),
+			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}); bURL != "" {
+			userReason = appendBlockURL(userReason, bURL)
 		}
 	}
 

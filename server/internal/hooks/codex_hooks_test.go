@@ -34,7 +34,7 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
 	require.Contains(t, *result.Reason, "Request access:")
-	require.Contains(t, *result.Reason, "/risk-policy-bypass/request#request_token=rpbr1.")
+	require.Contains(t, *result.Reason, "/risk-policy-bypass/request#request_token=rpbr2.")
 	require.Contains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
 }
 

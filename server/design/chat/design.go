@@ -23,10 +23,14 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
 			})
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
+			Attribute("pinned", String, "Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
 			Attribute("min_risk_score", Int, "Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.", func() {
@@ -63,8 +67,10 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("source")
 			Param("assistant_id")
 			Param("has_risk")
+			Param("pinned")
 			Param("min_risk_score")
 			Param("from")
 			Param("to")
@@ -108,10 +114,10 @@ var _ = Service("chat", func() {
 			Attribute("from_start", Boolean, "When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.", func() {
 				Default(false)
 			})
-			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.", func() {
+			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.", func() {
 				Default(false)
 			})
-			Attribute("query", String, "When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.", func() {
+			Attribute("query", String, "When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
@@ -222,6 +228,30 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
+	Method("setPinned", func() {
+		Description("Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to pin or unpin")
+			Attribute("pinned", Boolean, "True to pin the chat, false to unpin it")
+			Required("id", "pinned")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.setPinned")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setChatPinned")
+		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -252,6 +282,35 @@ var _ = Service("chat", func() {
 		Meta("openapi:operationId", "submitFeedback")
 		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
 	})
+
+	Method("listSources", func() {
+		Description("List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+		})
+
+		Result(ListSourcesResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.listSources")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChatSources")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSources")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
+	})
+})
+
+var ListSourcesResult = Type("ListSourcesResult", func() {
+	Attribute("sources", ArrayOf(String), "The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').")
+	Required("sources")
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {
@@ -297,7 +356,6 @@ var Chat = Type("Chat", func() {
 	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
 	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
 	Attribute("match_segments", ArrayOf(RiskSegment), "Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.")
-	Attribute("match_seqs", ArrayOf(Int64), "Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 
@@ -329,6 +387,7 @@ var RiskSegment = Type("RiskSegment", func() {
 var ChatMessage = Type("ChatMessage", func() {
 	Attribute("id", String, "The ID of the message")
 	Attribute("seq", Int64, "Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.")
+	Attribute("is_risk", Boolean, "Present only in `risk_only` mode: true when this message has an active risk finding, false for the surrounding-context messages padded around it.")
 	Attribute("role", String, "The role of the message")
 	Attribute("content", Any, "The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls", func() {
 		Meta("struct:field:type", "json.RawMessage", "encoding/json")

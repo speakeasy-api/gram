@@ -37,9 +37,17 @@ type Client struct {
 	// endpoint.
 	DeleteChatDoer goahttp.Doer
 
+	// SetPinned Doer is the HTTP client used to make requests to the setPinned
+	// endpoint.
+	SetPinnedDoer goahttp.Doer
+
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
+
+	// ListSources Doer is the HTTP client used to make requests to the listSources
+	// endpoint.
+	ListSourcesDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -66,7 +74,9 @@ func NewClient(
 		GenerateTitleDoer:   doer,
 		CreditUsageDoer:     doer,
 		DeleteChatDoer:      doer,
+		SetPinnedDoer:       doer,
 		SubmitFeedbackDoer:  doer,
+		ListSourcesDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -195,6 +205,30 @@ func (c *Client) DeleteChat() goa.Endpoint {
 	}
 }
 
+// SetPinned returns an endpoint that makes HTTP requests to the chat service
+// setPinned server.
+func (c *Client) SetPinned() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetPinnedRequest(c.encoder)
+		decodeResponse = DecodeSetPinnedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetPinnedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetPinnedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "setPinned", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // SubmitFeedback returns an endpoint that makes HTTP requests to the chat
 // service submitFeedback server.
 func (c *Client) SubmitFeedback() goa.Endpoint {
@@ -214,6 +248,30 @@ func (c *Client) SubmitFeedback() goa.Endpoint {
 		resp, err := c.SubmitFeedbackDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "submitFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSources returns an endpoint that makes HTTP requests to the chat service
+// listSources server.
+func (c *Client) ListSources() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSourcesRequest(c.encoder)
+		decodeResponse = DecodeListSourcesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSourcesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSourcesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "listSources", err)
 		}
 		return decodeResponse(resp)
 	}

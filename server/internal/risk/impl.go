@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -86,7 +87,11 @@ type Service struct {
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
-	jwtSecret        string
+	// cache backs the rpbr2 policy-bypass request links: the link generator
+	// stores request state here and CreateRiskPolicyBypassRequest reads it
+	// back. Must be the same backing store the link generator uses.
+	cache     cache.Cache
+	jwtSecret string
 	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
 	// when nil the feature is treated as disabled.
 	flags feature.Provider
@@ -127,6 +132,7 @@ func NewObserver(
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
+		cache:            nil,
 		jwtSecret:        "",
 		piiScanner:       nil,
 		piScanner:        nil,
@@ -147,6 +153,7 @@ func NewService(
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	cacheImpl cache.Cache,
 	jwtSecret string,
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
@@ -168,6 +175,7 @@ func NewService(
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
+		cache:            cacheImpl,
 		jwtSecret:        jwtSecret,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
@@ -1342,7 +1350,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1370,7 +1378,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1399,7 +1407,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -2839,7 +2847,7 @@ func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextval
 }
 
 func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
+	id, policyID uuid.UUID, policyVersion int64, blockID uuid.UUID, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
@@ -2848,6 +2856,7 @@ func foundRowToResult(
 		ID:            id.String(),
 		PolicyID:      policyID.String(),
 		PolicyVersion: policyVersion,
+		BlockID:       blockIDPtr(blockID),
 		ChatMessageID: chatMessageID.String(),
 		ChatID:        chatID,
 		ChatTitle:     conv.FromPGText[string](chatTitle),
@@ -2863,6 +2872,15 @@ func foundRowToResult(
 		Spans:         parseRiskSpans(spans),
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
 	}
+}
+
+// blockIDPtr maps the COALESCE'd block id to an optional string: a nil UUID
+// means the finding's message has no durable tool call block.
+func blockIDPtr(blockID uuid.UUID) *string {
+	if blockID == uuid.Nil {
+		return nil
+	}
+	return conv.PtrEmpty(blockID.String())
 }
 
 // parseRiskSpans decodes the risk_results.spans JSONB column into the API span

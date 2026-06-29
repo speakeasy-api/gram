@@ -1902,16 +1902,17 @@ func DecodeEnsureManagedAssistantResponse(decoder func(*http.Response) goahttp.D
 // *types.Assistant from a value of type *AssistantResponseBody.
 func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *types.Assistant {
 	res := &types.Assistant{
-		ID:             *v.ID,
-		ProjectID:      *v.ProjectID,
-		Name:           *v.Name,
-		Model:          *v.Model,
-		Instructions:   *v.Instructions,
-		WarmTTLSeconds: *v.WarmTTLSeconds,
-		MaxConcurrency: *v.MaxConcurrency,
-		Status:         *v.Status,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:              *v.ID,
+		ProjectID:       *v.ProjectID,
+		CreatedByUserID: v.CreatedByUserID,
+		Name:            *v.Name,
+		Model:           *v.Model,
+		Instructions:    *v.Instructions,
+		WarmTTLSeconds:  *v.WarmTTLSeconds,
+		MaxConcurrency:  *v.MaxConcurrency,
+		Status:          *v.Status,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
 	}
 	res.Toolsets = make([]*types.AssistantToolsetRef, len(v.Toolsets))
 	for i, val := range v.Toolsets {
