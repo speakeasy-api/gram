@@ -14,10 +14,11 @@ CREATE TABLE "device_owners" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "device_owners_organization_id_provider_device_id_key" UNIQUE ("organization_id", "provider", "device_id"),
   CONSTRAINT "device_owners_linked_user_id_fkey" FOREIGN KEY ("linked_user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "device_owners_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "device_owners_organization_id_provider_device_id_key" to table: "device_owners"
+CREATE UNIQUE INDEX "device_owners_organization_id_provider_device_id_key" ON "device_owners" ("organization_id", "provider", "device_id") WHERE (deleted_at IS NULL);
 -- Create "user_accounts" table
 CREATE TABLE "user_accounts" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -36,10 +37,11 @@ CREATE TABLE "user_accounts" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "user_accounts_org_provider_external_account_uuid_key" UNIQUE ("organization_id", "provider", "external_account_uuid"),
   CONSTRAINT "user_accounts_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "user_accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "user_accounts_account_type_check" CHECK (account_type = ANY (ARRAY['team'::text, 'personal'::text]))
 );
+-- Create index "user_accounts_org_provider_external_account_uuid_key" to table: "user_accounts"
+CREATE UNIQUE INDEX "user_accounts_org_provider_external_account_uuid_key" ON "user_accounts" ("organization_id", "provider", "external_account_uuid") WHERE (deleted_at IS NULL);
 -- Create index "user_accounts_organization_id_user_id_idx" to table: "user_accounts"
 CREATE INDEX "user_accounts_organization_id_user_id_idx" ON "user_accounts" ("organization_id", "user_id");

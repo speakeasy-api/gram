@@ -1786,10 +1786,15 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT user_accounts_pkey PRIMARY KEY (id),
-  CONSTRAINT user_accounts_org_provider_external_account_uuid_key UNIQUE (organization_id, provider, external_account_uuid),
   CONSTRAINT user_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+
+-- Partial unique index so a soft-deleted account doesn't block re-enrolling the
+-- same external account (a plain UNIQUE constraint would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uuid_key
+ON user_accounts (organization_id, provider, external_account_uuid)
+WHERE deleted_at IS NULL;
 
 -- The dashboard lists an employee's accounts by (organization_id, user_id).
 CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx
@@ -1823,10 +1828,15 @@ CREATE TABLE IF NOT EXISTS device_owners (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT device_owners_pkey PRIMARY KEY (id),
-  CONSTRAINT device_owners_organization_id_provider_device_id_key UNIQUE (organization_id, provider, device_id),
   CONSTRAINT device_owners_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT device_owners_linked_user_id_fkey FOREIGN KEY (linked_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+
+-- Partial unique index so a soft-deleted device row doesn't block re-creating the
+-- same (org, provider, device) mapping (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_owners_organization_id_provider_device_id_key
+ON device_owners (organization_id, provider, device_id)
+WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
