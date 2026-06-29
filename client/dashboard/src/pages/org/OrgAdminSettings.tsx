@@ -9,7 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components";
 import {
@@ -468,7 +468,7 @@ function OnboardingTab() {
 }
 
 export default function OrgAdminSettings(): JSX.Element {
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
 
   if (!isAdmin) {
     return (

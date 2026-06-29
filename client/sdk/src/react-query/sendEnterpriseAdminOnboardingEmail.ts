@@ -52,7 +52,7 @@ export type SendEnterpriseAdminOnboardingEmailMutationError =
  * sendEnterpriseAdminOnboardingEmail organizations
  *
  * @remarks
- * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.
+ * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
  */
 export function useSendEnterpriseAdminOnboardingEmailMutation(
   options?: MutationHookOptions<

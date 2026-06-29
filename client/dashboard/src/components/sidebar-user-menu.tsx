@@ -1,4 +1,4 @@
-import { useIsAdmin, useSession, useUser } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession, useUser } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const session = useSession();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const navigate = useNavigate();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();

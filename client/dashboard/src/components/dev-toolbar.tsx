@@ -1,5 +1,5 @@
 import { ReactElement } from "react";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,7 +21,7 @@ import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
-const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
 
 type ResourceType = "org" | "project" | "environment" | "mcp" | "chat";
@@ -210,7 +210,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
 
 export function RBACDevToolbar(): ReactElement | null {
   const { session } = useSession();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const [hidden, setHidden] = useState(
     () => localStorage.getItem(HIDDEN_KEY) === "1",
   );
@@ -238,7 +238,7 @@ export function RBACDevToolbar(): ReactElement | null {
   // Don't render when unauthenticated (e.g. login page) to avoid firing
   // API calls like toolsets.listForOrg that will 401 and trigger the error boundary.
   if (!session) return null;
-  // Always visible in dev; in other environments, restricted to superadmins.
+  // Always visible in dev; in other environments, restricted to platform admins.
   if (!(import.meta.env.DEV || isAdmin)) return null;
   if (hidden) return null;
 
@@ -257,8 +257,8 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
-  const [superAdmin, setSuperAdmin] = useState(
-    () => localStorage.getItem(SUPER_ADMIN_KEY) === "1",
+  const [platformAdmin, setPlatformAdmin] = useState(
+    () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
   const queryClient = useQueryClient();
   const organization = useOrganization();
@@ -550,38 +550,38 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
               {import.meta.env.DEV && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab("superadmin")}
+                  onClick={() => setActiveTab("platformadmin")}
                   className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
-                    activeTab === "superadmin"
+                    activeTab === "platformadmin"
                       ? "border-foreground text-foreground"
                       : "text-muted-foreground hover:text-foreground border-transparent"
                   }`}
                 >
                   <Crown className="h-3 w-3" />
-                  Super Admin
+                  Platform Admin
                 </button>
               )}
             </div>
 
             {/* RBAC tab */}
-            {activeTab === "superadmin" && (
+            {activeTab === "platformadmin" && (
               <div className="flex items-center justify-between px-3.5 py-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className={`h-1.5 w-1.5 rounded-full ${superAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
                   />
                   <span className="text-foreground text-xs font-medium">
-                    {superAdmin ? "Super admin active" : "Super admin off"}
+                    {platformAdmin ? "Platform admin active" : "Platform admin off"}
                   </span>
                 </div>
                 <Switch
-                  checked={superAdmin}
+                  checked={platformAdmin}
                   onCheckedChange={(checked) => {
-                    setSuperAdmin(checked);
-                    localStorage.setItem(SUPER_ADMIN_KEY, checked ? "1" : "0");
+                    setPlatformAdmin(checked);
+                    localStorage.setItem(PLATFORM_ADMIN_KEY, checked ? "1" : "0");
                     invalidate();
                   }}
-                  aria-label="Toggle super admin"
+                  aria-label="Toggle platform admin"
                 />
               </div>
             )}

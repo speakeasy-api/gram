@@ -13,7 +13,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
@@ -66,7 +66,7 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =

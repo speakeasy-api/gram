@@ -160,13 +160,13 @@ export const useUser = (): User => {
   return user;
 };
 
-const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 
-export const useIsAdmin = (): boolean => {
+export const useIsPlatformAdmin = (): boolean => {
   const { isAdmin } = useUser();
   if (import.meta.env.DEV) {
     try {
-      const override = localStorage.getItem(SUPER_ADMIN_KEY);
+      const override = localStorage.getItem(PLATFORM_ADMIN_KEY);
       if (override === "1") return true;
       if (override === "0") return false;
     } catch {

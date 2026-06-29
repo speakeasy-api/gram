@@ -2,14 +2,14 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization, useProject } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useOrganization, useProject } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 
 export default function Settings(): JSX.Element {
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const organization = useOrganization();
   const project = useProject();
 

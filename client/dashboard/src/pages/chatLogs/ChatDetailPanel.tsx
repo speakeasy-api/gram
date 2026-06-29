@@ -50,7 +50,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -635,12 +635,12 @@ function ChatDetailPanel({
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
-  const isSuperAdmin = useIsAdmin();
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
-  const canManageChat = isSuperAdmin || hasScope("org:admin");
+  const canManageChat = isPlatformAdmin || hasScope("org:admin");
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
-  const canViewRisk = isSuperAdmin || hasScope("org:admin");
+  const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
   // Header transcript filter — which message types to show (all on by default)

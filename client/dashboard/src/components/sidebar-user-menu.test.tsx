@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
-  useIsAdmin: () => false,
+  useIsPlatformAdmin: () => false,
   useSession: () => ({ organizations: [{ id: "o1" }] }),
 }));
 vi.mock("@/contexts/Sdk", () => ({

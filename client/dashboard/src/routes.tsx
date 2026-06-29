@@ -908,7 +908,7 @@ const ORG_ROUTE_STRUCTURE = {
     outsideMainLayout: true,
   },
   adminSettings: {
-    title: "Super Admin",
+    title: "Platform Admin",
     url: "admin-settings",
     icon: "shield-alert",
     component: OrgAdminSettings,
