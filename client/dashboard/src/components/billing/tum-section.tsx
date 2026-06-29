@@ -341,7 +341,9 @@ export const TumAdminSection = (): JSX.Element => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>TUM Contract (ADMIN VIEW ONLY)</Page.Section.Title>
+      <Page.Section.Title>
+        TUM Contract (PLATFORM ADMIN VIEW ONLY)
+      </Page.Section.Title>
       <Page.Section.Description>
         Set this organization's contracted tokens under management terms.
         Customers never see this section or the alert email.
