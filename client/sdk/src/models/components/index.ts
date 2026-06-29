@@ -46,6 +46,8 @@ export * from "./cloneenvironmentrequestbody.js";
 export * from "./codexhookpayload.js";
 export * from "./codexhookresult.js";
 export * from "./createassistantform.js";
+export * from "./createcimdform.js";
+export * from "./createcimdorganizationremotesessionclientform.js";
 export * from "./createcustomdetectionrulerequestbody.js";
 export * from "./createdeploymentrequestbody.js";
 export * from "./createdeploymentresult.js";

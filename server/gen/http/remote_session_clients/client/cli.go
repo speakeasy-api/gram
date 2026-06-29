@@ -98,6 +98,79 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	return v, nil
 }
 
+// BuildCreateCimdPayload builds the payload for the remoteSessionClients
+// createCimd endpoint from CLI flags.
+func BuildCreateCimdPayload(remoteSessionClientsCreateCimdBody string, remoteSessionClientsCreateCimdSessionToken string, remoteSessionClientsCreateCimdApikeyToken string, remoteSessionClientsCreateCimdProjectSlugInput string) (*remotesessionclients.CreateCimdPayload, error) {
+	var err error
+	var body CreateCimdRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsCreateCimdBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		for _, e := range body.UserSessionIssuerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsCreateCimdSessionToken != "" {
+			sessionToken = &remoteSessionClientsCreateCimdSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsCreateCimdApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsCreateCimdApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsCreateCimdProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsCreateCimdProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.CreateCimdPayload{
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Audience:              body.Audience,
+	}
+	if body.UserSessionIssuerIds != nil {
+		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+		for i, val := range body.UserSessionIssuerIds {
+			v.UserSessionIssuerIds[i] = val
+		}
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCloneClientFromOAuthProxyProviderPayload builds the payload for the
 // remoteSessionClients cloneClientFromOAuthProxyProvider endpoint from CLI
 // flags.

@@ -160,6 +160,80 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 	return i, err
 }
 
+const createRemoteSessionClientCIMD = `-- name: CreateRemoteSessionClientCIMD :one
+INSERT INTO remote_session_clients (
+    id,
+    project_id,
+    remote_session_issuer_id,
+    client_id,
+    client_id_metadata_uri,
+    client_id_issued_at,
+    token_endpoint_auth_method,
+    scope,
+    audience
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $4,
+    $5,
+    'none',
+    $6::text[],
+    $7
+)
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateRemoteSessionClientCIMDParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+	ClientIDMetadataUri   string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	Scope                 []string
+	Audience              pgtype.Text
+}
+
+// Create a client directly in Client ID Metadata Document (CIMD) mode. The
+// createCimd handler generates the row id and the document URL up front, so
+// client_id and client_id_metadata_uri are both set to that URL in a single
+// INSERT (kept equal by the remote_session_clients_client_id_metadata_uri_check
+// constraint). The row carries no secret and token_endpoint_auth_method is none.
+func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateRemoteSessionClientCIMDParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, createRemoteSessionClientCIMD,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientIDMetadataUri,
+		arg.ClientIDIssuedAt,
+		arg.Scope,
+		arg.Audience,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createRemoteSessionIssuer = `-- name: CreateRemoteSessionIssuer :one
 
 INSERT INTO remote_session_issuers (
@@ -177,6 +251,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
     oidc,
     passthrough
 )
@@ -196,7 +271,8 @@ VALUES (
     $13,
     $14,
     $15,
-    $16
+    $16,
+    $17
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
@@ -216,6 +292,7 @@ type CreateRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
 }
@@ -241,6 +318,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
 	)
@@ -790,6 +868,32 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 		&i.RemoteSessionClient.Deleted,
 		&i.UserSessionIssuerIds,
 	)
+	return i, err
+}
+
+const getRemoteSessionClientForClientMetadataDocument = `-- name: GetRemoteSessionClientForClientMetadataDocument :one
+SELECT client_id_metadata_uri, scope
+FROM remote_session_clients
+WHERE id = $1
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type GetRemoteSessionClientForClientMetadataDocumentRow struct {
+	ClientIDMetadataUri pgtype.Text
+	Scope               []string
+}
+
+// Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+// endpoint is unauthenticated and addresses clients by their globally unique
+// primary key, and the served document exposes only the client identity Gram
+// already sends the upstream AS as client_id (CIMD rows never carry a secret).
+// Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
+// client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
+func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientForClientMetadataDocumentRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientForClientMetadataDocument, id)
+	var i GetRemoteSessionClientForClientMetadataDocumentRow
+	err := row.Scan(&i.ClientIDMetadataUri, &i.Scope)
 	return i, err
 }
 
@@ -2216,10 +2320,11 @@ SET
     grant_types_supported = COALESCE($10::text[], grant_types_supported),
     response_types_supported = COALESCE($11::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE($12::text[], token_endpoint_auth_methods_supported),
-    oidc = COALESCE($13, oidc),
-    passthrough = COALESCE($14, passthrough),
+    client_id_metadata_document_supported = COALESCE($13, client_id_metadata_document_supported),
+    oidc = COALESCE($14, oidc),
+    passthrough = COALESCE($15, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $15 AND organization_id = $16 AND deleted IS FALSE
+WHERE id = $16 AND organization_id = $17 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -2236,6 +2341,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
@@ -2258,6 +2364,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,
@@ -2377,10 +2484,11 @@ SET
     grant_types_supported = COALESCE($10::text[], grant_types_supported),
     response_types_supported = COALESCE($11::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE($12::text[], token_endpoint_auth_methods_supported),
-    oidc = COALESCE($13, oidc),
-    passthrough = COALESCE($14, passthrough),
+    client_id_metadata_document_supported = COALESCE($13, client_id_metadata_document_supported),
+    oidc = COALESCE($14, oidc),
+    passthrough = COALESCE($15, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $15 AND project_id = $16 AND deleted IS FALSE
+WHERE id = $16 AND project_id = $17 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -2397,6 +2505,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
@@ -2423,6 +2532,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,

@@ -70,6 +70,10 @@ type Client struct {
 	// createClient endpoint.
 	CreateClientDoer goahttp.Doer
 
+	// CreateCimdClient Doer is the HTTP client used to make requests to the
+	// createCimdClient endpoint.
+	CreateCimdClientDoer goahttp.Doer
+
 	// UpdateClient Doer is the HTTP client used to make requests to the
 	// updateClient endpoint.
 	UpdateClientDoer goahttp.Doer
@@ -128,6 +132,7 @@ func NewClient(
 		ListClientMcpServersDoer:      doer,
 		ListClientSessionsDoer:        doer,
 		CreateClientDoer:              doer,
+		CreateCimdClientDoer:          doer,
 		UpdateClientDoer:              doer,
 		DeleteClientDoer:              doer,
 		RemoveClientFromMcpServerDoer: doer,
@@ -449,6 +454,30 @@ func (c *Client) CreateClient() goa.Endpoint {
 		resp, err := c.CreateClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateCimdClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service createCimdClient server.
+func (c *Client) CreateCimdClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateCimdClientRequest(c.encoder)
+		decodeResponse = DecodeCreateCimdClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateCimdClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateCimdClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createCimdClient", err)
 		}
 		return decodeResponse(resp)
 	}

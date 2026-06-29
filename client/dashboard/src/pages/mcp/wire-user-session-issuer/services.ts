@@ -168,6 +168,7 @@ function createMigrationServicesImpl(
         grantTypesSupported?: string[];
         responseTypesSupported?: string[];
         tokenEndpointAuthMethodsSupported?: string[];
+        clientIdMetadataDocumentSupported?: boolean;
       } = {};
 
       try {
@@ -211,6 +212,8 @@ function createMigrationServicesImpl(
               draft.tokenEndpointAuthMethodsSupported ??
               input.proxyProvider.tokenEndpointAuthMethodsSupported ??
               [],
+            clientIdMetadataDocumentSupported:
+              draft.clientIdMetadataDocumentSupported ?? false,
           },
         },
         ...fetchOptions({ signal }),

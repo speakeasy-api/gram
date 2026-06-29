@@ -82,6 +82,7 @@ function remoteSessionIssuer(id = "rsi-1"): RemoteSessionIssuer {
     grantTypesSupported: ["authorization_code", "refresh_token"],
     responseTypesSupported: ["code"],
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    clientIdMetadataDocumentSupported: false,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

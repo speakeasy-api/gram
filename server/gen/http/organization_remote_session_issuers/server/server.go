@@ -33,6 +33,7 @@ type Server struct {
 	ListClientMcpServers      http.Handler
 	ListClientSessions        http.Handler
 	CreateClient              http.Handler
+	CreateCimdClient          http.Handler
 	UpdateClient              http.Handler
 	DeleteClient              http.Handler
 	RemoveClientFromMcpServer http.Handler
@@ -81,6 +82,7 @@ func New(
 			{"ListClientMcpServers", "GET", "/rpc/organizationRemoteSessionIssuers.listClientMcpServers"},
 			{"ListClientSessions", "GET", "/rpc/organizationRemoteSessionIssuers.listClientSessions"},
 			{"CreateClient", "POST", "/rpc/organizationRemoteSessionIssuers.createClient"},
+			{"CreateCimdClient", "POST", "/rpc/organizationRemoteSessionIssuers.createCimdClient"},
 			{"UpdateClient", "POST", "/rpc/organizationRemoteSessionIssuers.updateClient"},
 			{"DeleteClient", "DELETE", "/rpc/organizationRemoteSessionIssuers.deleteClient"},
 			{"RemoveClientFromMcpServer", "POST", "/rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer"},
@@ -101,6 +103,7 @@ func New(
 		ListClientMcpServers:      NewListClientMcpServersHandler(e.ListClientMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListClientSessions:        NewListClientSessionsHandler(e.ListClientSessions, mux, decoder, encoder, errhandler, formatter),
 		CreateClient:              NewCreateClientHandler(e.CreateClient, mux, decoder, encoder, errhandler, formatter),
+		CreateCimdClient:          NewCreateCimdClientHandler(e.CreateCimdClient, mux, decoder, encoder, errhandler, formatter),
 		UpdateClient:              NewUpdateClientHandler(e.UpdateClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteClient:              NewDeleteClientHandler(e.DeleteClient, mux, decoder, encoder, errhandler, formatter),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerHandler(e.RemoveClientFromMcpServer, mux, decoder, encoder, errhandler, formatter),
@@ -128,6 +131,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListClientMcpServers = m(s.ListClientMcpServers)
 	s.ListClientSessions = m(s.ListClientSessions)
 	s.CreateClient = m(s.CreateClient)
+	s.CreateCimdClient = m(s.CreateCimdClient)
 	s.UpdateClient = m(s.UpdateClient)
 	s.DeleteClient = m(s.DeleteClient)
 	s.RemoveClientFromMcpServer = m(s.RemoveClientFromMcpServer)
@@ -155,6 +159,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListClientMcpServersHandler(mux, h.ListClientMcpServers)
 	MountListClientSessionsHandler(mux, h.ListClientSessions)
 	MountCreateClientHandler(mux, h.CreateClient)
+	MountCreateCimdClientHandler(mux, h.CreateCimdClient)
 	MountUpdateClientHandler(mux, h.UpdateClient)
 	MountDeleteClientHandler(mux, h.DeleteClient)
 	MountRemoveClientFromMcpServerHandler(mux, h.RemoveClientFromMcpServer)
@@ -847,6 +852,60 @@ func NewCreateClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCimdClientHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint.
+func MountCreateCimdClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionIssuers.createCimdClient", f)
+}
+
+// NewCreateCimdClientHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationRemoteSessionIssuers" service
+// "createCimdClient" endpoint.
+func NewCreateCimdClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCimdClientRequest(mux, decoder)
+		encodeResponse = EncodeCreateCimdClientResponse(encoder)
+		encodeError    = EncodeCreateCimdClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCimdClient")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

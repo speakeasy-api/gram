@@ -93,6 +93,10 @@ type CreateRemoteSessionIssuerPayload struct {
 	// When true, the MCP client registers and transacts directly with this issuer.
 	// Default false.
 	Passthrough *bool
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool
 }
 
 // DeleteRemoteSessionIssuerPayload is the payload type of the
@@ -177,6 +181,9 @@ type UpdateRemoteSessionIssuerPayload struct {
 	TokenEndpointAuthMethodsSupported []string
 	Oidc                              *bool
 	Passthrough                       *bool
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

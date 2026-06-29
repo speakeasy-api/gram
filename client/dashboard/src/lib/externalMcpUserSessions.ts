@@ -178,6 +178,8 @@ export async function onboardExternalMcpToUserSessions({
         tokenEndpointAuthMethodsSupported:
           draft?.tokenEndpointAuthMethodsSupported ??
           oauth.tokenEndpointAuthMethodsSupported,
+        clientIdMetadataDocumentSupported:
+          draft?.clientIdMetadataDocumentSupported ?? false,
         oidc: draft?.oidc,
         passthrough: draft?.passthrough,
       },
