@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://www.speakeasy.com/product/gram" target="_blank">
-    <img src="./.github/speakeasy-icon.png" alt="Gram by Speakeasy" width="140">
+    <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/speakeasy-icon.png" alt="Gram by Speakeasy" width="140">
   </a>
 </p>
 
@@ -29,19 +29,19 @@ To get started on the hosted platform you can [Sign up](https://app.getgram.ai/)
 ### Supports popular AI providers
 
 <p align="center">
-  <img src="./.github/agent-icons/claude.svg" alt="Claude" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/claude.svg" alt="Claude" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/claude-code.svg" alt="Claude Code" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/claude-code.svg" alt="Claude Code" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/openai.svg" alt="ChatGPT" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/openai.svg" alt="ChatGPT" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/codex.svg" alt="Codex" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/codex.svg" alt="Codex" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/gemini.png" alt="Gemini" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/gemini.png" alt="Gemini" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/cursor.svg" alt="Cursor" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/cursor.svg" alt="Cursor" height="40">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./.github/agent-icons/gh-copilot.svg" alt="GitHub Copilot" height="40">
+  <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/gh-copilot.svg" alt="GitHub Copilot" height="40">
 </p>
 
 ## Connect
