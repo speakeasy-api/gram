@@ -18,14 +18,20 @@ func (s *Service) enforceShadowMCPToolAccess(
 	projectID string,
 	userID string,
 	policyID string,
-	toolInput any,
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
 ) (string, bool) {
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
-	if !denied {
-		return "", false
+	var detail string
+	switch {
+	case evidence.FullURL != "":
+		if s.isGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
+			return "", false
+		}
+		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
+	default:
+		detail = "MCP server is not Gram-hosted"
 	}
+
 	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
@@ -105,26 +111,6 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 		}
 	}
 	return evidence, matched
-}
-
-// codexInventoryProvenanceDetail reports why a Codex MCP call should be
-// denied based on where the SessionStart inventory says the matched server
-// actually routes: an external (non-Gram) URL or a local stdio server. An
-// empty string means the inventory raises no objection — either the entry is
-// Gram-hosted or there is nothing to cross-check (nil entry). Mirrors the
-// target checks of the Claude PreToolUse guard.
-func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, orgID string) string {
-	if matched == nil {
-		return ""
-	}
-	switch {
-	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
-		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
-	case matched.URL == "" && matched.Command != "":
-		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)
-	default:
-		return ""
-	}
 }
 
 func cursorShadowMCPEvidence(payload *gen.CursorPayload) shadowmcp.AccessEvidence {
