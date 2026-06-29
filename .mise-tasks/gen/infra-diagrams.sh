@@ -14,7 +14,3 @@ export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
 # the Go and Python call sites. ast-grep is provided by mise (see mise.toml).
 out="./docs/pubsub-topology.md"
 go run ./infra/main.go gen-diagram --out "$out"
-
-# Match the repo's markdown style (oxfmt pads tables) so the generated file is
-# stable under the pre-commit formatter and re-runs are byte-identical.
-pnpm exec oxfmt --write "$out"

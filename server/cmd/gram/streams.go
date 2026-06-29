@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -23,14 +24,18 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/streams"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 func newStreamsCommand() *cli.Command {
@@ -96,6 +101,8 @@ func newStreamsCommand() *cli.Command {
 	}
 
 	flags = append(flags, gcpFlags...)
+	flags = append(flags, posthogFlags...)
+	flags = append(flags, riskFlags...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -165,10 +172,32 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = redisClient
 
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+			var featureFlags feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
 			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			bqClient, shutdown, err := newBigQueryClient(ctx, c, logger)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			if err != nil {
+				return fmt.Errorf("failed to create bigquery client: %w", err)
+			}
+
+			riskFindingsTable, err := bqTableFromSpec(bqClient, c.String("bq-risk-findings"))
+			if err != nil {
+				return fmt.Errorf("failed to parse BigQuery table spec: %w", err)
+			}
+
+			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
+			if err != nil {
+				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
@@ -230,6 +259,12 @@ func newStreamsCommand() *cli.Command {
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+
+				mustReceiveBatch(
+					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},
+					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+					risk.NewFindingBQWriter(logger, meterProvider, riskFindingsTable, featureFlags, riskFingerprinter),
+				)
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-
@@ -387,8 +422,6 @@ func mustReceive[M proto.Message](
 // streams runner surface so consumers can opt into batch processing; register
 // one with mustReceiveBatch in the receivers block alongside the single-message
 // handlers.
-//
-//nolint:unused // wiring kept available for batch consumers registered later
 func receiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
@@ -456,7 +489,6 @@ func receiveBatch[M proto.Message](
 	return nil
 }
 
-//nolint:unused // registration helper for batch consumers added later
 func mustReceiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,

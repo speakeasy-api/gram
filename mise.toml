@@ -200,6 +200,9 @@ TEMPORAL_WEB_PORT = "8233"
 GRAM_DISABLE_AIR = 0
 PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
+## During local development, you can disable BigQuery writes to avoid the extra
+## dependency on a GCP project.
+DISABLE_BIGQUERY_WRITES = 1
 
 ####################################
 ## Gram Functions runner settings ##
@@ -238,10 +241,16 @@ PULSE_REGISTRY_KEY = "unset"
 
 ##############
 ## Elements ##
+##############
 ## Used for local development only
 ## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
 ELEMENTS_STORYBOOK_PORT = "6007"
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+
+##########
+## Risk ##
+##########
+GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
 
 #########################
 ## Polar configuration ##
