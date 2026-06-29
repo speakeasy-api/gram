@@ -169,6 +169,11 @@ export function CreateRemoteIdentityProviderSheet({
             discoveredSnapshot?.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+          // CIMD support is parsed during discovery and persisted here so the
+          // issuer can offer the CIMD client type. Defaults false when the
+          // operator skipped Discover and typed the endpoints by hand.
+          clientIdMetadataDocumentSupported:
+            discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
         },
       },
     });

@@ -1483,21 +1483,22 @@ func DecodeDeleteRemoteSessionIssuerResponse(decoder func(*http.Response) goahtt
 // *RemoteSessionIssuerResponseBody.
 func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *RemoteSessionIssuerResponseBody) *types.RemoteSessionIssuer {
 	res := &types.RemoteSessionIssuer{
-		ID:                    *v.ID,
-		ProjectID:             *v.ProjectID,
-		OrganizationID:        *v.OrganizationID,
-		Slug:                  *v.Slug,
-		Issuer:                *v.Issuer,
-		Name:                  v.Name,
-		LogoAssetID:           v.LogoAssetID,
-		AuthorizationEndpoint: v.AuthorizationEndpoint,
-		TokenEndpoint:         v.TokenEndpoint,
-		RegistrationEndpoint:  v.RegistrationEndpoint,
-		JwksURI:               v.JwksURI,
-		Oidc:                  *v.Oidc,
-		Passthrough:           *v.Passthrough,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+		ID:                                *v.ID,
+		ProjectID:                         *v.ProjectID,
+		OrganizationID:                    *v.OrganizationID,
+		Slug:                              *v.Slug,
+		Issuer:                            *v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		Oidc:                              *v.Oidc,
+		Passthrough:                       *v.Passthrough,
+		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         *v.CreatedAt,
+		UpdatedAt:                         *v.UpdatedAt,
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))

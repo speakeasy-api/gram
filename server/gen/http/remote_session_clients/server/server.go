@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts                            []*MountPoint
 	CreateRemoteSessionClient         http.Handler
+	CreateCimd                        http.Handler
 	CloneClientFromOAuthProxyProvider http.Handler
 	UpdateRemoteSessionClient         http.Handler
 	AttachUserSessionIssuer           http.Handler
@@ -57,6 +58,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.create"},
+			{"CreateCimd", "POST", "/rpc/remoteSessionClients.createCimd"},
 			{"CloneClientFromOAuthProxyProvider", "POST", "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider"},
 			{"UpdateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.update"},
 			{"AttachUserSessionIssuer", "POST", "/rpc/remoteSessionClients.attachUserSessionIssuer"},
@@ -66,6 +68,7 @@ func New(
 			{"DeleteRemoteSessionClient", "DELETE", "/rpc/remoteSessionClients.delete"},
 		},
 		CreateRemoteSessionClient:         NewCreateRemoteSessionClientHandler(e.CreateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
+		CreateCimd:                        NewCreateCimdHandler(e.CreateCimd, mux, decoder, encoder, errhandler, formatter),
 		CloneClientFromOAuthProxyProvider: NewCloneClientFromOAuthProxyProviderHandler(e.CloneClientFromOAuthProxyProvider, mux, decoder, encoder, errhandler, formatter),
 		UpdateRemoteSessionClient:         NewUpdateRemoteSessionClientHandler(e.UpdateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 		AttachUserSessionIssuer:           NewAttachUserSessionIssuerHandler(e.AttachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +85,7 @@ func (s *Server) Service() string { return "remoteSessionClients" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRemoteSessionClient = m(s.CreateRemoteSessionClient)
+	s.CreateCimd = m(s.CreateCimd)
 	s.CloneClientFromOAuthProxyProvider = m(s.CloneClientFromOAuthProxyProvider)
 	s.UpdateRemoteSessionClient = m(s.UpdateRemoteSessionClient)
 	s.AttachUserSessionIssuer = m(s.AttachUserSessionIssuer)
@@ -97,6 +101,7 @@ func (s *Server) MethodNames() []string { return remotesessionclients.MethodName
 // Mount configures the mux to serve the remoteSessionClients endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRemoteSessionClientHandler(mux, h.CreateRemoteSessionClient)
+	MountCreateCimdHandler(mux, h.CreateCimd)
 	MountCloneClientFromOAuthProxyProviderHandler(mux, h.CloneClientFromOAuthProxyProvider)
 	MountUpdateRemoteSessionClientHandler(mux, h.UpdateRemoteSessionClient)
 	MountAttachUserSessionIssuerHandler(mux, h.AttachUserSessionIssuer)
@@ -142,6 +147,59 @@ func NewCreateRemoteSessionClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createRemoteSessionClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCimdHandler configures the mux to serve the
+// "remoteSessionClients" service "createCimd" endpoint.
+func MountCreateCimdHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionClients.createCimd", f)
+}
+
+// NewCreateCimdHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteSessionClients" service "createCimd" endpoint.
+func NewCreateCimdHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCimdRequest(mux, decoder)
+		encodeResponse = EncodeCreateCimdResponse(encoder)
+		encodeError    = EncodeCreateCimdError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCimd")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

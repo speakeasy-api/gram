@@ -23,6 +23,8 @@ export * from "./createapikey.js";
 export * from "./createassistant.js";
 export * from "./createchatsession.js";
 export * from "./createcheckout.js";
+export * from "./createcimdorganizationremotesessionclient.js";
+export * from "./createcimdremotesessionclient.js";
 export * from "./createcollection.js";
 export * from "./createcustomdetectionrule.js";
 export * from "./createcustomersession.js";

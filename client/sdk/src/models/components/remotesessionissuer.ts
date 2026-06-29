@@ -16,6 +16,10 @@ export type RemoteSessionIssuer = {
    * Upstream authorization endpoint.
    */
   authorizationEndpoint?: string | undefined;
+  /**
+   * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+   */
+  clientIdMetadataDocumentSupported: boolean;
   createdAt: Date;
   grantTypesSupported?: Array<string> | undefined;
   /**
@@ -79,6 +83,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorization_endpoint: z.optional(z.string()),
+    client_id_metadata_document_supported: z.boolean(),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -107,6 +112,8 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
+      "client_id_metadata_document_supported":
+        "clientIdMetadataDocumentSupported",
       "created_at": "createdAt",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",

@@ -38,6 +38,7 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
 		UserSessionIssuerIds:    issuerIDs,
 		ClientID:                row.ClientID,
+		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,
 		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),

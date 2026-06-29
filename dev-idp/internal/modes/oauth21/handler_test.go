@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -147,4 +148,124 @@ func TestAuthorizeRejectsNonS256Challenge(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, "invalid_request", body["error"])
 	require.Contains(t, body["error_description"], "S256")
+}
+
+// =============================================================================
+// CIMD (Client ID Metadata Document) — client_id is a hosted-document URL
+// =============================================================================
+
+func TestASMetadataAdvertisesCIMDSupport(t *testing.T) {
+	t.Parallel()
+
+	ks, err := keystore.New(nil, newTestLogger(t))
+	require.NoError(t, err)
+	h := NewHandler(Config{ExternalURL: "https://idp.example.com"}, ks, newTestLogger(t), newTestTracer(t), nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	h.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
+	require.Equal(t, true, doc["client_id_metadata_document_supported"])
+}
+
+// cimdDocServer serves a fixed JSON client metadata document at every path.
+func cimdDocServer(t *testing.T, doc map[string]any) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// cimdSelfDocServer serves a document whose client_id equals the server's own
+// URL (the CIMD invariant), with the supplied redirect_uris.
+func cimdSelfDocServer(t *testing.T, redirectURIs []string) *httptest.Server {
+	t.Helper()
+	var base string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":     base,
+			"redirect_uris": redirectURIs,
+		})
+	}))
+	base = srv.URL
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func cimdAuthorizeRequest(clientID, redirectURI string) *http.Request {
+	// PKCE is verified at the token leg, so any non-empty S256 challenge passes
+	// the authorize-time check and lets the request reach CIMD validation.
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", clientID)
+	q.Set("redirect_uri", redirectURI)
+	q.Set("code_challenge", "abc")
+	q.Set("code_challenge_method", "S256")
+	return httptest.NewRequest(http.MethodGet, "/authorize?"+q.Encode(), nil)
+}
+
+func newCIMDTestHandler(t *testing.T) *Handler {
+	t.Helper()
+	ks, err := keystore.New(nil, newTestLogger(t))
+	require.NoError(t, err)
+	// db is nil: every assertion below rejects before the auth-code DB write.
+	return NewHandler(Config{ExternalURL: "https://idp.example.com"}, ks, newTestLogger(t), newTestTracer(t), nil)
+}
+
+func TestAuthorizeCIMDRejectsDocumentClientIDMismatch(t *testing.T) {
+	t.Parallel()
+
+	srv := cimdDocServer(t, map[string]any{
+		"client_id":     "https://attacker.example/other",
+		"redirect_uris": []string{"https://app.example/cb"},
+	})
+
+	rec := httptest.NewRecorder()
+	newCIMDTestHandler(t).Handler().ServeHTTP(rec, cimdAuthorizeRequest(srv.URL, "https://app.example/cb"))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "invalid_client", body["error"])
+	require.Contains(t, body["error_description"], "does not match")
+}
+
+func TestAuthorizeCIMDRejectsRedirectURINotInDocument(t *testing.T) {
+	t.Parallel()
+
+	srv := cimdSelfDocServer(t, []string{"https://other.example/cb"})
+
+	rec := httptest.NewRecorder()
+	newCIMDTestHandler(t).Handler().ServeHTTP(rec, cimdAuthorizeRequest(srv.URL, "https://app.example/cb"))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "invalid_request", body["error"])
+	require.Contains(t, body["error_description"], "redirect_uri")
+}
+
+func TestAuthorizeCIMDRejectsUnfetchableDocument(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nope", http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	rec := httptest.NewRecorder()
+	newCIMDTestHandler(t).Handler().ServeHTTP(rec, cimdAuthorizeRequest(srv.URL, "https://app.example/cb"))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "invalid_client", body["error"])
+	require.Contains(t, body["error_description"], "could not fetch")
 }

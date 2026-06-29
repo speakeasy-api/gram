@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 15146a49d19c48f78793c03437f56abd
+  docChecksum: e42dcef80811fc4fc58b157f3524e32d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -170,6 +170,10 @@ trackedFiles:
     last_write_checksum: sha1:78209277c97086634e731f27985ad581c263c56e
   docs/models/components/createassistantformstatus.md:
     last_write_checksum: sha1:7436f6e05e725b649a2872e91c305ff297fd4c0f
+  docs/models/components/createcimdform.md:
+    last_write_checksum: sha1:ea2c2573fdc2d541599030dc5280df065a9b1a8f
+  docs/models/components/createcimdorganizationremotesessionclientform.md:
+    last_write_checksum: sha1:f89ebfe433586cc507ecfe99d6655ceddb17a467
   docs/models/components/createcustomdetectionrulerequestbody.md:
     last_write_checksum: sha1:90b82406fb3a5ff0e7478151419ffbff5c022fdd
   docs/models/components/createdeploymentrequestbody.md:
@@ -181,7 +185,7 @@ trackedFiles:
   docs/models/components/createenvironmentform.md:
     last_write_checksum: sha1:3485d01b560b400b24bb588d4a78bfceaa6540fe
   docs/models/components/createissuerrequestbody.md:
-    last_write_checksum: sha1:36a4155cc85f03a787e56f6ee7d3960e47260f88
+    last_write_checksum: sha1:9e4f664c6a08b24630e86ff741ad248821a73448
   docs/models/components/createkeyform.md:
     last_write_checksum: sha1:9a3995f8914e23da4b59fd20043b13558767c68c
   docs/models/components/createmcpendpointform.md:
@@ -191,7 +195,9 @@ trackedFiles:
   docs/models/components/createmcpserverformvisibility.md:
     last_write_checksum: sha1:a75c05e8b8f0d0bd19a21755e3425a63cd4788fb
   docs/models/components/createorganizationremotesessionclientform.md:
-    last_write_checksum: sha1:75dbd17a3eaf1fb199b3c96bb0fd12bae92df605
+    last_write_checksum: sha1:2ed0fdc1b4ba9ee02d914eeb69c52c577c9fa22a
+  docs/models/components/createorganizationremotesessionclientformtokenendpointauthmethod.md:
+    last_write_checksum: sha1:4b20e80bbe2bfffa7cf4c5a2e915ca93ac6a1dd5
   docs/models/components/createpackageform.md:
     last_write_checksum: sha1:28dbea849b6af9ba006ab16afc9ed45fd96799e7
   docs/models/components/createpackageresult.md:
@@ -217,7 +223,7 @@ trackedFiles:
   docs/models/components/createremotesessionclientformtokenendpointauthmethod.md:
     last_write_checksum: sha1:975db3f1436c7c954ee699e000b8d6e37820ff08
   docs/models/components/createremotesessionissuerform.md:
-    last_write_checksum: sha1:ad8e6239475fd438f8827a1f03bdbfa95837d823
+    last_write_checksum: sha1:37af63f124b6766f055ee0e1990ad3cf36b83682
   docs/models/components/createrequestbody.md:
     last_write_checksum: sha1:ecb743dbe8d0313e31d32c821947781386bf5ed6
   docs/models/components/createrequestbody2.md:
@@ -521,7 +527,7 @@ trackedFiles:
   docs/models/components/listorganizationremotesessionclientsresult.md:
     last_write_checksum: sha1:d42880fd1653356ca7141c9efd33d132946c15de
   docs/models/components/listorganizationremotesessionissuersresult.md:
-    last_write_checksum: sha1:7a552b367b1f585edb1df4f8b1a3cfaf25246fa0
+    last_write_checksum: sha1:7d5375ca4790d900d954e4f666aa6db4aea2ac0c
   docs/models/components/listorganizationremotesessionsresult.md:
     last_write_checksum: sha1:70726424413e96eff1bba4190dc1b3e85f703173
   docs/models/components/listpackagesresult.md:
@@ -711,7 +717,7 @@ trackedFiles:
   docs/models/components/organizationremotesessionclient.md:
     last_write_checksum: sha1:0a903880442be62c1786fee42366ddc0c4ce3498
   docs/models/components/organizationremotesessionissuer.md:
-    last_write_checksum: sha1:ce9a3599e8a3b643d82fb45e12b5f1b45becf097
+    last_write_checksum: sha1:68141bc0f81dc393750f08db4e1856264cc11e8a
   docs/models/components/organizationuser.md:
     last_write_checksum: sha1:f9c65c3ae8b5afc67f32af3d91b60052132f4413
   docs/models/components/otelattribute.md:
@@ -843,13 +849,11 @@ trackedFiles:
   docs/models/components/remotesession.md:
     last_write_checksum: sha1:f1dfcb231545e82b9ae388684bf6e90119799326
   docs/models/components/remotesessionclient.md:
-    last_write_checksum: sha1:58e1227cff6e4a2505bc4bac808629088c443b5b
-  docs/models/components/remotesessionclienttokenendpointauthmethod.md:
-    last_write_checksum: sha1:f52b7dfc2e0616ea489d5d1104a7de74b0c64f69
+    last_write_checksum: sha1:058f23e7537cbeef39a30ef2615c00d5de4b4d06
   docs/models/components/remotesessionissuer.md:
-    last_write_checksum: sha1:c7c709fd0eb3b336a734f0459039dd63707c072c
+    last_write_checksum: sha1:0199fb8f029aa05990b837f817a7c9d32df99868
   docs/models/components/remotesessionissuerdraft.md:
-    last_write_checksum: sha1:dd8774c696fc0ea36e5f348f0c934f7f59abeaf3
+    last_write_checksum: sha1:0bc389d70cd9ad32fbea67b24e835cba615b4912
   docs/models/components/removeclientfrommcpserverrequestbody.md:
     last_write_checksum: sha1:97b7172ed77eb6774399535b3b318a70ea6a0f4b
   docs/models/components/rendertemplatebyidrequestbody.md:
@@ -1117,7 +1121,7 @@ trackedFiles:
   docs/models/components/timeseriesbucket.md:
     last_write_checksum: sha1:0f9f31c7a4adb6abd079a9d1e46852e52bf5a942
   docs/models/components/tokenendpointauthmethod.md:
-    last_write_checksum: sha1:5b0a99540ec9c2047766cc4bd6254e0d06ee539d
+    last_write_checksum: sha1:e67937fc02f219f4bd0de26448bb4aa2d3f2d9d2
   docs/models/components/tokensundermanagement.md:
     last_write_checksum: sha1:9ef495d5be8bbaf753d373bc093a4ca1a92790c3
   docs/models/components/tool.md:
@@ -1287,7 +1291,7 @@ trackedFiles:
   docs/models/components/updateremotesessionclientformtokenendpointauthmethod.md:
     last_write_checksum: sha1:a6e4c2b408de7ec769da08fcb125836d30488582
   docs/models/components/updateremotesessionissuerform.md:
-    last_write_checksum: sha1:933da16e511c2f4725cd685ef0d7cfc15ff847cc
+    last_write_checksum: sha1:2b6589cc6f388460b16bae84d68f65c1a83e8032
   docs/models/components/updaterequestbody.md:
     last_write_checksum: sha1:4719dcee3ba86f7b9ae30c87b2cb21c1653cfd31
   docs/models/components/updaterequestbodyvisibility.md:
@@ -1528,6 +1532,18 @@ trackedFiles:
     last_write_checksum: sha1:d36c23a27fca47142ecddb97bc030bd94b88ec05
   docs/models/operations/createcheckoutsecurity.md:
     last_write_checksum: sha1:3e1ccdd7ca51b2bcd147cd8bec7249487188075e
+  docs/models/operations/createcimdorganizationremotesessionclientrequest.md:
+    last_write_checksum: sha1:421e0f1f700b7a38ff78eeb21247abcfd2be8dde
+  docs/models/operations/createcimdorganizationremotesessionclientsecurity.md:
+    last_write_checksum: sha1:5065d848648d84f4e7b98fa0bd246eb0857e1f5e
+  docs/models/operations/createcimdremotesessionclientrequest.md:
+    last_write_checksum: sha1:937433fc89504dbdc95000ec634188ef2a441d0d
+  docs/models/operations/createcimdremotesessionclientsecurity.md:
+    last_write_checksum: sha1:89acd881b6aba424dd54009960d36c8907ec99e0
+  docs/models/operations/createcimdremotesessionclientsecurityoption1.md:
+    last_write_checksum: sha1:913d3f7a6f329ca28b314f80176af3cb804444b5
+  docs/models/operations/createcimdremotesessionclientsecurityoption2.md:
+    last_write_checksum: sha1:e045376308b6c38a2a9f654efed56f7895b03e3b
   docs/models/operations/createcollectionrequest.md:
     last_write_checksum: sha1:96224383941da02a34fda83375be4c1b6ddf811d
   docs/models/operations/createcollectionsecurity.md:
@@ -3529,7 +3545,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:28eb584833ae3cbd82950f92292038055ff34b32
   docs/sdks/organizationremotesessionissuers/README.md:
-    last_write_checksum: sha1:627a625174426cfc41d50371fa0cd124a2317cf1
+    last_write_checksum: sha1:bf95d55c7d56064e3a551797379d8934fc9547f7
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:d8eceef43b2a8f6f1511db17dc5a842435358c66
   docs/sdks/otelforwarding/README.md:
@@ -3549,7 +3565,7 @@ trackedFiles:
   docs/sdks/remotemcp/README.md:
     last_write_checksum: sha1:2f1b92facb854536c2c73faa46d0bbaabb31896e
   docs/sdks/remotesessionclients/README.md:
-    last_write_checksum: sha1:f058e596509f6706fed268bb38c94bef80b09408
+    last_write_checksum: sha1:50d3268a1f52784d494f56b95d3547e4c605006c
   docs/sdks/remotesessionissuers/README.md:
     last_write_checksum: sha1:30c75645889786df33baa73761310ddd8adba85e
   docs/sdks/remotesessions/README.md:
@@ -3872,6 +3888,8 @@ trackedFiles:
     last_write_checksum: sha1:4abc4cb95c5d3a93e5c2489246dd2543eae5df26
   src/funcs/mcpServersUpdate.ts:
     last_write_checksum: sha1:dabc64edc0ec1e51119fbb590f462d5e10c3162a
+  src/funcs/organizationRemoteSessionIssuersCreateCimdClient.ts:
+    last_write_checksum: sha1:9b4365f2063496cdf847cc7ff08c384ca03ba439
   src/funcs/organizationRemoteSessionIssuersCreateClient.ts:
     last_write_checksum: sha1:a7c7932419157d6a43d97ac95467626171e7ae58
   src/funcs/organizationRemoteSessionIssuersCreateIssuer.ts:
@@ -4022,6 +4040,8 @@ trackedFiles:
     last_write_checksum: sha1:e5ada8454c71337288791c99c48aff6a7ed3d7b1
   src/funcs/remoteSessionClientsCreate.ts:
     last_write_checksum: sha1:253fda1fff25492886d0511eec82995f2bd545aa
+  src/funcs/remoteSessionClientsCreateCimd.ts:
+    last_write_checksum: sha1:f9709dcccd903aee682f9a4988a31279e728415c
   src/funcs/remoteSessionClientsDelete.ts:
     last_write_checksum: sha1:df59390e1b2191d12008e88d74204eb3882d9402
   src/funcs/remoteSessionClientsDetachUserSessionIssuer.ts:
@@ -4398,6 +4418,10 @@ trackedFiles:
     last_write_checksum: sha1:c2fc11be25bf3ec299077675ebe25642409b2aa4
   src/models/components/createassistantform.ts:
     last_write_checksum: sha1:8661cb7dace7db097ac9a071d2a475d85fa5c372
+  src/models/components/createcimdform.ts:
+    last_write_checksum: sha1:796bd6b4b57cb5f82156102f50f01d871346e557
+  src/models/components/createcimdorganizationremotesessionclientform.ts:
+    last_write_checksum: sha1:f1ed9bef75c9f56c4c43b481ef39aae2d17de5ea
   src/models/components/createcustomdetectionrulerequestbody.ts:
     last_write_checksum: sha1:090ba7d561004059f6282970d153054e1f578b51
   src/models/components/createdeploymentrequestbody.ts:
@@ -4409,7 +4433,7 @@ trackedFiles:
   src/models/components/createenvironmentform.ts:
     last_write_checksum: sha1:8f299ef8a5117b8d03158c1ba237d6f6589f176b
   src/models/components/createissuerrequestbody.ts:
-    last_write_checksum: sha1:ff95dd5052a619b165f9ed5f8a243eebabd3831a
+    last_write_checksum: sha1:95d2327b9d1a6f47460b713fbd74381d4ed34eba
   src/models/components/createkeyform.ts:
     last_write_checksum: sha1:408cc6b253da83563dae1e706b744b03b023b625
   src/models/components/createmcpendpointform.ts:
@@ -4417,7 +4441,7 @@ trackedFiles:
   src/models/components/createmcpserverform.ts:
     last_write_checksum: sha1:ac90ac88d40a5f285ae50741c5e2cf744c6f9544
   src/models/components/createorganizationremotesessionclientform.ts:
-    last_write_checksum: sha1:8b3821efb61d38b863e474462549b3dd57fec680
+    last_write_checksum: sha1:0fed35fb5c9c05d460271499e08523ef3682fd5d
   src/models/components/createpackageform.ts:
     last_write_checksum: sha1:7388e08e207a0244cd85e7152b8dd171e8023fc1
   src/models/components/createpackageresult.ts:
@@ -4437,7 +4461,7 @@ trackedFiles:
   src/models/components/createremotesessionclientform.ts:
     last_write_checksum: sha1:4a608b23fbcff8c15c4fc51e141a5d4a00bf0c43
   src/models/components/createremotesessionissuerform.ts:
-    last_write_checksum: sha1:aba630fe1c7d58efd2c638dcfa77a5afa77e0192
+    last_write_checksum: sha1:9c12ff7a6e974541518f7c9342373c0d8900b824
   src/models/components/createrequestbody.ts:
     last_write_checksum: sha1:c84072d7b162bb7402a99c3c4b319af9fdbf533b
   src/models/components/createrequestbody2.ts:
@@ -4631,7 +4655,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e32f5749651cab0d85968377993cf5dd4bccd44f
+    last_write_checksum: sha1:607da1867fbde7e8d953b4fbc4529b42d13c7fee
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4979,11 +5003,11 @@ trackedFiles:
   src/models/components/remotesession.ts:
     last_write_checksum: sha1:93f1c9dba819d46dffc198584b6ab7999d032289
   src/models/components/remotesessionclient.ts:
-    last_write_checksum: sha1:689b6c88fcf930539a51414b707de4faa7ccaecf
+    last_write_checksum: sha1:ae6728fe04972f3de6c77dad5d29cd41afd850b2
   src/models/components/remotesessionissuer.ts:
-    last_write_checksum: sha1:94298e5affa0bc72b1ba32a66a81b64d528bfe4c
+    last_write_checksum: sha1:a6ca3654455fdb7fddda1e40cffcfd7cd6632dde
   src/models/components/remotesessionissuerdraft.ts:
-    last_write_checksum: sha1:5cce2c4c00d217d4dd65e35b08ba6db1b94fbaa8
+    last_write_checksum: sha1:bc2302358b80ed9ff19b1b3b2eba30728a1d347d
   src/models/components/removeclientfrommcpserverrequestbody.ts:
     last_write_checksum: sha1:5d02ec28476cf21b627f36e6ec6ab288be12b00b
   src/models/components/rendertemplatebyidrequestbody.ts:
@@ -5279,7 +5303,7 @@ trackedFiles:
   src/models/components/updateremotesessionclientform.ts:
     last_write_checksum: sha1:1bfeaddd44390f6d322233a4304754c1b68605d9
   src/models/components/updateremotesessionissuerform.ts:
-    last_write_checksum: sha1:028d2c95594485e3d0aec9db06f47c8de234f7b4
+    last_write_checksum: sha1:504bddd8fbd92c5756b46afb9d6ba2c8d0f3fe57
   src/models/components/updaterequestbody.ts:
     last_write_checksum: sha1:504b230ade27ef53b7f8a825b4fb8da9feead7f8
   src/models/components/updateriskexclusionrequestbody.ts:
@@ -5408,6 +5432,10 @@ trackedFiles:
     last_write_checksum: sha1:51318f76cb833d7328569c90f9b01e667c64d0c8
   src/models/operations/createcheckout.ts:
     last_write_checksum: sha1:5fdd6c85c1959c6ce2a66c98412af4f1b9481f7d
+  src/models/operations/createcimdorganizationremotesessionclient.ts:
+    last_write_checksum: sha1:d74c26f277cd6e9fdf88cea09908b047cea52ced
+  src/models/operations/createcimdremotesessionclient.ts:
+    last_write_checksum: sha1:2022846ab9fcc9cb06e4343351512659010baf20
   src/models/operations/createcollection.ts:
     last_write_checksum: sha1:7db9149f83391f87e44ad3b9a713550041dd8fc3
   src/models/operations/createcustomdetectionrule.ts:
@@ -5690,7 +5718,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:64f74eb00b1e12a6eddc6555c6e5bf0304f40887
+    last_write_checksum: sha1:d5ea882ff67e8aa437a791a9bd19169d8a550564
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6144,6 +6172,10 @@ trackedFiles:
     last_write_checksum: sha1:7bdcffa0b0ef55a71bf67beb64741fd14167137f
   src/react-query/createCheckout.ts:
     last_write_checksum: sha1:c91695f803ae82d9a1a3b4ae4a782f9d07b19765
+  src/react-query/createCimdOrganizationRemoteSessionClient.ts:
+    last_write_checksum: sha1:d46e8ec0003ef246fda2f084249f50b22a046e12
+  src/react-query/createCimdRemoteSessionClient.ts:
+    last_write_checksum: sha1:ad24f3a992e235c06d8f08f70d1e05eec31ebec6
   src/react-query/createCustomerSession.ts:
     last_write_checksum: sha1:5ee642155bd2becb311067f4a838f6bf1d284232
   src/react-query/createDeployment.ts:
@@ -6384,7 +6416,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:6f6d9f13d0bcd9b29830bcb378bf3d128eae2dd5
+    last_write_checksum: sha1:aa9f9c1f103f87037db69825aa1d39a1fd133c4f
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -7073,7 +7105,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:fd065545ec1b6e1d3f30779375f5ea4bfb0047e7
   src/sdk/organizationremotesessionissuers.ts:
-    last_write_checksum: sha1:e6a750dbe0e4f551adb578c1ef2335bcbad8065a
+    last_write_checksum: sha1:4927551e972c88d0fc04c8cb68b5a1de232b814a
   src/sdk/organizations.ts:
     last_write_checksum: sha1:52e6012bb229d10c24e26d655303bce57fb932a4
   src/sdk/otelforwarding.ts:
@@ -7093,7 +7125,7 @@ trackedFiles:
   src/sdk/remotemcp.ts:
     last_write_checksum: sha1:98005b1f5a4586c627371aaa95769cf43fbb27ee
   src/sdk/remotesessionclients.ts:
-    last_write_checksum: sha1:ea9d98e77174a78b82082cf44ac9e04f216d0df5
+    last_write_checksum: sha1:fa587df091ff1dc40ed6aa2cba84c8f8b2bce7bc
   src/sdk/remotesessionissuers.ts:
     last_write_checksum: sha1:57d7e101aab2622364e76a9abb882df80d87008a
   src/sdk/remotesessions.ts:
@@ -8960,7 +8992,7 @@ examples:
         application/json: {"issuer": "jcb", "slug": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-08-19T11:14:05.565Z", "id": "3e418b52-e678-42ff-add9-5ddd7cce5646", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "e051333c-6fc6-4389-babe-416937b62ea3", "slug": "<value>", "updated_at": "2026-06-20T08:36:08.974Z"}
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2024-08-19T11:14:05.565Z", "id": "3e418b52-e678-42ff-add9-5ddd7cce5646", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "e051333c-6fc6-4389-babe-416937b62ea3", "slug": "<value>", "updated_at": "2026-06-20T08:36:08.974Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8981,7 +9013,7 @@ examples:
         application/json: {"issuer": "american_express"}
       responses:
         "200":
-          application/json: {"discovery_warnings": [], "issuer": "jcb", "oidc": false, "passthrough": true}
+          application/json: {"client_id_metadata_document_supported": true, "discovery_warnings": [], "issuer": "jcb", "oidc": false, "passthrough": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8990,7 +9022,7 @@ examples:
     speakeasy-default-get-remote-session-issuer:
       responses:
         "200":
-          application/json: {"created_at": "2025-08-29T22:13:39.923Z", "id": "c6b7bfa4-9199-4099-9201-44285a93beae", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "32bd2953-35c0-43a7-b5a7-b4f7c08f414b", "slug": "<value>", "updated_at": "2025-03-16T02:06:21.989Z"}
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-08-29T22:13:39.923Z", "id": "c6b7bfa4-9199-4099-9201-44285a93beae", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "32bd2953-35c0-43a7-b5a7-b4f7c08f414b", "slug": "<value>", "updated_at": "2025-03-16T02:06:21.989Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8999,7 +9031,7 @@ examples:
     speakeasy-default-list-remote-session-issuers:
       responses:
         "200":
-          application/json: {"items": [{"created_at": "2024-08-22T02:33:49.871Z", "id": "c63c3a5a-99cd-4141-b45e-e32f558d5ab5", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "ee5be03a-abe5-4bcb-a01b-ab1f5cfc9a3b", "slug": "<value>", "updated_at": "2026-10-10T17:49:30.647Z"}]}
+          application/json: {"items": [{"client_id_metadata_document_supported": false, "created_at": "2024-08-22T02:33:49.871Z", "id": "c63c3a5a-99cd-4141-b45e-e32f558d5ab5", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "ee5be03a-abe5-4bcb-a01b-ab1f5cfc9a3b", "slug": "<value>", "updated_at": "2026-10-10T17:49:30.647Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9010,7 +9042,7 @@ examples:
         application/json: {"id": "345b2690-8f5e-4f49-853c-9dcd27da418b"}
       responses:
         "200":
-          application/json: {"created_at": "2025-06-27T02:25:05.459Z", "id": "44dba613-4a49-40d3-976d-38c8b20302c5", "issuer": "american_express", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "56175a97-c3ab-4a10-b75e-6b1dc32653c0", "slug": "<value>", "updated_at": "2025-06-27T04:18:56.974Z"}
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2025-06-27T02:25:05.459Z", "id": "44dba613-4a49-40d3-976d-38c8b20302c5", "issuer": "american_express", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "56175a97-c3ab-4a10-b75e-6b1dc32653c0", "slug": "<value>", "updated_at": "2025-06-27T04:18:56.974Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10158,7 +10190,7 @@ examples:
         application/json: {"issuer": "diners_club", "slug": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-10-20T05:10:07.067Z", "id": "c2acebfc-0a1c-4292-a5ea-50b66989627d", "issuer": "mastercard", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T09:01:41.469Z"}
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2024-10-20T05:10:07.067Z", "id": "c2acebfc-0a1c-4292-a5ea-50b66989627d", "issuer": "mastercard", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T09:01:41.469Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10180,7 +10212,7 @@ examples:
           id: "55d3fd51-1410-48f5-841a-1d962a2b6844"
       responses:
         "200":
-          application/json: {"created_at": "2024-12-13T10:49:16.281Z", "id": "b97a9257-c688-4f5c-81c9-9b117cd2c285", "issuer": "mastercard", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-02T05:03:59.289Z"}
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2024-12-13T10:49:16.281Z", "id": "b97a9257-c688-4f5c-81c9-9b117cd2c285", "issuer": "mastercard", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-02T05:03:59.289Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10189,7 +10221,7 @@ examples:
     speakeasy-default-list-organization-remote-session-issuers:
       responses:
         "200":
-          application/json: {"items": [{"client_count": 722601, "issuer": {"created_at": "2026-03-26T05:37:33.917Z", "id": "c77c7009-3082-40e5-8f46-1292b6fc0b0c", "issuer": "discover", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-03-15T23:46:30.841Z"}}]}
+          application/json: {"items": [{"client_count": 722601, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2026-03-26T05:37:33.917Z", "id": "c77c7009-3082-40e5-8f46-1292b6fc0b0c", "issuer": "discover", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-03-15T23:46:30.841Z"}}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10200,7 +10232,7 @@ examples:
         application/json: {"id": "f92575af-75b9-49bf-b738-df46e967897e"}
       responses:
         "200":
-          application/json: {"created_at": "2024-02-20T13:36:15.478Z", "id": "ae3752be-0160-469c-9840-4648975ec9e8", "issuer": "discover", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-03-28T23:52:35.654Z"}
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2024-02-20T13:36:15.478Z", "id": "ae3752be-0160-469c-9840-4648975ec9e8", "issuer": "discover", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-03-28T23:52:35.654Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10586,7 +10618,7 @@ examples:
         application/json: {"id": "a2f073a6-f769-4f7f-ad18-960bb3ce5070"}
       responses:
         "200":
-          application/json: {"created_at": "2025-09-18T22:58:14.384Z", "id": "57155ca8-c513-4fb2-8dd7-882ef97e384f", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-02-14T07:37:20.776Z"}
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-09-18T22:58:14.384Z", "id": "57155ca8-c513-4fb2-8dd7-882ef97e384f", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-02-14T07:37:20.776Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10790,5 +10822,27 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createCimdOrganizationRemoteSessionClient:
+    speakeasy-default-create-cimd-organization-remote-session-client:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "d26acb2a-13f2-4784-955a-a0658dbb938d"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2026-03-05T23:35:50.429Z", "created_at": "2024-08-02T23:06:33.021Z", "id": "647a1bf0-fc8e-481e-8e07-9468dc958072", "project_id": "a0173293-a276-4d7a-a5d0-cfd8ed785bb1", "remote_session_issuer_id": "3736372e-1464-4371-a91a-2e32300eedab", "updated_at": "2025-06-16T11:26:57.629Z", "user_session_issuer_ids": ["a1b21407-ad6c-4294-828a-ede962e39608", "c7713f13-5b63-4467-b289-14c406cca771", "15f00246-0ee4-4eb7-bdfb-7e16104991a5"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createCimdRemoteSessionClient:
+    speakeasy-default-create-cimd-remote-session-client:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "69a60658-eb7f-4d4c-b255-ddae9b5f845c"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-09-24T23:23:45.719Z", "created_at": "2026-08-02T00:21:50.989Z", "id": "f0b66e93-c993-4955-afbd-650174022a3e", "project_id": "623d7118-12bb-41a4-b91c-0a57edef9f69", "remote_session_issuer_id": "b4f4002b-944b-4e10-b9b2-9a294557b8ec", "updated_at": "2026-08-31T13:17:28.814Z", "user_session_issuer_ids": ["49d16cb8-a0b0-4a35-8af0-7c1047ac47e4"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

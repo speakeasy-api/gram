@@ -54,6 +54,9 @@ export function OverviewTab({
       {values && values.length > 0 ? values.join(", ") : "—"}
     </InfoText>
   );
+  const supported = (value: boolean): ReactNode => (
+    <InfoText>{value ? "Supported" : "Not supported"}</InfoText>
+  );
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -95,6 +98,9 @@ export function OverviewTab({
         </InfoField>
         <InfoField label="Token Endpoint Authentication Methods">
           {list(issuer.tokenEndpointAuthMethodsSupported)}
+        </InfoField>
+        <InfoField label="Client ID Metadata Document">
+          {supported(issuer.clientIdMetadataDocumentSupported)}
         </InfoField>
       </InfoSection>
     </div>

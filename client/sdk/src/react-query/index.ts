@@ -43,6 +43,8 @@ export * from "./collectionsListServers.js";
 export * from "./collectionsUpdate.js";
 export * from "./createAPIKey.js";
 export * from "./createCheckout.js";
+export * from "./createCimdOrganizationRemoteSessionClient.js";
+export * from "./createCimdRemoteSessionClient.js";
 export * from "./createCustomerSession.js";
 export * from "./createDeployment.js";
 export * from "./createEnvironment.js";
