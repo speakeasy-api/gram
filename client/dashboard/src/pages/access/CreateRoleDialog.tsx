@@ -173,6 +173,7 @@ export function CreateRoleDialog({
       { label: "Build & Deploy", resourceType: "project" },
       { label: "Environments", resourceType: "environment" },
       { label: "MCP Servers", resourceType: "mcp" },
+      { label: "Agent Sessions", resourceType: "chat" },
     ];
     return groupOrder.map((g) => ({
       ...g,
@@ -705,7 +706,8 @@ export function CreateRoleDialog({
                                 const isChecked = !!grant;
                                 const isConfigurable =
                                   scopeDef.resourceType !== "org" &&
-                                  scopeDef.resourceType !== "environment";
+                                  scopeDef.resourceType !== "environment" &&
+                                  scopeDef.resourceType !== "chat";
 
                                 const row = (
                                   <div key={scopeDef.slug}>
@@ -754,7 +756,9 @@ export function CreateRoleDialog({
                                           {scopeDef.resourceType ===
                                           "environment"
                                             ? "All in project"
-                                            : "All"}
+                                            : scopeDef.resourceType === "chat"
+                                              ? "All sessions"
+                                              : "All"}
                                         </span>
                                       )}
                                     </div>

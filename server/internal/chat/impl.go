@@ -35,6 +35,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -51,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -73,6 +75,7 @@ type Service struct {
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
+	audit            *audit.Logger
 }
 
 func NewService(
@@ -90,6 +93,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -110,6 +114,7 @@ func NewService(
 		posthog:          posthog,
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
+		audit:            auditLogger,
 	}
 }
 
@@ -231,9 +236,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
 	}
 
-	// Visibility scoping: org admins and the managed-assistant runtime see all
-	// project sessions (optionally narrowed by an explicit external user id);
-	// everyone else is restricted to their own sessions.
+	// Visibility scoping: callers holding an unrestricted chat:read grant and the
+	// managed-assistant runtime see all project sessions (optionally narrowed by
+	// an explicit external user id); everyone else is restricted to their own
+	// sessions.
 	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID)
 	if err != nil {
 		return nil, err
@@ -311,6 +317,25 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
+// logChatAccess records an audit entry that a dashboard user opened a chat
+// session transcript. It is written with the pool directly (no surrounding
+// transaction) because it describes a read, not a mutation.
+func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.Chat) error {
+	if err := s.audit.LogChatSessionAccess(ctx, s.db, audit.LogChatSessionAccessEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        chat.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ChatSessionURN:   urn.NewChatSession(chat.ID),
+		ChatTitle:        chat.Title.String,
+		OwnerUserID:      chat.UserID.String,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to record chat access audit log").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
 // ListSources returns the distinct agent sources present in the project's chats
 // so the dashboard can populate the agent-type filter from real data instead of
 // a hardcoded catalog. Honors the same visibility scoping as ListChats.
@@ -367,42 +392,50 @@ func parseSourceFilter(source string) []string {
 }
 
 // chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
-// the chat listing endpoints. Org admins and the managed-assistant runtime see
-// all project sessions (optionally narrowed by an explicit external user id);
-// everyone else is restricted to their own sessions. Both empty means "all
-// chats in the project". Visibility is never a hard gate on the route — when the
-// admin check can't be made we fall back to own-sessions rather than failing.
+// the chat listing endpoints. Callers holding an unrestricted chat:read grant
+// (only admins do) and the managed-assistant runtime see all project sessions
+// (optionally narrowed by an explicit external user id); everyone else is
+// restricted to their own sessions. Both empty means "all chats in the project".
+// Visibility is never a hard gate on the route — when the chat:read check can't
+// be made we fall back to own-sessions rather than failing.
 func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID *string) (string, string, error) {
 	// An assistant principal is set only on the assistant runtime path and only
 	// the managed-assistant platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
-	// When RBAC is not enforced for the org we must NOT fall through to "see
-	// all" — Require short-circuits to allow when enforcement is off, so check
-	// ShouldEnforce explicitly and treat the disabled case as non-admin.
-	isOrgAdmin := false
+	// Whether the caller sees all project sessions or only their own is decided by
+	// the chat:read RBAC scope. Only admins hold a chat:read grant; members hold
+	// none and fall through to own-session visibility (filtered by user_id in SQL,
+	// which keeps the list paginated and its `total` correct). Members still read
+	// their own sessions; the per-session chat.load route grants that via
+	// owner-matching, not via chat:read.
+	//
+	// When RBAC is not enforced for the org we must NOT fall through to "see all"
+	// — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as constrained.
+	canReadAllSessions := false
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+		err := s.authz.Require(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
 		var shareableErr *oops.ShareableError
 		switch {
 		case err == nil:
-			isOrgAdmin = true
+			canReadAllSessions = true
 		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
-			// Forbidden simply means not an org admin — show own sessions.
+			// Forbidden simply means the caller can only read their own sessions.
 		default:
 			// Any other error is unexpected; log it but still serve own sessions
 			// rather than failing the listing.
-			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		}
 	}
 
 	switch {
 	case authCtx.ExternalUserID != "":
 		return authCtx.ExternalUserID, "", nil
-	case isOrgAdmin, isAssistantCall:
+	case canReadAllSessions, isAssistantCall:
 		return conv.PtrValOr(payloadExternalUserID, ""), "", nil
 	default:
 		if authCtx.UserID == "" {
@@ -438,11 +471,36 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	// Off-dashboard callers must match the chat owner unless they're the
 	// managed-assistant runtime (see ListChats).
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 	if authCtx.SessionID == nil {
-		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return nil, oops.C(oops.CodeUnauthorized)
 			}
+		}
+	}
+
+	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
+	// enforced for the org (enterprise + feature flag + session). Members can
+	// always read sessions they own, so bypass the scope check for the owner;
+	// reading anyone else's session requires an unrestricted chat:read grant,
+	// which only admins hold. The managed-assistant runtime is exempt — it
+	// consumes transcripts programmatically, not as a reviewer.
+	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	if !isAssistantCall && !isOwner {
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
+			return nil, err
+		}
+	}
+
+	// Record dashboard session-opens in the audit log. Scroll pagination
+	// (before_seq/after_seq) reuses the same open and is not re-logged; only
+	// session-authenticated (dashboard) reads are recorded, since chat-token,
+	// external-user, and assistant reads are the owner/runtime consuming their
+	// own transcript rather than a reviewer accessing a session.
+	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil {
+		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
+			return nil, err
 		}
 	}
 

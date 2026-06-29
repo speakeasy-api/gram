@@ -27,7 +27,8 @@ export type ResourceType =
   | "project"
   | "mcp"
   | "environment"
-  | "risk_policy";
+  | "risk_policy"
+  | "chat";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
