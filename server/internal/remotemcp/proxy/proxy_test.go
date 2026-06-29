@@ -702,6 +702,32 @@ func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, proxy.ErrBodyTooLarge)
 }
 
+func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// A non-spec-compliant remote returned a non-SSE body that isn't a single
+	// JSON-RPC message (observed in prod as a bare heartbeat scalar). The proxy
+	// must relay it verbatim with the upstream status rather than surfacing a
+	// 5xx — mirroring the SSE relay path's treatment of undecodable events.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("3"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code, "undecodable upstream body must not surface as a 5xx")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "3", rr.Body.String(), "undecodable upstream body must reach the client unmangled")
+}
+
 func TestProxy_Post_OversizedUserBodyReturnsError(t *testing.T) {
 	t.Parallel()
 
