@@ -52,11 +52,6 @@ Reference these guidelines when:
   - Suggest running `mise db:diff <migration-name>` after making schema changes to generate a migration file. Replace `<migration-name>` with a clear snake-case migration id such as `users-add-email-column`.
   - If you need to undo a migration then run: 1. `mise run db:reset` 2. `mise run db:migrate` to re-run all migrations from the beginning.
 
-- **Migrations ship in their own PR:**
-  - A migration goes in a dedicated PR — no application/business-logic code, no backfills, and no unrelated changes alongside it. Shipping migrations with business logic risks outages (the server can query a schema that has not rolled out yet) and makes the PR hard to revert.
-  - Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise db:diff`) and contain only DDL. Never hand-edit, rename, or rehash them.
-  - Migration files are never the place for backfills or other DML — data migrations belong in application code, not migration files.
-
 <relevant-tasks>
 
 - `mise run db:diff <name-of-migrations>`: Create a database migration
@@ -145,6 +140,25 @@ Instead, strongly consider these better alternatives:
 - Adding nullable columns to existing tables.
 - Deprecating columns by making them nullable.
 - Using expand-contract pattern for evolving schemas without causing outages.
+
+## Database migrations
+
+These rules apply any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`. They are non-negotiable.
+
+Gram uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are involved, and they are not the same thing:
+
+- `server/database/schema.sql` is the **SDL** — the declarative, desired-state schema. This is the file you edit.
+- `server/migrations/*.sql` are the **DDL** diff Atlas generates from that schema. Running `mise db:diff <name>` computes the delta (e.g. `ALTER TABLE ... ADD COLUMN ...`), writes a new timestamped migration file, and updates `atlas.sum`.
+
+Rules:
+
+- **Migrations ship in their own PR.** No application/business-logic code, no backfills, no unrelated changes alongside. Shipping migrations with business logic risks outages — the server can query a schema that has not rolled out yet — and makes the PR hard to revert.
+- **Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise db:diff`).** Never hand-edit, rename, or rehash them.
+- **Migration files contain only DDL — never DML.** Backfills and other data manipulation (`INSERT` / `UPDATE` / `DELETE`) do not belong in a migration file. Data migrations live in application code, not migrations.
+- **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
+- **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
+- **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
+- **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.
 
 ## Writing queries with SQLc
 
