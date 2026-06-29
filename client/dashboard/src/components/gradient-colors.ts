@@ -37,9 +37,11 @@ export function getGradientColors(label: string): {
   const base = BRAND_HUES[hash % BRAND_HUES.length]!;
 
   // Small hue drift keeps the gradient lively without clashing.
-  const drift = 12 + ((hash >> 10) % 12); // 12–23°
+  // Use unsigned shifts: the FNV-1a hash sets bit 31, and a signed `>>`
+  // would yield negative intermediates that skew drift/angle.
+  const drift = 12 + ((hash >>> 10) % 12); // 12–23°
   // A few pleasing diagonals.
-  const angle = 130 + ((hash >> 18) % 3) * 15; // 130 / 145 / 160
+  const angle = 130 + ((hash >>> 18) % 3) * 15; // 130 / 145 / 160
 
   return {
     from: `hsl(${base.h}, ${base.s}%, 60%)`,

@@ -70,11 +70,12 @@ export function MemberFacepile({
   members: FacepileMember[];
   maxFaces?: number;
 }): React.JSX.Element {
+  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
+
   if (members.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
 
-  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const sorted = [...members].sort((a, b) => a.name.localeCompare(b.name));
   const shown = sorted.slice(0, maxFaces);
   const overflow = sorted.length - shown.length;

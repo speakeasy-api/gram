@@ -168,7 +168,7 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
+func TestService_UpdateRole_SystemRole_RejectsNameDescriptionChanges(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -177,13 +177,15 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
 
+	// Name and description are platform-managed (shared globally) and stay
+	// immutable for system roles.
 	name := "Custom Name"
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:   roleID,
 		Name: &name,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "system role properties cannot be updated")
+	require.Contains(t, err.Error(), "system role name and description cannot be changed")
 
 	description := "Custom description"
 	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
@@ -191,17 +193,40 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 		Description: &description,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "system role properties cannot be updated")
-
-	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:        roleID,
-		AddGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "system role properties cannot be updated")
+	require.Contains(t, err.Error(), "system role name and description cannot be changed")
 }
 
-func TestService_UpdateRole_SystemRole_RejectsNoopUpdate(t *testing.T) {
+func TestService_UpdateRole_SystemRole_AllowsGrantEdit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Grants are per-org and may be customized on a system role.
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        roleID,
+		AddGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectWrite)}},
+	})
+	require.NoError(t, err)
+	require.True(t, role.IsSystem)
+
+	found := false
+	for _, g := range role.Grants {
+		if g.Scope == string(authz.ScopeProjectWrite) {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "added grant should be present on the updated system role")
+
+	// WorkOS only tracks role identity/membership, not gram grants.
+	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_UpdateRole_SystemRole_AdminMustKeepOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -210,11 +235,14 @@ func TestService_UpdateRole_SystemRole_RejectsNoopUpdate(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 
+	// Stripping org:admin from the Admin role would lock the org out of
+	// administration, so it is rejected.
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID: roleID,
+		ID:           roleID,
+		RemoveGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeOrgAdmin)}},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "system role update requires member_ids")
+	require.Contains(t, err.Error(), "the Admin role must keep the org:admin permission")
 }
 
 func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {

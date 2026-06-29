@@ -308,6 +308,26 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
+	// Lockout guardrail: removing org:admin from the Admin role would lock the
+	// org out of administration. Validate against the payload up front so a
+	// rejected request never performs grant writes that have to be rolled back.
+	if currentRole.Slug == authz.SystemRoleAdmin {
+		removingOrgAdmin, addingOrgAdmin := false, false
+		for _, g := range removeGrants {
+			if g.Scope == string(authz.ScopeOrgAdmin) {
+				removingOrgAdmin = true
+			}
+		}
+		for _, g := range addGrants {
+			if g.Scope == string(authz.ScopeOrgAdmin) {
+				addingOrgAdmin = true
+			}
+		}
+		if removingOrgAdmin && !addingOrgAdmin {
+			return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
+		}
+	}
+
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
@@ -371,20 +391,6 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
 			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
-		}
-		// Lockout guardrail: the Admin system role must always retain an allow
-		// grant for org:admin, otherwise no one could administer the org.
-		if currentRole.Slug == authz.SystemRoleAdmin {
-			hasOrgAdmin := false
-			for _, grant := range syncedGrants {
-				if grant.Scope == string(authz.ScopeOrgAdmin) && grant.Effect == authz.PolicyEffectAllow {
-					hasOrgAdmin = true
-					break
-				}
-			}
-			if !hasOrgAdmin {
-				return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
-			}
 		}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
