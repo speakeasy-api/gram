@@ -175,7 +175,6 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			URL: registry.Url,
 		}, ListServersParams{
 			Search: payload.Search,
-			Cursor: payload.Cursor,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").LogError(ctx, s.logger)
@@ -183,7 +182,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 
 		return &gen.ListCatalogResult{
 			Servers:    result.Servers,
-			NextCursor: result.NextCursor,
+			NextCursor: nil,
 		}, nil
 	}
 
@@ -195,14 +194,12 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 
 	// Aggregate servers from all registries
 	var allServers []*types.ExternalMCPServerEntry
-	var registryResults []ListServersResult
 	for _, registry := range registries {
 		result, err := s.registryClient.ListServers(ctx, Registry{
 			ID:  registry.ID,
 			URL: registry.Url,
 		}, ListServersParams{
 			Search: payload.Search,
-			Cursor: payload.Cursor,
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
@@ -213,24 +210,21 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			continue
 		}
 		allServers = append(allServers, result.Servers...)
-		registryResults = append(registryResults, result)
 	}
 
-	// Cap at 100 servers for v0
+	// Cap at 100 servers for v0. Multi-registry pagination is tracked in
+	// AGE-2153; until then anything past the cap is silently dropped, so warn.
 	if len(allServers) > 100 {
+		s.logger.WarnContext(ctx, "catalog result truncated to cap",
+			attr.SlogStatsMCPServerCount(len(allServers)),
+			attr.SlogPaginationLimit(100),
+		)
 		allServers = allServers[:100]
-	}
-
-	// Return the cursor only when there is a single registry —
-	// multi-registry composite cursor support is tracked in AGE-2153.
-	var nextCursor *string
-	if len(registryResults) == 1 {
-		nextCursor = registryResults[0].NextCursor
 	}
 
 	return &gen.ListCatalogResult{
 		Servers:    allServers,
-		NextCursor: nextCursor,
+		NextCursor: nil,
 	}, nil
 }
 
@@ -293,7 +287,7 @@ type serverDetailsResult struct {
 func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) (*serverDetailsResult, error) {
 	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url, url.PathEscape(serverName))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
