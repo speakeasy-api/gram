@@ -22,6 +22,10 @@ const (
 	HeaderAgentVersion          = "X-Gram-Agent-Version"
 	HeaderTunnelID              = "X-Gram-Tunnel-Id"
 	HeaderTunnelConsumerSession = "X-Gram-Tunnel-Consumer-Session"
+	// HeaderTunnelForwardToken carries the shared secret that authenticates a
+	// forward request as originating from gram-server. It is verified and then
+	// stripped by the gateway; it is never forwarded to the agent.
+	HeaderTunnelForwardToken    = "X-Gram-Tunnel-Forward-Token"
 	HeaderTunnelServiceID       = "X-Gram-Tunnel-Service-Id"
 	HeaderTunnelServiceSlug     = "X-Gram-Tunnel-Service-Slug"
 	HeaderTunnelServiceVersion  = "X-Gram-Tunnel-Service-Version"

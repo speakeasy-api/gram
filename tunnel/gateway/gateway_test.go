@@ -28,6 +28,65 @@ func TestPublicHandlerDoesNotForward(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
+func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
+	t.Helper()
+	return New(cfg, NewStaticKeyStore(map[string]string{}), route.NewMemory(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+
+	for _, token := range []string{"", "wrong"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
+		req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+		if token != "" {
+			req.Header.Set(wire.HeaderTunnelForwardToken, token)
+		}
+
+		gw.ForwardHandler().ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusForbidden, rec.Code)
+	}
+}
+
+func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	// Token accepted: the request advances past the gate to the registry
+	// lookup, which has no live session and returns the distinct 502.
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, "no-live-session", rec.Header().Get("X-Gram-Tunnel-Error"))
+	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
+}
+
+func TestForwardHandlerAllowsAllWhenTokenUnset(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	// No token configured: enforcement disabled, request reaches the lookup.
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, "no-live-session", rec.Header().Get("X-Gram-Tunnel-Error"))
+}
+
 func TestParseServiceMetadata(t *testing.T) {
 	t.Parallel()
 

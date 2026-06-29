@@ -30,6 +30,12 @@ type Config struct {
 	AdvertiseAddr string
 	// MaxStreamsPerTunnel caps concurrent substreams per agent session.
 	MaxStreamsPerTunnel int
+	// ForwardToken is the shared secret a forward request must present in the
+	// HeaderTunnelForwardToken header. When set, the forward handler rejects
+	// any request without a matching token, authenticating gram-server as the
+	// only legitimate caller. When empty, the token check is disabled (the
+	// listener split remains the primary control; tests run without a token).
+	ForwardToken string
 }
 
 // Gateway terminates agent WebSocket upgrades, owns the yamux sessions, and
@@ -312,6 +318,18 @@ func (g *Gateway) sayHello(session *yamux.Session, tunnelID, sessionID string) {
 // The tunnel ID arrives in a header set by gram-server (never by an external
 // caller); see the tenant-isolation invariant in the design.
 func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
+	if g.cfg.ForwardToken != "" {
+		presented := r.Header.Get(wire.HeaderTunnelForwardToken)
+		if !wire.ConstantTimeEqual(presented, g.cfg.ForwardToken) {
+			g.logger.WarnContext(r.Context(), "tunnel forward rejected", slog.String("reason", "forward-token"))
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+	// Strip the token regardless of whether enforcement is enabled so it is
+	// never proxied to the agent.
+	r.Header.Del(wire.HeaderTunnelForwardToken)
+
 	tunnelID := r.Header.Get(wire.HeaderTunnelID)
 	if tunnelID == "" {
 		http.Error(w, "missing tunnel id", http.StatusBadRequest)

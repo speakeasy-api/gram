@@ -137,6 +137,10 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelRoutes       route.Store
+	// tunnelForwardToken is the shared secret presented to the tunnel gateway's
+	// forward listener to authenticate gram-server as the caller. Empty disables
+	// the header (the gateway then runs without forward-token enforcement).
+	tunnelForwardToken string
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -260,6 +264,7 @@ func NewService(
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
+	tunnelForwardToken string,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -336,6 +341,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelRoutes:       tunnelRoutes,
+		tunnelForwardToken: tunnelForwardToken,
 	}
 }
 

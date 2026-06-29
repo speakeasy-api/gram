@@ -32,6 +32,15 @@ func main() {
 	// reach this service through TLS-terminating ingress; this address is the
 	// internal gram-server -> gateway route.
 	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "http://tunnel-gateway-forward:8091")
+	// ForwardToken authenticates gram-server -> gateway forward requests. The
+	// forward listener is not exposed publicly, but requiring a shared secret
+	// closes in-cluster lateral movement to the forward path. Required so a
+	// deployment cannot silently ship with the control disabled.
+	forwardToken := strings.TrimSpace(os.Getenv("TUNNEL_GATEWAY_FORWARD_TOKEN"))
+	if forwardToken == "" {
+		logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_FORWARD_TOKEN is required")
+		os.Exit(2)
+	}
 
 	routes, err := buildRouteStore(logger)
 	if err != nil {
@@ -48,6 +57,7 @@ func main() {
 	gw := gateway.New(gateway.Config{
 		AdvertiseAddr:       advertiseAddr,
 		MaxStreamsPerTunnel: 256,
+		ForwardToken:        forwardToken,
 	}, keys, routes, logger)
 
 	publicSrv := &http.Server{

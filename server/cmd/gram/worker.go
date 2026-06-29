@@ -692,6 +692,9 @@ func newWorkerCommand() *cli.Command {
 				// intentionally nil here.
 				nil,
 				route.NewMemory(),
+				// The worker never serves runtime forward requests, so no
+				// forward token is needed.
+				"",
 			)
 
 			chatClient := chat.NewAgenticChatClient(

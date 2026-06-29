@@ -463,6 +463,14 @@ func (s *Service) serveTunnelledBackend(
 			ValueFromRequestHeader: "",
 		},
 	}
+	if s.tunnelForwardToken != "" {
+		headers = append(headers, proxy.ConfiguredHeader{
+			IsRequired:             true,
+			Name:                   wire.HeaderTunnelForwardToken,
+			StaticValue:            s.tunnelForwardToken,
+			ValueFromRequestHeader: "",
+		})
+	}
 	if consumerSession := tunnelConsumerSessionKey(r); consumerSession != "" {
 		headers = append(headers, proxy.ConfiguredHeader{
 			IsRequired:             false,
