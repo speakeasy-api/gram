@@ -28,15 +28,15 @@ export interface SplitText {
 export function splitContextBlocks(text: string): SplitText {
   const blocks: ContextBlock[] = [];
   let rest = text;
-  // `CONTEXT_BLOCK_RE` is not global, so `exec` always scans from index 0 with
-  // no `lastIndex` state — we advance by re-slicing `rest`, never by the regex.
-  for (
-    let match = CONTEXT_BLOCK_RE.exec(rest);
-    match;
-    match = CONTEXT_BLOCK_RE.exec(rest)
-  ) {
+  // `CONTEXT_BLOCK_RE` is `^`-anchored and non-global, so each `exec` scans from
+  // index 0 — we peel one leading block per pass by re-slicing `rest`.
+  // `String.matchAll` doesn't fit: it requires a global regex and walks
+  // `lastIndex` forward, which the `^` anchor never matches past position 0.
+  let match = CONTEXT_BLOCK_RE.exec(rest);
+  while (match) {
     blocks.push({ tag: match[1]!, body: match[2]!.trim() });
     rest = rest.slice(match[0].length);
+    match = CONTEXT_BLOCK_RE.exec(rest);
   }
   return { blocks, rest };
 }
