@@ -184,6 +184,45 @@ func TestFingerprinter_TenantedHS256(t *testing.T) {
 	assert.NotEqual(t, got, gotV1)
 }
 
+func TestFingerprinter_TenantedHS256_WithKeyCache(t *testing.T) {
+	t.Parallel()
+
+	keyV1 := []byte("key-material-for-v1")
+	keyV2 := []byte("key-material-for-v2")
+	payload := keyRingJSON(t, "v2", map[string][]byte{"v1": keyV1, "v2": keyV2})
+
+	fp, err := risk.ParsePepperKeyRing(payload)
+	require.NoError(t, err)
+
+	msg := []byte("fingerprint me")
+	cache := make(map[string][]byte)
+
+	// A cached run must match the un-cached fingerprint exactly.
+	uncached, _, err := fp.TenantedHS256("tenant-a", msg)
+	require.NoError(t, err)
+
+	cached, version, err := fp.TenantedHS256("tenant-a", msg, risk.WithKeyCache(cache))
+	require.NoError(t, err)
+	assert.Equal(t, "v2", version)
+	assert.Equal(t, uncached, cached)
+
+	// The derived key is now memoized for (version, tenant) and reused on the
+	// next call without re-running HKDF.
+	require.Len(t, cache, 1)
+
+	again, _, err := fp.TenantedHS256("tenant-a", msg, risk.WithKeyCache(cache))
+	require.NoError(t, err)
+	assert.Equal(t, cached, again)
+	require.Len(t, cache, 1)
+
+	// Distinct tenants and distinct versions each get their own cache entry.
+	_, _, err = fp.TenantedHS256("tenant-b", msg, risk.WithKeyCache(cache))
+	require.NoError(t, err)
+	_, err = fp.TenantedHS256WithVersion("v1", "tenant-a", msg, risk.WithKeyCache(cache))
+	require.NoError(t, err)
+	require.Len(t, cache, 3)
+}
+
 func TestFingerprinter_TenantedHS256WithVersion_UnknownVersion(t *testing.T) {
 	t.Parallel()
 

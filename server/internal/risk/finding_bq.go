@@ -65,6 +65,10 @@ func (w *FindingBQWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 
 	captureMatchByOrg := make(map[string]bool)
 
+	// Cache per-tenant derived keys for the lifetime of this batch so repeated
+	// findings from the same org don't each re-run HKDF.
+	tenantKeyCache := make(map[string][]byte)
+
 	items := make([]FindingBQRow, 0, len(messages))
 	for _, message := range messages {
 		orgID := strings.TrimSpace(message.GetOrganizationId())
@@ -92,7 +96,7 @@ func (w *FindingBQWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		pepperVersion := ""
 		tenantHS256 := ""
 		if !deadLetter && orgID != "" && match != "" {
-			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match)); err != nil {
+			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
 				pepperVersion = pepperver

@@ -28,6 +28,28 @@ type Fingerprinter struct {
 	keys           map[string][]byte
 }
 
+// tenantedOptions holds the configurable behaviour for the tenanted
+// fingerprinting methods.
+type tenantedOptions struct {
+	keyCache map[string][]byte
+}
+
+// TenantedOption customizes the behaviour of TenantedHS256 and
+// TenantedHS256WithVersion.
+type TenantedOption func(*tenantedOptions)
+
+// WithKeyCache supplies a cache for per-tenant derived keys so that repeated
+// fingerprinting under the same (version, tenant) pair does not re-run HKDF.
+// The cache is keyed by version and tenant ID and is read from and written to
+// by the tenanted fingerprinting methods. The caller owns the map and is
+// responsible for its lifetime and any concurrency control; a fresh map scoped
+// to a single batch is the typical usage.
+func WithKeyCache(cache map[string][]byte) TenantedOption {
+	return func(o *tenantedOptions) {
+		o.keyCache = cache
+	}
+}
+
 func (p Fingerprinter) get(version string) ([]byte, error) {
 	key, ok := p.keys[version]
 	if !ok {
@@ -71,7 +93,7 @@ func (p Fingerprinter) HS256WithVersion(version string, message []byte) ([]byte,
 // TenantedHS256 fingerprints message under a per-tenant key derived from the
 // current pepper version, so the same secret in two different tenants produces
 // unrelated fingerprints (tenant isolation).
-func (p Fingerprinter) TenantedHS256(tenantID string, message []byte) ([]byte, string, error) {
+func (p Fingerprinter) TenantedHS256(tenantID string, message []byte, opts ...TenantedOption) ([]byte, string, error) {
 	inv.Require(
 		"fingerprint pepper keyring",
 		"current version is set", p.currentVersion != "",
@@ -81,7 +103,7 @@ func (p Fingerprinter) TenantedHS256(tenantID string, message []byte) ([]byte, s
 		},
 	)
 
-	s, err := p.TenantedHS256WithVersion(p.currentVersion, tenantID, message)
+	s, err := p.TenantedHS256WithVersion(p.currentVersion, tenantID, message, opts...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -91,8 +113,13 @@ func (p Fingerprinter) TenantedHS256(tenantID string, message []byte) ([]byte, s
 
 // TenantedHS256WithVersion is like HS256WithVersion but keys the HMAC with a
 // per-tenant key instead of the raw pepper. See deriveKey for the derivation.
-func (p Fingerprinter) TenantedHS256WithVersion(version string, tenantID string, message []byte) ([]byte, error) {
-	key, err := p.deriveKey(version, tenantID)
+func (p Fingerprinter) TenantedHS256WithVersion(version string, tenantID string, message []byte, opts ...TenantedOption) ([]byte, error) {
+	var o tenantedOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	key, err := p.deriveKey(version, tenantID, o.keyCache)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +135,14 @@ func (p Fingerprinter) TenantedHS256WithVersion(version string, tenantID string,
 // tenant ID as salt. Same pepper + same tenant always yields the same key, so
 // fingerprints are stable; different tenants get independent keys, so the same
 // secret in two tenants produces unrelated fingerprints (tenant isolation).
-func (p Fingerprinter) deriveKey(version string, tenantID string) ([]byte, error) {
+func (p Fingerprinter) deriveKey(version string, tenantID string, cache map[string][]byte) ([]byte, error) {
+	cacheKey := version + "\x00" + tenantID
+	if cache != nil {
+		if key, ok := cache[cacheKey]; ok {
+			return key, nil
+		}
+	}
+
 	pepper, err := p.get(version)
 	if err != nil {
 		return nil, err
@@ -117,6 +151,10 @@ func (p Fingerprinter) deriveKey(version string, tenantID string) ([]byte, error
 	key, err := hkdf.Key(sha256.New, pepper, []byte(tenantID), hkdfInfo, 32)
 	if err != nil {
 		return nil, fmt.Errorf("hkdf: %w", err)
+	}
+
+	if cache != nil {
+		cache[cacheKey] = key
 	}
 
 	return key, nil
