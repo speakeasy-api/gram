@@ -67,30 +67,37 @@ backend = "aqua:bufbuild/buf"
 [tools.buf."platforms.linux-arm64"]
 checksum = "sha256:28b258cb4ee7a1224a61e1dd91ae5935f1c86c23e8e67bcfa23c8b096b0ad478"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-aarch64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.linux-arm64-musl"]
 checksum = "sha256:28b258cb4ee7a1224a61e1dd91ae5935f1c86c23e8e67bcfa23c8b096b0ad478"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-aarch64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.linux-x64"]
 checksum = "sha256:2b1f9cfb5e17d50c10dea9202979ffd28ca7ff7a6f4e51e801a9463986690b03"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-x86_64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.linux-x64-musl"]
 checksum = "sha256:2b1f9cfb5e17d50c10dea9202979ffd28ca7ff7a6f4e51e801a9463986690b03"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-x86_64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.macos-arm64"]
 checksum = "sha256:246534674239f326dd1ad2642e57865dd56dc4e98c4857d13da6eca4d3a168ad"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Darwin-arm64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.macos-x64"]
 checksum = "sha256:570458723a1e400d654e916cc54a98e78a9c23d72775afde9ef12abcdebd37a1"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Darwin-x86_64.tar.gz"
+provenance = "minisign"
 
 [tools.buf."platforms.windows-x64"]
 checksum = "sha256:55ad1b4662003406050d76bc812e5954dd3d3d23a9b62ab6bdbed1670a6292c4"
 url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Windows-x86_64.zip"
+provenance = "minisign"
 
 [[tools.flyctl]]
 version = "0.4.6"
