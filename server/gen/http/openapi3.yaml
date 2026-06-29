@@ -34289,6 +34289,110 @@ paths:
             x-speakeasy-name-override: listServers
             x-speakeasy-react-hook:
                 name: TunnelledMcpServers
+    /rpc/tunnelledMcp.rotateServerKey:
+        post:
+            description: Rotate a tunnelled MCP server source key. Returns the new tunnel key once.
+            operationId: rotateTunnelledMcpServerKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateTunnelledMcpServerKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RotateTunnelledMcpServerKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: rotateServerKey tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: rotateServerKey
+            x-speakeasy-react-hook:
+                name: RotateTunnelledMcpServerKey
     /rpc/tunnelledMcp.updateServer:
         post:
             description: Update a tunnelled MCP server source
@@ -48813,6 +48917,7 @@ components:
                 - total_output_tokens
                 - total_tokens
                 - total_chats
+<<<<<<< HEAD
         SaveRiskEvalReviewRequestBody:
             type: object
             properties:
@@ -48835,6 +48940,30 @@ components:
                 - policy_id
                 - chat_id
                 - verdict
+=======
+        RotateTunnelledMcpServerKeyForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the tunnelled MCP server
+                    format: uuid
+            description: Form for rotating a tunnelled MCP server source key
+            required:
+                - id
+        RotateTunnelledMcpServerKeyResult:
+            type: object
+            properties:
+                server:
+                    $ref: '#/components/schemas/TunnelledMcpServer'
+                tunnel_key:
+                    type: string
+                    description: Plaintext tunnel key. Only returned after rotation.
+            description: Rotated tunnelled MCP server plus the one-time replacement tunnel key
+            required:
+                - server
+                - tunnel_key
+>>>>>>> 685f2d905 (fix: address tunnelled mcp review)
         ScopeDefinition:
             type: object
             properties:

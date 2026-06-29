@@ -286,6 +286,7 @@ export * from "./riskUpdateExclusion.js";
 export * from "./riskUserBreakdown.js";
 export * from "./role.js";
 export * from "./roles.js";
+export * from "./rotateTunnelledMcpServerKey.js";
 export * from "./searchChats.js";
 export * from "./searchLogs.js";
 export * from "./searchToolCalls.js";

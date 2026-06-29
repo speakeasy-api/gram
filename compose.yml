@@ -166,7 +166,7 @@ services:
       DATABASE_URI: postgresql://${DB_USER}:${DB_PASSWORD}@gram-db:5432/${DB_NAME}
     command:
       [
-        "--access-mode=${TUNNEL_POSTGRES_MCP_ACCESS_MODE:-restricted}",
+        "--access-mode=unrestricted",
         "--transport=streamable-http",
         "--streamable-http-host=0.0.0.0",
         "--streamable-http-port=9000",
@@ -187,10 +187,10 @@ services:
       TUNNEL_GATEWAY_URL: ${TUNNEL_AGENT_GATEWAY_URL:-ws://host.docker.internal:8090/connect}
       TUNNEL_KEY: ${TUNNEL_LOCAL_KEY:-}
       TUNNEL_LOCAL_MCP_URL: http://127.0.0.1:9000/mcp
-      TUNNEL_SERVICE_ID: ${TUNNEL_SERVICE_ID:-local-postgres-mcp}
-      TUNNEL_SERVICE_SLUG: ${TUNNEL_SERVICE_SLUG:-postgres-mcp}
-      TUNNEL_SERVICE_VERSION: ${TUNNEL_SERVICE_VERSION:-0.3.0}
-      TUNNEL_METADATA: ${TUNNEL_METADATA:-{"environment":"local","server":"postgres-mcp","database":"gram","transport":"streamable-http"}}
+      TUNNEL_SERVICE_ID: local-postgres-mcp
+      TUNNEL_SERVICE_SLUG: postgres-mcp
+      TUNNEL_SERVICE_VERSION: 0.3.0
+      TUNNEL_METADATA: '{"environment":"local","server":"postgres-mcp","database":"gram","transport":"streamable-http"}'
     command: ["go", "run", "./tunnel/cmd/tunnel-agent"]
     depends_on:
       tunnel-postgres-mcp:

@@ -3,7 +3,6 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -29,8 +28,6 @@ import { mcpServersUpdate } from "@gram/client/funcs/mcpServersUpdate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { resourcesList } from "@gram/client/funcs/resourcesList.js";
-import { tunnelledMcpCreateServer } from "@gram/client/funcs/tunnelledMcpCreateServer.js";
-import { tunnelledMcpListServers } from "@gram/client/funcs/tunnelledMcpListServers.js";
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
@@ -58,6 +55,13 @@ type Asset = {
 const PLAYGROUND_MCP_APP_SLUG = "playground-mcp-app";
 const PLAYGROUND_MCP_APP_TOOL_NAME = "show_dashboard";
 const PLAYGROUND_MCP_APP_RESOURCE_URI = `ui://${PLAYGROUND_MCP_APP_SLUG}/dashboard`;
+const SEEDED_TUNNELLED_MCP_SOURCE_ID = "019f04af-61eb-7aec-b485-d59349afa755";
+const SEEDED_TUNNELLED_MCP_SOURCE_NAME = "Seeded Local Postgres MCP";
+const SEEDED_TUNNEL_KEY =
+  "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000";
+const SEEDED_TUNNEL_KEY_HASH =
+  "da47d4681359b43e76c22b686ddeb16320916c7510550c03550b5114634d63d5";
+const SEEDED_TUNNEL_KEY_PREFIX = "gram_tunnel_local";
 
 const SEED_PROJECTS: {
   name: string;
@@ -350,6 +354,7 @@ async function seed() {
     await seedTunnelledMcpSource({
       gram,
       sessionId,
+      projectId: tunnelSeedProject.id,
       projectSlug: tunnelSeedProject.slug,
       orgSlug: activeOrgSlug,
     });
@@ -644,17 +649,17 @@ async function getOrCreateEnvironment(init: {
 async function seedTunnelledMcpSource(init: {
   gram: GramCore;
   sessionId: string;
+  projectId: string;
   projectSlug: string;
   orgSlug: string | undefined;
 }): Promise<void> {
-  const { gram, sessionId, projectSlug, orgSlug } = init;
+  const { gram, sessionId, projectId, projectSlug, orgSlug } = init;
   const security = {
     option1: {
       sessionHeaderGramSession: sessionId,
       projectSlugHeaderGramProject: projectSlug,
     },
   };
-  const sourceName = "Seeded Local Postgres MCP";
   const mcpServerName = "Seeded Local Postgres MCP";
   const endpointSlug = `${orgSlug ?? projectSlug}-gram-postgres-mcp`;
   const userSessionIssuer = await getOrCreateSeededUserSessionIssuer({
@@ -663,40 +668,7 @@ async function seedTunnelledMcpSource(init: {
     slug: `${endpointSlug}-issuer`,
   });
 
-  const listSourcesRes = await tunnelledMcpListServers(
-    gram,
-    undefined,
-    security,
-  );
-  if (!listSourcesRes.ok) {
-    abort("Failed to list tunnelled MCP sources", listSourcesRes.error);
-  }
-
-  let source = listSourcesRes.value.tunnelledMcpServers.find(
-    (server) => server.name === sourceName,
-  );
-  if (!source) {
-    const createRes = await tunnelledMcpCreateServer(
-      gram,
-      {
-        createTunnelledMcpServerForm: {
-          name: sourceName,
-        },
-      },
-      security,
-    );
-    if (!createRes.ok) {
-      abort("Failed to create tunnelled MCP source", createRes.error);
-    }
-    source = createRes.value.server;
-    log.info(
-      `Created tunnelled MCP source '${source.name}' (key_prefix = ${source.keyPrefix})`,
-    );
-  } else {
-    log.info(
-      `Found existing tunnelled MCP source '${source.name}' (id = ${source.id})`,
-    );
-  }
+  const source = await upsertSeededTunnelledMcpSource({ projectId });
 
   const listMcpServersRes = await mcpServersList(
     gram,
@@ -806,15 +778,98 @@ async function seedTunnelledMcpSource(init: {
     }
   }
 
-  const tunnelKey = localTunnelKey(source.id);
-  await seedTunnelledRuntimeState(source.id, tunnelKey);
   await setLocalTunnelEnv({
     sourceId: source.id,
-    tunnelKey,
+    tunnelKey: SEEDED_TUNNEL_KEY,
     endpointSlug,
     mcpServerId: mcpServer.id,
   });
-  log.info("Seeded tunnelled MCP runtime state and Redis connections");
+  log.info("Seeded tunnelled MCP source and local tunnel environment");
+}
+
+async function upsertSeededTunnelledMcpSource(init: {
+  projectId: string;
+}): Promise<{ id: string; name: string; keyPrefix: string }> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH existing AS (
+  SELECT id
+  FROM tunnelled_mcp_servers
+  WHERE project_id = :'project_id'::uuid
+    AND name = :'name'
+    AND deleted IS FALSE
+  LIMIT 1
+),
+updated AS (
+  UPDATE tunnelled_mcp_servers
+  SET
+    key_hash = :'key_hash',
+    key_prefix = :'key_prefix',
+    status = 'created',
+    agent_version = NULL,
+    last_seen_at = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  WHERE id = (SELECT id FROM existing)
+  RETURNING id, name, key_prefix
+),
+inserted AS (
+  INSERT INTO tunnelled_mcp_servers (
+    id,
+    project_id,
+    name,
+    key_hash,
+    key_prefix,
+    status
+  )
+  SELECT
+    :'source_id'::uuid,
+    :'project_id'::uuid,
+    :'name',
+    :'key_hash',
+    :'key_prefix',
+    'created'
+  WHERE NOT EXISTS (SELECT 1 FROM updated)
+  ON CONFLICT (id) DO UPDATE SET
+    project_id = EXCLUDED.project_id,
+    name = EXCLUDED.name,
+    key_hash = EXCLUDED.key_hash,
+    key_prefix = EXCLUDED.key_prefix,
+    status = 'created',
+    agent_version = NULL,
+    last_seen_at = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  RETURNING id, name, key_prefix
+),
+source AS (
+  SELECT id, name, key_prefix FROM updated
+  UNION ALL
+  SELECT id, name, key_prefix FROM inserted
+  LIMIT 1
+)
+SELECT json_build_object(
+  'id', id::text,
+  'name', name,
+  'keyPrefix', key_prefix
+)::text
+FROM source;
+`;
+
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v source_id=${SEEDED_TUNNELLED_MCP_SOURCE_ID} -v project_id=${init.projectId} -v name=${SEEDED_TUNNELLED_MCP_SOURCE_NAME} -v key_hash=${SEEDED_TUNNEL_KEY_HASH} -v key_prefix=${SEEDED_TUNNEL_KEY_PREFIX} -tA -f -`.quiet();
+
+  const source = JSON.parse(result.stdout.trim()) as {
+    id: string;
+    name: string;
+    keyPrefix: string;
+  };
+  log.info(
+    `Seeded tunnelled MCP source '${source.name}' (id = ${source.id}, key_prefix = ${source.keyPrefix})`,
+  );
+  return source;
 }
 
 async function getOrCreateSeededUserSessionIssuer(init: {
@@ -860,14 +915,6 @@ async function getOrCreateSeededUserSessionIssuer(init: {
   return createRes.value;
 }
 
-async function seedTunnelledRuntimeState(
-  tunnelledMcpServerId: string,
-  tunnelKey: string,
-) {
-  process.env.TUNNEL_LOCAL_KEY = tunnelKey;
-  await $`go run .mise-tasks/seed_tunnelled_mcp_runtime.go ${tunnelledMcpServerId}`.quiet();
-}
-
 async function setLocalTunnelEnv(init: {
   sourceId: string;
   tunnelKey: string;
@@ -879,14 +926,6 @@ async function setLocalTunnelEnv(init: {
   await $`mise set --file mise.local.toml TUNNEL_LOCAL_KEY=${tunnelKey}`;
   await $`mise set --file mise.local.toml TUNNEL_LOCAL_MCP_ENDPOINT_SLUG=${endpointSlug}`;
   await $`mise set --file mise.local.toml TUNNEL_LOCAL_MCP_SERVER_ID=${mcpServerId}`;
-}
-
-function localTunnelKey(tunnelledMcpServerId: string): string {
-  const digest = crypto
-    .createHash("sha256")
-    .update(tunnelledMcpServerId)
-    .digest("hex");
-  return `gram_tunnel_${digest}`;
 }
 
 async function getOrCreateProject(init: {

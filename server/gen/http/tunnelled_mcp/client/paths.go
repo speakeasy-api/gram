@@ -27,6 +27,11 @@ func UpdateServerTunnelledMcpPath() string {
 	return "/rpc/tunnelledMcp.updateServer"
 }
 
+// RotateServerKeyTunnelledMcpPath returns the URL path to the tunnelledMcp service rotateServerKey HTTP endpoint.
+func RotateServerKeyTunnelledMcpPath() string {
+	return "/rpc/tunnelledMcp.rotateServerKey"
+}
+
 // DeleteServerTunnelledMcpPath returns the URL path to the tunnelledMcp service deleteServer HTTP endpoint.
 func DeleteServerTunnelledMcpPath() string {
 	return "/rpc/tunnelledMcp.deleteServer"

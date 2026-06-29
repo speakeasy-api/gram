@@ -201,6 +201,51 @@ func (q *Queries) LockOrganizationTunnelledMcpLimit(ctx context.Context, organiz
 	return err
 }
 
+const rotateServerKey = `-- name: RotateServerKey :one
+UPDATE tunnelled_mcp_servers
+SET
+    key_hash = $1,
+    key_prefix = $2,
+    status = 'created',
+    agent_version = NULL,
+    last_seen_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RotateServerKeyParams struct {
+	KeyHash   string
+	KeyPrefix string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RotateServerKey(ctx context.Context, arg RotateServerKeyParams) (TunnelledMcpServer, error) {
+	row := q.db.QueryRow(ctx, rotateServerKey,
+		arg.KeyHash,
+		arg.KeyPrefix,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i TunnelledMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.KeyHash,
+		&i.KeyPrefix,
+		&i.Status,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateServer = `-- name: UpdateServer :one
 UPDATE tunnelled_mcp_servers
 SET

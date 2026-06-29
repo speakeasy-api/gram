@@ -25,6 +25,8 @@ type Service interface {
 	GetServer(context.Context, *GetServerPayload) (res *types.TunnelledMcpServer, err error)
 	// Update a tunnelled MCP server source
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.TunnelledMcpServer, err error)
+	// Rotate a tunnelled MCP server source key. Returns the new tunnel key once.
+	RotateServerKey(context.Context, *RotateServerKeyPayload) (res *RotateTunnelledMcpServerKeyResult, err error)
 	// Delete a tunnelled MCP server source
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
 }
@@ -49,7 +51,7 @@ const ServiceName = "tunnelledMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createServer", "listServers", "getServer", "updateServer", "deleteServer"}
+var MethodNames = [6]string{"createServer", "listServers", "getServer", "updateServer", "rotateServerKey", "deleteServer"}
 
 // CreateServerPayload is the payload type of the tunnelledMcp service
 // createServer method.
@@ -101,6 +103,24 @@ type ListServersPayload struct {
 // listServers method.
 type ListTunnelledMcpServersResult struct {
 	TunnelledMcpServers []*types.TunnelledMcpServer
+}
+
+// RotateServerKeyPayload is the payload type of the tunnelledMcp service
+// rotateServerKey method.
+type RotateServerKeyPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The ID of the tunnelled MCP server
+	ID string
+}
+
+// RotateTunnelledMcpServerKeyResult is the result type of the tunnelledMcp
+// service rotateServerKey method.
+type RotateTunnelledMcpServerKeyResult struct {
+	Server *types.TunnelledMcpServer
+	// Plaintext tunnel key. Only returned after rotation.
+	TunnelKey string
 }
 
 // UpdateServerPayload is the payload type of the tunnelledMcp service

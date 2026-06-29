@@ -43,6 +43,18 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: RotateServerKey :one
+UPDATE tunnelled_mcp_servers
+SET
+    key_hash = @key_hash,
+    key_prefix = @key_prefix,
+    status = 'created',
+    agent_version = NULL,
+    last_seen_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
 -- name: DeleteServer :one
 UPDATE tunnelled_mcp_servers
 SET

@@ -166,6 +166,49 @@ func BuildUpdateServerPayload(tunnelledMcpUpdateServerBody string, tunnelledMcpU
 	return v, nil
 }
 
+// BuildRotateServerKeyPayload builds the payload for the tunnelledMcp
+// rotateServerKey endpoint from CLI flags.
+func BuildRotateServerKeyPayload(tunnelledMcpRotateServerKeyBody string, tunnelledMcpRotateServerKeySessionToken string, tunnelledMcpRotateServerKeyApikeyToken string, tunnelledMcpRotateServerKeyProjectSlugInput string) (*tunnelledmcp.RotateServerKeyPayload, error) {
+	var err error
+	var body RotateServerKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(tunnelledMcpRotateServerKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunnelledMcpRotateServerKeySessionToken != "" {
+			sessionToken = &tunnelledMcpRotateServerKeySessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunnelledMcpRotateServerKeyApikeyToken != "" {
+			apikeyToken = &tunnelledMcpRotateServerKeyApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunnelledMcpRotateServerKeyProjectSlugInput != "" {
+			projectSlugInput = &tunnelledMcpRotateServerKeyProjectSlugInput
+		}
+	}
+	v := &tunnelledmcp.RotateServerKeyPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteServerPayload builds the payload for the tunnelledMcp
 // deleteServer endpoint from CLI flags.
 func BuildDeleteServerPayload(tunnelledMcpDeleteServerID string, tunnelledMcpDeleteServerSessionToken string, tunnelledMcpDeleteServerApikeyToken string, tunnelledMcpDeleteServerProjectSlugInput string) (*tunnelledmcp.DeleteServerPayload, error) {

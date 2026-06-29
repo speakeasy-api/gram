@@ -10,9 +10,6 @@ if [[ -z "${TUNNEL_LOCAL_KEY:-}" ]]; then
   exit 2
 fi
 
-# Local dogfood default: read-write Postgres MCP. Override with TUNNEL_POSTGRES_MCP_ACCESS_MODE=restricted.
-export TUNNEL_POSTGRES_MCP_ACCESS_MODE="${TUNNEL_POSTGRES_MCP_ACCESS_MODE:-unrestricted}"
-
 cleanup() {
   docker compose --profile tunnel stop tunnel-agent tunnel-postgres-mcp >/dev/null 2>&1 || true
 }

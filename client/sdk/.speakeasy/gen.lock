@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 9cebefc3b91cf391c58671624ccd5f85
+  docChecksum: 4b0894c224070cb59d5b52914a439b77
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -3312,6 +3312,10 @@ trackedFiles:
     last_write_checksum: sha1:94df0d3d24eaa9af1648c6fcf1d3812788b3eb21
   docs/models/components/rolesummary.md:
     last_write_checksum: sha1:45d8d2e5a97e1fefeab1cd7edaceaff08ce21796
+  docs/models/components/rotatetunnelledmcpserverkeyform.md:
+    last_write_checksum: sha1:528f6d1a53f016c70df8c0b60738d0b2a469d909
+  docs/models/components/rotatetunnelledmcpserverkeyresult.md:
+    last_write_checksum: sha1:89ecdc52ece866b72a18f77c57e985968907ba39
   docs/models/components/scope.md:
     last_write_checksum: sha1:dcb5ae81f5d79f5e490cf9939a2d2919027cefab
   docs/models/components/scopedefinition.md:
@@ -5434,6 +5438,14 @@ trackedFiles:
     last_write_checksum: sha1:fdc47fc372e7d5391d3ee5ec54c6bb4163ade6ac
   docs/models/operations/revokeusersessionsecurityoption2.md:
     last_write_checksum: sha1:7e1a4e57064a521377d8d7ea130f9f0169affae3
+  docs/models/operations/rotatetunnelledmcpserverkeyrequest.md:
+    last_write_checksum: sha1:1eeffd8af26a058cee7584fa9994f3e6b75963a4
+  docs/models/operations/rotatetunnelledmcpserverkeysecurity.md:
+    last_write_checksum: sha1:2b1f758bd9da52e0b53baa86af03451bc50d70c0
+  docs/models/operations/rotatetunnelledmcpserverkeysecurityoption1.md:
+    last_write_checksum: sha1:dce3d38217741c3d1239be1571a9f2b7c9096ff7
+  docs/models/operations/rotatetunnelledmcpserverkeysecurityoption2.md:
+    last_write_checksum: sha1:b12dca514110a35c44193cfb1eedf6be946397f7
   docs/models/operations/searchchatsrequest.md:
     last_write_checksum: sha1:41b07c102a4dd518b6a031f1421013e6045164a1
   docs/models/operations/searchchatssecurity.md:
@@ -5977,7 +5989,7 @@ trackedFiles:
   docs/sdks/triggers/README.md:
     last_write_checksum: sha1:83cba427bf9553fb5cd63ce59def4d855d272e77
   docs/sdks/tunnelledmcp/README.md:
-    last_write_checksum: sha1:da60198a4fd54e586fa21e5f2a2ad97df50b5e83
+    last_write_checksum: sha1:1ef6ef09e05f610b6b0cafe423b1a22fcb90e082
   docs/sdks/usage/README.md:
     last_write_checksum: sha1:acf4c0df2dba507982dfff9b3d087ea142231117
   docs/sdks/usersessionclients/README.md:
@@ -6632,6 +6644,8 @@ trackedFiles:
     last_write_checksum: sha1:9d7570a78f5cadcfa282db725b4a2f84217a3db5
   src/funcs/tunnelledMcpListServers.ts:
     last_write_checksum: sha1:b928eed8f01a2fc3bffa00dd55c0941d27d6358e
+  src/funcs/tunnelledMcpRotateServerKey.ts:
+    last_write_checksum: sha1:c92eea62bd3f727f9d52ff74ffbb4a821e2494aa
   src/funcs/tunnelledMcpUpdateServer.ts:
     last_write_checksum: sha1:2aac5167d9988a5e746584456767f16f9b101a74
   src/funcs/usageCreateCheckout.ts:
@@ -7134,7 +7148,7 @@ trackedFiles:
 >>>>>>> cad7c60f4 (feat: add tunnelled mcp backend)
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:a9a6d421e030aecd8ba63f659b358ae9db786ad0
+    last_write_checksum: sha1:7f6cbdbb7813efbeeedeed8ba5f3795daf703203
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
 <<<<<<< HEAD
   src/models/components/inforesponsebody.ts: {}
@@ -8118,6 +8132,10 @@ trackedFiles:
     last_write_checksum: sha1:025d196f62e936e325c5a089b762abe611139d99
   src/models/components/rolesummary.ts:
     last_write_checksum: sha1:282676243abc03437f494ac392000ff98ea08145
+  src/models/components/rotatetunnelledmcpserverkeyform.ts:
+    last_write_checksum: sha1:f73892d8dc816ed78bc2da2f4eb7bc44004aa8d1
+  src/models/components/rotatetunnelledmcpserverkeyresult.ts:
+    last_write_checksum: sha1:a364eaf28d92cb17f0b9ecd0d65b57ceeec3b38c
   src/models/components/scopedefinition.ts:
     last_write_checksum: sha1:092c36f7b9015f62695fb2c37beddf2eeaae3601
   src/models/components/searchchatsfilter.ts:
@@ -8761,7 +8779,7 @@ trackedFiles:
 >>>>>>> cad7c60f4 (feat: add tunnelled mcp backend)
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:26ef48d309b815a81ceecb4ecc772fd48bd02960
+    last_write_checksum: sha1:6ebb1343af5cd94ef5c442cd7d430b493b57c91b
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
 <<<<<<< HEAD
   src/models/operations/ingesthookevent.ts: {}
@@ -9344,6 +9362,8 @@ trackedFiles:
     last_write_checksum: sha1:b78f7ced19a58b8db7bb285531736c80642b2f8b
   src/models/operations/revokeusersessionconsent.ts:
     last_write_checksum: sha1:cdd7be6e01eb0012ce6e8168caf8032cca8e0249
+  src/models/operations/rotatetunnelledmcpserverkey.ts:
+    last_write_checksum: sha1:b9f37b0fa76bf1b04e16e196e950712bec128eeb
   src/models/operations/searchchats.ts:
     last_write_checksum: sha1:a2c7fb671397ec9fc87fce9b0899da3d6ce4aa88
   src/models/operations/searchlogs.ts:
@@ -9839,7 +9859,7 @@ trackedFiles:
 >>>>>>> cad7c60f4 (feat: add tunnelled mcp backend)
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:1297d41201097ec9de65f9ed881880210e2e6ddb
+    last_write_checksum: sha1:7ce868cdba905a20db35810b0c38d06395c3d842
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
 <<<<<<< HEAD
   src/react-query/ingestHookEvent.ts: {}
@@ -11207,6 +11227,8 @@ examples:
     last_write_checksum: sha1:8dd76c319562c4d18e7be0bbbcaa243626448fca
   src/react-query/roles.ts:
     last_write_checksum: sha1:1045dcbe4500a3030dda24e50aa9a4a1a3e61399
+  src/react-query/rotateTunnelledMcpServerKey.ts:
+    last_write_checksum: sha1:938288c9e918a42fd4ad92d877b6eb183403786e
   src/react-query/searchChats.core.ts:
     last_write_checksum: sha1:38e0b4b2ec4157da48e5e6c8f1a7e1b7a9a246b1
   src/react-query/searchChats.ts:
@@ -11520,7 +11542,7 @@ examples:
   src/sdk/triggers.ts:
     last_write_checksum: sha1:e38ef614f5ad5706d131c34193150531a46af67b
   src/sdk/tunnelledmcp.ts:
-    last_write_checksum: sha1:f912c5995d506b4ab5a63ecaa136e785056d4f78
+    last_write_checksum: sha1:cb0a19ea1a746e9254f3efeeecaf7d62d59cfd56
   src/sdk/usage.ts:
     last_write_checksum: sha1:60ed383d33ad4068cccd754587fbea20104ace23
   src/sdk/usersessionclients.ts:
@@ -17380,5 +17402,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  rotateTunnelledMcpServerKey:
+    speakeasy-default-rotate-tunnelled-mcp-server-key:
+      requestBody:
+        application/json: {"id": "bddffcb9-647d-4828-adda-bdd79549695a"}
+      responses:
+        "200":
+          application/json: {"server": {"active_connection_count": 690770, "active_consumer_session_count": 866154, "connection_status": "never_connected", "connections": [{"active_consumer_sessions": 950547, "active_substreams": 778666, "connected_at": "2026-02-04T02:47:32.330Z", "last_heartbeat_at": "2025-09-20T20:55:42.732Z", "metadata": {"key": "<value>"}, "service_id": "<id>", "service_slug": "<value>", "service_version": "<value>", "session_id": "<id>"}], "created_at": "2024-10-23T05:21:46.963Z", "id": "7d828dda-bdd7-4954-b969-5aa65beb8114", "key_prefix": "<value>", "name": "<value>", "project_id": "182e0e64-36d4-4678-aff8-a8fc1f1df54f", "status": "created", "updated_at": "2025-04-27T13:52:21.818Z"}, "tunnel_key": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
