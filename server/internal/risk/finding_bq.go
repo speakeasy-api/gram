@@ -32,7 +32,7 @@ type FindingBQRow struct {
 	Match                    bigquery.NullString    `bigquery:"match"`
 	StartPos                 bigquery.NullInt64     `bigquery:"start_pos"`
 	EndPos                   bigquery.NullInt64     `bigquery:"end_pos"`
-	Tags                     []string               `bigquery:"tags,nullable"`
+	Tags                     []string               `bigquery:"tags"`
 	Source                   bigquery.NullString    `bigquery:"source"`
 	Confidence               bigquery.NullFloat64   `bigquery:"confidence"`
 	DeadLetterReason         bigquery.NullString    `bigquery:"dead_letter_reason"`
@@ -104,6 +104,11 @@ func (w *FindingBQWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			}
 		}
 
+		tags := message.GetTags()
+		if tags == nil {
+			tags = []string{}
+		}
+
 		item := FindingBQRow{
 			ID:                       bigquery.NullString{StringVal: message.GetId(), Valid: message.HasId()},
 			RequestID:                bigquery.NullString{StringVal: message.GetRequestId(), Valid: message.HasRequestId()},
@@ -117,7 +122,7 @@ func (w *FindingBQWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			Description:              bigquery.NullString{StringVal: message.GetDescription(), Valid: message.HasDescription()},
 			StartPos:                 bigquery.NullInt64{Int64: int64(message.GetStartPos()), Valid: message.HasStartPos()},
 			EndPos:                   bigquery.NullInt64{Int64: int64(message.GetEndPos()), Valid: message.HasEndPos()},
-			Tags:                     message.GetTags(),
+			Tags:                     tags,
 			Source:                   bigquery.NullString{StringVal: message.GetSource(), Valid: message.HasSource()},
 			Confidence:               bigquery.NullFloat64{Float64: message.GetConfidence(), Valid: message.HasConfidence()},
 			DeadLetterReason:         bigquery.NullString{StringVal: message.GetDeadLetterReason(), Valid: message.HasDeadLetterReason()},
