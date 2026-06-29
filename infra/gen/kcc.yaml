@@ -129,7 +129,7 @@ pubsub:
     name: gram-risk-v1-finding-bq-writer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -143,7 +143,7 @@ pubsub:
     name: gram-risk-v1-gitleaks-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -157,7 +157,7 @@ pubsub:
     name: gram-risk-v1-presidio-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s

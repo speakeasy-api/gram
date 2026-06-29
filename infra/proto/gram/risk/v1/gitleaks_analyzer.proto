@@ -11,7 +11,7 @@ message GitleaksAnalyzer {
     topic: "gram.risk.v1.GitleaksAnalysis"
     ack_deadline: {seconds: 60}
     retention: {
-      seconds: 2592000 /* 30 days */
+      seconds: 604800 /* 7 days */
     }
     retain_acked_messages: true
     retry_policy: {
