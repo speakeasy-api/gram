@@ -64,7 +64,7 @@ Track AI usage across teams and measure impact with either tokens or cost. Deep 
 
 - Chat with us: [Join our slack](https://join.slack.com/t/speakeasy-dev/shared_invite/zt-3hudfoj4y-9EPqMmHIFhNiTtannqiV3Q) for support and discussions or email us at [support@speakeasy.com](mailto:support@speakeasy.com).
 - Contribute feature requests or report issues [on our roadmap](https://roadmap.speakeasy.com/).
-- Documentation for the platform is avaialble [here](https://www.speakeasy.com/docs/mcp).
+- Documentation for the platform is available [here](https://www.speakeasy.com/docs/mcp).
 
 ## Contributing
 
