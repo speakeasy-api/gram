@@ -1,6 +1,9 @@
 package risk_analysis
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // AnalyzerConfig is the opaque per-analyzer scanner configuration persisted on
 // risk_policies.analyzer_config (JSONB), namespaced by analyzer. New per-scanner
@@ -49,21 +52,25 @@ func PresidioScoreThresholdPtr(b []byte) *float64 {
 }
 
 // WithPresidioScoreThreshold returns analyzer_config JSON with
-// presidio.score_threshold set to v (or cleared when v is nil), preserving any
-// other analyzer sections already present in base.
+// presidio.score_threshold set to v, or cleared when v is nil. Only fields known
+// to AnalyzerConfig are round-tripped; any unrecognized keys in base are dropped.
 func WithPresidioScoreThreshold(base []byte, v *float64) ([]byte, error) {
 	c := ParseAnalyzerConfig(base)
 	switch {
 	case v != nil:
 		if c.Presidio == nil {
-			c.Presidio = &PresidioConfig{}
+			c.Presidio = &PresidioConfig{ScoreThreshold: v}
+		} else {
+			c.Presidio.ScoreThreshold = v
 		}
-		c.Presidio.ScoreThreshold = v
 	case c.Presidio != nil:
-		c.Presidio.ScoreThreshold = nil
-		if (*c.Presidio == PresidioConfig{}) {
-			c.Presidio = nil
-		}
+		// ScoreThreshold is presidio's only field today; clearing it leaves the
+		// section empty, so drop it entirely.
+		c.Presidio = nil
 	}
-	return json.Marshal(c)
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal analyzer config: %w", err)
+	}
+	return out, nil
 }

@@ -782,7 +782,7 @@ func TestPresidioClientForwardsScoreThreshold(t *testing.T) {
 	var got atomic.Value // holds float64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req presidioRequest
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		got.Store(req.ScoreMin)
 		w.Header().Set("Content-Type", "application/json")
 		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
@@ -793,11 +793,15 @@ func TestPresidioClientForwardsScoreThreshold(t *testing.T) {
 
 	_, err := client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0.9, nil)
 	require.NoError(t, err)
-	require.InDelta(t, 0.9, got.Load().(float64), 1e-9)
+	gotCustom, ok := got.Load().(float64)
+	require.True(t, ok)
+	require.InDelta(t, 0.9, gotCustom, 1e-9)
 
 	_, err = client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0, nil)
 	require.NoError(t, err)
-	require.InDelta(t, DefaultPresidioScoreThreshold, got.Load().(float64), 1e-9)
+	gotDefault, ok := got.Load().(float64)
+	require.True(t, ok)
+	require.InDelta(t, DefaultPresidioScoreThreshold, gotDefault, 1e-9)
 }
 
 // --- helpers ---

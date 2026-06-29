@@ -94,7 +94,9 @@ type AnalyzeBatchArgs struct {
 	MessageTypes     []string
 	PresidioEntities []string
 	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
-	// (0.0-1.0). Zero means unset; the scanner applies DefaultPresidioScoreThreshold.
+	// (0.0-1.0). Do derives it from the refetched policy's analyzer_config, so it
+	// is not a caller input; zero means unset and the scanner applies
+	// DefaultPresidioScoreThreshold.
 	PresidioScoreThreshold float64
 	CustomRuleIds          []string
 }
@@ -145,6 +147,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
+
+	// Single source of truth: derive the presidio threshold from the policy we
+	// just refetched, rather than trusting a (possibly omitted) caller value.
+	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {

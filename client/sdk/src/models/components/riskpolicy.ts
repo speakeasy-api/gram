@@ -108,7 +108,7 @@ export type RiskPolicy = {
    */
   presidioEntities?: Array<string> | undefined;
   /**
-   * Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.75).
+   * Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
    */
   presidioScoreThreshold?: number | undefined;
   /**

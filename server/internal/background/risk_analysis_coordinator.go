@@ -89,15 +89,17 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 		for _, policy := range fetchResult.Policies {
 			for _, batch := range chunkUUIDs(fetchResult.MessageIDs, riskCoordinatorBatchSize) {
 				f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
-					ProjectID:              params.ProjectID,
-					OrganizationID:         policy.OrganizationID,
-					RiskPolicyID:           policy.ID,
-					PolicyVersion:          policy.Version,
-					MessageIDs:             batch,
-					Sources:                policy.Sources,
-					MessageTypes:           policy.MessageTypes,
-					PresidioEntities:       policy.PresidioEntities,
-					PresidioScoreThreshold: policy.PresidioScoreThreshold,
+					ProjectID:        params.ProjectID,
+					OrganizationID:   policy.OrganizationID,
+					RiskPolicyID:     policy.ID,
+					PolicyVersion:    policy.Version,
+					MessageIDs:       batch,
+					Sources:          policy.Sources,
+					MessageTypes:     policy.MessageTypes,
+					PresidioEntities: policy.PresidioEntities,
+					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
+					// left unset here to avoid a second config source.
+					PresidioScoreThreshold: 0,
 					CustomRuleIds:          policy.CustomRuleIds,
 				})
 				futures = append(futures, f)

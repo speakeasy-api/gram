@@ -23,7 +23,7 @@ type RiskPolicy struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string
 	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-	// Omit/null applies the default (0.75).
+	// Omit/null applies the default (0.5).
 	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.

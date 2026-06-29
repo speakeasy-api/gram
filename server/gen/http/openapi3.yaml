@@ -44960,7 +44960,7 @@ components:
                     description: Presidio entity types to scan for. When empty, scans all entities.
                 presidio_score_threshold:
                     type: number
-                    description: Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.75).
+                    description: Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
                     example: 0.75
                     format: double
                     minimum: 0

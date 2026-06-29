@@ -298,7 +298,7 @@ type CreateRiskPolicyResponseBody struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-	// Omit/null applies the default (0.75).
+	// Omit/null applies the default (0.5).
 	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
@@ -379,7 +379,7 @@ type GetRiskPolicyResponseBody struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-	// Omit/null applies the default (0.75).
+	// Omit/null applies the default (0.5).
 	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
@@ -453,7 +453,7 @@ type UpdateRiskPolicyResponseBody struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-	// Omit/null applies the default (0.75).
+	// Omit/null applies the default (0.5).
 	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
@@ -7172,7 +7172,7 @@ type RiskPolicyResponseBody struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-	// Omit/null applies the default (0.75).
+	// Omit/null applies the default (0.5).
 	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
