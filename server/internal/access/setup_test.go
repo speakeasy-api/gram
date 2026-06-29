@@ -34,9 +34,11 @@ var (
 	infra *testenv.Environment
 )
 
-type noopFeatureCacheWriter struct{}
+type noopProductFeatures struct{}
 
-func (noopFeatureCacheWriter) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
+func (noopProductFeatures) EnableRBAC(context.Context, string) error { return nil }
+
+func (noopProductFeatures) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
 }
 
 func TestMain(m *testing.M) {
@@ -101,7 +103,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, "test-jwt-secret", accessStore)
 
 	return ctx, &testInstance{
 		service: svc,

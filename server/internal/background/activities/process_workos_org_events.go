@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -292,7 +293,7 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	case err != nil:
 		return nil, err
 	case resolved.isNew:
-		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
+		if err := createOrganizationFromWorkOSEvent(ctx, dbtx, repo, payload, event.ID, resolved.organizationID); err != nil {
 			return nil, err
 		}
 	default:
@@ -355,7 +356,7 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	}
 }
 
-func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
+func createOrganizationFromWorkOSEvent(ctx context.Context, dbtx database.DBTX, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
 	// A zero row makes the normal cursor check accept genuine creates while
 	// keeping the create path consistent if a row appears between resolve and
 	// insert.
@@ -387,6 +388,14 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 	if err != nil {
 		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
 	}
+
+	// Enable RBAC for the newly provisioned org, atomically with its creation in
+	// this transaction, so WorkOS-origin orgs come up with access control on.
+	// Idempotent.
+	if err := productfeatures.EnableRBACTx(ctx, dbtx, organizationID); err != nil {
+		return fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
+	}
+
 	return nil
 }
 

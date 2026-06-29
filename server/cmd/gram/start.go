@@ -538,6 +538,8 @@ func newStartCommand() *cli.Command {
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -550,6 +552,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -597,7 +600,6 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
 
@@ -1043,6 +1045,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
