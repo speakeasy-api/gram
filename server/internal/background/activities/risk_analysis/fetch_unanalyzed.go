@@ -40,7 +40,10 @@ type PolicyForAnalysis struct {
 	Sources          []string
 	MessageTypes     []string
 	PresidioEntities []string
-	CustomRuleIds    []string
+	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
+	// (0.0-1.0). Zero means unset; the scanner applies DefaultPresidioScoreThreshold.
+	PresidioScoreThreshold float64
+	CustomRuleIds          []string
 }
 
 type FetchUnanalyzedArgs struct {
@@ -105,7 +108,10 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 			Sources:          p.Sources,
 			MessageTypes:     p.MessageTypes,
 			PresidioEntities: p.PresidioEntities,
-			CustomRuleIds:    p.CustomRuleIds,
+			// Absent presidio.score_threshold yields 0; the scanner reads 0 as
+			// "unset" and applies DefaultPresidioScoreThreshold.
+			PresidioScoreThreshold: PresidioScoreThresholdFromConfig(p.AnalyzerConfig),
+			CustomRuleIds:          p.CustomRuleIds,
 		}
 	}
 

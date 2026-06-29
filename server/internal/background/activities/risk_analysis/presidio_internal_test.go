@@ -253,7 +253,7 @@ func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	t.Parallel()
 
-	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, nil)
+	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	for _, findings := range results {
@@ -276,7 +276,7 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 
 	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
 
-	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 	for _, r := range results {
@@ -300,7 +300,7 @@ func TestAnalyzeOnceSingleAttemptNoRetry(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	_, err := client.analyzeOnce(t.Context(), "one", nil, nil)
+	_, err := client.analyzeOnce(t.Context(), "one", nil, 0, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "presidio returned status 503")
 	assert.Equal(t, int64(1), calls.Load(), "analyzeOnce must not retry internally")
@@ -321,7 +321,7 @@ func TestAnalyzeOnceRequestPayload(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	_, err := client.analyzeOnce(t.Context(), "alpha", []string{"EMAIL_ADDRESS"}, nil)
+	_, err := client.analyzeOnce(t.Context(), "alpha", []string{"EMAIL_ADDRESS"}, 0, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"alpha"}, got.Text)
 	assert.Equal(t, []string{"EMAIL_ADDRESS"}, got.Entities)
@@ -356,7 +356,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 	callResult := make(chan callOutcome, 1)
 
 	go func() {
-		results, err := client.AnalyzeBatch(t.Context(), []string{"hello"}, nil, func() {
+		results, err := client.AnalyzeBatch(t.Context(), []string{"hello"}, nil, 0, func() {
 			progress.Add(1)
 		})
 		callResult <- callOutcome{results: results, err: err}
@@ -408,7 +408,7 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -432,7 +432,7 @@ func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, 0, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -467,7 +467,7 @@ func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
@@ -502,7 +502,7 @@ func TestPresidioClientSurfacesOuterContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel before the call so the first ctx.Err() check trips
 
-	_, err := client.AnalyzeBatch(ctx, []string{"hang"}, nil, nil)
+	_, err := client.AnalyzeBatch(ctx, []string{"hang"}, nil, 0, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -529,7 +529,7 @@ func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	// without waiting out the 30s production default.
 	client.requestTimeout = 30 * time.Millisecond
 
-	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, 0, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -589,7 +589,7 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	// Build an input that is double the limit and contains a multibyte rune
 	// straddling the truncation point so we exercise the UTF-8 walk-back.
 	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
-	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, nil)
+	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
 	require.NoError(t, err)
 
 	// Truncation walks back to a rune start, so we land strictly inside the
@@ -750,7 +750,7 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 
 	client := newTestPresidioClient(t, srv.URL)
 	in := `{"body":"line one\nline two"}`
-	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, nil)
+	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Text, 1)
@@ -759,6 +759,45 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
 	assert.Contains(t, wire, "line one")
 	assert.Contains(t, wire, "line two")
+}
+
+func TestResolvePresidioScoreThreshold(t *testing.T) {
+	t.Parallel()
+
+	// Unset (zero) and out-of-range values fall back to the default floor.
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(0), 1e-9)
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(-0.1), 1e-9)
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(1.5), 1e-9)
+	// In-range values pass through verbatim, including the boundary 1.0.
+	assert.InDelta(t, 0.6, resolvePresidioScoreThreshold(0.6), 1e-9)
+	assert.InDelta(t, 1.0, resolvePresidioScoreThreshold(1.0), 1e-9)
+}
+
+// TestPresidioClientForwardsScoreThreshold verifies the per-call threshold is
+// sent on the /analyze request as score_threshold and that an unset (0) value
+// resolves to DefaultPresidioScoreThreshold before the request leaves.
+func TestPresidioClientForwardsScoreThreshold(t *testing.T) {
+	t.Parallel()
+
+	var got atomic.Value // holds float64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req presidioRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		got.Store(req.ScoreMin)
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+
+	_, err := client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0.9, nil)
+	require.NoError(t, err)
+	require.InDelta(t, 0.9, got.Load().(float64), 1e-9)
+
+	_, err = client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0, nil)
+	require.NoError(t, err)
+	require.InDelta(t, DefaultPresidioScoreThreshold, got.Load().(float64), 1e-9)
 }
 
 // --- helpers ---

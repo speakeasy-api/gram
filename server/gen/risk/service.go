@@ -218,6 +218,9 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
@@ -880,6 +883,9 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string

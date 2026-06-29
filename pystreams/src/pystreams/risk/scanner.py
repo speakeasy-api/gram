@@ -51,6 +51,11 @@ from pystreams.risk import presidiofp
 # Presidio default change from silently reaching for a model we don't package.
 SPACY_MODEL = "en_core_web_lg"
 
+# Minimum recognizer confidence (0.0-1.0) a match must clear to be emitted when
+# a request carries no explicit threshold. Mirrors the Go scanner's
+# DefaultPresidioScoreThreshold so both paths agree on the floor.
+DEFAULT_SCORE_THRESHOLD = 0.5
+
 _T = TypeVar("_T")
 
 
@@ -85,7 +90,7 @@ class Scanner(Protocol):
     """
 
     async def scan(
-        self, content: str, entities: list[str] | None
+        self, content: str, entities: list[str] | None, score_threshold: float
     ) -> list[Detection]: ...
 
     async def aclose(self) -> None: ...
@@ -140,9 +145,11 @@ class ThreadScanner(_AsyncCloseable):
             self._limiter = anyio.CapacityLimiter(self._max_concurrency)
         return self._limiter
 
-    async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
+    async def scan(
+        self, content: str, entities: list[str] | None, score_threshold: float
+    ) -> list[Detection]:
         return await asyncify(_scan_to_detections, limiter=self._get_limiter())(
-            self._analyzer, content, entities
+            self._analyzer, content, entities, score_threshold
         )
 
     async def aclose(self) -> None:
@@ -260,8 +267,10 @@ class ProcessPoolScanner(_AsyncCloseable):
             raise
         return scanner
 
-    async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
-        future = await self._submit(_worker_scan, content, entities)
+    async def scan(
+        self, content: str, entities: list[str] | None, score_threshold: float
+    ) -> list[Detection]:
+        future = await self._submit(_worker_scan, content, entities, score_threshold)
         if self._scan_timeout is None:
             return await self._await_result(future)
         try:
@@ -346,7 +355,9 @@ def _worker_init() -> None:
     _WORKER_ANALYZER = _build_analyzer()
 
 
-def _worker_scan(content: str, entities: list[str] | None) -> list[Detection]:
+def _worker_scan(
+    content: str, entities: list[str] | None, score_threshold: float
+) -> list[Detection]:
     """Scan in a worker process using its cached analyzer."""
     global _WORKER_ANALYZER
     analyzer = _WORKER_ANALYZER
@@ -354,7 +365,7 @@ def _worker_scan(content: str, entities: list[str] | None) -> list[Detection]:
         # Defensive: the initializer always runs first, but rebuild rather than
         # crash the worker if somehow it didn't.
         analyzer = _WORKER_ANALYZER = _build_analyzer()
-    return _scan_to_detections(analyzer, content, entities)
+    return _scan_to_detections(analyzer, content, entities, score_threshold)
 
 
 def _worker_warm() -> int:
@@ -363,13 +374,16 @@ def _worker_warm() -> int:
     The short sleep lets concurrently-submitted warmups land on distinct workers,
     so ``create`` reliably spins up every worker before serving real traffic.
     """
-    _worker_scan("warm up: a@b.com", None)
+    _worker_scan("warm up: a@b.com", None, DEFAULT_SCORE_THRESHOLD)
     time.sleep(0.25)
     return os.getpid()
 
 
 def _scan_to_detections(
-    analyzer: Analyzer, content: str, entities: list[str] | None
+    analyzer: Analyzer,
+    content: str,
+    entities: list[str] | None,
+    score_threshold: float,
 ) -> list[Detection]:
     """Analyze the content and return the real (non-false-positive) matches.
 
@@ -379,7 +393,12 @@ def _scan_to_detections(
     embedded ASN database), and the byte-offset conversion all stay off the event
     loop wherever it runs.
     """
-    results = analyzer.analyze(text=content, entities=entities, language="en")
+    results = analyzer.analyze(
+        text=content,
+        entities=entities,
+        language="en",
+        score_threshold=score_threshold,
+    )
     if not results:
         return []
     n = len(content)
@@ -478,5 +497,10 @@ class Analyzer(Protocol):
     """
 
     def analyze(
-        self, *, text: str, entities: list[str] | None, language: str
+        self,
+        *,
+        text: str,
+        entities: list[str] | None,
+        language: str,
+        score_threshold: float,
     ) -> Sequence[Recognized]: ...

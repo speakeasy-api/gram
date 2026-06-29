@@ -93,7 +93,10 @@ type AnalyzeBatchArgs struct {
 	Sources          []string
 	MessageTypes     []string
 	PresidioEntities []string
-	CustomRuleIds    []string
+	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
+	// (0.0-1.0). Zero means unset; the scanner applies DefaultPresidioScoreThreshold.
+	PresidioScoreThreshold float64
+	CustomRuleIds          []string
 }
 
 type AnalyzeBatchResult struct {

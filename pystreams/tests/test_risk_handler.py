@@ -7,7 +7,7 @@ from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
 from pystreams.risk.handler import PresidioHandler
-from pystreams.risk.scanner import Detection, _AsyncCloseable
+from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, _AsyncCloseable
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -47,9 +47,13 @@ class FakeScanner(_AsyncCloseable):
         self._detections = detections or []
         self._error = error
         self.calls: list[tuple[str, list[str] | None]] = []
+        self.score_thresholds: list[float] = []
 
-    async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
+    async def scan(
+        self, content: str, entities: list[str] | None, score_threshold: float
+    ) -> list[Detection]:
         self.calls.append((content, entities))
+        self.score_thresholds.append(score_threshold)
         if self._error is not None:
             raise self._error
         return list(self._detections)
@@ -219,6 +223,28 @@ async def test_empty_entities_means_scan_all():
     assert scanner.calls == [("a@b.com", None)]
     (entry,) = logs
     assert entry["requested_entities"] == []
+
+
+async def test_score_threshold_forwarded_to_scanner():
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    await handler.handle(
+        _message("a@b.com", request_id="req-1", score_threshold=0.9), _meta()
+    )
+
+    # The per-request threshold is passed through to the scanner verbatim.
+    assert scanner.score_thresholds == [0.9]
+
+
+async def test_unset_score_threshold_defaults():
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    # No score_threshold on the request (proto default 0.0) -> default floor.
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    assert scanner.score_thresholds == [DEFAULT_SCORE_THRESHOLD]
 
 
 async def test_scan_failure_is_swallowed_and_logged():

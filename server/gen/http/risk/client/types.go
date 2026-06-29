@@ -25,6 +25,9 @@ type CreateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -75,6 +78,9 @@ type UpdateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -280,6 +286,9 @@ type CreateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.75).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -358,6 +367,9 @@ type GetRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.75).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -429,6 +441,9 @@ type UpdateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.75).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -6750,6 +6765,9 @@ type RiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.75).
+	PresidioScoreThreshold *float64 `form:"presidio_score_threshold,omitempty" json:"presidio_score_threshold,omitempty" xml:"presidio_score_threshold,omitempty"`
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
@@ -7117,16 +7135,17 @@ type TestDetectionRuleMatchResponseBody struct {
 // of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRiskPolicyRequestBody {
 	body := &CreateRiskPolicyRequestBody{
-		Name:         p.Name,
-		PolicyType:   p.PolicyType,
-		ScopeInclude: p.ScopeInclude,
-		ScopeExempt:  p.ScopeExempt,
-		Enabled:      p.Enabled,
-		Action:       p.Action,
-		AudienceType: p.AudienceType,
-		AutoName:     p.AutoName,
-		UserMessage:  p.UserMessage,
-		Prompt:       p.Prompt,
+		Name:                   p.Name,
+		PolicyType:             p.PolicyType,
+		PresidioScoreThreshold: p.PresidioScoreThreshold,
+		ScopeInclude:           p.ScopeInclude,
+		ScopeExempt:            p.ScopeExempt,
+		Enabled:                p.Enabled,
+		Action:                 p.Action,
+		AudienceType:           p.AudienceType,
+		AutoName:               p.AutoName,
+		UserMessage:            p.UserMessage,
+		Prompt:                 p.Prompt,
 	}
 	{
 		var zero string
@@ -7198,16 +7217,17 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 // of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRiskPolicyRequestBody {
 	body := &UpdateRiskPolicyRequestBody{
-		ID:           p.ID,
-		Name:         p.Name,
-		ScopeInclude: p.ScopeInclude,
-		ScopeExempt:  p.ScopeExempt,
-		Enabled:      p.Enabled,
-		Action:       p.Action,
-		AudienceType: p.AudienceType,
-		AutoName:     p.AutoName,
-		UserMessage:  p.UserMessage,
-		Prompt:       p.Prompt,
+		ID:                     p.ID,
+		Name:                   p.Name,
+		PresidioScoreThreshold: p.PresidioScoreThreshold,
+		ScopeInclude:           p.ScopeInclude,
+		ScopeExempt:            p.ScopeExempt,
+		Enabled:                p.Enabled,
+		Action:                 p.Action,
+		AudienceType:           p.AudienceType,
+		AutoName:               p.AutoName,
+		UserMessage:            p.UserMessage,
+		Prompt:                 p.Prompt,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -7455,23 +7475,24 @@ func NewTestDetectionRuleRequestBody(p *risk.TestDetectionRulePayload) *TestDete
 // endpoint result from a HTTP "OK" response.
 func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.RiskPolicy {
 	v := &types.RiskPolicy{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		Name:            *body.Name,
-		PolicyType:      *body.PolicyType,
-		ScopeInclude:    body.ScopeInclude,
-		ScopeExempt:     body.ScopeExempt,
-		Enabled:         *body.Enabled,
-		Action:          *body.Action,
-		AudienceType:    *body.AudienceType,
-		AutoName:        *body.AutoName,
-		UserMessage:     body.UserMessage,
-		Prompt:          body.Prompt,
-		Version:         *body.Version,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-		PendingMessages: *body.PendingMessages,
-		TotalMessages:   *body.TotalMessages,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   *body.Name,
+		PolicyType:             *body.PolicyType,
+		PresidioScoreThreshold: body.PresidioScoreThreshold,
+		ScopeInclude:           body.ScopeInclude,
+		ScopeExempt:            body.ScopeExempt,
+		Enabled:                *body.Enabled,
+		Action:                 *body.Action,
+		AudienceType:           *body.AudienceType,
+		AutoName:               *body.AutoName,
+		UserMessage:            body.UserMessage,
+		Prompt:                 body.Prompt,
+		Version:                *body.Version,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+		PendingMessages:        *body.PendingMessages,
+		TotalMessages:          *body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -7838,23 +7859,24 @@ func NewListRiskPoliciesGatewayError(body *ListRiskPoliciesGatewayErrorResponseB
 // endpoint result from a HTTP "OK" response.
 func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPolicy {
 	v := &types.RiskPolicy{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		Name:            *body.Name,
-		PolicyType:      *body.PolicyType,
-		ScopeInclude:    body.ScopeInclude,
-		ScopeExempt:     body.ScopeExempt,
-		Enabled:         *body.Enabled,
-		Action:          *body.Action,
-		AudienceType:    *body.AudienceType,
-		AutoName:        *body.AutoName,
-		UserMessage:     body.UserMessage,
-		Prompt:          body.Prompt,
-		Version:         *body.Version,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-		PendingMessages: *body.PendingMessages,
-		TotalMessages:   *body.TotalMessages,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   *body.Name,
+		PolicyType:             *body.PolicyType,
+		PresidioScoreThreshold: body.PresidioScoreThreshold,
+		ScopeInclude:           body.ScopeInclude,
+		ScopeExempt:            body.ScopeExempt,
+		Enabled:                *body.Enabled,
+		Action:                 *body.Action,
+		AudienceType:           *body.AudienceType,
+		AutoName:               *body.AutoName,
+		UserMessage:            body.UserMessage,
+		Prompt:                 body.Prompt,
+		Version:                *body.Version,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+		PendingMessages:        *body.PendingMessages,
+		TotalMessages:          *body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -8055,23 +8077,24 @@ func NewGetRiskPolicyGatewayError(body *GetRiskPolicyGatewayErrorResponseBody) *
 // endpoint result from a HTTP "OK" response.
 func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.RiskPolicy {
 	v := &types.RiskPolicy{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		Name:            *body.Name,
-		PolicyType:      *body.PolicyType,
-		ScopeInclude:    body.ScopeInclude,
-		ScopeExempt:     body.ScopeExempt,
-		Enabled:         *body.Enabled,
-		Action:          *body.Action,
-		AudienceType:    *body.AudienceType,
-		AutoName:        *body.AutoName,
-		UserMessage:     body.UserMessage,
-		Prompt:          body.Prompt,
-		Version:         *body.Version,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-		PendingMessages: *body.PendingMessages,
-		TotalMessages:   *body.TotalMessages,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   *body.Name,
+		PolicyType:             *body.PolicyType,
+		PresidioScoreThreshold: body.PresidioScoreThreshold,
+		ScopeInclude:           body.ScopeInclude,
+		ScopeExempt:            body.ScopeExempt,
+		Enabled:                *body.Enabled,
+		Action:                 *body.Action,
+		AudienceType:           *body.AudienceType,
+		AutoName:               *body.AutoName,
+		UserMessage:            body.UserMessage,
+		Prompt:                 body.Prompt,
+		Version:                *body.Version,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+		PendingMessages:        *body.PendingMessages,
+		TotalMessages:          *body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -12881,6 +12904,16 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
 		}
 	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 0, true))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -12975,6 +13008,16 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
 		}
 	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 0, true))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -13051,6 +13094,16 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.PolicyType != nil {
 		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 0, true))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
 	if body.Action != nil {
@@ -21402,6 +21455,16 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.PolicyType != nil {
 		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 0, true))
+		}
+	}
+	if body.PresidioScoreThreshold != nil {
+		if *body.PresidioScoreThreshold > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
 	if body.Action != nil {

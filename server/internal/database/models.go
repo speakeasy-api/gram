@@ -1333,6 +1333,7 @@ type RiskPolicy struct {
 	PolicyType           string
 	Sources              []string
 	PresidioEntities     []string
+	AnalyzerConfig       []byte
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string

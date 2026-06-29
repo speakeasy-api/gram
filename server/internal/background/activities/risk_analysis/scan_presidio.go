@@ -14,9 +14,10 @@ import (
 )
 
 func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]Finding, error) {
-	a.publishPresidioScanRequests(ctx, args, requestID, messages)
+	scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
+	a.publishPresidioScanRequests(ctx, args, requestID, messages, scoreThreshold)
 
-	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, func() {
+	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, scoreThreshold, func() {
 		activity.RecordHeartbeat(ctx, SourcePresidio)
 	})
 	if results == nil {
@@ -32,7 +33,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 	return results, err
 }
 
-func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
+func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, scoreThreshold float64) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, len(messages))
 	for i, msg := range messages {
@@ -45,9 +46,10 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 			RiskPolicyVersion: &args.PolicyVersion,
 			CreatedAt:         &createdAt,
 
-			ReplyUrn: nil,
-			Content:  new(msg.Content),
-			Entities: args.PresidioEntities,
+			ReplyUrn:       nil,
+			Content:        new(msg.Content),
+			Entities:       args.PresidioEntities,
+			ScoreThreshold: &scoreThreshold,
 		}.Build())
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)

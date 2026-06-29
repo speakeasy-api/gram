@@ -254,6 +254,15 @@ func FromPGFloat8(t pgtype.Float8) *float64 {
 	return &t.Float64
 }
 
+// PtrToPGFloat8 converts a float64 pointer to a pgtype.Float8. If the pointer
+// is nil, the result has Valid set to false.
+func PtrToPGFloat8(v *float64) pgtype.Float8 {
+	if v == nil {
+		return pgtype.Float8{Float64: 0, Valid: false}
+	}
+	return pgtype.Float8{Float64: *v, Valid: true}
+}
+
 // FromBytes converts a byte slice to a string pointer. If the byte slice is
 // empty, it returns nil.
 func FromBytes(b []byte) *string {
