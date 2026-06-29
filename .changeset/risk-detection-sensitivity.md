@@ -1,6 +1,5 @@
 ---
 "dashboard": minor
-"@gram/client": patch
 ---
 
 Risk policies: configurable detection sensitivity. Adds a per-policy minimum
