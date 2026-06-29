@@ -97,18 +97,27 @@ func sanitizeMCPName(name string) string {
 // carry a pre-computed ToolPrefix because Codex's sanitizer differs from
 // Claude's (every non-alphanumeric/underscore character becomes "_").
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
+	var matched *MCPServerEntry
 	for i := range entries {
-		if entries[i].ToolPrefix != "" && entries[i].ToolPrefix == serverPrefix {
-			return &entries[i]
+		if !mcpEntryMatchesPrefix(entries[i], serverPrefix) {
+			continue
 		}
-		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
-			return &entries[i]
+		if matched != nil {
+			return nil
 		}
-		if mcpServerPrefix(entries[i].Source, entries[i].PluginName, entries[i].Name) == serverPrefix {
-			return &entries[i]
-		}
+		matched = &entries[i]
 	}
-	return nil
+	return matched
+}
+
+func mcpEntryMatchesPrefix(entry MCPServerEntry, serverPrefix string) bool {
+	if entry.ToolPrefix != "" && entry.ToolPrefix == serverPrefix {
+		return true
+	}
+	if entry.ConnectorUUID != "" && entry.ConnectorUUID == serverPrefix {
+		return true
+	}
+	return mcpServerPrefix(entry.Source, entry.PluginName, entry.Name) == serverPrefix
 }
 
 // matchCodexCachedMCPEntry resolves a raw Codex tool name
@@ -124,6 +133,7 @@ func matchCodexCachedMCPEntry(entries []MCPServerEntry, rawToolName string) *MCP
 		return nil
 	}
 	var best *MCPServerEntry
+	ambiguous := false
 	for i := range entries {
 		p := entries[i].ToolPrefix
 		if p == "" || !strings.HasPrefix(rest, p+"__") {
@@ -131,12 +141,47 @@ func matchCodexCachedMCPEntry(entries []MCPServerEntry, rawToolName string) *MCP
 		}
 		if best == nil || len(p) > len(best.ToolPrefix) {
 			best = &entries[i]
+			ambiguous = false
+			continue
+		}
+		if len(p) == len(best.ToolPrefix) {
+			ambiguous = true
 		}
 	}
 	if best != nil {
+		if ambiguous {
+			return nil
+		}
 		return best
 	}
 	return matchCachedMCPEntry(entries, mcpServerIdentityFromToolName(rawToolName))
+}
+
+// matchCodexCachedMCPServerEntry resolves the explicit server name Codex
+// sends in built-in MCP meta-tool inputs, such as list_mcp_resources. Unlike
+// mcp__ tool names, this value is the configured server name rather than a
+// sanitized prefix.
+func matchCodexCachedMCPServerEntry(entries []MCPServerEntry, serverName string) *MCPServerEntry {
+	serverName = strings.TrimSpace(serverName)
+	if serverName == "" {
+		return nil
+	}
+	var matched *MCPServerEntry
+	for i := range entries {
+		if entries[i].Name == serverName {
+			if matched != nil {
+				return nil
+			}
+			matched = &entries[i]
+		}
+	}
+	if matched != nil {
+		return matched
+	}
+	if matched := matchCachedMCPEntry(entries, codexSanitizeToolName(serverName)); matched != nil {
+		return matched
+	}
+	return matchCachedMCPEntry(entries, serverName)
 }
 
 // applyMCPInventoryAttrs decorates a telemetry attribute map with the
