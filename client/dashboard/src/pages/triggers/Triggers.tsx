@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
@@ -531,6 +532,7 @@ function TriggerDialog({
       },
     });
     invalidateAll();
+    toast.success("Trigger created");
     handleOpenChange(false);
   };
 
@@ -550,6 +552,7 @@ function TriggerDialog({
       },
     });
     invalidateAll();
+    toast.success("Trigger saved");
     handleOpenChange(false);
   };
 
@@ -559,6 +562,7 @@ function TriggerDialog({
       request: { id: editingTrigger.id },
     });
     invalidateAll();
+    toast.success("Trigger deleted");
     handleOpenChange(false);
   };
 

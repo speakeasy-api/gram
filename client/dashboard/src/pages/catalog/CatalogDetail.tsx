@@ -27,6 +27,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { toast } from "sonner";
 
 // Map of server specifiers to their website URLs
 const SERVER_WEBSITE_MAP: Record<string, string> = {
@@ -117,6 +118,7 @@ export default function CatalogDetail(): JSX.Element {
       });
     },
     onSuccess: async () => {
+      toast.success("Server removed");
       await refetchDeployment();
     },
   });

@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
@@ -58,6 +59,7 @@ export function AssistantDraftPanel(): JSX.Element {
   const del = useAssistantsDeleteMutation({
     onSuccess: () => {
       void invalidateAllAssistantsList(queryClient);
+      toast.success("Assistant deleted");
       routes.assistants.goTo();
     },
   });

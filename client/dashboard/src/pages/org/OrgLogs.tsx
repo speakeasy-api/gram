@@ -11,6 +11,7 @@ import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query";
+import { toast } from "sonner";
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -55,6 +56,12 @@ function OrgLogsInner() {
       onSuccess: (_, variables) => {
         const { featureName, enabled } =
           variables.request.setProductFeatureRequestBody;
+        const labels: Partial<Record<FeatureName, string>> = {
+          [FeatureName.Logs]: "Logs",
+          [FeatureName.ToolIoLogs]: "Tool I/O logging",
+          [FeatureName.SessionCapture]: "Agent session capture",
+          [FeatureName.ObservabilityMode]: "Observability mode",
+        };
         if (featureName === FeatureName.Logs) {
           setLogsEnabled(enabled);
         } else if (featureName === FeatureName.ToolIoLogs) {
@@ -63,6 +70,10 @@ function OrgLogsInner() {
           setSessionCaptureEnabled(enabled);
         } else if (featureName === FeatureName.ObservabilityMode) {
           setObservabilityModeEnabled(enabled);
+        }
+        const label = labels[featureName];
+        if (label) {
+          toast.success(`${label} ${enabled ? "enabled" : "disabled"}`);
         }
       },
     });

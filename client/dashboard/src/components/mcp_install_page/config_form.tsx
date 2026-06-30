@@ -6,6 +6,7 @@ import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
 import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { toast } from "sonner";
 import { CompactUpload } from "../upload";
 import type { UseMcpMetadataMetadataFormResult } from "./useMcpMetadataForm";
 
@@ -150,7 +151,14 @@ export function InstallPageConfigForm({
             </Button>
             <Button
               onClick={() => {
-                form.save();
+                void form
+                  .saveAsync()
+                  .then(() => {
+                    toast.success("Branding saved");
+                  })
+                  .catch(() => {
+                    // Error toast is shown by the global mutation error handler.
+                  });
                 setOpen(false);
               }}
               disabled={isLoading || !form.valid.valid || !form.brandingDirty}

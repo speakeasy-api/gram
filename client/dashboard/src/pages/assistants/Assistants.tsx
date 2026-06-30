@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
 import { getGradientColors } from "@/components/gradient-colors";
@@ -347,6 +348,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
       void invalidateAllAssistantsList(queryClient);
+      toast.success("Assistant deleted");
     },
   });
 

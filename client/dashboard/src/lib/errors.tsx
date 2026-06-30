@@ -13,7 +13,7 @@ interface ErrorHandlerOptions {
 }
 
 export function handleError(
-  error: Error | string,
+  error: unknown,
   options: ErrorHandlerOptions = {},
 ): void {
   const {
@@ -23,7 +23,12 @@ export function handleError(
     silent = false,
   } = options;
 
-  const errorMessage = typeof error === "string" ? error : error.message;
+  const errorMessage =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "An unexpected error occurred";
 
   // Log error for debugging
   console.error("Error handled:", error);

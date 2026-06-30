@@ -131,6 +131,7 @@ function RBACManagementSection() {
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
       setConfirmAction(null);
+      toast.success("RBAC enabled");
     },
   });
 
@@ -138,6 +139,7 @@ function RBACManagementSection() {
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
       setConfirmAction(null);
+      toast.success("RBAC disabled");
     },
   });
 
@@ -271,8 +273,10 @@ function ProductFeaturesTab() {
     error: mutError,
     variables,
   } = useFeaturesSetMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       void invalidateAllProductFeatures(queryClient);
+      const { enabled } = variables.request.setProductFeatureRequestBody;
+      toast.success(enabled ? "Feature enabled" : "Feature disabled");
     },
   });
 

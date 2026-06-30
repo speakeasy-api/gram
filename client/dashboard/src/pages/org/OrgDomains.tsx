@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
+import { toast } from "sonner";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -255,6 +256,7 @@ function OrgDomainsInner() {
       setPendingIPs([]);
       setPendingIPsValid(true);
       setIsAllowlistExpanded(false);
+      toast.success("Domain added");
       setTimeout(() => {
         void domainRefetch();
       }, 2000);
@@ -268,6 +270,7 @@ function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
+      toast.success("Domain removed");
       await invalidateAllGetDomain(queryClient);
     },
   });
@@ -275,6 +278,7 @@ function OrgDomainsInner() {
   const updateDomainMutation = useUpdateDomainMutation({
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
+      toast.success("Allowlist saved");
       await invalidateAllGetDomain(queryClient);
     },
     onError: (error) => {

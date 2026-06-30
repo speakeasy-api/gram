@@ -18,6 +18,7 @@ import {
   Server as ServerIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useCreateCollection } from "./hooks";
 
 function slugify(name: string): string {
@@ -204,6 +205,7 @@ function CreateCollectionForm() {
         },
       },
     });
+    toast.success("Collection created");
     orgRoutes.collections.goTo();
   };
 

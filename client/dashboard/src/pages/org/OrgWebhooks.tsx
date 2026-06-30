@@ -22,6 +22,7 @@ import React, { JSX } from "react";
 import "svix-react/style.css";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useSessionData } from "@/contexts/Auth";
+import { toast } from "sonner";
 
 export default function OrgWebhooks(): React.JSX.Element {
   const { data: features, isLoading } = useProductFeatures();
@@ -52,9 +53,11 @@ export default function OrgWebhooks(): React.JSX.Element {
 function OrgWebhooksInner() {
   const orgResult = useOrganization();
   const enableWebhooks = useEnableWebhooksMutation({
+    onSuccess: () => toast.success("Webhooks enabled"),
     onSettled: () => orgResult.refetch(),
   });
   const disableWebhooks = useDisableWebhooksMutation({
+    onSuccess: () => toast.success("Webhooks disabled"),
     onSettled: () => orgResult.refetch(),
   });
 

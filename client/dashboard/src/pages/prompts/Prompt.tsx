@@ -6,6 +6,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router";
+import { toast } from "sonner";
 import { PromptEditor } from "./PromptEditor";
 
 export default function PromptPage(): JSX.Element {
@@ -13,6 +14,9 @@ export default function PromptPage(): JSX.Element {
   const { data, error, status } = useTemplate({ name: promptName });
   const queryClient = useQueryClient();
   const m = useUpdateTemplateMutation({
+    onSuccess: () => {
+      toast.success("Prompt saved");
+    },
     onSettled: () => {
       void invalidateTemplate(queryClient, [{ name: promptName }]);
     },

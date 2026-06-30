@@ -47,6 +47,8 @@ import {
 } from "@/pages/security/policy-data";
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import { cn } from "@/lib/utils";
+import { handleError } from "@/lib/errors";
+import { toast } from "sonner";
 
 interface ConfigurePoliciesStepProps {
   onComplete: () => void;
@@ -274,7 +276,10 @@ export function ConfigurePoliciesStep({
     onSuccess: invalidatePolicies,
   });
   const updatePolicyMutation = useRiskPoliciesUpdateMutation({
-    onSuccess: invalidatePolicies,
+    onSuccess: () => {
+      invalidatePolicies();
+      toast.success("Policy updated");
+    },
   });
 
   const persistConfigChange = (cat: RuleCategory, nextCfg: CategoryConfig) => {
@@ -377,11 +382,15 @@ export function ConfigurePoliciesStep({
           },
         },
         {
-          onError: () => {
+          onSuccess: () => {
+            toast.success("Policy enabled");
+          },
+          onError: (error) => {
             setConfigs((prev) => ({
               ...prev,
               [cat]: { ...prev[cat], enabled: false },
             }));
+            handleError(error, { title: "Failed to update policy" });
           },
         },
       );
@@ -390,11 +399,15 @@ export function ConfigurePoliciesStep({
       deletePolicyMutation.mutate(
         { request: { id: existing.id } },
         {
-          onError: () => {
+          onSuccess: () => {
+            toast.success("Policy disabled");
+          },
+          onError: (error) => {
             setConfigs((prev) => ({
               ...prev,
               [cat]: { ...prev[cat], enabled: true },
             }));
+            handleError(error, { title: "Failed to update policy" });
           },
         },
       );

@@ -537,6 +537,7 @@ function CustomRuleDetail({
         matcher: detectionExpr,
       };
       setSaveState("saved");
+      toast.success("Detection rule updated");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
       }
