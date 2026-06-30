@@ -1368,10 +1368,116 @@ emit_deny() {
     "$(json_string "$1")" "$(json_string "$1")"
 }
 
+gram_stat_uid_mode() {
+  local path="$1"
+  if stat -c '%%u %%a' "$path" >/dev/null 2>&1; then
+    stat -c '%%u %%a' "$path"
+    return
+  fi
+  stat -f '%%u %%Lp' "$path" 2>/dev/null
+}
+
+gram_trusted_cursor_manifest() {
+  local path="$1"
+  [ -n "$path" ] && [ -f "$path" ] || return 1
+  [ ! -L "$path" ] || return 1
+
+  local dir
+  dir=$(dirname "$path")
+  [ -d "$dir" ] && [ ! -L "$dir" ] || return 1
+
+  local uid file_stat dir_stat file_uid file_mode dir_uid dir_mode
+  uid=$(id -u 2>/dev/null) || return 1
+  file_stat=$(gram_stat_uid_mode "$path") || return 1
+  dir_stat=$(gram_stat_uid_mode "$dir") || return 1
+
+  file_uid="${file_stat%% *}"
+  file_mode="${file_stat#* }"
+  dir_uid="${dir_stat%% *}"
+  dir_mode="${dir_stat#* }"
+
+  [ "$file_uid" = "$uid" ] && [ "$dir_uid" = "$uid" ] || return 1
+  [ -n "$file_mode" ] && [ -n "$dir_mode" ] || return 1
+  # Cursor installs plugin manifests as user-owned files under plugin
+  # directories that may be group/world readable (e.g. 0644/0755). Only reject
+  # writability by group/other users, which is the tampering boundary here.
+  [ $((8#$file_mode & 022)) -eq 0 ] || return 1
+  [ $((8#$dir_mode & 022)) -eq 0 ] || return 1
+}
+
+gram_enrich_cursor_mcp_payload() {
+  local input="$1"
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '%%s' "$input"
+    return
+  fi
+
+  local event
+  event=$(printf '%%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || {
+    printf '%%s' "$input"
+    return
+  }
+  case "$event" in
+    beforeMCPExecution|afterMCPExecution) ;;
+    *)
+      printf '%%s' "$input"
+      return
+      ;;
+  esac
+
+  local existing_url
+  existing_url=$(printf '%%s' "$input" | jq -r '(.url // .mcp_server_url // "") | select(type == "string")' 2>/dev/null) || true
+  if [ -n "$existing_url" ]; then
+    printf '%%s' "$input"
+    return
+  fi
+
+  local server_name
+  server_name=$(printf '%%s' "$input" | jq -r '(.mcp_server_name // .command // "") | select(type == "string")' 2>/dev/null) || true
+  if [ -z "$server_name" ]; then
+    printf '%%s' "$input"
+    return
+  fi
+
+  local roots=()
+  if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    roots+=("$(dirname "$CURSOR_PLUGIN_ROOT")")
+  fi
+  roots+=("${HOME}/.cursor/plugins/local")
+
+  local matched_url=""
+  local ambiguous=0
+  local root mcp_file url
+  for root in "${roots[@]}"; do
+    for mcp_file in "$root"/*/mcp.json; do
+      gram_trusted_cursor_manifest "$mcp_file" || continue
+      url=$(jq -r --arg name "$server_name" '.mcpServers[$name].url // empty | select(type == "string")' "$mcp_file" 2>/dev/null) || continue
+      [ -n "$url" ] || continue
+      if [ -z "$matched_url" ]; then
+        matched_url="$url"
+        continue
+      fi
+      if [ "$matched_url" != "$url" ]; then
+        ambiguous=1
+        break
+      fi
+    done
+    [ "$ambiguous" -eq 0 ] || break
+  done
+
+  if [ -z "$matched_url" ] || [ "$ambiguous" -ne 0 ]; then
+    printf '%%s' "$input"
+    return
+  fi
+
+  printf '%%s' "$input" | jq -c --arg url "$matched_url" '. + {url: $url, mcp_server_url: $url}' 2>/dev/null || printf '%%s' "$input"
+}
+
 payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
+payload=$(gram_enrich_cursor_mcp_payload "$payload")
 
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
