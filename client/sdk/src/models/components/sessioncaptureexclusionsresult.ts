@@ -32,35 +32,7 @@ export const SessionCaptureExclusionsResult$inboundSchema: z.ZodMiniType<
     });
   }),
 );
-/** @internal */
-export type SessionCaptureExclusionsResult$Outbound = {
-  user_ids: Array<string>;
-};
 
-/** @internal */
-export const SessionCaptureExclusionsResult$outboundSchema: z.ZodMiniType<
-  SessionCaptureExclusionsResult$Outbound,
-  SessionCaptureExclusionsResult
-> = z.pipe(
-  z.object({
-    userIds: z.array(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      userIds: "user_ids",
-    });
-  }),
-);
-
-export function sessionCaptureExclusionsResultToJSON(
-  sessionCaptureExclusionsResult: SessionCaptureExclusionsResult,
-): string {
-  return JSON.stringify(
-    SessionCaptureExclusionsResult$outboundSchema.parse(
-      sessionCaptureExclusionsResult,
-    ),
-  );
-}
 export function sessionCaptureExclusionsResultFromJSON(
   jsonString: string,
 ): SafeParseResult<SessionCaptureExclusionsResult, SDKValidationError> {

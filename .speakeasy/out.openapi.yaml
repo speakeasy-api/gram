@@ -19340,7 +19340,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SessionCaptureExclusionsResult'
+              $ref: '#/components/schemas/SetSessionCaptureExclusionsRequestBody'
         required: true
       responses:
         "200":
@@ -46715,6 +46715,18 @@ components:
           $ref: '#/components/schemas/Project'
       required:
         - project
+    SetSessionCaptureExclusionsRequestBody:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+            maxLength: 256
+          description: Gram user IDs to exclude. The provided list replaces any existing exclusions for the organization.
+          maxItems: 1000
+      required:
+        - user_ids
     SetSourceEnvironmentLinkRequestBody:
       type: object
       properties:

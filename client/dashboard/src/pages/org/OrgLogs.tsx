@@ -310,13 +310,12 @@ function OrgLogsInner() {
             <div className="ml-6">
               <RequireScope scope="org:admin" level="component">
                 <MultiSelect
-                  key={excludedUserIds.join(",")}
                   options={memberOptions}
                   defaultValue={excludedUserIds}
                   onValueChange={(userIds) =>
                     setExclusions({
                       request: {
-                        sessionCaptureExclusionsResult: { userIds },
+                        setSessionCaptureExclusionsRequestBody: { userIds },
                       },
                     })
                   }

@@ -89,10 +89,18 @@ func BuildSetSessionCaptureExclusionsPayload(featuresSetSessionCaptureExclusions
 	{
 		err = json.Unmarshal([]byte(featuresSetSessionCaptureExclusionsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_ids\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_ids\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
 		}
 		if body.UserIds == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("user_ids", "body"))
+		}
+		if len(body.UserIds) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids", body.UserIds, len(body.UserIds), 1000, false))
+		}
+		for _, e := range body.UserIds {
+			if utf8.RuneCountInString(e) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids[*]", e, utf8.RuneCountInString(e), 256, false))
+			}
 		}
 		if err != nil {
 			return nil, err

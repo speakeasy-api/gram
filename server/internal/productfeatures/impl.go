@@ -21,7 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -242,6 +244,25 @@ func (s *Service) SetSessionCaptureExclusions(ctx context.Context, payload *gen.
 		desired = append(desired, uid)
 	}
 
+	// Only active members of this org may be excluded. Without this, an org
+	// admin could create exclusions (and audit entries) for arbitrary global
+	// user IDs, outside the "specific members" contract.
+	if len(desired) > 0 {
+		members, err := orgrepo.New(s.db).ListActiveOrganizationUserIDs(ctx, org)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list active organization members").LogError(ctx, s.logger, attr.SlogOrganizationID(org))
+		}
+		memberSet := make(map[string]struct{}, len(members))
+		for _, uid := range members {
+			memberSet[uid] = struct{}{}
+		}
+		for _, uid := range desired {
+			if _, ok := memberSet[uid]; !ok {
+				return nil, oops.E(oops.CodeBadRequest, nil, "one or more users are not active members of the organization").LogError(ctx, s.logger, attr.SlogOrganizationID(org))
+			}
+		}
+	}
+
 	existing, err := s.repo.ListSessionCaptureExclusions(ctx, org)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list existing session capture exclusions").LogError(ctx, s.logger, attr.SlogOrganizationID(org))
@@ -280,7 +301,7 @@ func (s *Service) SetSessionCaptureExclusions(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(org))
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	qtx := s.repo.WithTx(tx)
 
 	if _, err := qtx.ClearSessionCaptureExclusions(ctx, org); err != nil {
@@ -294,7 +315,7 @@ func (s *Service) SetSessionCaptureExclusions(ctx context.Context, payload *gen.
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, uid := range added {
-		if err := s.audit.LogSessionCaptureExclusionAdd(ctx, tx, audit.LogSessionCaptureExclusionAddEvent{
+		if err := s.audit.LogSessionCaptureExclusionAdd(ctx, tx, audit.LogSessionCaptureExclusionEvent{
 			OrganizationID: org, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil,
 			ExcludedUserID: uid, ExcludedUserDisplayName: names[uid],
 		}); err != nil {
@@ -302,7 +323,7 @@ func (s *Service) SetSessionCaptureExclusions(ctx context.Context, payload *gen.
 		}
 	}
 	for _, uid := range removed {
-		if err := s.audit.LogSessionCaptureExclusionRemove(ctx, tx, audit.LogSessionCaptureExclusionRemoveEvent{
+		if err := s.audit.LogSessionCaptureExclusionRemove(ctx, tx, audit.LogSessionCaptureExclusionEvent{
 			OrganizationID: org, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil,
 			ExcludedUserID: uid, ExcludedUserDisplayName: names[uid],
 		}); err != nil {

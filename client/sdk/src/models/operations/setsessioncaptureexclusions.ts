@@ -15,7 +15,8 @@ export type SetSessionCaptureExclusionsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  sessionCaptureExclusionsResult: components.SessionCaptureExclusionsResult;
+  setSessionCaptureExclusionsRequestBody:
+    components.SetSessionCaptureExclusionsRequestBody;
 };
 
 /** @internal */
@@ -51,8 +52,8 @@ export function setSessionCaptureExclusionsSecurityToJSON(
 /** @internal */
 export type SetSessionCaptureExclusionsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  SessionCaptureExclusionsResult:
-    components.SessionCaptureExclusionsResult$Outbound;
+  SetSessionCaptureExclusionsRequestBody:
+    components.SetSessionCaptureExclusionsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -62,13 +63,14 @@ export const SetSessionCaptureExclusionsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    sessionCaptureExclusionsResult:
-      components.SessionCaptureExclusionsResult$outboundSchema,
+    setSessionCaptureExclusionsRequestBody:
+      components.SetSessionCaptureExclusionsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      sessionCaptureExclusionsResult: "SessionCaptureExclusionsResult",
+      setSessionCaptureExclusionsRequestBody:
+        "SetSessionCaptureExclusionsRequestBody",
     });
   }),
 );

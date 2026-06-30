@@ -1532,5 +1532,13 @@ func ValidateSetSessionCaptureExclusionsRequestBody(body *SetSessionCaptureExclu
 	if body.UserIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_ids", "body"))
 	}
+	if len(body.UserIds) > 1000 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids", body.UserIds, len(body.UserIds), 1000, false))
+	}
+	for _, e := range body.UserIds {
+		if utf8.RuneCountInString(e) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids[*]", e, utf8.RuneCountInString(e), 256, false))
+		}
+	}
 	return
 }
