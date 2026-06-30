@@ -2379,10 +2379,37 @@ async function seedObservabilityData(init: {
   const COST_CENTERS = ["CC-1000", "CC-2000", "CC-3000", "CC-4000"];
   const ROLE_POOL = ["admin", "developer", "viewer", "billing", "analyst"];
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
-  // The consuming surface (gram.hook.source) for chat rows, exposed as the
-  // "provider" dimension on telemetry.query. (The hooks seeding block below has
-  // its own HOOK_SOURCES list for hook events.)
+  // The consuming surface (gram.hook.source) for chat rows — the hook_source
+  // dimension on telemetry.query. (The hooks seeding block below has its own
+  // HOOK_SOURCES list for hook events.)
   const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
+
+  // AI-account provider per consuming surface, used to stamp the gram.provider
+  // attribute (the `provider` dimension) together with a deterministic
+  // team/personal split (gram.account_type), so /costs and /insights have
+  // populated, drillable account_type + provider breakdowns. A deterministic
+  // slice is left unmarked ('') to exercise the unclassified bucket — matching
+  // production, where rows are unclassified until the classifier labels them.
+  const SURFACE_PROVIDER: Record<string, string> = {
+    "claude-code": "anthropic",
+    cowork: "anthropic",
+    claude: "anthropic",
+    api: "anthropic",
+    codex: "openai",
+    vscode: "openai",
+    cursor: "cursor",
+    cli: "cursor",
+  };
+  function classifyAccount(
+    surface: string,
+    seed: number,
+  ): { accountType: string; provider: string } {
+    if (seed % 7 === 0) return { accountType: "", provider: "" };
+    return {
+      accountType: seed % 4 === 0 ? "personal" : "team",
+      provider: SURFACE_PROVIDER[surface] ?? "anthropic",
+    };
+  }
 
   // Stable non-negative hash so attributes can be derived from a string key
   // (e.g. an email) as well as a numeric user index.
@@ -2934,7 +2961,11 @@ async function seedObservabilityData(init: {
 
     // Chat completion event - same trace ID links it to the tool call.
     // Token usage attributes feed metrics_summaries (raw "total tokens") and
-    // chat_token_summaries (tokens under management).
+    // chat_token_summaries (tokens under management). gen_ai.operation.name="chat"
+    // (in the attrs below) also satisfies the attribute_metrics MV cost gate
+    // (operation.name='chat' AND cost != ''), so this rich, WorkOS-attributed
+    // cost/token data flows to the cost explorer (/costs) and /insights, drillable
+    // by account_type + provider — not just the personal-account usage rows.
     const finishReason =
       Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
@@ -2949,8 +2980,15 @@ async function seedObservabilityData(init: {
     // Rough blended price ($3/M input, $15/M output) so cost charts are non-zero.
     const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(6);
 
+    // Stamp account_type + provider (the new telemetry.query dimensions) so the
+    // cost/token/chat breakdowns on /costs and /insights are drillable by them.
+    const acct = classifyAccount(hookSource, userIndex);
+    const acctFrag = acct.accountType
+      ? `"gram.account_type": "${acct.accountType}", "gram.provider": "${acct.provider}", `
+      : "";
+
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Resolution event (70% of chats) - same trace ID
@@ -3255,6 +3293,14 @@ async function seedObservabilityData(init: {
       USER_EMAIL_TOTAL,
     );
 
+    // account_type + provider for this session's hook events, so the tool-call
+    // breakdown on /insights is drillable by them. Seeded by user/session so a
+    // session's events share one classification; a slice stays unmarked.
+    const acct = classifyAccount(
+      hookSource,
+      hashToIndex(userEmail || sessionId),
+    );
+
     const eventTime = new Date(now - daysAgo * msPerDay);
     const baseTimeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
 
@@ -3276,6 +3322,10 @@ async function seedObservabilityData(init: {
       if (userEmail) {
         attrs["user.email"] = userEmail;
         Object.assign(attrs, workosAttrObject(hashToIndex(userEmail)));
+      }
+      if (acct.accountType) {
+        attrs["gram.account_type"] = acct.accountType;
+        attrs["gram.provider"] = acct.provider;
       }
 
       chInserts.push(
@@ -3300,6 +3350,10 @@ async function seedObservabilityData(init: {
       if (userEmail) {
         preToolAttrs["user.email"] = userEmail;
         Object.assign(preToolAttrs, workosAttrObject(hashToIndex(userEmail)));
+      }
+      if (acct.accountType) {
+        preToolAttrs["gram.account_type"] = acct.accountType;
+        preToolAttrs["gram.provider"] = acct.provider;
       }
       if (mcpServer && toolName !== "Skill")
         preToolAttrs["gram.tool_call.source"] = mcpServer;
@@ -3330,6 +3384,10 @@ async function seedObservabilityData(init: {
         postToolAttrs["user.email"] = userEmail;
         Object.assign(postToolAttrs, workosAttrObject(hashToIndex(userEmail)));
       }
+      if (acct.accountType) {
+        postToolAttrs["gram.account_type"] = acct.accountType;
+        postToolAttrs["gram.provider"] = acct.provider;
+      }
       if (mcpServer && toolName !== "Skill")
         postToolAttrs["gram.tool_call.source"] = mcpServer;
       if (skillName)
@@ -3349,6 +3407,7 @@ async function seedObservabilityData(init: {
     SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE trace_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
