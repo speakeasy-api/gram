@@ -24,6 +24,7 @@ import {
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import {
   defineFilters,
   useFilterState,
@@ -92,13 +93,6 @@ const EMPLOYEE_FILTERS = defineFilters([
 const STATUS_OPTIONS = [
   { value: "enrolled", label: "Enrolled" },
   { value: "not_enrolled", label: "Not enrolled" },
-];
-
-// "Personal" surfaces employees with any personal-account usage; "Team" is the
-// implied default (everything without a personal account), mirroring the badge.
-const ACCOUNT_TYPE_OPTIONS = [
-  { value: "personal", label: "Personal" },
-  { value: "team", label: "Team" },
 ];
 
 const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {

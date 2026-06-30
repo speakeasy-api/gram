@@ -6,6 +6,7 @@ import {
   type FilterValue,
   type OptionsById,
 } from "@/components/filters";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
@@ -93,11 +94,6 @@ const OBSERVE_FILTERS_WITH_ACCOUNT_TYPE = defineFilters([
     allLabel: "All",
   },
 ] as const);
-
-const ACCOUNT_TYPE_OPTIONS = [
-  { value: "personal", label: "Personal" },
-  { value: "team", label: "Team" },
-];
 
 export function ObserveFilterBar({
   serverOptions,
