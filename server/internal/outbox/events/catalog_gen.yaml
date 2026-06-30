@@ -1948,10 +1948,10 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
-    audit_log.tunnelled_mcp_server_event_v1:
+    audit_log.tunneled_mcp_server_event_v1:
         post:
-            description: Emitted when changes to tunnelled MCP servers are made
-            operationId: audit_log.tunnelled_mcp_server_event_v1
+            description: Emitted when changes to tunneled MCP servers are made
+            operationId: audit_log.tunneled_mcp_server_event_v1
             requestBody:
                 content:
                     application/json:

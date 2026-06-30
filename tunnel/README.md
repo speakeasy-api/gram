@@ -8,11 +8,11 @@ and the gateway forwards MCP traffic back over yamux substreams.
 
 The backend control plane exists:
 
-- `tunnelled_mcp_servers` is the durable Postgres source record.
-- `/rpc/tunnelledMcp.*` creates, lists, updates, and deletes tunnelled MCP
+- `tunneled_mcp_servers` is the durable Postgres source record.
+- `/rpc/tunneledMcp.*` creates, lists, updates, and deletes tunneled MCP
   sources, with RBAC and audit logging.
-- `mcp_servers.tunnelled_mcp_server_id` links a hosted MCP server to a
-  tunnelled MCP source.
+- `mcp_servers.tunneled_mcp_server_id` links a hosted MCP server to a
+  tunneled MCP source.
 - The MCP serve path resolves live tunnel routes from Redis, injects the tunnel
   ID server-side, and reuses the remote MCP proxy stack for auth, usage, tool
   logs, and stream metadata.
@@ -27,7 +27,7 @@ Postgres. Redis is the live routing table and connection snapshot store.
 | Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and proxies substream HTTP to one pinned local MCP URL.                                   |
 | Gateway     | `tunnel/gateway`, `tunnel/cmd/tunnel-gateway` | Accepts agent WebSockets on the public listener, owns yamux sessions, and forwards requests by tunnel ID on the internal listener. |
 | MCP serve   | `server/internal/mcp/serveendpoint.go`        | Resolves the tunnel route, injects `X-Gram-Tunnel-Id`, and runs the remote MCP proxy path.                                         |
-| Management  | `server/internal/tunnelledmcp`                | Goa service backed by Postgres plus Redis connection metadata.                                                                     |
+| Management  | `server/internal/tunneledmcp`                 | Goa service backed by Postgres plus Redis connection metadata.                                                                     |
 | Shared wire | `tunnel/wire`, `tunnel/route`                 | Key format, control frames, WS `net.Conn`, Redis route and connection stores.                                                      |
 
 ## Request Path
@@ -35,7 +35,7 @@ Postgres. Redis is the live routing table and connection snapshot store.
 ```
 MCP client
   -> gram-server /mcp/<slug>
-  -> mcp_servers row resolves tunnelled_mcp_server_id
+  -> mcp_servers row resolves tunneled_mcp_server_id
   -> Redis lookup: tunnel_routes:<tunnelID> -> internal gateway forward address
   -> gram-server proxies to gateway with X-Gram-Tunnel-Id
   -> gateway opens yamux substream to a live agent
@@ -50,9 +50,9 @@ MCP server row and overwrites any inbound tunnel header before forwarding.
 
 Postgres is durable control-plane state:
 
-- `tunnelled_mcp_servers`: display name, key hash/prefix, lifecycle status,
+- `tunneled_mcp_servers`: display name, key hash/prefix, lifecycle status,
   persisted agent version, last-seen timestamp, soft delete.
-- `mcp_servers.tunnelled_mcp_server_id`: hosted MCP server binding.
+- `mcp_servers.tunneled_mcp_server_id`: hosted MCP server binding.
 
 Redis is live data-plane state:
 
@@ -79,7 +79,7 @@ Two madprocs entries wrap the same local path:
 The tunnel seed task writes the local tunnel ID and key to `mise.local.toml`:
 
 ```bash
-TUNNEL_LOCAL_ID=<tunnelled_mcp_servers.id>
+TUNNEL_LOCAL_ID=<tunneled_mcp_servers.id>
 TUNNEL_LOCAL_KEY=<one-time tunnel key>
 TUNNEL_LOCAL_MCP_ENDPOINT_SLUG=<mcp endpoint slug>
 TUNNEL_LOCAL_MCP_SERVER_ID=<mcp server id>
@@ -87,13 +87,13 @@ TUNNEL_LOCAL_MCP_SERVER_ID=<mcp server id>
 
 The Compose service runs the agent in the Postgres MCP network namespace and
 pins the upstream to `http://127.0.0.1:9000/mcp`; Gram reaches it through the
-normal tunnelled MCP endpoint seeded in the dashboard.
+normal tunneled MCP endpoint seeded in the dashboard.
 
 ## Tests
 
 ```bash
-go test ./tunnel/... ./server/internal/tunnelledmcp/...
+go test ./tunnel/... ./server/internal/tunneledmcp/...
 ```
 
-`server/internal/mcp` covers the production MCP serve path that routes tunnelled
+`server/internal/mcp` covers the production MCP serve path that routes tunneled
 MCP servers through the remote MCP proxy stack.

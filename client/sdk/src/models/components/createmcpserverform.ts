@@ -22,7 +22,7 @@ export type CreateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.
+ * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
  */
 export type CreateMcpServerForm = {
   /**
@@ -46,9 +46,9 @@ export type CreateMcpServerForm = {
    */
   toolsetId?: string | undefined;
   /**
-   * The ID of the tunnelled MCP server to use as the backend
+   * The ID of the tunneled MCP server to use as the backend
    */
-  tunnelledMcpServerId?: string | undefined;
+  tunneledMcpServerId?: string | undefined;
   /**
    * The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
    */
@@ -71,7 +71,7 @@ export type CreateMcpServerForm$Outbound = {
   remote_mcp_server_id?: string | undefined;
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
-  tunnelled_mcp_server_id?: string | undefined;
+  tunneled_mcp_server_id?: string | undefined;
   user_session_issuer_id?: string | undefined;
   visibility: string;
 };
@@ -87,7 +87,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     remoteMcpServerId: z.optional(z.string()),
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
-    tunnelledMcpServerId: z.optional(z.string()),
+    tunneledMcpServerId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
   }),
@@ -97,7 +97,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
       remoteMcpServerId: "remote_mcp_server_id",
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
-      tunnelledMcpServerId: "tunnelled_mcp_server_id",
+      tunneledMcpServerId: "tunneled_mcp_server_id",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

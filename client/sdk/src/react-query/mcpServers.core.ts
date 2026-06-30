@@ -45,7 +45,7 @@ export function buildMcpServersQuery(
   return {
     queryKey: queryKeyMcpServers({
       remoteMcpServerId: request?.remoteMcpServerId,
-      tunnelledMcpServerId: request?.tunnelledMcpServerId,
+      tunneledMcpServerId: request?.tunneledMcpServerId,
       toolsetId: request?.toolsetId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -78,7 +78,7 @@ export function buildMcpServersQuery(
 export function queryKeyMcpServers(
   parameters: {
     remoteMcpServerId?: string | undefined;
-    tunnelledMcpServerId?: string | undefined;
+    tunneledMcpServerId?: string | undefined;
     toolsetId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;

@@ -71,13 +71,13 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("listMcpServers", func() {
-		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
+		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
 
 		Payload(func() {
 			Attribute("remote_mcp_server_id", String, "Filter to MCP servers backed by this remote MCP server", func() {
 				Format(FormatUUID)
 			})
-			Attribute("tunnelled_mcp_server_id", String, "Filter to MCP servers backed by this tunnelled MCP server", func() {
+			Attribute("tunneled_mcp_server_id", String, "Filter to MCP servers backed by this tunneled MCP server", func() {
 				Format(FormatUUID)
 			})
 			Attribute("toolset_id", String, "Filter to MCP servers backed by this toolset", func() {
@@ -93,7 +93,7 @@ var _ = Service("mcpServers", func() {
 		HTTP(func() {
 			GET("/rpc/mcpServers.list")
 			Param("remote_mcp_server_id")
-			Param("tunnelled_mcp_server_id")
+			Param("tunneled_mcp_server_id")
 			Param("toolset_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -107,7 +107,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("updateMcpServer", func() {
-		Description("Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.")
+		Description("Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 
 		Payload(func() {
 			Extend(UpdateMcpServerForm)
@@ -196,7 +196,7 @@ var McpServerVisibility = Type("McpServerVisibility", String, func() {
 })
 
 var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
-	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.")
+	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
@@ -208,7 +208,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tunnelled_mcp_server_id", String, "The ID of the tunnelled MCP server to use as the backend", func() {
+	Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
@@ -223,7 +223,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -238,7 +238,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tunnelled_mcp_server_id", String, "The ID of the tunnelled MCP server to use as the backend", func() {
+	Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
@@ -274,7 +274,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server used as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tunnelled_mcp_server_id", String, "The ID of the tunnelled MCP server used as the backend", func() {
+	Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server used as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {

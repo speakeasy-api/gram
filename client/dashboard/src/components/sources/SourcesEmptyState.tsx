@@ -121,16 +121,14 @@ export function SourcesEmptyState(): JSX.Element {
                       </div>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addTunnelledMcp.goTo()}
+                      onSelect={() => routes.sources.addTunneledMcp.goTo()}
                       className="flex cursor-pointer items-start gap-3 rounded-md p-2"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
                         <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">
-                          Tunnelled MCP Server
-                        </span>
+                        <span className="font-medium">Tunneled MCP Server</span>
                         <span className="text-muted-foreground text-xs">
                           Connect private MCP servers through a tunnel
                         </span>

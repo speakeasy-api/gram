@@ -10,7 +10,7 @@ import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
-  formatTunnelledMcpDisplay,
+  formatTunneledMcpDisplay,
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -50,7 +50,7 @@ export type NamedAsset =
       deploymentAssetId: string;
       slug: string;
       name: string;
-      type: "tunnelledmcp";
+      type: "tunneledmcp";
       createdAt?: Date;
       updatedAt?: Date;
     };
@@ -68,8 +68,8 @@ const sourceTypeConfig = {
   remotemcp: {
     label: "Remote MCP",
   },
-  tunnelledmcp: {
-    label: "Tunnelled MCP",
+  tunneledmcp: {
+    label: "Tunneled MCP",
   },
 };
 
@@ -99,9 +99,9 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote/tunnelled MCP deletion lives in Settings because it touches linked server/endpoint state.
+  // Remote/tunneled MCP deletion lives in Settings because it touches linked server/endpoint state.
   const actions =
-    asset.type === "remotemcp" || asset.type === "tunnelledmcp"
+    asset.type === "remotemcp" || asset.type === "tunneledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -147,8 +147,8 @@ export function SourceCard({
   const displayName =
     asset.type === "remotemcp"
       ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
-      : asset.type === "tunnelledmcp"
-        ? formatTunnelledMcpDisplay(asset)
+      : asset.type === "tunneledmcp"
+        ? formatTunneledMcpDisplay(asset)
         : asset.name;
   const displaySubtitle =
     asset.type === "remotemcp" && remoteMcpTrimmedName
@@ -168,7 +168,7 @@ export function SourceCard({
     if (
       asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
-      asset.type === "tunnelledmcp"
+      asset.type === "tunneledmcp"
     ) {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }

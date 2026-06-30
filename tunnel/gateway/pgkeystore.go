@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// PostgresKeyResolver reads durable tunnel key state from tunnelled_mcp_servers.
+// PostgresKeyResolver reads durable tunnel key state from tunneled_mcp_servers.
 type PostgresKeyResolver struct {
 	db *pgxpool.Pool
 }
@@ -36,7 +36,7 @@ func (r *PostgresKeyResolver) Resolve(ctx context.Context, bearer string) (strin
 	var tunnelID string
 	err := r.db.QueryRow(ctx, `
 SELECT id::text
-FROM tunnelled_mcp_servers
+FROM tunneled_mcp_servers
 WHERE key_hash = $1
   AND status IN ('created', 'active')
   AND deleted IS FALSE
@@ -53,7 +53,7 @@ LIMIT 1
 
 func (r *PostgresKeyResolver) MarkConnected(ctx context.Context, tunnelID, keyHash, agentVersion string) error {
 	tag, err := r.db.Exec(ctx, `
-UPDATE tunnelled_mcp_servers
+UPDATE tunneled_mcp_servers
 SET
   status = 'active',
   agent_version = NULLIF($3, ''),
@@ -78,7 +78,7 @@ func (r *PostgresKeyResolver) IsActive(ctx context.Context, tunnelID, keyHash st
 	err := r.db.QueryRow(ctx, `
 SELECT EXISTS (
   SELECT 1
-  FROM tunnelled_mcp_servers
+  FROM tunneled_mcp_servers
   WHERE id = $1::uuid
     AND key_hash = $2
     AND status = 'active'

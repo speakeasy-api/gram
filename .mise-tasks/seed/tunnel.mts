@@ -33,7 +33,7 @@ WITH project AS (
   LIMIT 1
 ),
 source AS (
-  INSERT INTO tunnelled_mcp_servers (project_id, name, key_hash, key_prefix, status)
+  INSERT INTO tunneled_mcp_servers (project_id, name, key_hash, key_prefix, status)
   SELECT id, :'source_name', :'key_hash', :'key_prefix', 'created'
   FROM project
   ON CONFLICT (project_id, name) WHERE deleted IS FALSE
@@ -63,7 +63,7 @@ mcp_server AS (
     name,
     slug,
     user_session_issuer_id,
-    tunnelled_mcp_server_id,
+    tunneled_mcp_server_id,
     visibility
   )
   SELECT source.project_id, :'source_name', 'seeded-local-postgres-mcp', issuer.id, source.id, 'private'
@@ -74,7 +74,7 @@ mcp_server AS (
     name = EXCLUDED.name,
     user_session_issuer_id = EXCLUDED.user_session_issuer_id,
     remote_mcp_server_id = NULL,
-    tunnelled_mcp_server_id = EXCLUDED.tunnelled_mcp_server_id,
+    tunneled_mcp_server_id = EXCLUDED.tunneled_mcp_server_id,
     toolset_id = NULL,
     visibility = EXCLUDED.visibility,
     updated_at = clock_timestamp()

@@ -125,7 +125,7 @@ func (f *ProxyManager) Build(
 	return f.BuildTarget(logger, server.ID.String(), server.Url, mcpServerID, configured, visibility, projectID, upstreamAuth)
 }
 
-// BuildTarget keys tunnel-backed MCP telemetry by tunnelled_mcp_servers.id.
+// BuildTarget keys tunnel-backed MCP telemetry by tunneled_mcp_servers.id.
 func (f *ProxyManager) BuildTarget(
 	logger *slog.Logger,
 	upstreamID string,

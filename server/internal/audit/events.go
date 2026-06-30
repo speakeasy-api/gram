@@ -31,7 +31,7 @@ const (
 	subjectTypeTemplate                 subjectType = "template"
 	subjectTypeRemoteMcpServer          subjectType = "remote_mcp_server"
 	subjectTypeToolset                  subjectType = "toolset"
-	subjectTypeTunnelledMcpServer       subjectType = "tunnelled_mcp_server"
+	subjectTypeTunneledMcpServer        subjectType = "tunneled_mcp_server"
 	subjectTypeTriggerInstance          subjectType = "trigger_instance"
 	subjectTypeVariation                subjectType = "variation"
 	subjectTypeRiskPolicy               subjectType = "risk_policy"

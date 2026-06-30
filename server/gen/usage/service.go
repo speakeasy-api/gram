@@ -111,8 +111,8 @@ type SetBillingMetadataPayload struct {
 	SessionToken *string
 	// The contracted monthly tokens under management limit. Omit to clear.
 	MonthlyTokenLimit *int64
-	// The contracted tunnelled MCP server source cap. Omit to use the plan default.
-	TunnelledMcpServerLimit *int
+	// The contracted tunneled MCP server source cap. Omit to use the plan default.
+	TunneledMcpServerLimit *int
 	// Email address to notify on TUM threshold events. Omit to clear.
 	AlertEmail *string
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
@@ -171,8 +171,8 @@ type TokensUnderManagement struct {
 	// The contracted monthly tokens under management limit, if one has been
 	// configured
 	MonthlyTokenLimit *int64
-	// The contracted tunnelled MCP server source cap, if one has been configured
-	TunnelledMcpServerLimit *int
+	// The contracted tunneled MCP server source cap, if one has been configured
+	TunneledMcpServerLimit *int
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int
 	// Email address to notify on TUM threshold events. Only populated for platform

@@ -269,11 +269,11 @@ func TestValidateRemoteMCPServerCall_ServerInOtherProject(t *testing.T) {
 	assert.Contains(t, detail, "not found in this project")
 }
 
-func TestValidateRemoteMCPServerCall_TunnelledServerSuccess(t *testing.T) {
+func TestValidateRemoteMCPServerCall_TunneledServerSuccess(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	serverID := f.createTunnelledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+	serverID := f.createTunneledMCPServer(t, "tnl-"+uuid.NewString()[:8])
 
 	detail, denied := f.client.ValidateRemoteMCPServerCall(
 		t.Context(),
@@ -285,11 +285,11 @@ func TestValidateRemoteMCPServerCall_TunnelledServerSuccess(t *testing.T) {
 	require.Empty(t, detail)
 }
 
-func TestValidateRemoteMCPServerCall_TunnelledServerInOtherProject(t *testing.T) {
+func TestValidateRemoteMCPServerCall_TunneledServerInOtherProject(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	serverID := f.createTunnelledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+	serverID := f.createTunneledMCPServer(t, "tnl-"+uuid.NewString()[:8])
 
 	detail, denied := f.client.ValidateRemoteMCPServerCall(
 		t.Context(),

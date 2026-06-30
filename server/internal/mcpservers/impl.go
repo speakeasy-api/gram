@@ -36,7 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	tunnelledmcprepo "github.com/speakeasy-api/gram/server/internal/tunnelledmcp/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
@@ -109,14 +109,14 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		payload.EnvironmentID,
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
-		payload.TunnelledMcpServerID,
+		payload.TunneledMcpServerID,
 		payload.ToolsetID,
 		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunnelledMcpServerID, ids.ToolsetID); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -152,7 +152,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		EnvironmentID:         ids.EnvironmentID,
 		UserSessionIssuerID:   ids.UserSessionIssuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunnelledMcpServerID:  ids.TunnelledMcpServerID,
+		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 		Visibility:            string(payload.Visibility),
@@ -342,23 +342,23 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_mcp_server_id").LogError(ctx, logger)
 	}
-	tunnelledMcpServerID, err := conv.PtrToNullUUID(payload.TunnelledMcpServerID)
+	tunneledMcpServerID, err := conv.PtrToNullUUID(payload.TunneledMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid tunnelled_mcp_server_id").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogError(ctx, logger)
 	}
 	toolsetID, err := conv.PtrToNullUUID(payload.ToolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, logger)
 	}
-	if backendFilterCount(remoteMcpServerID, tunnelledMcpServerID, toolsetID) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id may be provided").LogError(ctx, logger)
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) > 1 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id may be provided").LogError(ctx, logger)
 	}
 
 	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
-		ProjectID:            *authCtx.ProjectID,
-		RemoteMcpServerID:    remoteMcpServerID,
-		TunnelledMcpServerID: tunnelledMcpServerID,
-		ToolsetID:            toolsetID,
+		ProjectID:           *authCtx.ProjectID,
+		RemoteMcpServerID:   remoteMcpServerID,
+		TunneledMcpServerID: tunneledMcpServerID,
+		ToolsetID:           toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
@@ -388,14 +388,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		payload.EnvironmentID,
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
-		payload.TunnelledMcpServerID,
+		payload.TunneledMcpServerID,
 		payload.ToolsetID,
 		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunnelledMcpServerID, ids.ToolsetID); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -447,7 +447,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		EnvironmentID:         ids.EnvironmentID,
 		UserSessionIssuerID:   ids.UserSessionIssuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunnelledMcpServerID:  ids.TunnelledMcpServerID,
+		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 		Visibility:            string(payload.Visibility),
@@ -577,7 +577,7 @@ type serverIDs struct {
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
-	TunnelledMcpServerID  uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 }
@@ -588,7 +588,7 @@ func parseServerIDs(
 	environmentIDStr *string,
 	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
-	tunnelledMcpServerIDStr *string,
+	tunneledMcpServerIDStr *string,
 	toolsetIDStr *string,
 	toolVariationsGroupIDStr *string,
 ) (serverIDs, error) {
@@ -606,8 +606,8 @@ func parseServerIDs(
 	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
 	}
-	if ids.TunnelledMcpServerID, err = conv.PtrToNullUUID(tunnelledMcpServerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid tunnelled_mcp_server_id: %w", err)
+	if ids.TunneledMcpServerID, err = conv.PtrToNullUUID(tunneledMcpServerIDStr); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid tunneled_mcp_server_id: %w", err)
 	}
 	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
@@ -619,9 +619,9 @@ func parseServerIDs(
 	return ids, nil
 }
 
-func validateServerBackendExclusivity(remoteMcpServerID, tunnelledMcpServerID, toolsetID uuid.NullUUID) error {
-	if backendFilterCount(remoteMcpServerID, tunnelledMcpServerID, toolsetID) != 1 {
-		return fmt.Errorf("exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided")
+func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID uuid.NullUUID) error {
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) != 1 {
+		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided")
 	}
 	return nil
 }
@@ -685,15 +685,15 @@ func verifyServerReferenceOwnership(
 		}
 	}
 
-	if ids.TunnelledMcpServerID.Valid {
-		if _, err := tunnelledmcprepo.New(dbtx).GetServerByID(ctx, tunnelledmcprepo.GetServerByIDParams{
-			ID:        ids.TunnelledMcpServerID.UUID,
+	if ids.TunneledMcpServerID.Valid {
+		if _, err := tunneledmcprepo.New(dbtx).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+			ID:        ids.TunneledMcpServerID.UUID,
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("tunnelled_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("tunneled_mcp_server_id does not reference a resource in this project")
 			}
-			return fmt.Errorf("check tunnelled mcp server ownership: %w", err)
+			return fmt.Errorf("check tunneled mcp server ownership: %w", err)
 		}
 	}
 

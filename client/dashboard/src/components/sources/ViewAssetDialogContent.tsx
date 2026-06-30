@@ -11,7 +11,7 @@ import MonacoEditorLazy from "../monaco-editor.lazy";
 // Only deployment-backed assets can be viewed here.
 type ViewableAsset = Exclude<
   NamedAsset,
-  { type: "remotemcp" } | { type: "tunnelledmcp" }
+  { type: "remotemcp" } | { type: "tunneledmcp" }
 >;
 
 interface ViewAssetDialogContentProps {

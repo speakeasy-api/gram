@@ -510,13 +510,13 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpservers.ListMcpServersPayload, error) {
 		var payload *mcpservers.ListMcpServersPayload
 		var (
-			remoteMcpServerID    *string
-			tunnelledMcpServerID *string
-			toolsetID            *string
-			sessionToken         *string
-			apikeyToken          *string
-			projectSlugInput     *string
-			err                  error
+			remoteMcpServerID   *string
+			tunneledMcpServerID *string
+			toolsetID           *string
+			sessionToken        *string
+			apikeyToken         *string
+			projectSlugInput    *string
+			err                 error
 		)
 		qp := r.URL.Query()
 		remoteMcpServerIDRaw := qp.Get("remote_mcp_server_id")
@@ -526,12 +526,12 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if remoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("remote_mcp_server_id", *remoteMcpServerID, goa.FormatUUID))
 		}
-		tunnelledMcpServerIDRaw := qp.Get("tunnelled_mcp_server_id")
-		if tunnelledMcpServerIDRaw != "" {
-			tunnelledMcpServerID = &tunnelledMcpServerIDRaw
+		tunneledMcpServerIDRaw := qp.Get("tunneled_mcp_server_id")
+		if tunneledMcpServerIDRaw != "" {
+			tunneledMcpServerID = &tunneledMcpServerIDRaw
 		}
-		if tunnelledMcpServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("tunnelled_mcp_server_id", *tunnelledMcpServerID, goa.FormatUUID))
+		if tunneledMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("tunneled_mcp_server_id", *tunneledMcpServerID, goa.FormatUUID))
 		}
 		toolsetIDRaw := qp.Get("toolset_id")
 		if toolsetIDRaw != "" {
@@ -555,7 +555,7 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMcpServersPayload(remoteMcpServerID, tunnelledMcpServerID, toolsetID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListMcpServersPayload(remoteMcpServerID, tunneledMcpServerID, toolsetID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1445,7 +1445,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
-		TunnelledMcpServerID:  v.TunnelledMcpServerID,
+		TunneledMcpServerID:   v.TunneledMcpServerID,
 		ToolsetID:             v.ToolsetID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            string(v.Visibility),

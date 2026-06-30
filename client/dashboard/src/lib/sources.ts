@@ -10,20 +10,20 @@ export type SourceType =
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunnelledmcp";
+  | "tunneledmcp";
 export type UrnKind =
   | "http"
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunnelledmcp";
+  | "tunneledmcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
   function: "function",
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
-  tunnelledmcp: "tunnelledmcp",
+  tunneledmcp: "tunneledmcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
@@ -31,7 +31,7 @@ const urnToSourceType: Record<UrnKind, SourceType> = {
   function: "function",
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
-  tunnelledmcp: "tunnelledmcp",
+  tunneledmcp: "tunneledmcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {
@@ -65,10 +65,10 @@ export function formatRemoteMcpDisplay(server: {
   return formatRemoteMcpUrlForDisplay(server.url);
 }
 
-export function formatTunnelledMcpDisplay(server: {
+export function formatTunneledMcpDisplay(server: {
   name?: string | null | undefined;
 }): string {
-  return server.name?.trim() || "Tunnelled MCP server";
+  return server.name?.trim() || "Tunneled MCP server";
 }
 
 // formatRemoteSessionIssuerDisplay picks the render-time primary label for a
@@ -110,7 +110,7 @@ export function remoteMcpRouteParam(server: {
   return server.slug?.trim() || server.id;
 }
 
-export function tunnelledMcpRouteParam(server: { id: string }): string {
+export function tunneledMcpRouteParam(server: { id: string }): string {
   return server.id;
 }
 
@@ -147,7 +147,7 @@ export function getRemoteMcpServerArgs(idOrSlug: string): {
   return { slug: idOrSlug };
 }
 
-export function getTunnelledMcpServerArgs(id: string): { id: string } {
+export function getTunneledMcpServerArgs(id: string): { id: string } {
   return { id };
 }
 

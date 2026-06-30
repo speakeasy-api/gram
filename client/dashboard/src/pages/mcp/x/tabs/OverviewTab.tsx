@@ -4,21 +4,21 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import {
-  formatTunnelledMcpDisplay,
+  formatTunneledMcpDisplay,
   remoteMcpRouteParam,
-  tunnelledMcpRouteParam,
+  tunneledMcpRouteParam,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type {
   McpEndpoint,
   McpServer,
   RemoteMcpServer,
-  TunnelledMcpServer,
+  TunneledMcpServer,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
   useGetRemoteMcpServer,
-  useGetTunnelledMcpServer,
+  useGetTunneledMcpServer,
   useListToolsets,
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
@@ -105,7 +105,7 @@ function OverviewRows({
   const authentication = useAuthenticationOverview(mcpServer);
   const source = useSourceOverview(
     mcpServer.remoteMcpServerId,
-    mcpServer.tunnelledMcpServerId,
+    mcpServer.tunneledMcpServerId,
   );
 
   return (
@@ -127,7 +127,7 @@ function OverviewRows({
           authentication={authentication}
           onConfigure={onShowAuthentication}
         />
-        {mcpServer.remoteMcpServerId || mcpServer.tunnelledMcpServerId ? (
+        {mcpServer.remoteMcpServerId || mcpServer.tunneledMcpServerId ? (
           <SourceOverviewRow source={source} />
         ) : (
           // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
@@ -314,16 +314,16 @@ function useAuthenticationOverview(
 
 type SourceOverview = OverviewReadiness & {
   remoteMcpServer: RemoteMcpServer | undefined;
-  tunnelledMcpServer: TunnelledMcpServer | undefined;
+  tunneledMcpServer: TunneledMcpServer | undefined;
   status: RowStatus | undefined;
 };
 
 function useSourceOverview(
   remoteMcpServerId: string | undefined,
-  tunnelledMcpServerId: string | undefined,
+  tunneledMcpServerId: string | undefined,
 ): SourceOverview {
   const remoteId = remoteMcpServerId ?? "";
-  const tunnelledId = tunnelledMcpServerId ?? "";
+  const tunneledId = tunneledMcpServerId ?? "";
   const {
     data: remoteMcpServer,
     isLoading: isLoadingRemote,
@@ -333,27 +333,27 @@ function useSourceOverview(
     throwOnError: false,
   });
   const {
-    data: tunnelledMcpServer,
-    isLoading: isLoadingTunnelled,
-    isError: isTunnelledError,
-  } = useGetTunnelledMcpServer({ id: tunnelledId }, undefined, {
-    enabled: tunnelledId !== "",
+    data: tunneledMcpServer,
+    isLoading: isLoadingTunneled,
+    isError: isTunneledError,
+  } = useGetTunneledMcpServer({ id: tunneledId }, undefined, {
+    enabled: tunneledId !== "",
     throwOnError: false,
   });
 
   const loading =
     (remoteId !== "" && isLoadingRemote) ||
-    (tunnelledId !== "" && isLoadingTunnelled);
+    (tunneledId !== "" && isLoadingTunneled);
   const ready =
     !loading &&
     ((!isRemoteError && !!remoteMcpServer) ||
-      (!isTunnelledError && !!tunnelledMcpServer));
+      (!isTunneledError && !!tunneledMcpServer));
 
   return {
     ready,
     loading,
     remoteMcpServer,
-    tunnelledMcpServer,
+    tunneledMcpServer,
     status: readyStatus(loading, ready),
   };
 }
@@ -539,7 +539,7 @@ function SourceOverviewRow({ source }: { source: SourceOverview }) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const remoteMcpServer = source.remoteMcpServer;
-  const tunnelledMcpServer = source.tunnelledMcpServer;
+  const tunneledMcpServer = source.tunneledMcpServer;
 
   let description: ReactNode = "Linked source could not be loaded.";
   let detail: ReactNode | undefined;
@@ -557,16 +557,16 @@ function SourceOverviewRow({ source }: { source: SourceOverview }) {
       "remotemcp",
       remoteMcpRouteParam(remoteMcpServer),
     );
-  } else if (tunnelledMcpServer) {
-    description = formatTunnelledMcpDisplay(tunnelledMcpServer);
+  } else if (tunneledMcpServer) {
+    description = formatTunneledMcpDisplay(tunneledMcpServer);
     detail = (
       <Type muted small as="div">
-        Tunnelled MCP server
+        Tunneled MCP server
       </Type>
     );
     sourceHref = routes.sources.source.href(
-      "tunnelledmcp",
-      tunnelledMcpRouteParam(tunnelledMcpServer),
+      "tunneledmcp",
+      tunneledMcpRouteParam(tunneledMcpServer),
     );
   }
 

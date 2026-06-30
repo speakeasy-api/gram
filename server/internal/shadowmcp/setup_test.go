@@ -22,7 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	tunnelledmcprepo "github.com/speakeasy-api/gram/server/internal/tunnelledmcp/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -128,11 +128,11 @@ func (f *fixture) createRemoteMCPServer(t *testing.T, slug string) uuid.UUID {
 	return server.ID
 }
 
-func (f *fixture) createTunnelledMCPServer(t *testing.T, name string) uuid.UUID {
+func (f *fixture) createTunneledMCPServer(t *testing.T, name string) uuid.UUID {
 	t.Helper()
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
-	server, err := tunnelledmcprepo.New(f.conn).CreateServer(t.Context(), tunnelledmcprepo.CreateServerParams{
+	server, err := tunneledmcprepo.New(f.conn).CreateServer(t.Context(), tunneledmcprepo.CreateServerParams{
 		ID:        id,
 		ProjectID: f.projectID,
 		Name:      name,
