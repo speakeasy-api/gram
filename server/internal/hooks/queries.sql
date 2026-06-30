@@ -126,6 +126,18 @@ WHERE organization_id = @organization_id
   AND external_account_uuid = @external_account_uuid
   AND deleted_at IS NULL;
 
+-- name: ListUserAccountsByUsers :many
+-- Returns the linked AI accounts for a set of users within an org. Each
+-- (provider, email) row is a distinct account, so a user may have several across
+-- providers. Used to attach a per-user accounts breakdown to usage summaries on
+-- the employees list. Ordered team-first, then by provider for stable display.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
 -- name: GetDeviceOwner :one
 SELECT * FROM device_owners
 WHERE organization_id = @organization_id

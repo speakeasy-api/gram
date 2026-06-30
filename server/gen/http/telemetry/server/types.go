@@ -112,6 +112,11 @@ type GetUserMetricsSummaryRequestBody struct {
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Optional filter to a single AI account by its provider org id; scopes
+	// metrics to that one account
+	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 }
 
 // GetEmployeeDataFlowGraphRequestBody is the type of the "telemetry" service
@@ -125,6 +130,11 @@ type GetEmployeeDataFlowGraphRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID to get the graph for (mutually exclusive with user_id)
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// graph to that one account
+	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 }
 
 // GetObservabilityOverviewRequestBody is the type of the "telemetry" service
@@ -151,6 +161,11 @@ type GetObservabilityOverviewRequestBody struct {
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// overview to that one account
+	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
@@ -4182,6 +4197,10 @@ type UserSummaryResponseBody struct {
 	Tools []*ToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// Per-hook-source usage breakdown
 	HookSources []*HookSourceUsageResponseBody `form:"hook_sources" json:"hook_sources" xml:"hook_sources"`
+	// Distinct account types observed for this user ('team', 'personal')
+	AccountTypes []string `form:"account_types,omitempty" json:"account_types,omitempty" xml:"account_types,omitempty"`
+	// Linked AI accounts for this user (team and personal, across providers)
+	Accounts []*UserAccountResponseBody `form:"accounts,omitempty" json:"accounts,omitempty" xml:"accounts,omitempty"`
 }
 
 // ToolUsageResponseBody is used to define fields on response body types.
@@ -4202,6 +4221,25 @@ type HookSourceUsageResponseBody struct {
 	Source string `form:"source" json:"source" xml:"source"`
 	// Total hook events for this source
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
+// UserAccountResponseBody is used to define fields on response body types.
+type UserAccountResponseBody struct {
+	// Account record id (user_accounts.id); used to scope chat/session views to
+	// this account
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Email associated with the account; may differ from the user's work email for
+	// personal accounts
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// 'team' (enterprise) or 'personal' (individual); empty when not yet classified
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Provider org id for this account; the per-account discriminator used to
+	// scope telemetry to this one account
+	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
+	// Latest activity timestamp for this account in Unix nanoseconds
+	LastSeenUnixNano *string `form:"last_seen_unix_nano,omitempty" json:"last_seen_unix_nano,omitempty" xml:"last_seen_unix_nano,omitempty"`
 }
 
 // RoleSummaryResponseBody is used to define fields on response body types.
@@ -5015,6 +5053,11 @@ type SearchUsersFilterRequestBody struct {
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code').
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Optional filter to a single AI account by its provider org id (the
+	// per-account discriminator); scopes results to that one account.
+	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 }
 
 // QueryFilterRequestBody is used to define fields on request body types.
@@ -8534,6 +8577,8 @@ func NewGetUserMetricsSummaryPayload(body *GetUserMetricsSummaryRequestBody, api
 		ExternalUserID: body.ExternalUserID,
 		EventSource:    body.EventSource,
 		HookSource:     body.HookSource,
+		AccountType:    body.AccountType,
+		ExternalOrgID:  body.ExternalOrgID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -8550,6 +8595,8 @@ func NewGetEmployeeDataFlowGraphPayload(body *GetEmployeeDataFlowGraphRequestBod
 		To:             *body.To,
 		UserID:         body.UserID,
 		ExternalUserID: body.ExternalUserID,
+		AccountType:    body.AccountType,
+		ExternalOrgID:  body.ExternalOrgID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -8572,6 +8619,8 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 		McpServerID:       body.McpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
+		AccountType:       body.AccountType,
+		ExternalOrgID:     body.ExternalOrgID,
 	}
 	if body.IncludeTimeSeries != nil {
 		v.IncludeTimeSeries = *body.IncludeTimeSeries

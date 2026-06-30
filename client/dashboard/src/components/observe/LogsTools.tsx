@@ -331,6 +331,60 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
+  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
+  // filters on the materialized gram.account_type column via the raw-logs path.
+  // "team" is expressed as "not personal" so unclassified rows count as team
+  // (matching the badge semantics elsewhere).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountType = ((): string => {
+    const v = searchParams.get("account_type");
+    return v === "team" || v === "personal" ? v : "";
+  })();
+  const setAccountType = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const accountTypeSdkFilters = useMemo<LogFilter[]>(() => {
+    if (accountType === "personal") {
+      return [
+        {
+          path: "gram.account_type",
+          operator: Operator.Eq,
+          values: ["personal"],
+        },
+      ];
+    }
+    if (accountType === "team") {
+      return [
+        {
+          path: "gram.account_type",
+          operator: Operator.NotEq,
+          values: ["personal"],
+        },
+      ];
+    }
+    return [];
+  }, [accountType]);
+  // Combined attribute filters sent to the query. Both the manual attribute
+  // filters and the account-type scope force the raw-logs path.
+  const queryFilters = useMemo(
+    () => [...attributeSdkFilters, ...accountTypeSdkFilters],
+    [attributeSdkFilters, accountTypeSdkFilters],
+  );
+
   const {
     data: tracesData,
     error,
@@ -352,7 +406,7 @@ export function LogsTools(): JSX.Element {
         userFilters,
         hookSources,
         attributeSearchQuery,
-        attributeSdkFilters,
+        queryFilters,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -368,10 +422,7 @@ export function LogsTools(): JSX.Element {
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
               query: attributeSearchQuery ?? undefined,
-              filters:
-                attributeSdkFilters.length > 0
-                  ? attributeSdkFilters
-                  : undefined,
+              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -509,6 +560,8 @@ export function LogsTools(): JSX.Element {
             onAttributeSearchSubmit={updateAttributeSearchQuery}
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
+            accountType={accountType}
+            onAccountTypeChange={setAccountType}
             from={from}
             to={to}
           />
@@ -561,6 +614,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit,
   onAttributeFiltersChange,
   onAddFilterFromLog,
+  accountType,
+  onAccountTypeChange,
   from,
   to,
 }: {
@@ -608,6 +663,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit: (query: string) => void;
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
 }) {
@@ -659,6 +716,8 @@ function LogsToolsContent({
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
+            accountType={accountType}
+            onAccountTypeChange={onAccountTypeChange}
             attributeSearchControl={
               <div className="min-w-[260px] flex-[1.2]">
                 <LogFilterBar
@@ -674,7 +733,8 @@ function LogsToolsContent({
             }
           />
 
-          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
+          {(isCustomSearchActive(attributeSearchQuery, attributeFilters) ||
+            accountType !== "") && (
             <div className="flex shrink-0">
               <SlowSearchNotice />
             </div>
@@ -712,6 +772,7 @@ function LogsToolsContent({
                       selectedTypes.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
+                      accountType !== "" ||
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}

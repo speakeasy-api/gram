@@ -631,6 +631,8 @@ type GetTimeSeriesMetricsParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -698,6 +700,12 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
+	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
 	// FROM/TO use aligned nanosecond boundaries; TO is exclusive so we add one step.
@@ -746,6 +754,8 @@ type GetToolMetricsBreakdownParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -792,6 +802,12 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -845,6 +861,8 @@ type GetOverviewSummaryParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -853,7 +871,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -974,6 +992,12 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	return sb
@@ -1389,6 +1413,8 @@ type SearchUsersParams struct {
 	GramDeploymentID string // optional
 	EventSource      string // optional; e.g. "hook"
 	HookSource       string // optional; e.g. "cursor"
+	AccountType      string // optional; e.g. "personal"
+	ExternalOrgID    string // optional; scopes to a single account by provider org id
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1445,6 +1471,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Hook source breakdowns (maps of hook source -> count)
 		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
+
+		// Distinct account types observed (powers the employees personal-account indicator)
+		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1461,6 +1490,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where("account_type = ?", arg.AccountType)
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
 	if len(arg.UserIDs) > 0 {
 		if arg.GroupBy == "external_user_id" {
@@ -1519,6 +1554,8 @@ type GetUserMetricsSummaryParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 	EventSource    string // Optional filter - filters by event_source
 	HookSource     string // Optional filter - filters by hook_source
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -1589,6 +1626,12 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1679,6 +1722,8 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeEnd        int64
 	UserID         string // user_id (mutually exclusive with ExternalUserID)
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -1777,6 +1822,12 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").

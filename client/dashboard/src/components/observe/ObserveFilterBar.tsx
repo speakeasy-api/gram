@@ -42,7 +42,7 @@ const SERVER_TYPES: Array<{ label: string; value: ObserveTypeFilterValue }> = [
 // Server, User and the date range are the most-used dimensions, so they pin as
 // always-visible pills. Role and Agent appear as pills once active; Type is
 // sheet-only (it always carries a default value and would otherwise pill).
-const OBSERVE_FILTERS = defineFilters([
+const OBSERVE_FILTER_BASE = [
   {
     id: "server",
     label: "Server",
@@ -77,7 +77,27 @@ const OBSERVE_FILTERS = defineFilters([
     placeholder: "Filter by agent",
   },
   { id: "type", label: "Type", kind: "multiselect", hideChip: true },
-]);
+] as const;
+
+const OBSERVE_FILTERS = defineFilters(OBSERVE_FILTER_BASE);
+
+// Account-type is opt-in: only consumers whose data source can filter on the
+// account_type dimension (e.g. the raw-logs path) pass account-type props, so
+// the control isn't shown where it can't be served.
+const OBSERVE_FILTERS_WITH_ACCOUNT_TYPE = defineFilters([
+  ...OBSERVE_FILTER_BASE,
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
+] as const);
+
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "personal", label: "Personal" },
+  { value: "team", label: "Team" },
+];
 
 export function ObserveFilterBar({
   serverOptions,
@@ -104,6 +124,8 @@ export function ObserveFilterBar({
   className,
   serverNameMappings,
   attributeSearchControl,
+  accountType,
+  onAccountTypeChange,
 }: {
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
@@ -129,6 +151,10 @@ export function ObserveFilterBar({
   className?: string;
   serverNameMappings?: ReturnType<typeof useServerNameMappings>;
   attributeSearchControl?: ReactNode;
+  // Opt-in account-type ("team" | "personal" | "") filter. Only wire these on
+  // pages whose data source can filter on account_type (e.g. raw logs).
+  accountType?: string;
+  onAccountTypeChange?: (value: string) => void;
 }): JSX.Element {
   const valuesByPath = useCallback(
     (path: string) =>
@@ -187,6 +213,7 @@ export function ObserveFilterBar({
       role: selectedRoleIds,
       source: selectedSources,
       type: selectedTypes,
+      account_type: accountType || null,
     }),
     [
       selectedServers,
@@ -197,6 +224,7 @@ export function ObserveFilterBar({
       selectedRoleIds,
       selectedSources,
       selectedTypes,
+      accountType,
     ],
   );
 
@@ -207,6 +235,7 @@ export function ObserveFilterBar({
       role: roleOptions.map((r) => ({ label: r.name, value: r.id })),
       source: sourceOptionsWithIcons,
       type: typeOptions,
+      account_type: ACCOUNT_TYPE_OPTIONS,
     }),
     [
       serverOptionsResolved,
@@ -234,6 +263,9 @@ export function ObserveFilterBar({
           return;
         case "type":
           onTypesChange(value as ObserveTypeFilterValue[]);
+          return;
+        case "account_type":
+          onAccountTypeChange?.((value as string | null) ?? "");
           return;
         case "date": {
           const d = value as {
@@ -265,6 +297,7 @@ export function ObserveFilterBar({
       onCustomRangeChange,
       onDateRangeChange,
       onClearCustomRange,
+      onAccountTypeChange,
     ],
   );
 
@@ -286,6 +319,9 @@ export function ObserveFilterBar({
         case "type":
           onTypesChange([]);
           return;
+        case "account_type":
+          onAccountTypeChange?.("");
+          return;
         case "date":
           onDateRangeChange(DEFAULT_PRESET);
           return;
@@ -298,6 +334,7 @@ export function ObserveFilterBar({
       onSourceSelectionChange,
       onTypesChange,
       onDateRangeChange,
+      onAccountTypeChange,
     ],
   );
 
@@ -332,7 +369,8 @@ export function ObserveFilterBar({
       },
       { replace: true },
     );
-  }, [setSearchParams]);
+    onAccountTypeChange?.("");
+  }, [setSearchParams, onAccountTypeChange]);
 
   // The arbitrary-attribute search/builder lives inside the sheet's "Custom
   // attributes" section (via FilterBar's customBuilder) rather than as a second
@@ -341,7 +379,11 @@ export function ObserveFilterBar({
   return (
     <Page.Toolbar className={className}>
       <Page.Toolbar.Filters
-        schema={OBSERVE_FILTERS}
+        schema={
+          onAccountTypeChange
+            ? OBSERVE_FILTERS_WITH_ACCOUNT_TYPE
+            : OBSERVE_FILTERS
+        }
         values={values}
         optionsById={optionsById}
         onChange={handleChange}

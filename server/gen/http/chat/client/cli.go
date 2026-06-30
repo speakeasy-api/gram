@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -55,6 +55,18 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			hasRisk = &chatListChatsHasRisk
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var accountType *string
+	{
+		if chatListChatsAccountType != "" {
+			accountType = &chatListChatsAccountType
+			if !(*accountType == "" || *accountType == "team" || *accountType == "personal") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("account_type", *accountType, []any{"", "team", "personal"}))
 			}
 			if err != nil {
 				return nil, err
@@ -196,6 +208,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.Source = source
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.AccountType = accountType
 	v.Pinned = pinned
 	v.MinRiskScore = minRiskScore
 	v.From = from

@@ -237,6 +237,7 @@ candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -265,6 +266,16 @@ candidate_chats AS (
       @has_risk_filter::text = ''
       OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
       OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @account_type::text = ''
+      OR ua.account_type = @account_type::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        @account_type::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
     )
     AND (
       @min_risk_score::int < 0
@@ -322,9 +333,13 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
-    COALESCE(rc.cnt, 0) AS risk_findings_count
+    COALESCE(rc.cnt, 0) AS risk_findings_count,
+    COALESCE(ua.account_type, '')::text AS account_type
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
+  -- matching chats.user_id) to expose its team/personal classification.
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -353,6 +368,16 @@ candidate_chats AS (
       @has_risk_filter::text = ''
       OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
       OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @account_type::text = ''
+      OR ua.account_type = @account_type::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        @account_type::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
     )
     AND (
       @min_risk_score::int < 0
@@ -389,7 +414,8 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    cc.risk_findings_count
+    cc.risk_findings_count,
+    cc.account_type
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -406,7 +432,8 @@ limited_chats AS (
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
-    fc.risk_findings_count
+    fc.risk_findings_count,
+    fc.account_type
   FROM filtered_chats fc
   ORDER BY
     CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
@@ -428,7 +455,8 @@ SELECT
   lc.updated_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  lc.risk_findings_count
+  lc.risk_findings_count,
+  lc.account_type
 FROM limited_chats lc;
 
 -- name: ListChatSources :many

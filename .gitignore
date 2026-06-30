@@ -1,5 +1,9 @@
 *.tmp-*
 *.log
+# Local agent scratch — per-machine memory store and ad-hoc planning notes.
+.claude/projects/
+PERSONAL_ACCOUNT_*
+.otel-capture/
 mise.local.toml
 mise.*.local.toml
 flags.local.csv

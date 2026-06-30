@@ -257,6 +257,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		MinRiskScore:   minRiskScore,
 		Pinned:         conv.PtrValOr(payload.Pinned, ""),
 		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -276,6 +277,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		MinRiskScore:   baseParams.MinRiskScore,
 		Pinned:         baseParams.Pinned,
 		Sources:        baseParams.Sources,
+		AccountType:    baseParams.AccountType,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -303,6 +305,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
 			RiskFindingsCount:    &riskCount,
+			AccountType:          conv.PtrEmpty(row.AccountType),
 			TotalInputTokens:     nil,
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
@@ -771,6 +774,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
+		AccountType:          nil,
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),

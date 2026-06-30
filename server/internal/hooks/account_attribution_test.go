@@ -251,6 +251,90 @@ func TestLogs_AttributesOncePerSession(t *testing.T) {
 	require.Equal(t, accountTypePersonal, second.AccountType.String)
 }
 
+// TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches covers a session
+// whose records a collector split across batches: the first batch carrying the
+// account UUID lacks the work email (so it classifies personal), and a later
+// batch is the first to carry the resolving email. The later batch must re-run
+// attribution — reclassifying to team, persisting the email/org, and teaching the
+// device bridge — rather than short-circuiting on the cached personal result.
+func TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "split-employee", "split@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const (
+		sessionID   = "split-session"
+		accountUUID = "acct-split"
+		extOrgID    = "split-ent-org"
+		deviceID    = "device-split"
+	)
+
+	// First batch: account UUID + device but NO work email -> classified personal.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.account_uuid", accountUUID),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	first, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, first.AccountType.String)
+	require.False(t, first.UserID.Valid)
+
+	// Second batch for the SAME session is the first to carry the work email (and
+	// the provider org). Attribution must re-run and reclassify to team.
+	err = ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now.Add(time.Minute))),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", workEmail),
+				strAttr("organization.id", extOrgID),
+				strAttr("user.account_uuid", accountUUID),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	enriched, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, enriched.AccountType.String)
+	require.Equal(t, userID, enriched.UserID.String)
+	require.Equal(t, workEmail, enriched.Email.String)
+	require.Equal(t, extOrgID, enriched.ExternalOrgID.String)
+
+	// The late-arriving team session also taught the device bridge.
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID, Provider: providerAnthropic, DeviceID: deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String)
+}
+
 // TestLogs_StampsAccountAttributionOnTelemetry confirms the account attribution
 // (provider, account_type, external_org_id) lands on the telemetry_logs rows so
 // org-level usage dashboards can split by personal vs team account.
