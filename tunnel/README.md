@@ -63,7 +63,7 @@ Redis is live data-plane state:
 
 ## Local Validation
 
-Run `mise run seed:tunnel`, then start the normal Gram stack with `madprocs`.
+Run `mise run seed`, then start the normal Gram stack with `madprocs`.
 The local Postgres MCP server and agent are declared in `compose.yml` under the
 `tunnel` profile:
 

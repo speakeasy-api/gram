@@ -6,7 +6,7 @@
 set -euo pipefail
 
 if [[ -z "${TUNNEL_LOCAL_KEY:-}" ]]; then
-  echo "TUNNEL_LOCAL_KEY is not set. Run 'mise run seed:tunnel' first." >&2
+  echo "TUNNEL_LOCAL_KEY is not set. Run 'mise run seed' first." >&2
   exit 2
 fi
 
