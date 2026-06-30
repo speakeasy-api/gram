@@ -1057,3 +1057,81 @@ VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
 -- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
 -- its threads behind).
 UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: UpsertChatArtifact :one
+-- Insert or refresh a Claude artifact for a captured session. We keep only the
+-- latest version, so a re-import of the same external_artifact_id swaps in the
+-- newest version's asset and metadata. Always scoped to project_id.
+INSERT INTO chat_artifacts (
+    project_id
+  , chat_id
+  , external_message_id
+  , external_artifact_id
+  , external_version_id
+  , title
+  , artifact_type
+  , asset_id
+)
+VALUES (
+    @project_id
+  , @chat_id
+  , @external_message_id
+  , @external_artifact_id
+  , @external_version_id
+  , @title
+  , @artifact_type
+  , @asset_id
+)
+ON CONFLICT (project_id, external_artifact_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    chat_id = EXCLUDED.chat_id
+  , external_message_id = EXCLUDED.external_message_id
+  , external_version_id = EXCLUDED.external_version_id
+  , title = EXCLUDED.title
+  , artifact_type = EXCLUDED.artifact_type
+  , asset_id = EXCLUDED.asset_id
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: ListChatArtifactsByChat :many
+-- All live artifacts for a chat, newest first, with the asset metadata the
+-- viewer needs to fetch and render the content. Scoped to project_id.
+SELECT
+    ca.id
+  , ca.chat_id
+  , ca.external_message_id
+  , ca.external_artifact_id
+  , ca.external_version_id
+  , ca.title
+  , ca.artifact_type
+  , ca.asset_id
+  , ca.created_at
+  , ca.updated_at
+  , a.content_type AS asset_content_type
+  , a.content_length AS asset_content_length
+FROM chat_artifacts ca
+JOIN assets a ON a.id = ca.asset_id
+WHERE ca.project_id = @project_id
+  AND ca.chat_id = @chat_id
+  AND ca.deleted IS FALSE
+ORDER BY ca.created_at DESC;
+
+-- name: GetChatArtifact :one
+-- A single live artifact plus the asset url/content-type needed to stream it.
+-- Scoped to project_id so a serve handler cannot read across tenants.
+SELECT
+    ca.id
+  , ca.chat_id
+  , ca.external_artifact_id
+  , ca.external_version_id
+  , ca.title
+  , ca.artifact_type
+  , ca.asset_id
+  , a.url AS asset_url
+  , a.content_type AS asset_content_type
+  , a.content_length AS asset_content_length
+FROM chat_artifacts ca
+JOIN assets a ON a.id = ca.asset_id
+WHERE ca.project_id = @project_id
+  AND ca.id = @id
+  AND ca.deleted IS FALSE;

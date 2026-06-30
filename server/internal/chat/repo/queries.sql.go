@@ -542,6 +542,63 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 	return i, err
 }
 
+const getChatArtifact = `-- name: GetChatArtifact :one
+SELECT
+    ca.id
+  , ca.chat_id
+  , ca.external_artifact_id
+  , ca.external_version_id
+  , ca.title
+  , ca.artifact_type
+  , ca.asset_id
+  , a.url AS asset_url
+  , a.content_type AS asset_content_type
+  , a.content_length AS asset_content_length
+FROM chat_artifacts ca
+JOIN assets a ON a.id = ca.asset_id
+WHERE ca.project_id = $1
+  AND ca.id = $2
+  AND ca.deleted IS FALSE
+`
+
+type GetChatArtifactParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+type GetChatArtifactRow struct {
+	ID                 uuid.UUID
+	ChatID             uuid.UUID
+	ExternalArtifactID string
+	ExternalVersionID  string
+	Title              pgtype.Text
+	ArtifactType       string
+	AssetID            uuid.UUID
+	AssetUrl           string
+	AssetContentType   string
+	AssetContentLength int64
+}
+
+// A single live artifact plus the asset url/content-type needed to stream it.
+// Scoped to project_id so a serve handler cannot read across tenants.
+func (q *Queries) GetChatArtifact(ctx context.Context, arg GetChatArtifactParams) (GetChatArtifactRow, error) {
+	row := q.db.QueryRow(ctx, getChatArtifact, arg.ProjectID, arg.ID)
+	var i GetChatArtifactRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.ExternalArtifactID,
+		&i.ExternalVersionID,
+		&i.Title,
+		&i.ArtifactType,
+		&i.AssetID,
+		&i.AssetUrl,
+		&i.AssetContentType,
+		&i.AssetContentLength,
+	)
+	return i, err
+}
+
 const getChatEntryTotals = `-- name: GetChatEntryTotals :one
 WITH ordered AS (
   SELECT
@@ -1086,6 +1143,83 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	var last_cursor_id pgtype.Text
 	err := row.Scan(&last_cursor_id)
 	return last_cursor_id, err
+}
+
+const listChatArtifactsByChat = `-- name: ListChatArtifactsByChat :many
+SELECT
+    ca.id
+  , ca.chat_id
+  , ca.external_message_id
+  , ca.external_artifact_id
+  , ca.external_version_id
+  , ca.title
+  , ca.artifact_type
+  , ca.asset_id
+  , ca.created_at
+  , ca.updated_at
+  , a.content_type AS asset_content_type
+  , a.content_length AS asset_content_length
+FROM chat_artifacts ca
+JOIN assets a ON a.id = ca.asset_id
+WHERE ca.project_id = $1
+  AND ca.chat_id = $2
+  AND ca.deleted IS FALSE
+ORDER BY ca.created_at DESC
+`
+
+type ListChatArtifactsByChatParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+type ListChatArtifactsByChatRow struct {
+	ID                 uuid.UUID
+	ChatID             uuid.UUID
+	ExternalMessageID  string
+	ExternalArtifactID string
+	ExternalVersionID  string
+	Title              pgtype.Text
+	ArtifactType       string
+	AssetID            uuid.UUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	AssetContentType   string
+	AssetContentLength int64
+}
+
+// All live artifacts for a chat, newest first, with the asset metadata the
+// viewer needs to fetch and render the content. Scoped to project_id.
+func (q *Queries) ListChatArtifactsByChat(ctx context.Context, arg ListChatArtifactsByChatParams) ([]ListChatArtifactsByChatRow, error) {
+	rows, err := q.db.Query(ctx, listChatArtifactsByChat, arg.ProjectID, arg.ChatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatArtifactsByChatRow
+	for rows.Next() {
+		var i ListChatArtifactsByChatRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ExternalMessageID,
+			&i.ExternalArtifactID,
+			&i.ExternalVersionID,
+			&i.Title,
+			&i.ArtifactType,
+			&i.AssetID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AssetContentType,
+			&i.AssetContentLength,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
@@ -2578,6 +2712,83 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertChatArtifact = `-- name: UpsertChatArtifact :one
+INSERT INTO chat_artifacts (
+    project_id
+  , chat_id
+  , external_message_id
+  , external_artifact_id
+  , external_version_id
+  , title
+  , artifact_type
+  , asset_id
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+ON CONFLICT (project_id, external_artifact_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    chat_id = EXCLUDED.chat_id
+  , external_message_id = EXCLUDED.external_message_id
+  , external_version_id = EXCLUDED.external_version_id
+  , title = EXCLUDED.title
+  , artifact_type = EXCLUDED.artifact_type
+  , asset_id = EXCLUDED.asset_id
+  , updated_at = clock_timestamp()
+RETURNING id, project_id, chat_id, external_message_id, external_artifact_id, external_version_id, title, artifact_type, asset_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertChatArtifactParams struct {
+	ProjectID          uuid.UUID
+	ChatID             uuid.UUID
+	ExternalMessageID  string
+	ExternalArtifactID string
+	ExternalVersionID  string
+	Title              pgtype.Text
+	ArtifactType       string
+	AssetID            uuid.UUID
+}
+
+// Insert or refresh a Claude artifact for a captured session. We keep only the
+// latest version, so a re-import of the same external_artifact_id swaps in the
+// newest version's asset and metadata. Always scoped to project_id.
+func (q *Queries) UpsertChatArtifact(ctx context.Context, arg UpsertChatArtifactParams) (ChatArtifact, error) {
+	row := q.db.QueryRow(ctx, upsertChatArtifact,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ExternalMessageID,
+		arg.ExternalArtifactID,
+		arg.ExternalVersionID,
+		arg.Title,
+		arg.ArtifactType,
+		arg.AssetID,
+	)
+	var i ChatArtifact
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ChatID,
+		&i.ExternalMessageID,
+		&i.ExternalArtifactID,
+		&i.ExternalVersionID,
+		&i.Title,
+		&i.ArtifactType,
+		&i.AssetID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const upsertExternalChat = `-- name: UpsertExternalChat :one

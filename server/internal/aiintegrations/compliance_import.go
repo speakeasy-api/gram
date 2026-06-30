@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -55,15 +56,17 @@ type ComplianceImportService struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	writer         *chat.ChatMessageWriter
+	assetStorage   assets.BlobStore
 	heartbeat      func(ctx context.Context, scope string, page int)
 }
 
-func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, scope string, page int)) *ComplianceImportService {
+func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, assetStorage assets.BlobStore, heartbeat func(ctx context.Context, scope string, page int)) *ComplianceImportService {
 	return &ComplianceImportService{
 		logger:         logger.With(attr.SlogComponent("aiintegrations.anthropic_compliance")),
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		writer:         writer,
+		assetStorage:   assetStorage,
 		heartbeat:      heartbeat,
 	}
 }
@@ -290,6 +293,11 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 		if err != nil {
 			return err
 		}
+
+		// Store any Claude artifacts referenced by this page's messages. Runs
+		// after the chat is enriched (page one) so the chat_id foreign key
+		// resolves; best-effort so it never blocks the message import.
+		s.persistPageArtifacts(ctx, client, cfg, chatID, page)
 
 		select {
 		case <-ctx.Done():

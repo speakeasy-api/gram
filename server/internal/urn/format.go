@@ -42,12 +42,14 @@ const (
 	AssetKindImage    AssetKind = "image"
 	AssetKindFunction AssetKind = "function"
 	AssetKindOpenAPI  AssetKind = "openapi"
+	AssetKindArtifact AssetKind = "artifact"
 )
 
 var assetKinds = map[AssetKind]struct{}{
 	AssetKindImage:    {},
 	AssetKindFunction: {},
 	AssetKindOpenAPI:  {},
+	AssetKindArtifact: {},
 }
 
 type VariationKind string

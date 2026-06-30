@@ -27,6 +27,22 @@ type Chat struct {
 	Deleted          bool
 }
 
+type ChatArtifact struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ChatID             uuid.UUID
+	ExternalMessageID  string
+	ExternalArtifactID string
+	ExternalVersionID  string
+	Title              pgtype.Text
+	ArtifactType       string
+	AssetID            uuid.UUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
 type ChatMessage struct {
 	ID                uuid.UUID
 	Seq               int64

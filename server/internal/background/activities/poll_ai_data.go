@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -34,6 +35,7 @@ func NewPollAIData(
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
+	assetStorage assets.BlobStore,
 ) *PollAIData {
 	return &PollAIData{
 		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
@@ -43,7 +45,7 @@ func NewPollAIData(
 				"page":     page,
 			})
 		}),
-		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
+		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, assetStorage, func(ctx context.Context, scope string, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderAnthropicCompliance,
 				"scope":    scope,
