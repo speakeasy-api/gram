@@ -15,6 +15,7 @@ import {
   useRegisterToolsetTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
@@ -96,7 +97,7 @@ function PlaygroundInner() {
   );
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState("anthropic/claude-sonnet-5");
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [playgroundEnvironmentSlug, setPlaygroundEnvironmentSlug] = useState<
     string | undefined

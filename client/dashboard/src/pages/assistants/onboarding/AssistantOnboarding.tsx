@@ -2,12 +2,12 @@ import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
 import {
   Chat,
   GramElementsProvider,
   type MCPServerEntry,
-  type Model,
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
@@ -229,7 +229,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           systemPrompt,
           mcps,
           model: {
-            defaultModel: "anthropic/claude-sonnet-5" as Model,
+            defaultModel: DEFAULT_ASSISTANT_MODEL,
             showModelPicker: false,
           },
           welcome,

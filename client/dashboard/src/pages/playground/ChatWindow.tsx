@@ -23,6 +23,7 @@ import {
 import { HttpRoute } from "@/components/http-route";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
@@ -62,7 +63,7 @@ type CoreTool = {
 
 const defaultModel = {
   label: "Claude Sonnet 5",
-  value: "anthropic/claude-sonnet-5",
+  value: DEFAULT_MODEL,
 };
 
 export type ChatConfig = React.RefObject<{

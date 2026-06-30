@@ -45,6 +45,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { isNotFoundError } from "@/lib/route-errors";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
@@ -1008,7 +1009,7 @@ function GenerateInstructionsButton({
 }) {
   const [generating, setGenerating] = useState(false);
   const { data: fullToolset } = useToolset(toolset.slug);
-  const model = useModel("anthropic/claude-sonnet-5");
+  const model = useModel(DEFAULT_MODEL);
 
   const tools = fullToolset?.tools ?? [];
 
