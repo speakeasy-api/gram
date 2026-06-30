@@ -423,6 +423,7 @@ export * from "./setpluginassignmentsform.js";
 export * from "./setpluginassignmentsresponsebody.js";
 export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoresult.js";
+export * from "./setsessioncaptureexclusionsrequestbody.js";
 export * from "./setsourceenvironmentlinkrequestbody.js";
 export * from "./settoolsetenvironmentlinkrequestbody.js";
 export * from "./settoolvariationsgrouprequestbody.js";

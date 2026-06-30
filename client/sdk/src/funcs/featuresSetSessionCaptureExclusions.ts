@@ -95,9 +95,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SessionCaptureExclusionsResult, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.SetSessionCaptureExclusionsRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/productFeatures.setSessionCaptureExclusions")();
 

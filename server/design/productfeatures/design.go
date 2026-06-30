@@ -94,7 +94,11 @@ var _ = Service("features", func() {
 	Method("setSessionCaptureExclusions", func() {
 		Description("Replace the set of users excluded from session capture for the active organization with the provided list of Gram user IDs.")
 		Payload(func() {
-			Attribute("user_ids", ArrayOf(String), "Gram user IDs to exclude. The provided list replaces any existing exclusions for the organization.")
+			Attribute("user_ids", ArrayOf(String, func() {
+				MaxLength(256)
+			}), "Gram user IDs to exclude. The provided list replaces any existing exclusions for the organization.", func() {
+				MaxLength(1000)
+			})
 			Required("user_ids")
 			security.SessionPayload()
 		})

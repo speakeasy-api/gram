@@ -127,6 +127,16 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	})
 	require.NoError(t, err)
 
+	// Attach both users to the org. SetSessionCaptureExclusions rejects user
+	// IDs that are not active members, so the roster must include u1 and u2.
+	for _, uid := range []string{u1, u2ID} {
+		_, err = orgRepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			UserID:         conv.ToPGText(uid),
+		})
+		require.NoError(t, err)
+	}
+
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,

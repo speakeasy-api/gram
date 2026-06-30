@@ -3,11 +3,13 @@ package productfeatures_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/features"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestService_SetAndListSessionCaptureExclusions(t *testing.T) {
@@ -39,4 +41,25 @@ func TestService_SetAndListSessionCaptureExclusions(t *testing.T) {
 	addsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSessionCaptureExclusionAdd)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, addsAfter) // u1 unchanged → no new add
+}
+
+func TestService_SetSessionCaptureExclusions_RejectsNonMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	// A user ID that is not an active member of the org must be rejected so
+	// admins can't create exclusions (or audit entries) for arbitrary global
+	// user IDs, outside the "specific members" contract.
+	stranger := uuid.NewString()
+	_, err := ti.service.SetSessionCaptureExclusions(ctx, &gen.SetSessionCaptureExclusionsPayload{UserIds: []string{ti.u1, stranger}})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	// Validation runs before any writes, so nothing should have been persisted.
+	got, err := ti.service.ListSessionCaptureExclusions(ctx, &gen.ListSessionCaptureExclusionsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, got.UserIds)
 }
