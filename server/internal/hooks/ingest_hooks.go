@@ -2,46 +2,50 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-// Ingest is the authenticated, unified hook endpoint. Unlike the legacy
-// platform-specific endpoints, attribution comes from the authenticated API key
-// owner in AuthContext. Any user email in the payload is treated as
-// source-reported metadata only.
+const hookIngestSchemaV1 = "hook.ingest.v1"
+
+// Ingest is the authenticated, feature-first hook endpoint. Legacy
+// provider-specific endpoints keep their compatibility behavior; this path only
+// accepts the canonical Gram contract and attributes every event to the token
+// owner from AuthContext.
 func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
-
-	actorEmail := ""
-	if authCtx.Email != nil {
-		actorEmail = strings.TrimSpace(*authCtx.Email)
+	if err := validateCanonicalIngestPayload(payload); err != nil {
+		return nil, err
 	}
 
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-	actorUserID := authCtx.UserID
+	eventType := strings.TrimSpace(payload.Event.Type)
+	source := strings.TrimSpace(payload.Source.Adapter)
+	sessionID := canonicalSessionID(payload)
+	timestamp := canonicalEventTime(payload)
 
 	logger := s.logger.With(
-		attr.SlogHookSource(payload.HookSource),
-		attr.SlogHookEvent(payload.EventType),
-		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
-		attr.SlogGenAIConversationID(ingestConversationID(payload)),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
+		attr.SlogHookSource(source),
+		attr.SlogHookEvent(eventType),
+		attr.SlogToolName(canonicalToolName(payload)),
+		attr.SlogGenAIConversationID(sessionID),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
 	)
 	logger.InfoContext(ctx, "unified hook received", attr.SlogEvent("hooks_ingest"))
 
@@ -49,29 +53,93 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		ctx = withHookDuplicate(ctx)
 	}
 
-	hookEvent, err := normalizedEventFromIngest(payload, authCtx, actorEmail, time.Now())
-	if err != nil {
-		return nil, err
+	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, timestamp)
+	if !s.isHookDuplicate(ctx) {
+		s.recordCanonicalHook(ctx, payload, authCtx, timestamp, blockReason)
 	}
-	blockReason, userReason := s.evaluateIngestHook(ctx, hookEvent, payload, authCtx, actorUserID)
-	s.recordKnownIngestSource(ctx, payload, authCtx, actorEmail, blockReason)
 	if blockReason != "" {
-		return blockedIngestResult(payload, userReason), nil
+		return canonicalDenyResult(userReason), nil
 	}
-	return allowedIngestResult(payload), nil
+	return canonicalAllowResult(), nil
 }
 
-func normalizedEventFromIngest(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actorEmail string, timestamp time.Time) (any, error) {
-	eventType := hookevents.EventType(strings.TrimSpace(payload.EventType))
-	rawEventType := rawIngestHookEventName(payload)
-	if rawEventType == "" {
-		rawEventType = string(eventType)
+func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return oops.E(oops.CodeInvalid, nil, "source and event are required")
 	}
+	if strings.TrimSpace(payload.Source.Adapter) == "" {
+		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
+	}
+	if strings.TrimSpace(payload.Event.Type) == "" {
+		return oops.E(oops.CodeInvalid, nil, "event.type is required")
+	}
+	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
+		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
+	}
+	return nil
+}
 
-	event := hookevents.Event{
-		Provider:     hookevents.Provider(strings.TrimSpace(payload.HookSource)),
-		Type:         eventType,
-		RawEventType: rawEventType,
+func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time) (string, string) {
+	event := canonicalHookEvent(payload, authCtx, timestamp)
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "prompt.submitted":
+		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
+			Prompt: canonicalPromptText(payload),
+		})
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+		}
+	case "tool.requested":
+		toolName := canonicalToolName(payload)
+		toolInput := canonicalToolInput(payload)
+		if permissionType := canonicalPermissionType(payload); permissionType != "" {
+			ev := hookevents.NewPermissionRequest(event, hookevents.PermissionRequestParams{
+				ToolName:       toolName,
+				ToolInput:      toolInput,
+				PermissionType: permissionType,
+			})
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+				return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+			}
+		}
+		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) {
+			ev := hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
+				ToolName:  toolName,
+				ToolInput: toolInput,
+			})
+			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+				return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+			}
+			return s.evaluateCanonicalShadowMCP(ctx, authCtx, payload, toolName, toolInput)
+		}
+		ev := hookevents.NewBeforeToolUse(event, hookevents.BeforeToolUseParams{
+			ToolName:  toolName,
+			ToolInput: toolInput,
+		})
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+		}
+	}
+	return "", ""
+}
+
+func canonicalHookEvent(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time) hookevents.Event {
+	actorEmail := ""
+	if authCtx.Email != nil {
+		actorEmail = strings.TrimSpace(*authCtx.Email)
+	}
+	rawEvent := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
+	if rawEvent == "" {
+		rawEvent = strings.TrimSpace(payload.Event.Type)
+	}
+	return hookevents.Event{
+		Provider:     hookevents.Provider(strings.TrimSpace(payload.Source.Adapter)),
+		Type:         canonicalRiskEventType(payload),
+		RawEventType: rawEvent,
 		Timestamp:    timestamp,
 		AuthContext:  authCtx,
 		Context: hookevents.EventContext{
@@ -82,127 +150,59 @@ func normalizedEventFromIngest(payload *gen.IngestPayload, authCtx *contextvalue
 				Email: actorEmail,
 			},
 		},
-		ConversationID: ingestConversationID(payload),
+		ConversationID: canonicalSessionID(payload),
 		Raw:            payload,
 	}
+}
 
-	switch eventType {
-	case hookevents.EventTypeSessionStart:
-		return hookevents.NewSessionStart(event), nil
-	case hookevents.EventTypeConfigChange:
-		return hookevents.NewConfigChange(event), nil
-	case hookevents.EventTypeBeforeToolUse:
-		return hookevents.NewBeforeToolUse(event, hookevents.BeforeToolUseParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
-		}), nil
-	case hookevents.EventTypeAfterToolUse:
-		return hookevents.NewAfterToolUse(event, hookevents.AfterToolUseParams{
-			ToolName:   conv.PtrValOr(payload.ToolName, ""),
-			ToolOutput: ingestToolOutput(payload),
-		}), nil
-	case hookevents.EventTypeAfterToolUseFailure:
-		return hookevents.NewAfterToolUseFailure(event, hookevents.AfterToolUseFailureParams{
-			ToolName:    conv.PtrValOr(payload.ToolName, ""),
-			Error:       payload.Error,
-			IsInterrupt: conv.PtrValOr(payload.IsInterrupt, false),
-		}), nil
-	case hookevents.EventTypeBeforeMCPExecution:
-		return hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
-		}), nil
-	case hookevents.EventTypeAfterMCPExecution:
-		return hookevents.NewAfterMCPExecution(event, hookevents.AfterMCPExecutionParams{
-			ToolName:   conv.PtrValOr(payload.ToolName, ""),
-			ToolOutput: ingestToolOutput(payload),
-		}), nil
-	case hookevents.EventTypePermissionRequest:
-		return hookevents.NewPermissionRequest(event, hookevents.PermissionRequestParams{
-			ToolName:       conv.PtrValOr(payload.ToolName, ""),
-			ToolInput:      payload.ToolInput,
-			PermissionType: conv.PtrValOr(payload.PermissionType, ""),
-		}), nil
-	case hookevents.EventTypeUserPromptSubmit:
-		return hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: conv.PtrValOr(payload.Prompt, ""),
-		}), nil
-	case hookevents.EventTypeAfterAgentResponse:
-		return hookevents.NewAfterAgentResponse(event, hookevents.AfterAgentResponseParams{
-			Text: conv.PtrValOr(payload.Text, ""),
-		}), nil
-	case hookevents.EventTypeAfterAgentThought:
-		return hookevents.NewAfterAgentThought(event, hookevents.AfterAgentThoughtParams{
-			Text:       conv.PtrValOr(payload.Text, ""),
-			DurationMs: conv.PtrValOr(payload.DurationMs, 0),
-		}), nil
-	case hookevents.EventTypeStop:
-		return hookevents.NewStop(event, hookevents.StopParams{
-			LastAssistantMessage: conv.PtrValOr(payload.LastAssistantMessage, ""),
-		}), nil
-	case hookevents.EventTypeSessionEnd:
-		return hookevents.NewSessionEnd(event, hookevents.SessionEndParams{
-			Reason: conv.PtrValOr(payload.Reason, ""),
-		}), nil
-	case hookevents.EventTypeNotification:
-		return hookevents.NewNotification(event, hookevents.NotificationParams{
-			NotificationType: conv.PtrValOr(payload.NotificationType, ""),
-			Message:          conv.PtrValOr(payload.Message, ""),
-			Title:            conv.PtrValOr(payload.Title, ""),
-		}), nil
+func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "prompt.submitted":
+		return hookevents.EventTypeUserPromptSubmit
+	case "tool.requested":
+		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload)) {
+			return hookevents.EventTypeBeforeMCPExecution
+		}
+		if canonicalPermissionType(payload) != "" {
+			return hookevents.EventTypePermissionRequest
+		}
+		return hookevents.EventTypeBeforeToolUse
+	case "tool.completed":
+		if canonicalMCPData(payload) != nil {
+			return hookevents.EventTypeAfterMCPExecution
+		}
+		return hookevents.EventTypeAfterToolUse
+	case "tool.failed":
+		return hookevents.EventTypeAfterToolUseFailure
+	case "assistant.responded":
+		return hookevents.EventTypeAfterAgentResponse
+	case "session.started":
+		return hookevents.EventTypeSessionStart
+	case "session.updated":
+		return hookevents.EventTypeConfigChange
+	case "session.ended":
+		return hookevents.EventTypeSessionEnd
+	case "notification.reported":
+		return hookevents.EventTypeNotification
 	default:
-		return nil, oops.E(oops.CodeInvalid, nil, "unsupported hook event_type")
+		return hookevents.EventType(strings.TrimSpace(payload.Event.Type))
 	}
 }
 
-func (s *Service) evaluateIngestHook(ctx context.Context, hookEvent any, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actorUserID string) (string, string) {
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-
-	switch ev := hookEvent.(type) {
-	case *hookevents.BeforeMCPExecution:
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
-			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-		return s.evaluateIngestShadowMCP(ctx, orgID, projectID, actorUserID, payload, ev.ToolName, ev.ToolInput)
-	case *hookevents.BeforeToolUse:
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
-			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-		if toolref.IsMCPToolName(ev.ToolName) {
-			return s.evaluateIngestShadowMCP(ctx, orgID, projectID, actorUserID, payload, ev.ToolName, ev.ToolInput)
-		}
-	case *hookevents.PermissionRequest:
-		if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
-			auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-	case *hookevents.UserPromptSubmit:
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
-			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-	default:
-	}
-	return "", ""
-}
-
-func (s *Service) evaluateIngestShadowMCP(ctx context.Context, orgID, projectID, actorUserID string, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, actorUserID)
+func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
+	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
 	if policy == nil {
 		return "", ""
 	}
 
 	toolName := toolref.MCPFunctionOf(rawToolName)
-	evidence := ingestShadowMCPEvidence(payload, rawToolName)
-	if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, toolInput, toolName, evidence); denied {
+	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
+	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, policy.ID, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  orgID,
-			ProjectID:       projectID,
-			RequesterUserID: actorUserID,
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			ProjectID:       authCtx.ProjectID.String(),
+			RequesterUserID: authCtx.UserID,
 			UserMessage:     policy.UserMessage,
 			AuditReason:     auditReason,
 			Evidence:        evidence,
@@ -215,322 +215,415 @@ func (s *Service) evaluateIngestShadowMCP(ctx context.Context, orgID, projectID,
 	return "", ""
 }
 
-func ingestShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {
+func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {
+	mcp := canonicalMCPData(payload)
+	if mcp == nil {
+		return shadowmcp.AccessEvidence{
+			FullURL:        "",
+			URLHost:        "",
+			ServerIdentity: toolref.MCPServerOf(rawToolName),
+		}
+	}
+	identity := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, ""))
+	if identity == "" {
+		identity = strings.TrimSpace(conv.PtrValOr(mcp.ServerName, ""))
+	}
+	if identity == "" {
+		identity = toolref.MCPServerOf(rawToolName)
+	}
 	return shadowmcp.AccessEvidence{
-		FullURL:        conv.PtrValOr(payload.URL, ""),
+		FullURL:        strings.TrimSpace(conv.PtrValOr(mcp.URL, "")),
 		URLHost:        "",
-		ServerIdentity: toolref.MCPServerOf(rawToolName),
+		ServerIdentity: identity,
 	}
 }
 
-func (s *Service) recordKnownIngestSource(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actorEmail string, blockReason string) {
-	switch strings.TrimSpace(payload.HookSource) {
-	case "claude":
-		claudePayload := claudePayloadFromIngest(payload, actorEmail)
-		if sessionID := conv.PtrValOr(claudePayload.SessionID, ""); sessionID != "" {
-			metadata := authenticatedSessionMetadata(authCtx, sessionID, "claude-code", actorEmail)
-			if err := s.cache.Set(ctx, sessionCacheKey(sessionID), metadata, 24*time.Hour); err != nil {
-				s.logger.WarnContext(ctx, "failed to cache authenticated Claude hook session metadata",
-					attr.SlogEvent("hooks_ingest_claude_cache_set_failed"),
-					attr.SlogError(err),
-					attr.SlogGenAIConversationID(sessionID),
-				)
-			}
+func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time, blockReason string) {
+	s.writeCanonicalTelemetry(ctx, payload, authCtx, timestamp, blockReason)
+	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx); err != nil {
+		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
+			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(canonicalSessionID(payload)),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
+	}
+}
+
+func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time, blockReason string) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	projectID := authCtx.ProjectID.String()
+	source := strings.TrimSpace(payload.Source.Adapter)
+	eventType := strings.TrimSpace(payload.Event.Type)
+	sessionID := canonicalSessionID(payload)
+	toolName := canonicalTelemetryToolName(payload)
+	if toolName == "" {
+		toolName = eventType
+	}
+
+	attrs := map[attr.Key]any{
+		attr.EventSourceKey:    string(telemetry.EventSourceHook),
+		attr.HookEventKey:      eventType,
+		attr.HookSourceKey:     source,
+		attr.ProjectIDKey:      projectID,
+		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
+		attr.SpanIDKey:         generateSpanID(),
+		attr.TraceIDKey:        canonicalTraceID(payload),
+		attr.LogBodyKey:        "Hook: " + eventType,
+	}
+	if sessionID != "" {
+		attrs[attr.GenAIConversationIDKey] = sessionID
+	}
+	if hostname := strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")); hostname != "" {
+		attrs[attr.HookHostnameKey] = hostname
+	}
+	if model := canonicalModel(payload); model != "" {
+		attrs[attr.GenAIResponseModelKey] = model
+	}
+	if blockReason != "" {
+		attrs[attr.HookBlockReasonKey] = blockReason
+	}
+	if toolName != "" {
+		attrs[attr.ToolNameKey] = toolName
+	}
+	if toolCallID := canonicalToolCallID(payload); toolCallID != "" {
+		attrs[attr.GenAIToolCallIDKey] = toolCallID
+	}
+	if input := canonicalToolInput(payload); input != nil {
+		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(input)
+	}
+	if output := canonicalToolOutput(payload); output != nil {
+		attrs[attr.GenAIToolCallResultKey] = jsonString(output)
+	}
+	if errPayload := canonicalToolError(payload); errPayload != nil {
+		attrs[attr.HookErrorKey] = jsonString(errPayload)
+	}
+	if isInterrupt := canonicalIsInterrupt(payload); isInterrupt != nil {
+		attrs[attr.HookIsInterruptKey] = *isInterrupt
+	}
+	if tool := canonicalToolCallData(payload); tool != nil && tool.DurationMs != nil {
+		attrs[attr.ToolCallDurationKey] = time.Duration(*tool.DurationMs * float64(time.Millisecond)).Seconds()
+	}
+	if usage := canonicalUsageData(payload); usage != nil {
+		if usage.InputTokens != nil {
+			attrs[attr.GenAIUsageInputTokensKey] = *usage.InputTokens
 		}
-		if payload.EventType == string(hookevents.EventTypeSessionStart) || payload.EventType == string(hookevents.EventTypeConfigChange) {
-			s.captureMCPListSnapshot(ctx, claudePayload)
+		if usage.OutputTokens != nil {
+			attrs[attr.GenAIUsageOutputTokensKey] = *usage.OutputTokens
 		}
-		s.recordHook(ctx, claudePayload)
-	case "cursor":
-		s.recordCursorHook(ctx, cursorPayloadFromIngest(payload, actorEmail), authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, blockReason)
-	case "codex":
-		codexPayload := codexPayloadFromIngest(payload, actorEmail)
-		metadata := authenticatedSessionMetadata(authCtx, conv.PtrValOr(codexPayload.SessionID, ""), "Codex", actorEmail)
-		s.recordCodexHook(ctx, codexPayload, &metadata, blockReason)
+		if usage.CacheReadTokens != nil {
+			attrs[attr.GenAIUsageCacheReadInputTokensKey] = *usage.CacheReadTokens
+		}
+		if usage.CacheWriteTokens != nil {
+			attrs[attr.GenAIUsageCacheCreationInputTokensKey] = *usage.CacheWriteTokens
+		}
+		if usage.Cost != nil {
+			attrs[attr.GenAIUsageCostKey] = *usage.Cost
+		}
+	}
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			attrs[attr.ToolCallSourceKey] = server
+		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			attrs[attr.ToolCallSourceKey] = server
+		}
+		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
+			attrs[attr.MCPServerURLKey] = url
+			attrs[attr.MCPMatchKey] = url
+		} else if command := strings.TrimSpace(conv.PtrValOr(mcp.Command, "")); command != "" {
+			attrs[attr.MCPMatchKey] = command
+		}
+	}
+	if skill := canonicalSkillName(payload); skill != "" {
+		attrs[attr.ToolNameKey] = "Skill"
+		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
+		toolName = "Skill"
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp: timestamp,
+		ToolInfo: telemetry.ToolInfo{
+			Name:           toolName,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      projectID,
+			ID:             "",
+			URN:            "",
+			DeploymentID:   "",
+			FunctionID:     nil,
+		},
+		UserInfo:   telemetry.UserInfoByID(authCtx.UserID),
+		Attributes: attrs,
+	})
+}
+
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) error {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" || authCtx.ProjectID == nil {
+		return nil
+	}
+
+	var role, content string
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "prompt.submitted":
+		role = "user"
+		content = canonicalPromptText(payload)
+	case "assistant.responded":
+		role = "assistant"
+		content = canonicalMessageText(payload)
 	default:
-		// Custom hook sources are accepted by /rpc/hooks.ingest, but the
-		// current storage schema is still shaped around built-in adapters.
+		return nil
 	}
-}
-
-func ingestConversationID(payload *gen.IngestPayload) string {
-	if id := strings.TrimSpace(conv.PtrValOr(payload.ConversationID, "")); id != "" {
-		return id
-	}
-	return strings.TrimSpace(conv.PtrValOr(payload.SessionID, ""))
-}
-
-func rawIngestHookEventName(payload *gen.IngestPayload) string {
-	return strings.TrimSpace(conv.PtrValOr(payload.HookEventName, ""))
-}
-
-func ingestToolOutput(payload *gen.IngestPayload) any {
-	if payload.ToolOutput != nil {
-		return payload.ToolOutput
-	}
-	if payload.ToolResponse != nil {
-		return payload.ToolResponse
-	}
-	if payload.ResultJSON != nil {
-		return *payload.ResultJSON
-	}
-	return nil
-}
-
-func legacyHookEventName(payload *gen.IngestPayload) string {
-	if raw := rawIngestHookEventName(payload); raw != "" {
-		return raw
+	if strings.TrimSpace(content) == "" {
+		return nil
 	}
 
-	switch strings.TrimSpace(payload.HookSource) {
-	case "claude":
-		switch hookevents.EventType(payload.EventType) {
-		case hookevents.EventTypeSessionStart:
-			return "SessionStart"
-		case hookevents.EventTypeConfigChange:
-			return "ConfigChange"
-		case hookevents.EventTypeBeforeToolUse:
-			return "PreToolUse"
-		case hookevents.EventTypeAfterToolUse:
-			return "PostToolUse"
-		case hookevents.EventTypeAfterToolUseFailure:
-			return "PostToolUseFailure"
-		case hookevents.EventTypeUserPromptSubmit:
-			return "UserPromptSubmit"
-		case hookevents.EventTypeStop:
-			return "Stop"
-		case hookevents.EventTypeSessionEnd:
-			return "SessionEnd"
-		case hookevents.EventTypeNotification:
-			return "Notification"
-		default:
-		}
-	case "cursor":
-		switch hookevents.EventType(payload.EventType) {
-		case hookevents.EventTypeSessionStart:
-			return "sessionStart"
-		case hookevents.EventTypeUserPromptSubmit:
-			return "beforeSubmitPrompt"
-		case hookevents.EventTypeAfterAgentResponse:
-			return "afterAgentResponse"
-		case hookevents.EventTypeAfterAgentThought:
-			return "afterAgentThought"
-		case hookevents.EventTypeBeforeToolUse:
-			return "preToolUse"
-		case hookevents.EventTypeAfterToolUse:
-			return "postToolUse"
-		case hookevents.EventTypeAfterToolUseFailure:
-			return "postToolUseFailure"
-		case hookevents.EventTypeBeforeMCPExecution:
-			return "beforeMCPExecution"
-		case hookevents.EventTypeAfterMCPExecution:
-			return "afterMCPExecution"
-		case hookevents.EventTypeStop:
-			return "stop"
-		default:
-		}
-	case "codex":
-		switch hookevents.EventType(payload.EventType) {
-		case hookevents.EventTypeSessionStart:
-			return "SessionStart"
-		case hookevents.EventTypeBeforeToolUse:
-			return "PreToolUse"
-		case hookevents.EventTypeAfterToolUse:
-			return "PostToolUse"
-		case hookevents.EventTypePermissionRequest:
-			return "PermissionRequest"
-		case hookevents.EventTypeUserPromptSubmit:
-			return "UserPromptSubmit"
-		case hookevents.EventTypeStop:
-			return "Stop"
-		default:
-		}
-	default:
+	actorEmail := ""
+	if authCtx.Email != nil {
+		actorEmail = strings.TrimSpace(*authCtx.Email)
 	}
-	return payload.EventType
-}
-
-func allowedIngestResult(payload *gen.IngestPayload) *gen.IngestHookResult {
-	result := emptyIngestHookResult()
-	switch strings.TrimSpace(payload.HookSource) {
-	case "claude":
-		if hookevents.EventType(payload.EventType) == hookevents.EventTypeSessionStart {
-			continueVal := true
-			result.Continue = &continueVal
-		}
-		if hookevents.EventType(payload.EventType) == hookevents.EventTypeBeforeToolUse {
-			hookEventName := legacyHookEventName(payload)
-			allow := "allow"
-			result.HookSpecificOutput = &HookSpecificOutput{
-				HookEventName:            &hookEventName,
-				AdditionalContext:        nil,
-				PermissionDecision:       &allow,
-				PermissionDecisionReason: nil,
-			}
-		}
-	case "cursor":
-		eventType := hookevents.EventType(payload.EventType)
-		if eventType == hookevents.EventTypeBeforeToolUse || eventType == hookevents.EventTypeBeforeMCPExecution {
-			allow := "allow"
-			result.Permission = &allow
-		}
-	default:
-	}
-	return result
-}
-
-func blockedIngestResult(payload *gen.IngestPayload, reason string) *gen.IngestHookResult {
-	if strings.TrimSpace(payload.HookSource) == "claude" {
-		return ingestResultFromClaude(constructBlockResponse(legacyHookEventName(payload), reason))
-	}
-
-	result := emptyIngestHookResult()
-	deny := "deny"
-	result.Decision = &deny
-	result.Reason = &reason
-	result.Permission = &deny
-	result.UserMessage = &reason
-	result.AgentMessage = &reason
-	return result
-}
-
-func emptyIngestHookResult() *gen.IngestHookResult {
-	return &gen.IngestHookResult{
-		Continue:           nil,
-		StopReason:         nil,
-		SuppressOutput:     nil,
-		SystemMessage:      nil,
-		HookSpecificOutput: nil,
-		Decision:           nil,
-		Reason:             nil,
-		Permission:         nil,
-		UserMessage:        nil,
-		AdditionalContext:  nil,
-		AgentMessage:       nil,
-	}
-}
-
-func authenticatedSessionMetadata(authCtx *contextvalues.AuthContext, sessionID, serviceName, actorEmail string) SessionMetadata {
-	return SessionMetadata{
+	metadata := SessionMetadata{
 		SessionID:   sessionID,
-		ServiceName: serviceName,
+		ServiceName: strings.TrimSpace(payload.Source.Adapter),
 		UserEmail:   actorEmail,
 		UserID:      authCtx.UserID,
 		ClaudeOrgID: "",
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}
+	msg := chatRepo.CreateChatMessageParams{
+		ChatID:           sessionIDToUUID(sessionID),
+		ProjectID:        *authCtx.ProjectID,
+		Role:             role,
+		Content:          content,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGTextEmpty(authCtx.UserID),
+		ExternalUserID:   conv.ToPGTextEmpty(actorEmail),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+		Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
+		ContentHash:      nil,
+		Generation:       canonicalGeneration(payload),
+	}
+	return s.insertMessageWithFallbackUpsert(ctx, &metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, content))
 }
 
-func claudePayloadFromIngest(payload *gen.IngestPayload, actorEmail string) *gen.ClaudePayload {
-	return &gen.ClaudePayload{
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		HookHostname:         payload.HookHostname,
-		IdempotencyKey:       payload.IdempotencyKey,
-		HookEventName:        legacyHookEventName(payload),
-		ToolName:             payload.ToolName,
-		ToolUseID:            payload.ToolUseID,
-		ToolInput:            payload.ToolInput,
-		ToolResponse:         payload.ToolResponse,
-		Error:                payload.Error,
-		IsInterrupt:          payload.IsInterrupt,
-		SessionID:            payload.SessionID,
-		UserEmail:            &actorEmail,
-		Cwd:                  payload.Cwd,
-		TranscriptPath:       payload.TranscriptPath,
-		AdditionalData:       payload.AdditionalData,
-		Source:               payload.Source,
-		Model:                payload.Model,
-		Prompt:               payload.Prompt,
-		LastAssistantMessage: payload.LastAssistantMessage,
-		StopHookActive:       payload.StopHookActive,
-		Reason:               payload.Reason,
-		NotificationType:     payload.NotificationType,
-		Message:              payload.Message,
-		Title:                payload.Title,
-	}
-}
-
-func cursorPayloadFromIngest(payload *gen.IngestPayload, actorEmail string) *gen.CursorPayload {
-	conversationID := payload.ConversationID
-	if conversationID == nil {
-		conversationID = payload.SessionID
-	}
-	return &gen.CursorPayload{
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		HookHostname:     payload.HookHostname,
-		IdempotencyKey:   payload.IdempotencyKey,
-		HookEventName:    legacyHookEventName(payload),
-		ConversationID:   conversationID,
-		GenerationID:     payload.GenerationID,
-		Model:            payload.Model,
-		CursorVersion:    payload.CursorVersion,
-		UserEmail:        &actorEmail,
-		SessionID:        payload.SessionID,
-		ToolName:         payload.ToolName,
-		ToolUseID:        payload.ToolUseID,
-		ToolInput:        payload.ToolInput,
-		ToolResponse:     payload.ToolResponse,
-		Error:            payload.Error,
-		IsInterrupt:      payload.IsInterrupt,
-		AdditionalData:   payload.AdditionalData,
-		Prompt:           payload.Prompt,
-		ComposerMode:     payload.ComposerMode,
-		TranscriptPath:   payload.TranscriptPath,
-		Status:           payload.Status,
-		LoopCount:        payload.LoopCount,
-		InputTokens:      payload.InputTokens,
-		OutputTokens:     payload.OutputTokens,
-		CacheReadTokens:  payload.CacheReadTokens,
-		CacheWriteTokens: payload.CacheWriteTokens,
-		Text:             payload.Text,
-		DurationMs:       payload.DurationMs,
-		URL:              payload.URL,
-		Command:          payload.Command,
-		ResultJSON:       payload.ResultJSON,
-		Duration:         payload.Duration,
-	}
-}
-
-func codexPayloadFromIngest(payload *gen.IngestPayload, actorEmail string) *gen.CodexPayload {
-	return &gen.CodexPayload{
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		HookHostname:         payload.HookHostname,
-		IdempotencyKey:       payload.IdempotencyKey,
-		HookEventName:        legacyHookEventName(payload),
-		SessionID:            payload.SessionID,
-		UserEmail:            &actorEmail,
-		AdditionalData:       payload.AdditionalData,
-		TranscriptPath:       payload.TranscriptPath,
-		Cwd:                  payload.Cwd,
-		Model:                payload.Model,
-		ToolName:             payload.ToolName,
-		ToolInput:            payload.ToolInput,
-		ToolOutput:           payload.ToolOutput,
-		PermissionType:       payload.PermissionType,
-		Prompt:               payload.Prompt,
-		LastAssistantMessage: payload.LastAssistantMessage,
-	}
-}
-
-func ingestResultFromClaude(result *gen.ClaudeHookResult) *gen.IngestHookResult {
-	if result == nil {
-		return &gen.IngestHookResult{Continue: nil, StopReason: nil, SuppressOutput: nil, SystemMessage: nil, HookSpecificOutput: nil, Decision: nil, Reason: nil, Permission: nil, UserMessage: nil, AdditionalContext: nil, AgentMessage: nil}
-	}
+func canonicalAllowResult() *gen.IngestHookResult {
 	return &gen.IngestHookResult{
-		Continue:           result.Continue,
-		StopReason:         result.StopReason,
-		SuppressOutput:     result.SuppressOutput,
-		SystemMessage:      result.SystemMessage,
-		HookSpecificOutput: result.HookSpecificOutput,
-		Decision:           result.Decision,
-		Reason:             result.Reason,
-		Permission:         nil,
-		UserMessage:        nil,
-		AdditionalContext:  nil,
-		AgentMessage:       nil,
+		Decision: "allow",
+		Reason:   nil,
+		Message:  nil,
+		Effects:  nil,
+	}
+}
+
+func canonicalDenyResult(message string) *gen.IngestHookResult {
+	if strings.TrimSpace(message) == "" {
+		message = "Request denied by Speakeasy policy."
+	}
+	reason := "policy_denied"
+	return &gen.IngestHookResult{
+		Decision: "deny",
+		Reason:   &reason,
+		Message:  &message,
+		Effects:  nil,
+	}
+}
+
+func canonicalEventTime(payload *gen.IngestPayload) time.Time {
+	if payload != nil && payload.Event != nil {
+		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
+			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				return t
+			}
+		}
+	}
+	return time.Now()
+}
+
+func canonicalSessionID(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Session != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Session.ID, ""))
+	}
+	return ""
+}
+
+func canonicalModel(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Session != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Session.Model, ""))
+	}
+	return ""
+}
+
+func canonicalToolName(payload *gen.IngestPayload) string {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return strings.TrimSpace(conv.PtrValOr(tool.Name, ""))
+	}
+	return ""
+}
+
+func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
+	if skill := canonicalSkillName(payload); skill != "" {
+		return "Skill"
+	}
+	return canonicalToolName(payload)
+}
+
+func canonicalToolCallID(payload *gen.IngestPayload) string {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return strings.TrimSpace(conv.PtrValOr(tool.ID, ""))
+	}
+	return ""
+}
+
+func canonicalTraceID(payload *gen.IngestPayload) string {
+	if id := canonicalToolCallID(payload); id != "" {
+		return hashToolCallIDToTraceID(id)
+	}
+	if sessionID := canonicalSessionID(payload); sessionID != "" {
+		return hashToolCallIDToTraceID(sessionID)
+	}
+	return generateTraceID()
+}
+
+func canonicalToolInput(payload *gen.IngestPayload) any {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return tool.Input
+	}
+	return nil
+}
+
+func canonicalToolOutput(payload *gen.IngestPayload) any {
+	if tool := canonicalToolCallData(payload); tool != nil && tool.Output != nil {
+		return tool.Output
+	}
+	if mcp := canonicalMCPData(payload); mcp != nil && mcp.ResultJSON != nil {
+		return *mcp.ResultJSON
+	}
+	return nil
+}
+
+func canonicalToolError(payload *gen.IngestPayload) any {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return tool.Error
+	}
+	return nil
+}
+
+func canonicalIsInterrupt(payload *gen.IngestPayload) *bool {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return tool.IsInterrupt
+	}
+	return nil
+}
+
+func canonicalPermissionType(payload *gen.IngestPayload) string {
+	if tool := canonicalToolCallData(payload); tool != nil {
+		return strings.TrimSpace(conv.PtrValOr(tool.PermissionType, ""))
+	}
+	return ""
+}
+
+func canonicalPromptText(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Data != nil && payload.Data.Prompt != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Data.Prompt.Text, ""))
+	}
+	return ""
+}
+
+func canonicalMessageText(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Data != nil && payload.Data.Message != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Data.Message.Text, ""))
+	}
+	return ""
+}
+
+func canonicalSkillName(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Data != nil && payload.Data.Skill != nil {
+		return strings.TrimSpace(payload.Data.Skill.Name)
+	}
+	return ""
+}
+
+func canonicalGeneration(payload *gen.IngestPayload) int32 {
+	if payload == nil || payload.Session == nil {
+		return 0
+	}
+	turnID := strings.TrimSpace(conv.PtrValOr(payload.Session.TurnID, ""))
+	if turnID == "" {
+		return 0
+	}
+	var hash uint32
+	for i := 0; i < len(turnID); i++ {
+		hash = hash*16777619 ^ uint32(turnID[i])
+	}
+	return int32(hash & 0x7fffffff)
+}
+
+func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
+	title := canonicalPromptText(payload)
+	if title == "" {
+		title = fallback
+	}
+	title = strings.TrimSpace(title)
+	if len(title) <= 80 {
+		return title
+	}
+	return title[:80]
+}
+
+func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {
+	if payload != nil && payload.Data != nil {
+		return payload.Data.ToolCall
+	}
+	return nil
+}
+
+func canonicalMCPData(payload *gen.IngestPayload) *gen.HookMCPData {
+	if payload != nil && payload.Data != nil {
+		return payload.Data.Mcp
+	}
+	return nil
+}
+
+func canonicalUsageData(payload *gen.IngestPayload) *gen.HookUsageData {
+	if payload != nil && payload.Data != nil {
+		return payload.Data.Usage
+	}
+	return nil
+}
+
+func jsonString(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	case json.RawMessage:
+		return string(t)
+	default:
+		b, err := json.Marshal(t)
+		if err != nil {
+			return fmt.Sprint(t)
+		}
+		return string(b)
 	}
 }

@@ -3,87 +3,60 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Unified result for hook events
+ * Whether the local hook should allow or deny the action.
+ */
+export const Decision = {
+  Allow: "allow",
+  Deny: "deny",
+} as const;
+/**
+ * Whether the local hook should allow or deny the action.
+ */
+export type Decision = ClosedEnum<typeof Decision>;
+
+/**
+ * Provider-neutral decision returned by the unified hook endpoint.
  */
 export type IngestHookResult = {
   /**
-   * Cursor context to inject
+   * Whether the local hook should allow or deny the action.
    */
-  additionalContext?: string | undefined;
+  decision: Decision;
   /**
-   * Cursor agent-facing message
+   * Optional side-effect hints for hook SDKs.
    */
-  agentMessage?: string | undefined;
+  effects?: { [k: string]: any } | undefined;
   /**
-   * Claude SessionStart continue flag
+   * User-facing decision message.
    */
-  continue?: boolean | undefined;
+  message?: string | undefined;
   /**
-   * Codex or Claude top-level block decision
-   */
-  decision?: string | undefined;
-  /**
-   * Claude hook-specific output
-   */
-  hookSpecificOutput?: any | undefined;
-  /**
-   * Cursor permission decision
-   */
-  permission?: string | undefined;
-  /**
-   * Reason accompanying decision
+   * Machine-readable decision reason.
    */
   reason?: string | undefined;
-  /**
-   * Claude SessionStart stop reason
-   */
-  stopReason?: string | undefined;
-  /**
-   * Claude output suppression flag
-   */
-  suppressOutput?: boolean | undefined;
-  /**
-   * Claude warning message
-   */
-  systemMessage?: string | undefined;
-  /**
-   * Cursor user-facing message
-   */
-  userMessage?: string | undefined;
 };
+
+/** @internal */
+export const Decision$inboundSchema: z.ZodMiniEnum<typeof Decision> = z.enum(
+  Decision,
+);
 
 /** @internal */
 export const IngestHookResult$inboundSchema: z.ZodMiniType<
   IngestHookResult,
   unknown
-> = z.pipe(
-  z.object({
-    additional_context: z.optional(z.string()),
-    agent_message: z.optional(z.string()),
-    continue: z.optional(z.boolean()),
-    decision: z.optional(z.string()),
-    hookSpecificOutput: z.optional(z.any()),
-    permission: z.optional(z.string()),
-    reason: z.optional(z.string()),
-    stopReason: z.optional(z.string()),
-    suppressOutput: z.optional(z.boolean()),
-    systemMessage: z.optional(z.string()),
-    user_message: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "additional_context": "additionalContext",
-      "agent_message": "agentMessage",
-      "user_message": "userMessage",
-    });
-  }),
-);
+> = z.object({
+  decision: Decision$inboundSchema,
+  effects: z.optional(z.record(z.string(), z.any())),
+  message: z.optional(z.string()),
+  reason: z.optional(z.string()),
+});
 
 export function ingestHookResultFromJSON(
   jsonString: string,

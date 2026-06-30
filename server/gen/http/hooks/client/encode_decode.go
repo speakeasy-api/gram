@@ -775,14 +775,6 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		{
-			head := p.HookSource
-			req.Header.Set("X-Gram-Hook-Source", head)
-		}
-		if p.HookHostname != nil {
-			head := *p.HookHostname
-			req.Header.Set("X-Gram-Hook-Hostname", head)
-		}
 		if p.IdempotencyKey != nil {
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
@@ -833,6 +825,10 @@ func DecodeIngestResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
 			}
 			res := NewIngestHookResultOK(&body)
 			return res, nil
@@ -1438,6 +1434,386 @@ func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			return nil, goahttp.ErrInvalidResponse("hooks", "metrics", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// marshalHooksHookIngestSourceToHookIngestSourceRequestBody builds a value of
+// type *HookIngestSourceRequestBody from a value of type
+// *hooks.HookIngestSource.
+func marshalHooksHookIngestSourceToHookIngestSourceRequestBody(v *hooks.HookIngestSource) *HookIngestSourceRequestBody {
+	res := &HookIngestSourceRequestBody{
+		Adapter:        v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestSessionToHookIngestSessionRequestBody builds a value
+// of type *HookIngestSessionRequestBody from a value of type
+// *hooks.HookIngestSession.
+func marshalHooksHookIngestSessionToHookIngestSessionRequestBody(v *hooks.HookIngestSession) *HookIngestSessionRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookIngestSessionRequestBody{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestEventToHookIngestEventRequestBody builds a value of
+// type *HookIngestEventRequestBody from a value of type *hooks.HookIngestEvent.
+func marshalHooksHookIngestEventToHookIngestEventRequestBody(v *hooks.HookIngestEvent) *HookIngestEventRequestBody {
+	res := &HookIngestEventRequestBody{
+		Type:       v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestDataToHookIngestDataRequestBody builds a value of type
+// *HookIngestDataRequestBody from a value of type *hooks.HookIngestData.
+func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestData) *HookIngestDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookIngestDataRequestBody{}
+	if v.Prompt != nil {
+		res.Prompt = marshalHooksHookPromptDataToHookPromptDataRequestBody(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = marshalHooksHookToolCallDataToHookToolCallDataRequestBody(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
+	}
+	if v.Usage != nil {
+		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = marshalHooksHookMessageDataToHookMessageDataRequestBody(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = marshalHooksHookSkillDataToHookSkillDataRequestBody(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v.Notification)
+	}
+
+	return res
+}
+
+// marshalHooksHookPromptDataToHookPromptDataRequestBody builds a value of type
+// *HookPromptDataRequestBody from a value of type *hooks.HookPromptData.
+func marshalHooksHookPromptDataToHookPromptDataRequestBody(v *hooks.HookPromptData) *HookPromptDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookPromptDataRequestBody{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// marshalHooksHookToolCallDataToHookToolCallDataRequestBody builds a value of
+// type *HookToolCallDataRequestBody from a value of type
+// *hooks.HookToolCallData.
+func marshalHooksHookToolCallDataToHookToolCallDataRequestBody(v *hooks.HookToolCallData) *HookToolCallDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookToolCallDataRequestBody{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// marshalHooksHookMCPDataToHookMCPDataRequestBody builds a value of type
+// *HookMCPDataRequestBody from a value of type *hooks.HookMCPData.
+func marshalHooksHookMCPDataToHookMCPDataRequestBody(v *hooks.HookMCPData) *HookMCPDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMCPDataRequestBody{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// marshalHooksHookUsageDataToHookUsageDataRequestBody builds a value of type
+// *HookUsageDataRequestBody from a value of type *hooks.HookUsageData.
+func marshalHooksHookUsageDataToHookUsageDataRequestBody(v *hooks.HookUsageData) *HookUsageDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookUsageDataRequestBody{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// marshalHooksHookMessageDataToHookMessageDataRequestBody builds a value of
+// type *HookMessageDataRequestBody from a value of type *hooks.HookMessageData.
+func marshalHooksHookMessageDataToHookMessageDataRequestBody(v *hooks.HookMessageData) *HookMessageDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMessageDataRequestBody{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// marshalHooksHookSkillDataToHookSkillDataRequestBody builds a value of type
+// *HookSkillDataRequestBody from a value of type *hooks.HookSkillData.
+func marshalHooksHookSkillDataToHookSkillDataRequestBody(v *hooks.HookSkillData) *HookSkillDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookSkillDataRequestBody{
+		Name:   v.Name,
+		Source: v.Source,
+	}
+
+	return res
+}
+
+// marshalHooksHookNotificationDataToHookNotificationDataRequestBody builds a
+// value of type *HookNotificationDataRequestBody from a value of type
+// *hooks.HookNotificationData.
+func marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v *hooks.HookNotificationData) *HookNotificationDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookNotificationDataRequestBody{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
+// type *hooks.HookIngestSource from a value of type
+// *HookIngestSourceRequestBody.
+func marshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSourceRequestBody) *hooks.HookIngestSource {
+	res := &hooks.HookIngestSource{
+		Adapter:        v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+	}
+
+	return res
+}
+
+// marshalHookIngestSessionRequestBodyToHooksHookIngestSession builds a value
+// of type *hooks.HookIngestSession from a value of type
+// *HookIngestSessionRequestBody.
+func marshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSessionRequestBody) *hooks.HookIngestSession {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestSession{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// marshalHookIngestEventRequestBodyToHooksHookIngestEvent builds a value of
+// type *hooks.HookIngestEvent from a value of type *HookIngestEventRequestBody.
+func marshalHookIngestEventRequestBodyToHooksHookIngestEvent(v *HookIngestEventRequestBody) *hooks.HookIngestEvent {
+	res := &hooks.HookIngestEvent{
+		Type:       v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// marshalHookIngestDataRequestBodyToHooksHookIngestData builds a value of type
+// *hooks.HookIngestData from a value of type *HookIngestDataRequestBody.
+func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequestBody) *hooks.HookIngestData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestData{}
+	if v.Prompt != nil {
+		res.Prompt = marshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = marshalHookToolCallDataRequestBodyToHooksHookToolCallData(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.Usage != nil {
+		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = marshalHookMessageDataRequestBodyToHooksHookMessageData(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = marshalHookSkillDataRequestBodyToHooksHookSkillData(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+
+	return res
+}
+
+// marshalHookPromptDataRequestBodyToHooksHookPromptData builds a value of type
+// *hooks.HookPromptData from a value of type *HookPromptDataRequestBody.
+func marshalHookPromptDataRequestBodyToHooksHookPromptData(v *HookPromptDataRequestBody) *hooks.HookPromptData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptData{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// marshalHookToolCallDataRequestBodyToHooksHookToolCallData builds a value of
+// type *hooks.HookToolCallData from a value of type
+// *HookToolCallDataRequestBody.
+func marshalHookToolCallDataRequestBodyToHooksHookToolCallData(v *HookToolCallDataRequestBody) *hooks.HookToolCallData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookToolCallData{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// marshalHookMCPDataRequestBodyToHooksHookMCPData builds a value of type
+// *hooks.HookMCPData from a value of type *HookMCPDataRequestBody.
+func marshalHookMCPDataRequestBodyToHooksHookMCPData(v *HookMCPDataRequestBody) *hooks.HookMCPData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPData{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// marshalHookUsageDataRequestBodyToHooksHookUsageData builds a value of type
+// *hooks.HookUsageData from a value of type *HookUsageDataRequestBody.
+func marshalHookUsageDataRequestBodyToHooksHookUsageData(v *HookUsageDataRequestBody) *hooks.HookUsageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookUsageData{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// marshalHookMessageDataRequestBodyToHooksHookMessageData builds a value of
+// type *hooks.HookMessageData from a value of type *HookMessageDataRequestBody.
+func marshalHookMessageDataRequestBodyToHooksHookMessageData(v *HookMessageDataRequestBody) *hooks.HookMessageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMessageData{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// marshalHookSkillDataRequestBodyToHooksHookSkillData builds a value of type
+// *hooks.HookSkillData from a value of type *HookSkillDataRequestBody.
+func marshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequestBody) *hooks.HookSkillData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookSkillData{
+		Name:   v.Name,
+		Source: v.Source,
+	}
+
+	return res
+}
+
+// marshalHookNotificationDataRequestBodyToHooksHookNotificationData builds a
+// value of type *hooks.HookNotificationData from a value of type
+// *HookNotificationDataRequestBody.
+func marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNotificationDataRequestBody) *hooks.HookNotificationData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookNotificationData{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
 }
 
 // marshalHooksOTELResourceLogToOTELResourceLogRequestBody builds a value of

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { hooksHooksNumberIngest } from "../funcs/hooksHooksNumberIngest.js";
+import { hooksIngest } from "../funcs/hooksIngest.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,15 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type HooksHooksNumberIngestMutationVariables = {
-  request: operations.HooksNumberIngestRequest;
-  security?: operations.HooksNumberIngestSecurity | undefined;
+export type IngestHookEventMutationVariables = {
+  request: operations.IngestHookEventRequest;
+  security?: operations.IngestHookEventSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type HooksHooksNumberIngestMutationData = components.IngestHookResult;
+export type IngestHookEventMutationData = components.IngestHookResult;
 
-export type HooksHooksNumberIngestMutationError =
+export type IngestHookEventMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -51,46 +51,46 @@ export type HooksHooksNumberIngestMutationError =
  * ingest hooks
  *
  * @remarks
- * Unified endpoint for hook events from supported coding assistants.
+ * Feature-first unified endpoint for hook events from supported coding assistants.
  */
-export function useHooksHooksNumberIngestMutation(
+export function useIngestHookEventMutation(
   options?: MutationHookOptions<
-    HooksHooksNumberIngestMutationData,
-    HooksHooksNumberIngestMutationError,
-    HooksHooksNumberIngestMutationVariables
+    IngestHookEventMutationData,
+    IngestHookEventMutationError,
+    IngestHookEventMutationVariables
   >,
 ): UseMutationResult<
-  HooksHooksNumberIngestMutationData,
-  HooksHooksNumberIngestMutationError,
-  HooksHooksNumberIngestMutationVariables
+  IngestHookEventMutationData,
+  IngestHookEventMutationError,
+  IngestHookEventMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildHooksHooksNumberIngestMutation(client, options),
+    ...buildIngestHookEventMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyHooksHooksNumberIngest(): MutationKey {
-  return ["@gram/client", "hooks", "hooksNumberIngest"];
+export function mutationKeyIngestHookEvent(): MutationKey {
+  return ["@gram/client", "hooks", "ingest"];
 }
 
-export function buildHooksHooksNumberIngestMutation(
+export function buildIngestHookEventMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: HooksHooksNumberIngestMutationVariables,
-  ) => Promise<HooksHooksNumberIngestMutationData>;
+    variables: IngestHookEventMutationVariables,
+  ) => Promise<IngestHookEventMutationData>;
 } {
   return {
-    mutationKey: mutationKeyHooksHooksNumberIngest(),
-    mutationFn: function hooksHooksNumberIngestMutationFn({
+    mutationKey: mutationKeyIngestHookEvent(),
+    mutationFn: function ingestHookEventMutationFn({
       request,
       security,
       options,
-    }): Promise<HooksHooksNumberIngestMutationData> {
+    }): Promise<IngestHookEventMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -103,7 +103,7 @@ export function buildHooksHooksNumberIngestMutation(
           ),
         },
       };
-      return unwrapAsync(hooksHooksNumberIngest(
+      return unwrapAsync(hooksIngest(
         client$,
         request,
         security,

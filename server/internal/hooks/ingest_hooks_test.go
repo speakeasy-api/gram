@@ -9,81 +9,94 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-func TestIngestCodex_AttributesToAuthenticatedTokenOwner(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.Email)
-	require.NotNil(t, authCtx.ProjectID)
-
-	reportedUserEmail := "reported-codex-user@example.com"
-	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "reported-codex-user", reportedUserEmail)
-
-	sessionID := "codex-ingest-auth-owner"
-	result, err := ti.service.Ingest(ctx, &gen.IngestPayload{
-		HookSource:        "codex",
-		EventType:         "session_start",
-		HookEventName:     new("SessionStart"),
-		SessionID:         &sessionID,
-		UserEmail:         &reportedUserEmail,
-		ReportedUserEmail: &reportedUserEmail,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
-	require.Equal(t, *authCtx.Email, metadata.UserEmail)
-	require.Equal(t, authCtx.UserID, metadata.UserID)
-}
-
-func TestIngestClaude_AttributesToAuthenticatedTokenOwner(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.Email)
-	require.NotNil(t, authCtx.ProjectID)
-
-	reportedUserEmail := "reported-claude-user@example.com"
-	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "reported-claude-user", reportedUserEmail)
-
-	sessionID := "claude-ingest-auth-owner"
-	result, err := ti.service.Ingest(ctx, &gen.IngestPayload{
-		HookSource:        "claude",
-		EventType:         "session_start",
-		HookEventName:     new("SessionStart"),
-		SessionID:         &sessionID,
-		UserEmail:         &reportedUserEmail,
-		ReportedUserEmail: &reportedUserEmail,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	metadata, err := ti.service.getSessionMetadata(ctx, sessionID)
-	require.NoError(t, err)
-	require.Equal(t, *authCtx.Email, metadata.UserEmail)
-	require.Equal(t, authCtx.UserID, metadata.UserID)
-	require.Equal(t, authCtx.ActiveOrganizationID, metadata.GramOrgID)
-	require.Equal(t, authCtx.ProjectID.String(), metadata.ProjectID)
-}
-
 func TestIngest_AcceptsCustomHookSource(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
 	sessionID := "custom-ingest-source"
 
-	result, err := ti.service.Ingest(ctx, &gen.IngestPayload{
-		HookSource: "openclaw",
-		EventType:  "session_start",
-		SessionID:  &sessionID,
-	})
+	result, err := ti.service.Ingest(ctx, canonicalIngestPayload("openclaw", "session.started", sessionID))
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+}
+
+func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	payload := canonicalIngestPayload("openclaw", "session.started", "bad-schema")
+	payload.SchemaVersion = "hook.ingest.v0"
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "unsupported hook schema_version")
+}
+
+func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	ti.service.riskScanner = userScopedShadowMCPScanner{userID: authCtx.UserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "canonical-shadow-mcp")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    new("call-1"),
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	require.Contains(t, *result.Message, shadowMCPApprovalRequestPrompt)
+}
+
+func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	payload := canonicalIngestPayload("claude", "skill.activated", "skill-session")
+	payload.Data = &gen.HookIngestData{
+		Skill: &gen.HookSkillData{Name: "repo-review"},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+}
+
+func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPayload {
+	return &gen.IngestPayload{
+		SchemaVersion: hookIngestSchemaV1,
+		Source: &gen.HookIngestSource{
+			Adapter: adapter,
+		},
+		Session: &gen.HookIngestSession{
+			ID: &sessionID,
+		},
+		Event: &gen.HookIngestEvent{
+			Type: eventType,
+		},
+	}
+}
+
+//go:fix inline
+func ptr[T any](v T) *T {
+	return new(v)
 }

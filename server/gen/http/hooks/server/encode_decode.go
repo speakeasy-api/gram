@@ -750,8 +750,6 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		var (
 			apikeyToken      *string
 			projectSlugInput *string
-			hookSource       string
-			hookHostname     *string
 			idempotencyKey   *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
@@ -762,22 +760,11 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		hookSource = r.Header.Get("X-Gram-Hook-Source")
-		if hookSource == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("hook_source", "header"))
-		}
-		hookHostnameRaw := r.Header.Get("X-Gram-Hook-Hostname")
-		if hookHostnameRaw != "" {
-			hookHostname = &hookHostnameRaw
-		}
 		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, hookSource, hookHostname, idempotencyKey)
+		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1395,6 +1382,196 @@ func EncodeMetricsError(encoder func(context.Context, http.ResponseWriter) goaht
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value
+// of type *hooks.HookIngestSource from a value of type
+// *HookIngestSourceRequestBody.
+func unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSourceRequestBody) *hooks.HookIngestSource {
+	res := &hooks.HookIngestSource{
+		Adapter:        *v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession builds a value
+// of type *hooks.HookIngestSession from a value of type
+// *HookIngestSessionRequestBody.
+func unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSessionRequestBody) *hooks.HookIngestSession {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestSession{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestEventRequestBodyToHooksHookIngestEvent builds a value of
+// type *hooks.HookIngestEvent from a value of type *HookIngestEventRequestBody.
+func unmarshalHookIngestEventRequestBodyToHooksHookIngestEvent(v *HookIngestEventRequestBody) *hooks.HookIngestEvent {
+	res := &hooks.HookIngestEvent{
+		Type:       *v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestDataRequestBodyToHooksHookIngestData builds a value of
+// type *hooks.HookIngestData from a value of type *HookIngestDataRequestBody.
+func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequestBody) *hooks.HookIngestData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestData{}
+	if v.Prompt != nil {
+		res.Prompt = unmarshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.Usage != nil {
+		res.Usage = unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = unmarshalHookMessageDataRequestBodyToHooksHookMessageData(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = unmarshalHookSkillDataRequestBodyToHooksHookSkillData(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+
+	return res
+}
+
+// unmarshalHookPromptDataRequestBodyToHooksHookPromptData builds a value of
+// type *hooks.HookPromptData from a value of type *HookPromptDataRequestBody.
+func unmarshalHookPromptDataRequestBodyToHooksHookPromptData(v *HookPromptDataRequestBody) *hooks.HookPromptData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptData{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData builds a value
+// of type *hooks.HookToolCallData from a value of type
+// *HookToolCallDataRequestBody.
+func unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData(v *HookToolCallDataRequestBody) *hooks.HookToolCallData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookToolCallData{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPDataRequestBodyToHooksHookMCPData builds a value of type
+// *hooks.HookMCPData from a value of type *HookMCPDataRequestBody.
+func unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v *HookMCPDataRequestBody) *hooks.HookMCPData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPData{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// unmarshalHookUsageDataRequestBodyToHooksHookUsageData builds a value of type
+// *hooks.HookUsageData from a value of type *HookUsageDataRequestBody.
+func unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v *HookUsageDataRequestBody) *hooks.HookUsageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookUsageData{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// unmarshalHookMessageDataRequestBodyToHooksHookMessageData builds a value of
+// type *hooks.HookMessageData from a value of type *HookMessageDataRequestBody.
+func unmarshalHookMessageDataRequestBodyToHooksHookMessageData(v *HookMessageDataRequestBody) *hooks.HookMessageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMessageData{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// unmarshalHookSkillDataRequestBodyToHooksHookSkillData builds a value of type
+// *hooks.HookSkillData from a value of type *HookSkillDataRequestBody.
+func unmarshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequestBody) *hooks.HookSkillData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookSkillData{
+		Name:   *v.Name,
+		Source: v.Source,
+	}
+
+	return res
+}
+
+// unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData builds a
+// value of type *hooks.HookNotificationData from a value of type
+// *HookNotificationDataRequestBody.
+func unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNotificationDataRequestBody) *hooks.HookNotificationData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookNotificationData{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
 }
 
 // unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of

@@ -6,12 +6,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type HooksNumberIngestSecurity = {
+export type IngestHookEventSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
 };
 
-export type HooksNumberIngestRequest = {
+export type IngestHookEventRequest = {
   /**
    * API Key header
    */
@@ -21,30 +21,22 @@ export type HooksNumberIngestRequest = {
    */
   gramProject?: string | undefined;
   /**
-   * The sending hook adapter or agent platform. Built-in values include claude, cursor, and codex; customer plugins may send their own stable slug.
-   */
-  xGramHookSource: string;
-  /**
-   * Optional endpoint hostname supplied by the Gram hook plugin.
-   */
-  xGramHookHostname?: string | undefined;
-  /**
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
-  ingestHookPayload: components.IngestHookPayload;
+  ingestRequestBody: components.IngestRequestBody;
 };
 
 /** @internal */
-export type HooksNumberIngestSecurity$Outbound = {
+export type IngestHookEventSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "project_slug_header_Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const HooksNumberIngestSecurity$outboundSchema: z.ZodMiniType<
-  HooksNumberIngestSecurity$Outbound,
-  HooksNumberIngestSecurity
+export const IngestHookEventSecurity$outboundSchema: z.ZodMiniType<
+  IngestHookEventSecurity$Outbound,
+  IngestHookEventSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -58,53 +50,47 @@ export const HooksNumberIngestSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function hooksNumberIngestSecurityToJSON(
-  hooksNumberIngestSecurity: HooksNumberIngestSecurity,
+export function ingestHookEventSecurityToJSON(
+  ingestHookEventSecurity: IngestHookEventSecurity,
 ): string {
   return JSON.stringify(
-    HooksNumberIngestSecurity$outboundSchema.parse(hooksNumberIngestSecurity),
+    IngestHookEventSecurity$outboundSchema.parse(ingestHookEventSecurity),
   );
 }
 
 /** @internal */
-export type HooksNumberIngestRequest$Outbound = {
+export type IngestHookEventRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  "X-Gram-Hook-Source": string;
-  "X-Gram-Hook-Hostname"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
-  IngestHookPayload: components.IngestHookPayload$Outbound;
+  IngestRequestBody: components.IngestRequestBody$Outbound;
 };
 
 /** @internal */
-export const HooksNumberIngestRequest$outboundSchema: z.ZodMiniType<
-  HooksNumberIngestRequest$Outbound,
-  HooksNumberIngestRequest
+export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
+  IngestHookEventRequest$Outbound,
+  IngestHookEventRequest
 > = z.pipe(
   z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    xGramHookSource: z.string(),
-    xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
-    ingestHookPayload: components.IngestHookPayload$outboundSchema,
+    ingestRequestBody: components.IngestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      xGramHookSource: "X-Gram-Hook-Source",
-      xGramHookHostname: "X-Gram-Hook-Hostname",
       idempotencyKey: "Idempotency-Key",
-      ingestHookPayload: "IngestHookPayload",
+      ingestRequestBody: "IngestRequestBody",
     });
   }),
 );
 
-export function hooksNumberIngestRequestToJSON(
-  hooksNumberIngestRequest: HooksNumberIngestRequest,
+export function ingestHookEventRequestToJSON(
+  ingestHookEventRequest: IngestHookEventRequest,
 ): string {
   return JSON.stringify(
-    HooksNumberIngestRequest$outboundSchema.parse(hooksNumberIngestRequest),
+    IngestHookEventRequest$outboundSchema.parse(ingestHookEventRequest),
   );
 }

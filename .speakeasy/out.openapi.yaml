@@ -10438,119 +10438,107 @@ paths:
         - {}
   /rpc/hooks.ingest:
     post:
-      tags:
-        - hooks
-      summary: ingest hooks
-      description: Unified endpoint for hook events from supported coding assistants.
-      operationId: hooks#ingest
+      description: Feature-first unified endpoint for hook events from supported coding assistants.
+      operationId: ingestHookEvent
       parameters:
-        - name: Gram-Key
-          in: header
+        - allowEmptyValue: true
           description: API Key header
-          allowEmptyValue: true
+          in: header
+          name: Gram-Key
           schema:
-            type: string
             description: API Key header
-        - name: Gram-Project
-          in: header
+            type: string
+        - allowEmptyValue: true
           description: project header
-          allowEmptyValue: true
+          in: header
+          name: Gram-Project
           schema:
-            type: string
             description: project header
-        - name: X-Gram-Hook-Source
-          in: header
-          description: The sending hook adapter or agent platform. Built-in values include claude, cursor, and codex; customer plugins may send their own stable slug.
-          allowEmptyValue: true
-          required: true
-          schema:
             type: string
-            description: The sending hook adapter or agent platform. Built-in values include claude, cursor, and codex; customer plugins may send their own stable slug.
-        - name: X-Gram-Hook-Hostname
-          in: header
-          description: Optional endpoint hostname supplied by the Gram hook plugin.
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: Optional endpoint hostname supplied by the Gram hook plugin.
-        - name: Idempotency-Key
-          in: header
+        - allowEmptyValue: true
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
-          allowEmptyValue: true
+          in: header
+          name: Idempotency-Key
           schema:
-            type: string
             description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+            type: string
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IngestHookPayload'
+              $ref: '#/components/schemas/IngestRequestBody'
+        required: true
       responses:
         "200":
-          description: OK response.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/IngestHookResult'
+          description: OK response.
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'bad_request: request is invalid'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'unauthorized: unauthorized access'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'forbidden: permission denied'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'not_found: resource not found'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'unsupported_media: unsupported media type'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'invalid: request contains one or more invalidation fields'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: 'unexpected: an unexpected error occurred'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "502":
-          description: 'gateway_error: an unexpected error occurred'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
       security:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+      summary: ingest hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: ingest
+      x-speakeasy-react-hook:
+        name: IngestHookEvent
   /rpc/hooks.listServerNameOverrides:
     get:
       tags:
@@ -40200,6 +40188,147 @@ components:
       description: Input for a remote MCP server header
       required:
         - name
+    HookIngestData:
+      type: object
+      properties:
+        mcp:
+          $ref: '#/components/schemas/HookMCPData'
+        message:
+          $ref: '#/components/schemas/HookMessageData'
+        notification:
+          $ref: '#/components/schemas/HookNotificationData'
+        prompt:
+          $ref: '#/components/schemas/HookPromptData'
+        skill:
+          $ref: '#/components/schemas/HookSkillData'
+        tool_call:
+          $ref: '#/components/schemas/HookToolCallData'
+        usage:
+          $ref: '#/components/schemas/HookUsageData'
+      description: Feature-specific payloads. Hooks populate only the blocks needed for the event.
+    HookIngestEvent:
+      type: object
+      properties:
+        occurred_at:
+          type: string
+          description: RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+        type:
+          type: string
+          description: Canonical Gram hook event type.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - usage.reported
+            - skill.activated
+            - notification.reported
+      description: Canonical Gram feature event.
+      required:
+        - type
+    HookIngestSession:
+      type: object
+      properties:
+        cwd:
+          type: string
+          description: Current working directory when the event fired.
+        id:
+          type: string
+          description: Stable conversation or session identifier.
+        model:
+          type: string
+          description: Model identifier reported by the local agent.
+        turn_id:
+          type: string
+          description: Generation, request, or turn identifier.
+      description: Agent session and turn identity, independent of provider naming.
+    HookIngestSource:
+      type: object
+      properties:
+        adapter:
+          type: string
+          description: Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
+        adapter_version:
+          type: string
+          description: Adapter implementation version.
+        hostname:
+          type: string
+          description: Hostname of the machine that emitted the hook event.
+        raw_event_name:
+          type: string
+          description: Provider-native event name, if one exists.
+      description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+      required:
+        - adapter
+    HookMCPData:
+      type: object
+      properties:
+        command:
+          type: string
+          description: MCP server command, when available.
+        result_json:
+          type: string
+          description: JSON-encoded MCP tool result, when reported as a string.
+        server_identity:
+          type: string
+          description: Stable server identity inferred by the hook adapter.
+        server_name:
+          type: string
+          description: Provider-reported MCP server name.
+        url:
+          type: string
+          description: MCP server URL, when available.
+      description: MCP feature payload.
+    HookMessageData:
+      type: object
+      properties:
+        duration_ms:
+          type: number
+          description: Message or thinking-block duration in milliseconds, when reported.
+          format: double
+        role:
+          type: string
+          description: Message role, e.g. assistant or user.
+        text:
+          type: string
+          description: Message text.
+      description: Assistant/user message payload.
+    HookNotificationData:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Notification message.
+        title:
+          type: string
+          description: Notification title.
+        type:
+          type: string
+          description: Notification type.
+      description: Local agent notification payload.
+    HookPromptData:
+      type: object
+      properties:
+        text:
+          type: string
+          description: User prompt text.
+      description: Prompt feature payload.
+    HookSkillData:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Activated skill name.
+        source:
+          type: string
+          description: Skill source or namespace, if available.
+      description: Skill activation payload.
+      required:
+        - name
     HookSourceUsage:
       type: object
       properties:
@@ -40214,6 +40343,35 @@ components:
       required:
         - source
         - event_count
+    HookToolCallData:
+      type: object
+      properties:
+        duration_ms:
+          type: number
+          description: Tool execution duration in milliseconds, when reported.
+          format: double
+        error:
+          description: Tool error payload.
+        id:
+          type: string
+          description: Provider tool call identifier.
+        input:
+          description: Tool input payload.
+        is_interrupt:
+          type: boolean
+          description: Whether the failure was caused by user interruption.
+        name:
+          type: string
+          description: Tool name.
+        output:
+          description: Tool output payload.
+        permission_type:
+          type: string
+          description: Permission type requested by the agent, when applicable.
+        status:
+          type: string
+          description: Provider-reported tool call status, when available.
+      description: Tool call feature payload.
     HookTraceSummary:
       type: object
       properties:
@@ -40266,6 +40424,37 @@ components:
         - start_time_unix_nano
         - log_count
         - gram_urn
+    HookUsageData:
+      type: object
+      properties:
+        cache_read_tokens:
+          type: integer
+          description: Cache read token count.
+          format: int64
+        cache_write_tokens:
+          type: integer
+          description: Cache write token count.
+          format: int64
+        cost:
+          type: number
+          description: Reported cost.
+          format: double
+        input_tokens:
+          type: integer
+          description: Input token count.
+          format: int64
+        loop_count:
+          type: integer
+          description: Agent loop count, when reported.
+          format: int64
+        output_tokens:
+          type: integer
+          description: Output token count.
+          format: int64
+        status:
+          type: string
+          description: Provider-reported usage or session status, when available.
+      description: Token and cost usage payload.
     HooksBreakdownRow:
       type: object
       properties:
@@ -40433,187 +40622,69 @@ components:
     IngestHookPayload:
       type: object
       properties:
-        additional_data:
-          type: object
-          description: Additional hook-specific data
-          additionalProperties: true
-        cache_read_tokens:
-          type: integer
-          description: Tokens read from cache
-          format: int64
-        cache_write_tokens:
-          type: integer
-          description: Tokens written to cache
-          format: int64
-        command:
+        data:
+          $ref: '#/components/schemas/HookIngestData'
+        event:
+          $ref: '#/components/schemas/HookIngestEvent'
+        idempotency_key:
           type: string
-          description: Command string for command-based MCP servers
-        composer_mode:
+          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+        raw:
+          description: Original provider payload for debugging. The backend does not use this for feature behavior.
+        schema_version:
           type: string
-          description: Cursor composer mode
-        conversation_id:
-          type: string
-          description: The agent conversation ID
-        cursor_version:
-          type: string
-          description: The Cursor IDE version
-        cwd:
-          type: string
-          description: The working directory when the event fired
-        duration:
-          type: number
-          description: Execution duration in milliseconds
-          format: double
-        duration_ms:
-          type: integer
-          description: Duration in milliseconds
-          format: int64
-        error:
-          description: The error from the tool
-        event_type:
-          type: string
-          description: Normalized Gram hook event type
-          enum:
-            - config_change
-            - session_start
-            - before_tool_use
-            - after_tool_use
-            - after_tool_use_failure
-            - before_mcp_execution
-            - after_mcp_execution
-            - permission_request
-            - user_prompt_submit
-            - after_agent_response
-            - after_agent_thought
-            - stop
-            - session_end
-            - notification
-        generation_id:
-          type: string
-          description: The generation or turn ID
-        hook_event_name:
-          type: string
-          description: Original platform-native hook event name, if the source has one
-        input_tokens:
-          type: integer
-          description: Total input tokens used
-          format: int64
-        is_interrupt:
-          type: boolean
-          description: Whether the failure was caused by user interruption
-        last_assistant_message:
-          type: string
-          description: The final assistant message text for the turn
-        loop_count:
-          type: integer
-          description: Number of agentic loops executed
-          format: int64
-        message:
-          type: string
-          description: Notification message text
-        model:
-          type: string
-          description: The model identifier
-        notification_type:
-          type: string
-          description: Type of notification
-        output_tokens:
-          type: integer
-          description: Total output tokens used
-          format: int64
-        permission_type:
-          type: string
-          description: The type of permission being requested
-        prompt:
-          type: string
-          description: The user's prompt text
-        reason:
-          type: string
-          description: Why the session ended
-        reported_user_email:
-          type: string
-          description: User email reported by the local agent. Informational only; attribution comes from the authenticated token.
-        result_json:
-          type: string
-          description: JSON-encoded MCP tool response
-        session_id:
-          type: string
-          description: The agent session ID
+          description: Contract version. The current version is hook.ingest.v1.
+        session:
+          $ref: '#/components/schemas/HookIngestSession'
         source:
-          type: string
-          description: How the session started (Claude SessionStart only)
-        status:
-          type: string
-          description: Completion status
-        stop_hook_active:
-          type: boolean
-          description: Whether a stop hook continuation is active
-        text:
-          type: string
-          description: Assistant response or thinking text
-        title:
-          type: string
-          description: Notification title
-        tool_input:
-          description: The input to the tool
-        tool_name:
-          type: string
-          description: The name of the tool
-        tool_output:
-          description: The output from the tool
-        tool_response:
-          description: The response from the tool
-        tool_use_id:
-          type: string
-          description: The unique ID for this tool use
-        transcript_path:
-          type: string
-          description: Path to the conversation transcript file
-        url:
-          type: string
-          description: URL of the MCP server
-        user_email:
-          type: string
-          description: Legacy source-reported user email. Informational only; attribution comes from the authenticated token.
-      description: Unified payload for hook events from coding assistants
+          $ref: '#/components/schemas/HookIngestSource'
+      description: Feature-first unified hook event payload.
       required:
-        - event_type
+        - schema_version
+        - source
+        - event
     IngestHookResult:
       type: object
       properties:
-        additional_context:
-          type: string
-          description: Cursor context to inject
-        agent_message:
-          type: string
-          description: Cursor agent-facing message
-        continue:
-          type: boolean
-          description: Claude SessionStart continue flag
         decision:
           type: string
-          description: Codex or Claude top-level block decision
-        hookSpecificOutput:
-          description: Claude hook-specific output
-        permission:
+          description: Whether the local hook should allow or deny the action.
+          enum:
+            - allow
+            - deny
+        effects:
+          type: object
+          description: Optional side-effect hints for hook SDKs.
+          additionalProperties: true
+        message:
           type: string
-          description: Cursor permission decision
+          description: User-facing decision message.
         reason:
           type: string
-          description: Reason accompanying decision
-        stopReason:
+          description: Machine-readable decision reason.
+      description: Provider-neutral decision returned by the unified hook endpoint.
+      required:
+        - decision
+    IngestRequestBody:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/HookIngestData'
+        event:
+          $ref: '#/components/schemas/HookIngestEvent'
+        raw:
+          description: Original provider payload for debugging. The backend does not use this for feature behavior.
+        schema_version:
           type: string
-          description: Claude SessionStart stop reason
-        suppressOutput:
-          type: boolean
-          description: Claude output suppression flag
-        systemMessage:
-          type: string
-          description: Claude warning message
-        user_message:
-          type: string
-          description: Cursor user-facing message
-      description: Unified result for hook events
+          description: Contract version. The current version is hook.ingest.v1.
+        session:
+          $ref: '#/components/schemas/HookIngestSession'
+        source:
+          $ref: '#/components/schemas/HookIngestSource'
+      required:
+        - schema_version
+        - source
+        - event
     InstanceMcpServer:
       type: object
       properties:

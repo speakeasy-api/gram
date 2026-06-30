@@ -163,90 +163,15 @@ type CodexRequestBody struct {
 // IngestRequestBody is the type of the "hooks" service "ingest" endpoint HTTP
 // request body.
 type IngestRequestBody struct {
-	// Normalized Gram hook event type
-	EventType string `form:"event_type" json:"event_type" xml:"event_type"`
-	// Original platform-native hook event name, if the source has one
-	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
-	// The agent session ID
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
-	// The agent conversation ID
-	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
-	// The generation or turn ID
-	GenerationID *string `form:"generation_id,omitempty" json:"generation_id,omitempty" xml:"generation_id,omitempty"`
-	// The model identifier
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// User email reported by the local agent. Informational only; attribution
-	// comes from the authenticated token.
-	ReportedUserEmail *string `form:"reported_user_email,omitempty" json:"reported_user_email,omitempty" xml:"reported_user_email,omitempty"`
-	// Legacy source-reported user email. Informational only; attribution comes
-	// from the authenticated token.
-	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Additional hook-specific data
-	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
-	// Path to the conversation transcript file
-	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
-	// The working directory when the event fired
-	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
-	// The name of the tool
-	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	// The unique ID for this tool use
-	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
-	// The input to the tool
-	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
-	// The response from the tool
-	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
-	// The output from the tool
-	ToolOutput any `form:"tool_output,omitempty" json:"tool_output,omitempty" xml:"tool_output,omitempty"`
-	// The error from the tool
-	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
-	// Whether the failure was caused by user interruption
-	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
-	// The type of permission being requested
-	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
-	// The user's prompt text
-	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// The final assistant message text for the turn
-	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
-	// How the session started (Claude SessionStart only)
-	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	// Whether a stop hook continuation is active
-	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
-	// Why the session ended
-	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// Type of notification
-	NotificationType *string `form:"notification_type,omitempty" json:"notification_type,omitempty" xml:"notification_type,omitempty"`
-	// Notification message text
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Notification title
-	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// The Cursor IDE version
-	CursorVersion *string `form:"cursor_version,omitempty" json:"cursor_version,omitempty" xml:"cursor_version,omitempty"`
-	// Cursor composer mode
-	ComposerMode *string `form:"composer_mode,omitempty" json:"composer_mode,omitempty" xml:"composer_mode,omitempty"`
-	// Completion status
-	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Number of agentic loops executed
-	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
-	// Total input tokens used
-	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Total output tokens used
-	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Tokens read from cache
-	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
-	// Tokens written to cache
-	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
-	// Assistant response or thinking text
-	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
-	// Duration in milliseconds
-	DurationMs *int `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
-	// URL of the MCP server
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-	// Command string for command-based MCP servers
-	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
-	// JSON-encoded MCP tool response
-	ResultJSON *string `form:"result_json,omitempty" json:"result_json,omitempty" xml:"result_json,omitempty"`
-	// Execution duration in milliseconds
-	Duration *float64 `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
+	// Contract version. The current version is hook.ingest.v1.
+	SchemaVersion string                        `form:"schema_version" json:"schema_version" xml:"schema_version"`
+	Source        *HookIngestSourceRequestBody  `form:"source" json:"source" xml:"source"`
+	Session       *HookIngestSessionRequestBody `form:"session,omitempty" json:"session,omitempty" xml:"session,omitempty"`
+	Event         *HookIngestEventRequestBody   `form:"event" json:"event" xml:"event"`
+	Data          *HookIngestDataRequestBody    `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
+	// Original provider payload for debugging. The backend does not use this for
+	// feature behavior.
+	Raw any `form:"raw,omitempty" json:"raw,omitempty" xml:"raw,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -309,28 +234,14 @@ type CodexResponseBody struct {
 // IngestResponseBody is the type of the "hooks" service "ingest" endpoint HTTP
 // response body.
 type IngestResponseBody struct {
-	// Claude SessionStart continue flag
-	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
-	// Claude SessionStart stop reason
-	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
-	// Claude output suppression flag
-	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
-	// Claude warning message
-	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
-	// Claude hook-specific output
-	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
-	// Codex or Claude top-level block decision
+	// Whether the local hook should allow or deny the action.
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
-	// Reason accompanying decision
+	// Machine-readable decision reason.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// Cursor permission decision
-	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
-	// Cursor user-facing message
-	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
-	// Cursor context to inject
-	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
-	// Cursor agent-facing message
-	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
+	// User-facing decision message.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Optional side-effect hints for hook SDKs.
+	Effects map[string]any `form:"effects,omitempty" json:"effects,omitempty" xml:"effects,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -1413,6 +1324,138 @@ type MetricsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// HookIngestSourceRequestBody is used to define fields on request body types.
+type HookIngestSourceRequestBody struct {
+	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
+	Adapter string `form:"adapter" json:"adapter" xml:"adapter"`
+	// Adapter implementation version.
+	AdapterVersion *string `form:"adapter_version,omitempty" json:"adapter_version,omitempty" xml:"adapter_version,omitempty"`
+	// Provider-native event name, if one exists.
+	RawEventName *string `form:"raw_event_name,omitempty" json:"raw_event_name,omitempty" xml:"raw_event_name,omitempty"`
+	// Hostname of the machine that emitted the hook event.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+}
+
+// HookIngestSessionRequestBody is used to define fields on request body types.
+type HookIngestSessionRequestBody struct {
+	// Stable conversation or session identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Generation, request, or turn identifier.
+	TurnID *string `form:"turn_id,omitempty" json:"turn_id,omitempty" xml:"turn_id,omitempty"`
+	// Current working directory when the event fired.
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Model identifier reported by the local agent.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+}
+
+// HookIngestEventRequestBody is used to define fields on request body types.
+type HookIngestEventRequestBody struct {
+	// Canonical Gram hook event type.
+	Type string `form:"type" json:"type" xml:"type"`
+	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+	OccurredAt *string `form:"occurred_at,omitempty" json:"occurred_at,omitempty" xml:"occurred_at,omitempty"`
+}
+
+// HookIngestDataRequestBody is used to define fields on request body types.
+type HookIngestDataRequestBody struct {
+	Prompt       *HookPromptDataRequestBody       `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	ToolCall     *HookToolCallDataRequestBody     `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	Mcp          *HookMCPDataRequestBody          `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
+	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
+	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+}
+
+// HookPromptDataRequestBody is used to define fields on request body types.
+type HookPromptDataRequestBody struct {
+	// User prompt text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+}
+
+// HookToolCallDataRequestBody is used to define fields on request body types.
+type HookToolCallDataRequestBody struct {
+	// Provider tool call identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Tool name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Tool input payload.
+	Input any `form:"input,omitempty" json:"input,omitempty" xml:"input,omitempty"`
+	// Tool output payload.
+	Output any `form:"output,omitempty" json:"output,omitempty" xml:"output,omitempty"`
+	// Tool error payload.
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Whether the failure was caused by user interruption.
+	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
+	// Permission type requested by the agent, when applicable.
+	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
+	// Tool execution duration in milliseconds, when reported.
+	DurationMs *float64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// Provider-reported tool call status, when available.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// HookMCPDataRequestBody is used to define fields on request body types.
+type HookMCPDataRequestBody struct {
+	// Provider-reported MCP server name.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Stable server identity inferred by the hook adapter.
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+	// MCP server URL, when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// MCP server command, when available.
+	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
+	// JSON-encoded MCP tool result, when reported as a string.
+	ResultJSON *string `form:"result_json,omitempty" json:"result_json,omitempty" xml:"result_json,omitempty"`
+}
+
+// HookUsageDataRequestBody is used to define fields on request body types.
+type HookUsageDataRequestBody struct {
+	// Input token count.
+	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output token count.
+	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read token count.
+	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache write token count.
+	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// Reported cost.
+	Cost *float64 `form:"cost,omitempty" json:"cost,omitempty" xml:"cost,omitempty"`
+	// Agent loop count, when reported.
+	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
+	// Provider-reported usage or session status, when available.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// HookMessageDataRequestBody is used to define fields on request body types.
+type HookMessageDataRequestBody struct {
+	// Message text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Message role, e.g. assistant or user.
+	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Message or thinking-block duration in milliseconds, when reported.
+	DurationMs *float64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+}
+
+// HookSkillDataRequestBody is used to define fields on request body types.
+type HookSkillDataRequestBody struct {
+	// Activated skill name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Skill source or namespace, if available.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+}
+
+// HookNotificationDataRequestBody is used to define fields on request body
+// types.
+type HookNotificationDataRequestBody struct {
+	// Notification type.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Notification title.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Notification message.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // OTELResourceLogRequestBody is used to define fields on request body types.
 type OTELResourceLogRequestBody struct {
 	// Resource information
@@ -1678,54 +1721,20 @@ func NewCodexRequestBody(p *hooks.CodexPayload) *CodexRequestBody {
 // "ingest" endpoint of the "hooks" service.
 func NewIngestRequestBody(p *hooks.IngestPayload) *IngestRequestBody {
 	body := &IngestRequestBody{
-		EventType:            p.EventType,
-		HookEventName:        p.HookEventName,
-		SessionID:            p.SessionID,
-		ConversationID:       p.ConversationID,
-		GenerationID:         p.GenerationID,
-		Model:                p.Model,
-		ReportedUserEmail:    p.ReportedUserEmail,
-		UserEmail:            p.UserEmail,
-		TranscriptPath:       p.TranscriptPath,
-		Cwd:                  p.Cwd,
-		ToolName:             p.ToolName,
-		ToolUseID:            p.ToolUseID,
-		ToolInput:            p.ToolInput,
-		ToolResponse:         p.ToolResponse,
-		ToolOutput:           p.ToolOutput,
-		Error:                p.Error,
-		IsInterrupt:          p.IsInterrupt,
-		PermissionType:       p.PermissionType,
-		Prompt:               p.Prompt,
-		LastAssistantMessage: p.LastAssistantMessage,
-		Source:               p.Source,
-		StopHookActive:       p.StopHookActive,
-		Reason:               p.Reason,
-		NotificationType:     p.NotificationType,
-		Message:              p.Message,
-		Title:                p.Title,
-		CursorVersion:        p.CursorVersion,
-		ComposerMode:         p.ComposerMode,
-		Status:               p.Status,
-		LoopCount:            p.LoopCount,
-		InputTokens:          p.InputTokens,
-		OutputTokens:         p.OutputTokens,
-		CacheReadTokens:      p.CacheReadTokens,
-		CacheWriteTokens:     p.CacheWriteTokens,
-		Text:                 p.Text,
-		DurationMs:           p.DurationMs,
-		URL:                  p.URL,
-		Command:              p.Command,
-		ResultJSON:           p.ResultJSON,
-		Duration:             p.Duration,
+		SchemaVersion: p.SchemaVersion,
+		Raw:           p.Raw,
 	}
-	if p.AdditionalData != nil {
-		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
-		for key, val := range p.AdditionalData {
-			tk := key
-			tv := val
-			body.AdditionalData[tk] = tv
-		}
+	if p.Source != nil {
+		body.Source = marshalHooksHookIngestSourceToHookIngestSourceRequestBody(p.Source)
+	}
+	if p.Session != nil {
+		body.Session = marshalHooksHookIngestSessionToHookIngestSessionRequestBody(p.Session)
+	}
+	if p.Event != nil {
+		body.Event = marshalHooksHookIngestEventToHookIngestEventRequestBody(p.Event)
+	}
+	if p.Data != nil {
+		body.Data = marshalHooksHookIngestDataToHookIngestDataRequestBody(p.Data)
 	}
 	return body
 }
@@ -2240,17 +2249,17 @@ func NewCodexGatewayError(body *CodexGatewayErrorResponseBody) *goa.ServiceError
 // a HTTP "OK" response.
 func NewIngestHookResultOK(body *IngestResponseBody) *hooks.IngestHookResult {
 	v := &hooks.IngestHookResult{
-		Continue:           body.Continue,
-		StopReason:         body.StopReason,
-		SuppressOutput:     body.SuppressOutput,
-		SystemMessage:      body.SystemMessage,
-		HookSpecificOutput: body.HookSpecificOutput,
-		Decision:           body.Decision,
-		Reason:             body.Reason,
-		Permission:         body.Permission,
-		UserMessage:        body.UserMessage,
-		AdditionalContext:  body.AdditionalContext,
-		AgentMessage:       body.AgentMessage,
+		Decision: *body.Decision,
+		Reason:   body.Reason,
+		Message:  body.Message,
+	}
+	if body.Effects != nil {
+		v.Effects = make(map[string]any, len(body.Effects))
+		for key, val := range body.Effects {
+			tk := key
+			tv := val
+			v.Effects[tk] = tv
+		}
 	}
 
 	return v
@@ -2686,6 +2695,19 @@ func NewMetricsGatewayError(body *MetricsGatewayErrorResponseBody) *goa.ServiceE
 	}
 
 	return v
+}
+
+// ValidateIngestResponseBody runs the validations defined on IngestResponseBody
+func ValidateIngestResponseBody(body *IngestResponseBody) (err error) {
+	if body.Decision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decision", "body"))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "allow" || *body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"allow", "deny"}))
+		}
+	}
+	return
 }
 
 // ValidateClaudeUnauthorizedResponseBody runs the validations defined on
@@ -4124,6 +4146,15 @@ func ValidateMetricsGatewayErrorResponseBody(body *MetricsGatewayErrorResponseBo
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateHookIngestEventRequestBody runs the validations defined on
+// HookIngestEventRequestBody
+func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err error) {
+	if !(body.Type == "session.started" || body.Type == "session.updated" || body.Type == "session.ended" || body.Type == "prompt.submitted" || body.Type == "tool.requested" || body.Type == "tool.completed" || body.Type == "tool.failed" || body.Type == "assistant.responded" || body.Type == "usage.reported" || body.Type == "skill.activated" || body.Type == "notification.reported") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", body.Type, []any{"session.started", "session.updated", "session.ended", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "usage.reported", "skill.activated", "notification.reported"}))
 	}
 	return
 }

@@ -138,72 +138,125 @@ var CodexHookResult = Type("CodexHookResult", func() {
 	Attribute("reason", String, "Reason for the decision, shown to the user")
 })
 
-// Ingest hook payload
-var IngestHookPayload = Type("IngestHookPayload", func() {
-	Description("Unified payload for hook events from coding assistants")
-	Required("event_type")
-	Attribute("event_type", String, "Normalized Gram hook event type", func() {
-		Enum("config_change", "session_start", "before_tool_use", "after_tool_use", "after_tool_use_failure",
-			"before_mcp_execution", "after_mcp_execution", "permission_request", "user_prompt_submit",
-			"after_agent_response", "after_agent_thought", "stop", "session_end", "notification")
-	})
-	Attribute("hook_event_name", String, "Original platform-native hook event name, if the source has one")
-	Attribute("session_id", String, "The agent session ID")
-	Attribute("conversation_id", String, "The agent conversation ID")
-	Attribute("generation_id", String, "The generation or turn ID")
-	Attribute("model", String, "The model identifier")
-	Attribute("reported_user_email", String, "User email reported by the local agent. Informational only; attribution comes from the authenticated token.")
-	Attribute("user_email", String, "Legacy source-reported user email. Informational only; attribution comes from the authenticated token.")
-	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
-	Attribute("transcript_path", String, "Path to the conversation transcript file")
-	Attribute("cwd", String, "The working directory when the event fired")
-	Attribute("tool_name", String, "The name of the tool")
-	Attribute("tool_use_id", String, "The unique ID for this tool use")
-	Attribute("tool_input", Any, "The input to the tool")
-	Attribute("tool_response", Any, "The response from the tool")
-	Attribute("tool_output", Any, "The output from the tool")
-	Attribute("error", Any, "The error from the tool")
-	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
-	Attribute("permission_type", String, "The type of permission being requested")
-	Attribute("prompt", String, "The user's prompt text")
-	Attribute("last_assistant_message", String, "The final assistant message text for the turn")
-	Attribute("source", String, "How the session started (Claude SessionStart only)")
-	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active")
-	Attribute("reason", String, "Why the session ended")
-	Attribute("notification_type", String, "Type of notification")
-	Attribute("message", String, "Notification message text")
-	Attribute("title", String, "Notification title")
-	Attribute("cursor_version", String, "The Cursor IDE version")
-	Attribute("composer_mode", String, "Cursor composer mode")
-	Attribute("status", String, "Completion status")
-	Attribute("loop_count", Int, "Number of agentic loops executed")
-	Attribute("input_tokens", Int, "Total input tokens used")
-	Attribute("output_tokens", Int, "Total output tokens used")
-	Attribute("cache_read_tokens", Int, "Tokens read from cache")
-	Attribute("cache_write_tokens", Int, "Tokens written to cache")
-	Attribute("text", String, "Assistant response or thinking text")
-	Attribute("duration_ms", Int, "Duration in milliseconds")
-	Attribute("url", String, "URL of the MCP server")
-	Attribute("command", String, "Command string for command-based MCP servers")
-	Attribute("result_json", String, "JSON-encoded MCP tool response")
-	Attribute("duration", Float64, "Execution duration in milliseconds")
+var HookIngestSource = Type("HookIngestSource", func() {
+	Description("Metadata about the local hook adapter that translated a provider event into the Gram hook contract.")
+	Required("adapter")
+	Attribute("adapter", String, "Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.")
+	Attribute("adapter_version", String, "Adapter implementation version.")
+	Attribute("raw_event_name", String, "Provider-native event name, if one exists.")
+	Attribute("hostname", String, "Hostname of the machine that emitted the hook event.")
 })
 
-// Ingest hook result contains the union of hook response shapes used by the
-// supported agent platforms. Each platform reads only the fields it knows.
+var HookIngestSession = Type("HookIngestSession", func() {
+	Description("Agent session and turn identity, independent of provider naming.")
+	Attribute("id", String, "Stable conversation or session identifier.")
+	Attribute("turn_id", String, "Generation, request, or turn identifier.")
+	Attribute("cwd", String, "Current working directory when the event fired.")
+	Attribute("model", String, "Model identifier reported by the local agent.")
+})
+
+var HookIngestEvent = Type("HookIngestEvent", func() {
+	Description("Canonical Gram feature event.")
+	Required("type")
+	Attribute("type", String, "Canonical Gram hook event type.", func() {
+		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
+			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
+			"usage.reported", "skill.activated", "notification.reported")
+	})
+	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.")
+})
+
+var HookPromptData = Type("HookPromptData", func() {
+	Description("Prompt feature payload.")
+	Attribute("text", String, "User prompt text.")
+})
+
+var HookToolCallData = Type("HookToolCallData", func() {
+	Description("Tool call feature payload.")
+	Attribute("id", String, "Provider tool call identifier.")
+	Attribute("name", String, "Tool name.")
+	Attribute("input", Any, "Tool input payload.")
+	Attribute("output", Any, "Tool output payload.")
+	Attribute("error", Any, "Tool error payload.")
+	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption.")
+	Attribute("permission_type", String, "Permission type requested by the agent, when applicable.")
+	Attribute("duration_ms", Float64, "Tool execution duration in milliseconds, when reported.")
+	Attribute("status", String, "Provider-reported tool call status, when available.")
+})
+
+var HookMCPData = Type("HookMCPData", func() {
+	Description("MCP feature payload.")
+	Attribute("server_name", String, "Provider-reported MCP server name.")
+	Attribute("server_identity", String, "Stable server identity inferred by the hook adapter.")
+	Attribute("url", String, "MCP server URL, when available.")
+	Attribute("command", String, "MCP server command, when available.")
+	Attribute("result_json", String, "JSON-encoded MCP tool result, when reported as a string.")
+})
+
+var HookUsageData = Type("HookUsageData", func() {
+	Description("Token and cost usage payload.")
+	Attribute("input_tokens", Int, "Input token count.")
+	Attribute("output_tokens", Int, "Output token count.")
+	Attribute("cache_read_tokens", Int, "Cache read token count.")
+	Attribute("cache_write_tokens", Int, "Cache write token count.")
+	Attribute("cost", Float64, "Reported cost.")
+	Attribute("loop_count", Int, "Agent loop count, when reported.")
+	Attribute("status", String, "Provider-reported usage or session status, when available.")
+})
+
+var HookMessageData = Type("HookMessageData", func() {
+	Description("Assistant/user message payload.")
+	Attribute("text", String, "Message text.")
+	Attribute("role", String, "Message role, e.g. assistant or user.")
+	Attribute("duration_ms", Float64, "Message or thinking-block duration in milliseconds, when reported.")
+})
+
+var HookSkillData = Type("HookSkillData", func() {
+	Description("Skill activation payload.")
+	Required("name")
+	Attribute("name", String, "Activated skill name.")
+	Attribute("source", String, "Skill source or namespace, if available.")
+})
+
+var HookNotificationData = Type("HookNotificationData", func() {
+	Description("Local agent notification payload.")
+	Attribute("type", String, "Notification type.")
+	Attribute("title", String, "Notification title.")
+	Attribute("message", String, "Notification message.")
+})
+
+var HookIngestData = Type("HookIngestData", func() {
+	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
+	Attribute("prompt", HookPromptData)
+	Attribute("tool_call", HookToolCallData)
+	Attribute("mcp", HookMCPData)
+	Attribute("usage", HookUsageData)
+	Attribute("message", HookMessageData)
+	Attribute("skill", HookSkillData)
+	Attribute("notification", HookNotificationData)
+})
+
+var IngestHookPayload = Type("IngestHookPayload", func() {
+	Description("Feature-first unified hook event payload.")
+	Required("schema_version", "source", "event")
+	Attribute("schema_version", String, "Contract version. The current version is hook.ingest.v1.")
+	Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
+	Attribute("source", HookIngestSource)
+	Attribute("session", HookIngestSession)
+	Attribute("event", HookIngestEvent)
+	Attribute("data", HookIngestData)
+	Attribute("raw", Any, "Original provider payload for debugging. The backend does not use this for feature behavior.")
+})
+
 var IngestHookResult = Type("IngestHookResult", func() {
-	Description("Unified result for hook events")
-	Attribute("continue", Boolean, "Claude SessionStart continue flag")
-	Attribute("stopReason", String, "Claude SessionStart stop reason")
-	Attribute("suppressOutput", Boolean, "Claude output suppression flag")
-	Attribute("systemMessage", String, "Claude warning message")
-	Attribute("hookSpecificOutput", Any, "Claude hook-specific output")
-	Attribute("decision", String, "Codex or Claude top-level block decision")
-	Attribute("reason", String, "Reason accompanying decision")
-	Attribute("permission", String, "Cursor permission decision")
-	Attribute("user_message", String, "Cursor user-facing message")
-	Attribute("additional_context", String, "Cursor context to inject")
-	Attribute("agent_message", String, "Cursor agent-facing message")
+	Description("Provider-neutral decision returned by the unified hook endpoint.")
+	Required("decision")
+	Attribute("decision", String, "Whether the local hook should allow or deny the action.", func() {
+		Enum("allow", "deny")
+	})
+	Attribute("reason", String, "Machine-readable decision reason.")
+	Attribute("message", String, "User-facing decision message.")
+	Attribute("effects", MapOf(String, Any), "Optional side-effect hints for hook SDKs.")
 })
 
 // Server name override types
@@ -301,7 +354,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("ingest", func() {
-		Description("Unified endpoint for hook events from supported coding assistants.")
+		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
@@ -311,10 +364,6 @@ var _ = Service("hooks", func() {
 			Extend(IngestHookPayload)
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("hook_source", String, "The sending hook adapter or agent platform. Built-in values include claude, cursor, and codex; customer plugins may send their own stable slug.")
-			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
-			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
-			Required("hook_source")
 		})
 
 		Result(IngestHookResult)
@@ -323,10 +372,12 @@ var _ = Service("hooks", func() {
 			POST("/rpc/hooks.ingest")
 			security.ByKeyHeader()
 			security.ProjectHeader()
-			Header("hook_source:X-Gram-Hook-Source")
-			Header("hook_hostname:X-Gram-Hook-Hostname")
 			Header("idempotency_key:Idempotency-Key")
 		})
+
+		Meta("openapi:operationId", "ingestHookEvent")
+		Meta("openapi:extension:x-speakeasy-name-override", "ingest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IngestHookEvent"}`)
 	})
 
 	Method("logs", func() {

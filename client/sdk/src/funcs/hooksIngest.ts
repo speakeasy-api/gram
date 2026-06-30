@@ -31,12 +31,12 @@ import { Result } from "../types/fp.js";
  * ingest hooks
  *
  * @remarks
- * Unified endpoint for hook events from supported coding assistants.
+ * Feature-first unified endpoint for hook events from supported coding assistants.
  */
-export function hooksHooksNumberIngest(
+export function hooksIngest(
   client: GramCore,
-  request: operations.HooksNumberIngestRequest,
-  security?: operations.HooksNumberIngestSecurity | undefined,
+  request: operations.IngestHookEventRequest,
+  security?: operations.IngestHookEventSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +62,8 @@ export function hooksHooksNumberIngest(
 
 async function $do(
   client: GramCore,
-  request: operations.HooksNumberIngestRequest,
-  security?: operations.HooksNumberIngestSecurity | undefined,
+  request: operations.IngestHookEventRequest,
+  security?: operations.IngestHookEventSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -84,15 +84,14 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(operations.HooksNumberIngestRequest$outboundSchema, value),
+    (value) => z.parse(operations.IngestHookEventRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.IngestHookPayload, { explode: true });
+  const body = encodeJSON("body", payload.IngestRequestBody, { explode: true });
 
   const path = pathToFunc("/rpc/hooks.ingest")();
 
@@ -110,16 +109,6 @@ async function $do(
     "Idempotency-Key": encodeSimple(
       "Idempotency-Key",
       payload["Idempotency-Key"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "X-Gram-Hook-Hostname": encodeSimple(
-      "X-Gram-Hook-Hostname",
-      payload["X-Gram-Hook-Hostname"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "X-Gram-Hook-Source": encodeSimple(
-      "X-Gram-Hook-Source",
-      payload["X-Gram-Hook-Source"],
       { explode: false, charEncoding: "none" },
     ),
   }));
@@ -142,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "hooks#ingest",
+    operationID: "ingestHookEvent",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
