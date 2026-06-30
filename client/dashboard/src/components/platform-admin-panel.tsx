@@ -27,11 +27,12 @@ import {
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
 
-// PlatformAdminPanel surfaces the Platform Admin tooling (org override,
-// product features, RBAC, enterprise onboarding) inside the Developer Toolkit.
-// It replaces the standalone OrgAdminSettings page; the layout is compact so it
-// fits the narrow platform-admin-toolbar panel. Every control here hits a platform-admin
-// guarded endpoint, so a non-platform-admin caller sees graceful error states.
+// These panels surface the Platform Admin tooling (org info & override, product
+// features, RBAC, enterprise onboarding) inside the Developer Toolkit, one panel
+// per toolkit tab. They replace the standalone OrgAdminSettings page; the layout
+// is compact so it fits the narrow platform-admin-toolbar panel. Every control
+// here hits a platform-admin guarded endpoint, so a non-platform-admin caller
+// sees graceful error states.
 
 function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
   return enabled ? (
@@ -487,13 +488,23 @@ function OrgInfoSection(): ReactElement {
   );
 }
 
-export function PlatformAdminPanel(): ReactElement {
+// The panels below back the Platform Admin tabs in the Developer Toolkit, one
+// per tab: Info (org info + override), Features (RBAC + product features), and
+// Onboarding (enterprise admin email).
+
+export function PlatformAdminInfoPanel(): ReactElement {
   return (
     <div className="space-y-2">
       <OrgInfoSection />
       <OrgOverrideSection />
-      <ProductFeaturesSection />
-      <OnboardingSection />
     </div>
   );
+}
+
+export function PlatformAdminFeaturesPanel(): ReactElement {
+  return <ProductFeaturesSection />;
+}
+
+export function PlatformAdminOnboardingPanel(): ReactElement {
+  return <OnboardingSection />;
 }
