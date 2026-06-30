@@ -39,7 +39,7 @@ func (q *Queries) DeleteFeature(ctx context.Context, arg DeleteFeatureParams) (O
 	return i, err
 }
 
-const enableFeature = `-- name: EnableFeature :one
+const enableFeature = `-- name: EnableFeature :exec
 INSERT INTO organization_features (
     organization_id,
     feature_name
@@ -48,8 +48,7 @@ INSERT INTO organization_features (
     $2
 )
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
+DO NOTHING
 `
 
 type EnableFeatureParams struct {
@@ -57,19 +56,9 @@ type EnableFeatureParams struct {
 	FeatureName    string
 }
 
-func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (OrganizationFeature, error) {
-	row := q.db.QueryRow(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
-	var i OrganizationFeature
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.FeatureName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
+func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) error {
+	_, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
+	return err
 }
 
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one
