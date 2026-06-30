@@ -71,6 +71,7 @@ import (
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
@@ -82,9 +83,13 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
-	ID                    string              `json:"id"`
-	ParentChallengeID     string              `json:"parent_challenge_id"`
-	ProjectID             uuid.UUID           `json:"project_id"`
+	ID                string    `json:"id"`
+	ParentChallengeID string    `json:"parent_challenge_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	// OrganizationID scopes the callback's client lookup so an organization-level
+	// client (project_id NULL) bound to this project's user_session_issuer
+	// resolves on the way back. Empty for in-flight states minted before it.
+	OrganizationID        string              `json:"organization_id,omitempty"`
 	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
 	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
 	TokenEndpoint         string              `json:"token_endpoint"`
@@ -188,9 +193,10 @@ func (c Client) resolveScopes() []string {
 func (m *ChallengeManager) ListClients(
 	ctx context.Context,
 	projectID uuid.UUID,
+	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -316,6 +322,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
+		OrganizationID:        parent.OrganizationID,
 		UserSessionIssuerID:   parent.UserSessionIssuerID,
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
@@ -417,8 +424,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
-		ID:        state.RemoteSessionClientID,
-		ProjectID: conv.ToNullUUID(state.ProjectID),
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: conv.ToPGText(state.OrganizationID),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)

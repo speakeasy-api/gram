@@ -107,8 +107,9 @@ type CreateClientRequestBody struct {
 	// organization.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
@@ -134,8 +135,9 @@ type CreateCimdClientRequestBody struct {
 	// organization and advertise client_id_metadata_document_supported.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
@@ -391,8 +393,10 @@ type ListClientsResponseBody struct {
 type GetClientResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -453,8 +457,10 @@ type ListClientSessionsResponseBody struct {
 type CreateClientResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -489,8 +495,10 @@ type CreateClientResponseBody struct {
 type CreateCimdClientResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -525,8 +533,10 @@ type CreateCimdClientResponseBody struct {
 type UpdateClientResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -4465,8 +4475,10 @@ type OrganizationRemoteSessionClientResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -6211,6 +6223,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 	v := &types.RemoteSessionClient{
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
@@ -6908,6 +6921,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 	v := &types.RemoteSessionClient{
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
@@ -7089,6 +7103,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 	v := &types.RemoteSessionClient{
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
@@ -7272,6 +7287,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 	v := &types.RemoteSessionClient{
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
@@ -8494,6 +8510,9 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
@@ -8514,9 +8533,6 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
@@ -8597,6 +8613,9 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
@@ -8617,9 +8636,6 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
@@ -8656,6 +8672,9 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
@@ -8676,9 +8695,6 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
@@ -8715,6 +8731,9 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
@@ -8735,9 +8754,6 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
@@ -13730,6 +13746,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
@@ -13750,9 +13769,6 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))

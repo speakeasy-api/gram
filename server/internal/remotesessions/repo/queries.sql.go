@@ -164,6 +164,7 @@ const createRemoteSessionClientCIMD = `-- name: CreateRemoteSessionClientCIMD :o
 INSERT INTO remote_session_clients (
     id,
     project_id,
+    organization_id,
     remote_session_issuer_id,
     client_id,
     client_id_metadata_uri,
@@ -177,11 +178,12 @@ VALUES (
     $2,
     $3,
     $4,
-    $4,
     $5,
+    $5,
+    $6,
     'none',
-    $6::text[],
-    $7
+    $7::text[],
+    $8
 )
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
@@ -189,6 +191,7 @@ RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, 
 type CreateRemoteSessionClientCIMDParams struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.NullUUID
+	OrganizationID        pgtype.Text
 	RemoteSessionIssuerID uuid.UUID
 	ClientIDMetadataUri   string
 	ClientIDIssuedAt      pgtype.Timestamptz
@@ -205,6 +208,7 @@ func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateR
 	row := q.db.QueryRow(ctx, createRemoteSessionClientCIMD,
 		arg.ID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.RemoteSessionIssuerID,
 		arg.ClientIDMetadataUri,
 		arg.ClientIDIssuedAt,
@@ -794,14 +798,18 @@ const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
 SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-WHERE s.id = $1 AND c.project_id = $2 AND s.deleted IS FALSE AND c.deleted IS FALSE
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.id = $1 AND usi.project_id = $2 AND s.deleted IS FALSE AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionByIDParams struct {
 	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ProjectID uuid.UUID
 }
 
+// Scoped by the session's user_session_issuer project (see
+// ListRemoteSessionsByProjectID), so an organization-level client's session is
+// reachable from the project whose user_session_issuer minted it.
 func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSessionByIDParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionByID, arg.ID, arg.ProjectID)
 	var i RemoteSession
@@ -829,15 +837,20 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = $1
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE
+WHERE c.id = $2
+  AND (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionClientByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
 }
 
 type GetRemoteSessionClientByIDRow struct {
@@ -846,7 +859,7 @@ type GetRemoteSessionClientByIDRow struct {
 }
 
 func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteSessionClientByIDParams) (GetRemoteSessionClientByIDRow, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.ProjectID, arg.ID, arg.OrganizationID)
 	var i GetRemoteSessionClientByIDRow
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
@@ -1499,19 +1512,22 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = $1
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.project_id = $1
+WHERE (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $2))
   AND c.deleted IS FALSE
-  AND ($2::uuid IS NULL OR c.remote_session_issuer_id = $2::uuid)
-  AND ($3::uuid IS NULL OR c.id < $3::uuid)
+  AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
+  AND ($4::uuid IS NULL OR c.id < $4::uuid)
 ORDER BY c.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListRemoteSessionClientsByProjectIDParams struct {
-	ProjectID             uuid.NullUUID
+	ProjectID             uuid.UUID
+	OrganizationID        pgtype.Text
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -1525,6 +1541,7 @@ type ListRemoteSessionClientsByProjectIDRow struct {
 func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg ListRemoteSessionClientsByProjectIDParams) ([]ListRemoteSessionClientsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -1572,25 +1589,28 @@ SELECT
     (
         SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS all_link
+        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
+          AND all_usi.project_id = $1
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND usi.project_id = $2
+WHERE link.user_session_issuer_id = $2
+  AND usi.project_id = $1
   AND usi.deleted IS FALSE
-  AND c.project_id = $2
+  AND (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $3))
   AND c.deleted IS FALSE
-  AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
-  AND ($4::uuid IS NULL OR c.id < $4::uuid)
+  AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4::uuid)
+  AND ($5::uuid IS NULL OR c.id < $5::uuid)
 ORDER BY c.id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams struct {
-	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	OrganizationID        pgtype.Text
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -1604,10 +1624,13 @@ type ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow struct {
 // Filters to clients bound to the given user_session_issuer through the join
 // table, while user_session_issuer_ids reports every issuer each client is
 // attached to (a correlated subquery independent of the filter join).
+// Includes both the project's own clients and organization-level clients
+// (project_id NULL) belonging to the project's org.
 func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams) ([]ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectIDForUserSessionIssuer,
-		arg.UserSessionIssuerID,
 		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
 		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -1671,7 +1694,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND c.project_id = $2
+  AND (c.project_id = $2 OR (c.project_id IS NULL AND c.organization_id = $3))
   AND usi.project_id = $2
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -1682,6 +1705,7 @@ ORDER BY c.id ASC
 type ListRemoteSessionClientsForUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 }
 
 type ListRemoteSessionClientsForUserSessionIssuerRow struct {
@@ -1704,9 +1728,12 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 
 // Joined client + issuer view used by the consent renderer and the
 // ChallengeManager. Returns one row per remote_session_client linked to
-// the given user_session_issuer through the join table.
+// the given user_session_issuer through the join table. Resolves both the
+// project's own clients and organization-level clients (project_id NULL)
+// belonging to the project's org, so an org-level client attached to this
+// project's user_session_issuer is honored at runtime.
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1880,8 +1907,9 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
   u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE c.project_id = $1
+WHERE usi.project_id = $1
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND ($2::text IS NULL OR s.subject_urn = $2::text)
@@ -1892,7 +1920,7 @@ LIMIT $5
 `
 
 type ListRemoteSessionsByProjectIDParams struct {
-	ProjectID             uuid.NullUUID
+	ProjectID             uuid.UUID
 	SubjectUrn            pgtype.Text
 	RemoteSessionClientID uuid.NullUUID
 	Cursor                uuid.NullUUID
@@ -1905,6 +1933,11 @@ type ListRemoteSessionsByProjectIDRow struct {
 	SubjectEmail       pgtype.Text
 }
 
+// Scoped by the session's user_session_issuer project, not the client's project:
+// a remote_session belongs to the project whose user_session_issuer minted it,
+// so sessions established through an organization-level client (project_id NULL)
+// bound to this project's user_session_issuer are listed here, while another
+// project's sessions on the same shared org-level client are not.
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]ListRemoteSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
 		arg.ProjectID,
@@ -2103,10 +2136,11 @@ func (q *Queries) RevokeOrganizationRemoteSession(ctx context.Context, arg Revok
 const revokeRemoteSession = `-- name: RevokeRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM remote_session_clients AS c
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
-  AND c.project_id = $2
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = $2
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
@@ -2114,9 +2148,13 @@ RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client
 
 type RevokeRemoteSessionParams struct {
 	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ProjectID uuid.UUID
 }
 
+// Scoped by the session's user_session_issuer project (see
+// ListRemoteSessionsByProjectID), so a project admin can revoke a session
+// established through an organization-level client bound to their own
+// user_session_issuer, but not another project's session on a shared one.
 func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, revokeRemoteSession, arg.ID, arg.ProjectID)
 	var i RemoteSession

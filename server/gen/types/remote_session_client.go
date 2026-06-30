@@ -12,8 +12,10 @@ package types
 type RemoteSessionClient struct {
 	// The remote_session_client id.
 	ID string
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string
 	// The user_session_issuers this client is attached to via the join table.

@@ -122,7 +122,7 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]string{remoteIssuerID: "upstream-access-token"}, tokens)
 }
@@ -140,7 +140,7 @@ func TestResolveAccessTokens_NoClientsReturnsNil(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-empty")
 	subject := urn.NewUserSubject("resolve-empty-subject")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Nil(t, tokens)
 }
@@ -160,7 +160,7 @@ func TestResolveAccessTokens_MissingSessionReturnsErrNoValidToken(t *testing.T) 
 	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-missing")
 
 	subject := urn.NewUserSubject("resolve-missing-subject")
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
