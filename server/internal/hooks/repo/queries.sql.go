@@ -100,7 +100,7 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
-const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
+const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :execrows
 INSERT INTO risk_results (
     id
   , project_id
@@ -155,9 +155,10 @@ type InsertShadowMCPBlockResultParams struct {
 // install delivers its own block with a distinct id and idempotency token, but
 // they resolve to the same (project, policy, version, chat_message). Run under
 // AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
-// collapses them atomically.
-func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) error {
-	_, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
+// collapses them atomically. Returns the row count so the caller can tell an
+// insert (1) from a dedup no-op (0) and avoid linking a non-existent finding id.
+func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
 		arg.ID,
 		arg.ProjectID,
 		arg.OrganizationID,
@@ -168,7 +169,10 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 		arg.Match,
 		arg.Confidence,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec

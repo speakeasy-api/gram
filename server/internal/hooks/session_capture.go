@@ -190,20 +190,48 @@ func (s *Service) persistBlockedClaudePrompt(ctx context.Context, metadata *Sess
 	if payload == nil || payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
+	content := conv.PtrValOr(payload.Prompt, "")
+	if content == "" {
+		return
+	}
 	ctx = context.WithoutCancel(ctx)
 
 	// A blocked prompt is erased from Claude's context, so it never reaches the
-	// Stop transcript — this row is its only capture, written with no
-	// external_message_id. Duplicate plugin installs each block the same prompt
-	// under their own request token, so the per-request isHookDuplicate guard
-	// misses them. Claim a deterministic token derived from the prompt so only
-	// the first install persists the row; the rest collapse.
-	sum := sha256.Sum256([]byte(*payload.SessionID + "\x00" + conv.PtrValOr(payload.Prompt, "")))
-	if !s.claimHookIdempotency(ctx, "claude-blocked-prompt:"+hex.EncodeToString(sum[:])) {
-		return
+	// Stop transcript — this is its only capture. Persist it through the batch
+	// path with a deterministic external_message_id (session + prompt) so the
+	// write itself is idempotent: duplicate installs that each block the same
+	// prompt collapse to one row at the DB (ON CONFLICT), and a transient failure
+	// can be safely retried without either duplicating the row or being silently
+	// dropped by a pre-claimed idempotency token.
+	sum := sha256.Sum256([]byte(*payload.SessionID + "\x00" + content))
+	externalID := "claude-blocked-prompt:" + hex.EncodeToString(sum[:])
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("UserPromptSubmit"),
+		attr.SlogGenAIConversationID(*payload.SessionID),
+	)
+	msgPayload := &gen.ClaudeMessagesPayload{
+		SessionID:        *payload.SessionID,
+		UserEmail:        payload.UserEmail,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		HookHostname:     nil,
+		Messages: []*gen.ClaudeCapturedMessage{{
+			ExternalID:       externalID,
+			Role:             "user",
+			Content:          &content,
+			Model:            nil,
+			ToolCalls:        nil,
+			ToolCallID:       nil,
+			PromptTokens:     nil,
+			CompletionTokens: nil,
+			TotalTokens:      nil,
+			Timestamp:        nil,
+			AgentID:          nil,
+			AgentType:        nil,
+		}},
 	}
-
-	if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
+	if err := s.persistClaudeMessages(ctx, msgPayload, *metadata, logger); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to persist blocked claude prompt",
 			attr.SlogEvent("claude_blocked_prompt_persist_failed"),
 			attr.SlogError(err),

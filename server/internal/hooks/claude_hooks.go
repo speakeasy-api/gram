@@ -1319,15 +1319,24 @@ func (s *Service) insertShadowMCPBlockFinding(
 		Match:             pgtype.Text{String: finding.Match, Valid: finding.Match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
-	if err := qtx.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+	rows, err := qtx.InsertShadowMCPBlockResult(ctx, insertParams)
+	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			// PK conflict: a row with this exact id already exists (e.g. a
+			// buffered finding flushed twice). That id is valid to link.
 			return resultID, nil
 		}
 		return uuid.Nil, fmt.Errorf("insert shadow-mcp block result: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return uuid.Nil, fmt.Errorf("commit shadow-mcp block tx: %w", err)
+	}
+	if rows == 0 {
+		// Deduped by NOT EXISTS: an existing finding with a different id already
+		// covers this tuple. Return Nil so the caller leaves the durable block's
+		// risk_result_id null instead of linking the id we minted but never wrote.
+		return uuid.Nil, nil
 	}
 	return resultID, nil
 }

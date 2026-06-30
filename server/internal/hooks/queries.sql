@@ -83,12 +83,13 @@ WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message
 -- without a unique constraint (risk_results has only a plain index on the tuple).
 SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(dedupe_key)::text, 0));
 
--- name: InsertShadowMCPBlockResult :exec
+-- name: InsertShadowMCPBlockResult :execrows
 -- Dedupe live hook-time block findings across duplicate plugin installs: each
 -- install delivers its own block with a distinct id and idempotency token, but
 -- they resolve to the same (project, policy, version, chat_message). Run under
 -- AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
--- collapses them atomically.
+-- collapses them atomically. Returns the row count so the caller can tell an
+-- insert (1) from a dedup no-op (0) and avoid linking a non-existent finding id.
 INSERT INTO risk_results (
     id
   , project_id
