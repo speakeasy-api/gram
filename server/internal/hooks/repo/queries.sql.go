@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireShadowMCPDedupeLock = `-- name: AcquireShadowMCPDedupeLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Transaction-level advisory lock keyed on the shadow-MCP dedupe tuple. Held with
+// InsertShadowMCPBlockResult in one transaction, it serializes concurrent
+// duplicate-install deliveries so the NOT EXISTS check and the insert are atomic
+// without a unique constraint (risk_results has only a plain index on the tuple).
+func (q *Queries) AcquireShadowMCPDedupeLock(ctx context.Context, dedupeKey string) error {
+	_, err := q.db.Exec(ctx, acquireShadowMCPDedupeLock, dedupeKey)
+	return err
+}
+
 const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
 WITH latest_user_message AS (
   SELECT chat_messages.id
@@ -140,8 +153,9 @@ type InsertShadowMCPBlockResultParams struct {
 
 // Dedupe live hook-time block findings across duplicate plugin installs: each
 // install delivers its own block with a distinct id and idempotency token, but
-// they resolve to the same (project, policy, version, chat_message). The
-// NOT EXISTS guard collapses them using risk_results_project_policy_version_message_idx.
+// they resolve to the same (project, policy, version, chat_message). Run under
+// AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
+// collapses them atomically.
 func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) error {
 	_, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
 		arg.ID,

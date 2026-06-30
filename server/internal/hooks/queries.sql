@@ -76,11 +76,19 @@ WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message
   AND sqlc.arg(message_id)::text <> ''
   AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
+-- name: AcquireShadowMCPDedupeLock :exec
+-- Transaction-level advisory lock keyed on the shadow-MCP dedupe tuple. Held with
+-- InsertShadowMCPBlockResult in one transaction, it serializes concurrent
+-- duplicate-install deliveries so the NOT EXISTS check and the insert are atomic
+-- without a unique constraint (risk_results has only a plain index on the tuple).
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(dedupe_key)::text, 0));
+
 -- name: InsertShadowMCPBlockResult :exec
 -- Dedupe live hook-time block findings across duplicate plugin installs: each
 -- install delivers its own block with a distinct id and idempotency token, but
--- they resolve to the same (project, policy, version, chat_message). The
--- NOT EXISTS guard collapses them using risk_results_project_policy_version_message_idx.
+-- they resolve to the same (project, policy, version, chat_message). Run under
+-- AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
+-- collapses them atomically.
 INSERT INTO risk_results (
     id
   , project_id

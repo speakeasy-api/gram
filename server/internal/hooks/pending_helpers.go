@@ -675,6 +675,9 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 // of looping forever (each re-buffer resets the item TTL). The counter is
 // cleared on the first successful flush.
 func (s *Service) allowClaudeMessagesFlushRetry(ctx context.Context, sessionID string) bool {
+	// The counter must outlive the request: a cancelled context could skip the
+	// increment (bypassing the cap) or leave the counter stale.
+	ctx = context.WithoutCancel(ctx)
 	key := claudeMessagesFlushRetryCounterCacheKey(sessionID)
 	var attempts int
 	_ = s.cache.Get(ctx, key, &attempts)

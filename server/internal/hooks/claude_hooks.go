@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -1284,6 +1286,28 @@ func (s *Service) insertShadowMCPBlockFinding(
 			return uuid.Nil, fmt.Errorf("generate uuidv7: %w", err)
 		}
 	}
+	// Serialize concurrent duplicate-install deliveries on the dedupe tuple so
+	// the NOT EXISTS check and the insert are atomic — risk_results has no unique
+	// constraint on the tuple, only a plain index. The advisory lock is
+	// transaction-scoped, so the insert must share its transaction.
+	dedupeKey := strings.Join([]string{
+		projectID.String(),
+		policyID.String(),
+		strconv.FormatInt(finding.RiskPolicyVersion, 10),
+		msgID.String(),
+	}, ":")
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin shadow-mcp block tx: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := s.repo.WithTx(tx)
+
+	if err := qtx.AcquireShadowMCPDedupeLock(ctx, dedupeKey); err != nil {
+		return uuid.Nil, fmt.Errorf("acquire shadow-mcp dedupe lock: %w", err)
+	}
+
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
 		ProjectID:         projectID,
@@ -1295,12 +1319,15 @@ func (s *Service) insertShadowMCPBlockFinding(
 		Match:             pgtype.Text{String: finding.Match, Valid: finding.Match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
-	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+	if err := qtx.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return resultID, nil
 		}
 		return uuid.Nil, fmt.Errorf("insert shadow-mcp block result: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit shadow-mcp block tx: %w", err)
 	}
 	return resultID, nil
 }

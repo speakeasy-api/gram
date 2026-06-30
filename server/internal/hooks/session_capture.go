@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -189,6 +191,18 @@ func (s *Service) persistBlockedClaudePrompt(ctx context.Context, metadata *Sess
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
+
+	// A blocked prompt is erased from Claude's context, so it never reaches the
+	// Stop transcript — this row is its only capture, written with no
+	// external_message_id. Duplicate plugin installs each block the same prompt
+	// under their own request token, so the per-request isHookDuplicate guard
+	// misses them. Claim a deterministic token derived from the prompt so only
+	// the first install persists the row; the rest collapse.
+	sum := sha256.Sum256([]byte(*payload.SessionID + "\x00" + conv.PtrValOr(payload.Prompt, "")))
+	if !s.claimHookIdempotency(ctx, "claude-blocked-prompt:"+hex.EncodeToString(sum[:])) {
+		return
+	}
+
 	if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to persist blocked claude prompt",
 			attr.SlogEvent("claude_blocked_prompt_persist_failed"),
