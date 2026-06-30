@@ -34,7 +34,7 @@ _meter = metrics.get_meter("github.com/speakeasy-api/gram/pystreams")
 # under load) can run for minutes, so the distribution reaches a 10-minute upper
 # bound rather than saturating the top bucket on the slow tail that matters most.
 _process_duration = _meter.create_histogram(
-    "pystreams.presidio.process.duration",
+    "gram.pystreams_presidio.process_duration",
     unit="s",
     description=(
         "Wall-clock time to process one message through the Presidio handler "
