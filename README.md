@@ -14,6 +14,7 @@
 
 <p align="center">
   <a href="https://www.getgram.ai/docs/introduction"><strong>Documentation</strong></a> ·
+  <a href="#running-locally"><strong>Running locally</strong></a> ·
   <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
   <a href="./CONTRIBUTING.md"><strong>Contributing</strong></a> ·
   <a href="https://app.getgram.ai/"><strong>Login</strong></a> ·
@@ -65,6 +66,20 @@ Track AI usage across teams and measure impact with either tokens or cost. Deep 
 - Chat with us: [Join our slack](https://join.slack.com/t/speakeasy-dev/shared_invite/zt-3hudfoj4y-9EPqMmHIFhNiTtannqiV3Q) for support and discussions or email us at [support@speakeasy.com](mailto:support@speakeasy.com).
 - Contribute feature requests or report issues [on our roadmap](https://roadmap.speakeasy.com/).
 - Documentation for the platform is available [here](https://www.speakeasy.com/docs/mcp).
+
+## Running locally
+
+Run `./zero` until it succeeds. This script is what you use to run the dashboard and services for local development. It installs dependencies, runs pending database migrations, and starts everything up.
+
+The main dependencies are [Mise](https://mise.jdx.dev/) and [Docker](https://www.docker.com/). The `./zero` script will guide you to install these if they are not found.
+
+Once everything is running, seed the local database with sample data:
+
+```bash
+mise seed
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for more detail on local development, auth, and the CLI.
 
 ## Contributing
 
