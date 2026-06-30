@@ -125,11 +125,7 @@ func (f *ProxyManager) Build(
 	return f.BuildTarget(logger, server.ID.String(), server.Url, mcpServerID, configured, visibility, projectID, upstreamAuth)
 }
 
-// BuildTarget constructs a configured [*proxy.Proxy] for a single request
-// against an MCP-compatible upstream URL. The upstream identity is normally
-// a remote_mcp_servers id, but tunnel-backed MCP servers reuse the same
-// interceptor stack with their tunnelled_mcp_servers id so logs and usage are
-// still correlated to the source row behind the fronting mcp_servers id.
+// BuildTarget keys tunnel-backed MCP telemetry by tunnelled_mcp_servers.id.
 func (f *ProxyManager) BuildTarget(
 	logger *slog.Logger,
 	upstreamID string,

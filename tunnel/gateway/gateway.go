@@ -20,21 +20,16 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// routeTTL is the lifetime of a published route; refreshed at half this.
 const routeTTL = 30 * time.Second
 
-// Config configures a Gateway.
 type Config struct {
-	// AdvertiseAddr is the internal host:port other pods (gram-server) reach
-	// this gateway on to forward requests (published into the route store).
-	AdvertiseAddr string
-	// MaxStreamsPerTunnel caps concurrent substreams per agent session.
+	// AdvertiseAddr is the internal gram-server -> gateway address published in Redis.
+	AdvertiseAddr       string
 	MaxStreamsPerTunnel int
 	ForwardToken        string
 }
 
-// Gateway terminates agent WebSocket upgrades, owns the yamux sessions, and
-// maps internal forward requests onto substreams by tunnel ID.
+// Gateway owns live agent yamux sessions and maps internal forwards to substreams.
 type Gateway struct {
 	cfg      Config
 	keys     KeyResolver
@@ -44,7 +39,6 @@ type Gateway struct {
 	upgrader websocket.Upgrader
 }
 
-// New builds a Gateway.
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) *Gateway {
 	if cfg.MaxStreamsPerTunnel <= 0 {
 		cfg.MaxStreamsPerTunnel = 256
@@ -64,9 +58,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	}
 }
 
-// PublicHandler returns the externally reachable agent routes. It intentionally
-// does not mount the forward handler: public clients may connect agents, but
-// only the internal listener may forward MCP traffic into a tunnel.
+// PublicHandler excludes forwarding; only the internal listener can enter a tunnel.
 func (g *Gateway) PublicHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/connect", g.handleConnect)
@@ -74,7 +66,6 @@ func (g *Gateway) PublicHandler() http.Handler {
 	return mux
 }
 
-// ForwardHandler returns the internal gram-server -> gateway forwarding routes.
 func (g *Gateway) ForwardHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
@@ -86,17 +77,11 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// ActiveSessions exposes the registered session count for metrics/tests.
 func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 
-// SetAdvertiseAddr overrides the internal forward address published into the
-// route store. Used when the listen address is only known after binding (tests,
-// downward-API wiring).
+// SetAdvertiseAddr lets tests publish listener addresses known only after bind.
 func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 
-// handleConnect authenticates the agent, upgrades to WebSocket, runs a yamux
-// client session over it, registers the session, and keeps the route fresh
-// until the session closes.
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	presentedKeyHash := hashBearerKey(authHeader)
@@ -184,14 +169,11 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.String("agent_version", agentVersion), slog.Int("active", g.reg.activeSessions()))
 
-	// Greet the agent over a substream (best effort; informational).
 	go g.sayHello(session, tunnelID, sessionID)
 
-	// Refresh the route until the session dies.
 	stop := make(chan struct{})
 	go g.refreshSessionState(tunnelID, presentedKeyHash, session, stop)
 
-	// Block until the session closes (agent disconnect / network drop).
 	<-session.CloseChan()
 	close(stop)
 	remove()
@@ -309,9 +291,6 @@ func (g *Gateway) sayHello(session *yamux.Session, tunnelID, sessionID string) {
 	_ = resp.Body.Close()
 }
 
-// handleForward maps an internal request onto a substream of the named tunnel.
-// The tunnel ID arrives in a header set by gram-server (never by an external
-// caller); see the tenant-isolation invariant in the design.
 func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	if g.cfg.ForwardToken != "" {
 		presented := r.Header.Get(wire.HeaderTunnelForwardToken)
@@ -323,6 +302,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Header.Del(wire.HeaderTunnelForwardToken)
 
+	// Forwarding is internal-only; gram-server supplies the tunnel ID header.
 	tunnelID := r.Header.Get(wire.HeaderTunnelID)
 	if tunnelID == "" {
 		http.Error(w, "missing tunnel id", http.StatusBadRequest)
@@ -331,7 +311,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	consumerSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelConsumerSession))
 	entry, ok := g.reg.beginForward(tunnelID, consumerSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
 	if !ok {
-		// Distinct 502 variant: tunnel known but no live agent session.
+		// Distinguish known tunnel/no live session from auth failures.
 		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
 		http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
 		return
@@ -361,8 +341,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// RevokeTunnel kills all sessions for a tunnel and clears its route. Durable
-// key state is owned by the resolver backing the gateway.
+// RevokeTunnel clears live routes/sessions; durable revocation stays in the key resolver.
 func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 	if revoker, ok := g.keys.(interface{ Revoke(string) }); ok {
 		revoker.Revoke(tunnelID)
@@ -371,10 +350,7 @@ func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 	return g.reg.kill(tunnelID)
 }
 
-// substreamTransport returns an http.RoundTripper that opens a fresh yamux
-// substream per request. Keepalives are disabled so DialContext (and therefore
-// a new substream) is invoked for every request, and the substream is torn down
-// when the exchange completes.
+// Disable keepalives so each request opens and closes its own yamux substream.
 func substreamTransport(session *yamux.Session) *http.Transport {
 	return &http.Transport{
 		DisableKeepAlives: true,

@@ -5,8 +5,7 @@ import (
 	"os"
 )
 
-// yamuxLogOutput is where the yamux session logs go. Defaults to discard;
-// set TUNNEL_YAMUX_DEBUG to surface yamux's internal session diagnostics.
+// Set TUNNEL_YAMUX_DEBUG to surface yamux internals; default is discard.
 var yamuxLogOutput io.Writer = func() io.Writer {
 	if os.Getenv("TUNNEL_YAMUX_DEBUG") != "" {
 		return os.Stderr

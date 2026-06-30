@@ -8,8 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NamedAsset } from "./SourceCard";
 import MonacoEditorLazy from "../monaco-editor.lazy";
 
-// Remote/tunnelled MCP servers don't have a deployment artifact in this dialog,
-// so this narrows the union to deployment-backed assets.
+// Only deployment-backed assets can be viewed here.
 type ViewableAsset = Exclude<
   NamedAsset,
   { type: "remotemcp" } | { type: "tunnelledmcp" }

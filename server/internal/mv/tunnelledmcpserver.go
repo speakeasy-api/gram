@@ -24,8 +24,7 @@ type TunnelledMcpConnectionCache struct {
 	Metadata               map[string]string `json:"metadata"`
 }
 
-// BuildTunnelledMcpServerView converts a repo tunnelled_mcp_servers row plus
-// the live Redis connection snapshot into the API response type.
+// BuildTunnelledMcpServerView adds live Redis connection fields to the tunnel row.
 func BuildTunnelledMcpServerView(server repo.TunnelledMcpServer, connections []TunnelledMcpConnectionCache) *types.TunnelledMcpServer {
 	agentVersion := conv.FromPGText[string](server.AgentVersion)
 	if agentVersion == nil {

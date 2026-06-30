@@ -1,7 +1,3 @@
-// Package e2e exercises the tunnel end to end in-process: a real yamux session
-// over a real WebSocket, agent reverse-proxying to a stub MCP server, and the
-// gram-server serve path forwarding through the gateway. Proves the connect /
-// negotiate / forward path and the tenant-isolation 502.
 package e2e
 
 import (
@@ -28,7 +24,6 @@ func TestTunnelEndToEnd(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := t.Context()
 
-	// Stub local MCP server (stands in for the customer's MCP server).
 	releaseSlowRequest := make(chan struct{})
 	var slowRequest sync.Once
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +41,6 @@ func TestTunnelEndToEnd(t *testing.T) {
 	}))
 	defer mcp.Close()
 
-	// Test gateway with a process-local route store and one seeded tunnel key.
 	const tunnelID = "tunnel-1"
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
@@ -60,7 +54,6 @@ func TestTunnelEndToEnd(t *testing.T) {
 	defer forwardServer.Close()
 	gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
 
-	// Agent dials the gateway and pins the stub MCP as its upstream.
 	wsURL := "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect"
 	ag, err := agent.New(agent.Config{
 		GatewayURL:     wsURL,
@@ -73,14 +66,11 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	go func() { _ = ag.Run(ctx) }()
 
-	// Wait for the agent to connect and publish its route.
 	requireEventually(t, 5*time.Second, func() bool {
 		_, ok, _ := routes.Lookup(ctx, tunnelID)
 		return ok && gw.ActiveSessions() == 1
 	})
 
-	// Forward through the gateway (as gram-server does, pod-to-pod) by setting
-	// the tunnel-ID header. Must round-trip to the stub MCP via the substream.
 	req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
 	require.NoError(t, err)
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
@@ -132,7 +122,6 @@ func TestTunnelEndToEnd(t *testing.T) {
 			connections[0].ActiveConsumerSessions == 1
 	})
 
-	// Tenant isolation: an unknown tunnel yields the distinct 502, never a leak.
 	req2, err := http.NewRequest(http.MethodGet, forwardServer.URL+"/mcp/x", nil)
 	require.NoError(t, err)
 	req2.Header.Set(wire.HeaderTunnelID, "does-not-exist")
@@ -180,7 +169,6 @@ func TestTunnelRevoke(t *testing.T) {
 	killed := gw.RevokeTunnel(ctx, tunnelID)
 	require.Equal(t, 1, killed)
 
-	// Route is gone after revoke.
 	_, ok, _ := routes.Lookup(ctx, tunnelID)
 	require.False(t, ok)
 }

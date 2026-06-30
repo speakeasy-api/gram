@@ -12,26 +12,21 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// PostgresKeyResolver resolves tunnel keys against durable
-// tunnelled_mcp_servers rows.
+// PostgresKeyResolver reads durable tunnel key state from tunnelled_mcp_servers.
 type PostgresKeyResolver struct {
 	db *pgxpool.Pool
 }
 
-// NewPostgresKeyResolver wraps the gateway's Postgres pool.
 func NewPostgresKeyResolver(db *pgxpool.Pool) *PostgresKeyResolver {
 	return &PostgresKeyResolver{db: db}
 }
 
-// Close releases the underlying pool.
 func (r *PostgresKeyResolver) Close() {
 	if r != nil && r.db != nil {
 		r.db.Close()
 	}
 }
 
-// Resolve validates a bearer value and returns the active tunnel ID bound to
-// that key hash.
 func (r *PostgresKeyResolver) Resolve(ctx context.Context, bearer string) (string, bool, error) {
 	key := strings.TrimSpace(strings.TrimPrefix(bearer, "Bearer "))
 	if !wire.HasKeyPrefix(key) {

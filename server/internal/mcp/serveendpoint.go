@@ -32,18 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// ServeMCPEndpoint resolves the given mcp_endpoint slug to its mcp_server,
-// optionally runs the issuer gate, and dispatches to the appropriate
-// backend (remote_mcp_servers via the remotemcp proxy, tunnelled_mcp_servers
-// via the tunnel gateway, or toolsets via ServeToolsetResolved). It is
-// the unified runtime entry point used by both /mcp and /x/mcp.
-//
-// mcpRouteBase is the URL route segment the request arrived under ("mcp"
-// or "x/mcp"), without leading or trailing slashes. It propagates into
-// WWW-Authenticate URLs, OAuth issuer URLs, and consent action targets so
-// post-resolution URLs match the surface the client called.
-//
-// The caller is responsible for closing r.Body.
+// ServeMCPEndpoint resolves a public MCP route; mcpRouteBase preserves the called surface in auth URLs.
 func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug, mcpRouteBase string) error {
 	ctx := r.Context()
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
@@ -373,17 +362,11 @@ func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) e
 		}
 		return nil
 	default:
-		// The mux only registers the three supported methods, so this is
-		// defensive.
 		return oops.E(oops.CodeBadRequest, nil, "unsupported method %s", r.Method)
 	}
 }
 
-// serveTunnelledBackend handles an mcp_server backed by a
-// tunnelled_mcp_server. It resolves the live route from Redis and then reuses
-// the remotemcp proxy interceptor stack so tunnel traffic is logged, metered,
-// and authorized like remote MCP traffic. The tunnel id header is injected
-// here server-side and overrides any caller-supplied value.
+// Tunnelled MCP reuses the remote proxy stack; Gram injects the tunnel ID header server-side.
 func (s *Service) serveTunnelledBackend(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -563,11 +546,7 @@ func (s *Service) prepareProxyBackendContext(
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 
-		// All private proxy-backed MCP servers require mcp:connect before the
-		// request reaches the upstream. The proxy's tools/list and tools/call
-		// interceptors still apply the narrower per-tool checks for interaction
-		// methods, but initialize and other non-tool methods need the same
-		// server-level fail-fast as toolset-backed private MCPs.
+		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
 			return nil, err
 		}

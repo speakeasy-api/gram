@@ -19,9 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// TestWSConnYamuxRoundTrip pairs two WSConns over a real WebSocket and runs a
-// yamux session, doing many HTTP round-trips to surface any intermittent
-// framing/stability bug in the WSConn adapter.
 func TestWSConnYamuxRoundTrip(t *testing.T) {
 	up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 
@@ -67,10 +64,6 @@ func TestWSConnYamuxRoundTrip(t *testing.T) {
 	}
 }
 
-// TestWSConnHTTPServeClient mimics the gateway/agent topology: the agent runs
-// http.Serve over a yamux *server*; the gateway uses an http.Client over a
-// substream-dialing transport (DisableKeepAlives) like sayHello. Asserts the
-// session survives the client request (isolates the e2e flake).
 func TestWSConnHTTPServeClient(t *testing.T) {
 	up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -5,9 +5,7 @@ import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
 
-// Remote/tunnelled MCP delete is driven from the detail page Settings tab. It
-// needs to enumerate related mcp_servers and mcp_endpoints, which doesn't fit
-// this deployment-evolve flow.
+// Remote/tunnelled MCP removal needs linked server/endpoint state, so Settings owns it.
 type RemovableAsset = Exclude<
   NamedAsset,
   { type: "remotemcp" } | { type: "tunnelledmcp" }

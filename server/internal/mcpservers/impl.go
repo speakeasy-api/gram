@@ -619,8 +619,6 @@ func parseServerIDs(
 	return ids, nil
 }
 
-// validateServerBackendExclusivity enforces the mcp_servers DB check
-// constraint that exactly one backend is set.
 func validateServerBackendExclusivity(remoteMcpServerID, tunnelledMcpServerID, toolsetID uuid.NullUUID) error {
 	if backendFilterCount(remoteMcpServerID, tunnelledMcpServerID, toolsetID) != 1 {
 		return fmt.Errorf("exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided")

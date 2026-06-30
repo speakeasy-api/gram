@@ -194,8 +194,7 @@ SELECT pg_advisory_xact_lock(hashtext('tunnelled_mcp_limit:' || $1::text))
 `
 
 // Tunnelled MCP Servers
-// Serialize create checks per organization so concurrent creates cannot race
-// past the org-level source cap.
+// Serialize per-org creates so concurrent requests cannot bypass the source cap.
 func (q *Queries) LockOrganizationTunnelledMcpLimit(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationTunnelledMcpLimit, organizationID)
 	return err

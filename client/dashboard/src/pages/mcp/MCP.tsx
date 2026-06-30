@@ -93,9 +93,7 @@ function MCPOverview() {
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // Filter the listing to mcp_servers-backed rows for now — the AGE-1902
-  // cutover will introduce toolset-backed rows that today still render
-  // through the existing Hosted MCPCard path via useToolsets().
+  // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
       (mcpServersResult?.mcpServers ?? []).filter(

@@ -1,8 +1,7 @@
 -- Tunnelled MCP Servers
 
 -- name: LockOrganizationTunnelledMcpLimit :exec
--- Serialize create checks per organization so concurrent creates cannot race
--- past the org-level source cap.
+-- Serialize per-org creates so concurrent requests cannot bypass the source cap.
 SELECT pg_advisory_xact_lock(hashtext('tunnelled_mcp_limit:' || @organization_id::text));
 
 -- name: GetTunnelledMcpServerLimitByOrganizationID :one

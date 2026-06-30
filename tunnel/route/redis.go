@@ -10,20 +10,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// keyPrefix namespaces route keys in Redis: tunnel_routes:<tunnelID>.
 const keyPrefix = "tunnel_routes:"
 
 const connectionKeyPrefix = "tunnel_connections:"
 
-// Redis is the live routing table and connection snapshot store. Postgres owns
-// durable tunnel source records; Redis owns the data-plane location of active
-// agent sessions.
+// Redis stores live routes and snapshots; Postgres owns durable tunnel sources.
 type Redis struct {
 	client redis.UniversalClient
 	cache  *redisCache.Cache
 }
 
-// NewRedis wraps an existing redis client.
 func NewRedis(client redis.UniversalClient) *Redis {
 	return &Redis{
 		client: client,

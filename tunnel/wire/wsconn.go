@@ -1,7 +1,4 @@
-// Package wire holds the small primitives shared by the tunnel agent and the
-// tunnel gateway: a net.Conn adapter over a gorilla WebSocket (so yamux can run
-// over the WS), the per-tunnel API key format, the agent version gate, and the
-// JSON control frames exchanged over the multiplexed session.
+// Package wire shares tunnel protocol primitives between agent and gateway.
 package wire
 
 import (
@@ -14,18 +11,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WSConn adapts a *websocket.Conn into a net.Conn carrying a byte stream over
-// binary WebSocket messages. yamux runs on top of it. yamux drives a single
-// reader and a single writer goroutine, which matches gorilla's "one concurrent
-// reader, one concurrent writer" constraint, so no extra locking is needed on
-// the hot path; the write mutex below only guards against close races.
+// WSConn exposes a binary WebSocket as net.Conn; yamux owns one reader and one writer.
 type WSConn struct {
 	ws     *websocket.Conn
 	reader io.Reader // current message reader, advanced lazily
 	writeM sync.Mutex
 }
 
-// NewWSConn wraps an established websocket connection.
 func NewWSConn(ws *websocket.Conn) *WSConn { return &WSConn{ws: ws} }
 
 func (c *WSConn) Read(p []byte) (int, error) {
@@ -43,7 +35,6 @@ func (c *WSConn) Read(p []byte) (int, error) {
 		}
 		n, err := c.reader.Read(p)
 		if errors.Is(err, io.EOF) {
-			// End of this message; next Read pulls the following frame.
 			c.reader = nil
 			if n > 0 {
 				return n, nil
