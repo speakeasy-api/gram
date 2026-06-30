@@ -241,6 +241,14 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 		return nil, fmt.Errorf("unable to record pgx metrics: %w", err)
 	}
 
+	// Ping the database to ensure connectivity
+	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("database ping failed: %w", err)
+	}
+
 	return pool, nil
 }
 

@@ -55,6 +55,7 @@ DB_PORT = "5439"
 ## static connection string. In this case, we use interpolation to point to the
 ## local development database configured above.
 GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}?sslmode=disable&search_path=public"
+GRAM_DATABASE_READ_REPLICA_URL = "{{env.GRAM_DATABASE_URL}}"
 
 ##############################
 ## ClickHouse configuration ##
