@@ -28,6 +28,11 @@ var _ = Service("risk", func() {
 			})
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
@@ -133,6 +138,11 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
@@ -550,6 +560,62 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("getRiskBlock", func() {
+		Description("Get a tool call block by its risk result ID for the durable block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			GET("/rpc/risk.getBlock")
+			security.SessionHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskBlock")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetBlock", "type": "query"}`)
+	})
+
+	Method("submitRiskBlockFeedback", func() {
+		Description("Record thumbs-up/thumbs-down feedback for a tool call block from the block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Attribute("sentiment", String, "Feedback sentiment.", func() {
+				Enum("up", "down")
+			})
+			Required("id", "sentiment")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			PUT("/rpc/risk.submitBlockFeedback")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitRiskBlockFeedback")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSubmitBlockFeedback", "type": "mutation"}`)
 	})
 
 	Method("listRiskPolicyBypassRequests", func() {
@@ -1270,6 +1336,25 @@ var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskBlock = Type("RiskBlock", func() {
+	Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project the block belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("reason", String, "Human-readable reason the tool call was blocked.")
+	Attribute("policy_name", String, "Name of the risk policy that blocked the call.")
+	Attribute("tool_name", String, "Name of the tool that was blocked, when known.")
+	Attribute("created_at", String, "When the block occurred.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("feedback", String, "Existing feedback sentiment recorded for this block, when any.", func() {
+		Enum("up", "down")
+	})
+	Required("id", "project_id", "reason", "policy_name", "created_at")
 })
 
 var RiskIDRequestBody = Type("RiskIDRequestBody", func() {

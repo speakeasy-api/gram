@@ -5692,6 +5692,7 @@ func unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGrou
 func unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageHostedServerFilterOption(v *ToolUsageHostedServerFilterOptionResponseBody) *telemetry.ToolUsageHostedServerFilterOption {
 	res := &telemetry.ToolUsageHostedServerFilterOption{
 		ToolsetSlug: *v.ToolsetSlug,
+		ToolsetName: *v.ToolsetName,
 		EventCount:  *v.EventCount,
 	}
 

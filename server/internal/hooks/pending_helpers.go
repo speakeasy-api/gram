@@ -770,7 +770,7 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 			continue
 		}
 
-		if err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, finding); err != nil {
+		if _, err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, finding); err != nil {
 			failedFindings = append(failedFindings, finding)
 			s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert pending risk_result",
 				attr.SlogEvent("claude_hook_block_finding_flush_insert_failed"),

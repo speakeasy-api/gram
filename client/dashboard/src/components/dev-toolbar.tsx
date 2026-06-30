@@ -24,7 +24,7 @@ const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
 
-type ResourceType = "org" | "project" | "environment" | "mcp";
+type ResourceType = "org" | "project" | "environment" | "mcp" | "chat";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -85,6 +85,12 @@ const SCOPE_DEFS: {
     label: "mcp:connect",
     resourceType: "mcp",
     description: "Execute MCP tool calls",
+  },
+  {
+    scope: "chat:read",
+    label: "chat:read",
+    resourceType: "chat",
+    description: "Read all agent session transcripts",
   },
 ];
 
@@ -199,6 +205,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
   { key: "mcp", label: "MCP" },
+  { key: "chat", label: "Agent Sessions" },
 ];
 
 export function RBACDevToolbar(): ReactElement | null {

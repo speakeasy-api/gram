@@ -23,18 +23,19 @@ const registryCacheTTL = 24 * time.Hour
 // "manual") for up to the 24h TTL.
 const registryCacheSchemaVersion = "v2"
 
-// CachedListServersResponse wraps a list of external MCP server summaries for caching.
-type CachedListServersResponse struct {
-	Key        string
-	Servers    []*types.ExternalMCPServerEntry
-	NextCursor *string
+// CachedListServers wraps the full, deduplicated list of external MCP server
+// summaries for a registry. The catalog is small and stable, so the whole list
+// is cached under a single key per registry.
+type CachedListServers struct {
+	Key     string
+	Servers []*types.ExternalMCPServerEntry
 }
 
-var _ cache.CacheableObject[CachedListServersResponse] = (*CachedListServersResponse)(nil)
+var _ cache.CacheableObject[CachedListServers] = (*CachedListServers)(nil)
 
-func (c CachedListServersResponse) CacheKey() string              { return c.Key }
-func (c CachedListServersResponse) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedListServersResponse) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedListServers) CacheKey() string              { return c.Key }
+func (c CachedListServers) AdditionalCacheKeys() []string { return []string{} }
+func (c CachedListServers) TTL() time.Duration            { return registryCacheTTL }
 
 // CachedServerDetailsResponse wraps server details for caching.
 type CachedServerDetailsResponse struct {

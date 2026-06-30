@@ -314,7 +314,7 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 	return a.generateChatTitle.Do(ctx, input)
 }
 
-func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) error {
+func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
 	return a.correlateClaudePrompts.Do(ctx, input)
 }
 

@@ -68,8 +68,8 @@ var File_gram_risk_v1_gitleaks_analyzer_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_gitleaks_analyzer_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/gitleaks_analyzer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"O\n" +
-	"\x10GitleaksAnalyzer:;\x92\xb5\x187\x12\x05\b\x80\x9a\x9e\x01\x18\x01\"\x02\b<2\t\n" +
+	"$gram/risk/v1/gitleaks_analyzer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"N\n" +
+	"\x10GitleaksAnalyzer::\x92\xb5\x186\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
 	"\x12\x03\b\xd8\x04R\x1dgram.risk.v1.GitleaksAnalysisB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 

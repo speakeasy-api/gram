@@ -791,17 +791,18 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		toolsets = append(toolsets, ref)
 	}
 	return &types.Assistant{
-		ID:             record.ID.String(),
-		ProjectID:      record.ProjectID.String(),
-		Name:           record.Name,
-		Model:          record.Model,
-		Instructions:   record.Instructions,
-		Toolsets:       toolsets,
-		WarmTTLSeconds: record.WarmTTLSeconds,
-		MaxConcurrency: record.MaxConcurrency,
-		Status:         record.Status,
-		CreatedAt:      record.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:      record.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:              record.ID.String(),
+		ProjectID:       record.ProjectID.String(),
+		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
+		Name:            record.Name,
+		Model:           record.Model,
+		Instructions:    record.Instructions,
+		Toolsets:        toolsets,
+		WarmTTLSeconds:  record.WarmTTLSeconds,
+		MaxConcurrency:  record.MaxConcurrency,
+		Status:          record.Status,
+		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
 }
 

@@ -157,6 +157,70 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 	return err
 }
 
+const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
+INSERT INTO tool_call_blocks (
+    id
+  , organization_id
+  , project_id
+  , provider
+  , reason
+  , tool_name
+  , risk_policy_id
+  , risk_result_id
+  , chat_id
+  , chat_message_id
+  , user_id
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+)
+`
+
+type InsertToolCallBlockParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Provider       string
+	Reason         string
+	ToolName       pgtype.Text
+	RiskPolicyID   uuid.NullUUID
+	RiskResultID   uuid.NullUUID
+	ChatID         uuid.NullUUID
+	ChatMessageID  uuid.NullUUID
+	UserID         string
+}
+
+// Records a durable block row at hook-time deny. The reason is captured verbatim
+// so the block page renders from this row alone; the risk_result_id / chat
+// foreign keys are optional enrichment set when those rows are known synchronously.
+// user_id is the Gram user whose agent was blocked (empty string when unresolved)
+// and is used to authorize the block page.
+func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlockParams) error {
+	_, err := q.db.Exec(ctx, insertToolCallBlock,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Provider,
+		arg.Reason,
+		arg.ToolName,
+		arg.RiskPolicyID,
+		arg.RiskResultID,
+		arg.ChatID,
+		arg.ChatMessageID,
+		arg.UserID,
+	)
+	return err
+}
+
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many
 SELECT id, raw_server_name, display_name, created_at, updated_at
 FROM hooks_server_name_overrides

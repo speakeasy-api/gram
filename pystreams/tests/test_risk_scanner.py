@@ -39,10 +39,16 @@ class FakeAnalyzer:
         self.calls: list[tuple[str, list[str] | None]] = []
 
     def analyze(
-        self, *, text: str, entities: list[str] | None, language: str
+        self,
+        *,
+        text: str,
+        entities: list[str] | None,
+        language: str,
+        score_threshold: float,
     ) -> list[Recognized]:
         self.calls.append((text, entities))
         assert language == "en"
+        assert 0.0 <= score_threshold <= 1.0
         return self.detections.get(text, [])
 
 
@@ -56,7 +62,7 @@ async def test_maps_recognizer_results_to_detections():
         {content: [_Result("EMAIL_ADDRESS", start=12, end=19, score=0.85)]}
     )
 
-    (detection,) = await _scanner(analyzer).scan(content, None)
+    (detection,) = await _scanner(analyzer).scan(content, None, 0.75)
 
     assert detection.entity_type == "EMAIL_ADDRESS"
     assert detection.match == "a@b.com"
@@ -76,7 +82,7 @@ async def test_returns_one_detection_per_recognized_span():
         }
     )
 
-    detections = await _scanner(analyzer).scan(content, None)
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
 
     assert [d.match for d in detections] == ["555-0100", "555-0199"]
 
@@ -89,7 +95,7 @@ async def test_byte_offsets_for_multibyte_content():
         {content: [_Result("EMAIL_ADDRESS", start=5, end=12, score=0.9)]}
     )
 
-    (detection,) = await _scanner(analyzer).scan(content, None)
+    (detection,) = await _scanner(analyzer).scan(content, None, 0.75)
 
     assert detection.match == "a@b.com"
     assert detection.start_pos == 6  # one extra byte from the 'é'
@@ -112,7 +118,7 @@ async def test_byte_offsets_for_multiple_multibyte_matches():
         }
     )
 
-    detections = await _scanner(analyzer).scan(content, None)
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
 
     by_match = {d.match: d for d in detections}
     assert by_match["a@b.com"].start_pos == 4  # 3-byte '€' + space
@@ -133,7 +139,7 @@ async def test_false_positives_are_filtered():
         }
     )
 
-    detections = await _scanner(analyzer).scan(content, None)
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
 
     # Only the real match survives; the reserved IP is dropped at the scanner.
     (detection,) = detections
@@ -146,19 +152,19 @@ async def test_all_false_positives_yields_no_detections():
     analyzer = FakeAnalyzer({content: [_Result("EMAIL_ADDRESS", start=12, end=28)]})
 
     # example.com is a placeholder domain: filtered out entirely.
-    assert await _scanner(analyzer).scan(content, None) == []
+    assert await _scanner(analyzer).scan(content, None, 0.75) == []
 
 
 async def test_nothing_recognized_yields_no_detections():
     analyzer = FakeAnalyzer()  # recognizes nothing
 
-    assert await _scanner(analyzer).scan("nothing sensitive here", None) == []
+    assert await _scanner(analyzer).scan("nothing sensitive here", None, 0.75) == []
 
 
 async def test_requested_entities_forwarded_to_analyzer():
     analyzer = FakeAnalyzer({"a@b.com": [_Result("EMAIL_ADDRESS", start=0, end=7)]})
 
-    await _scanner(analyzer).scan("a@b.com", ["EMAIL_ADDRESS", "PHONE_NUMBER"])
+    await _scanner(analyzer).scan("a@b.com", ["EMAIL_ADDRESS", "PHONE_NUMBER"], 0.75)
 
     # The explicit request set is passed through to the analyzer verbatim.
     assert analyzer.calls == [("a@b.com", ["EMAIL_ADDRESS", "PHONE_NUMBER"])]
@@ -167,7 +173,7 @@ async def test_requested_entities_forwarded_to_analyzer():
 async def test_none_entities_forwarded_to_analyzer():
     analyzer = FakeAnalyzer({"a@b.com": [_Result("EMAIL_ADDRESS", start=0, end=7)]})
 
-    await _scanner(analyzer).scan("a@b.com", None)
+    await _scanner(analyzer).scan("a@b.com", None, 0.75)
 
     # None tells Presidio to scan every type; it is forwarded unchanged.
     assert analyzer.calls == [("a@b.com", None)]
@@ -178,7 +184,7 @@ async def test_thread_scanner_is_async_context_manager():
 
     # Entering yields the scanner; the block can scan and leaving closes it.
     async with ThreadScanner(analyzer) as scanner:
-        (detection,) = await scanner.scan("a@b.com", None)
+        (detection,) = await scanner.scan("a@b.com", None, 0.75)
         assert detection.match == "a@b.com"
 
 
@@ -232,7 +238,7 @@ async def test_pool_scan_times_out_via_anyio_deadline():
 
     # The scan never completes, so the anyio fail_after deadline must raise.
     with pytest.raises(TimeoutError):
-        await scanner.scan("anything", None)
+        await scanner.scan("anything", None, 0.75)
 
     # On timeout the future is cancelled, so a still-queued scan is pulled rather
     # than left to run with nobody awaiting it (and the abandoned wait unblocks).
@@ -253,7 +259,7 @@ async def test_pool_scan_without_timeout_returns_result():
     )
 
     # scan_timeout=None disables the deadline; the result passes straight through.
-    assert await scanner.scan("a@b.com", None) == [detection]
+    assert await scanner.scan("a@b.com", None, 0.75) == [detection]
 
 
 class _WarmupFailExecutor:
@@ -369,7 +375,7 @@ async def test_concurrent_scans_only_receive_their_own_results():
     results: dict[str, list[Detection]] = {}
 
     async def run(content: str) -> None:
-        results[content] = await scanner.scan(content, None)
+        results[content] = await scanner.scan(content, None, 0.75)
 
     # fail_after guards against a routing regression that wedges a caller forever.
     with anyio.fail_after(5):

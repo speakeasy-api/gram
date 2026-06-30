@@ -15,6 +15,7 @@ import {
   useOrganizationRemoteSessionIssuer,
 } from "@gram/client/react-query/index.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
+import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";
 import { McpServersTab } from "./tabs/client/McpServersTab";
@@ -56,7 +57,9 @@ export default function RemoteSessionClientDetail(): JSX.Element {
       CLIENT_TAB_ROUTE_KEY[tab]
     ].href(issuerId, clientId);
 
-  const label = client?.clientId ?? "Remote Session Client";
+  const label = client
+    ? remoteSessionClientDisplayName(client)
+    : "Remote Session Client";
   // Mirror the issuer's own breadcrumb: its display name (name, falling back to
   // the issuer URL), and the raw id only while the issuer is still loading.
   const issuerLabel = issuer ? issuerDisplayName(issuer) : issuerId;

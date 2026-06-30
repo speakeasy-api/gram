@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/presidio_analysis.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf5\x02\n\x10PresidioAnalysis\x12\x1d\n\nrequest_id\x18\x01 \x01(\tR\trequestId\x12&\n\x0f\x63hat_message_id\x18\x02 \x01(\tR\rchatMessageId\x12\x1d\n\nproject_id\x18\x03 \x01(\tR\tprojectId\x12\'\n\x0forganization_id\x18\x04 \x01(\tR\x0eorganizationId\x12$\n\x0erisk_policy_id\x18\x05 \x01(\tR\x0criskPolicyId\x12.\n\x13risk_policy_version\x18\x06 \x01(\x03R\x11riskPolicyVersion\x12\x1d\n\ncreated_at\x18\x07 \x01(\tR\tcreatedAt\x12\x1b\n\treply_urn\x18\x08 \x01(\tR\x08replyUrn\x12\x18\n\x07\x63ontent\x18\t \x01(\tR\x07\x63ontent\x12\x1a\n\x08\x65ntities\x18\n \x03(\tR\x08\x65ntities:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/presidio_analysis.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9e\x03\n\x10PresidioAnalysis\x12\x1d\n\nrequest_id\x18\x01 \x01(\tR\trequestId\x12&\n\x0f\x63hat_message_id\x18\x02 \x01(\tR\rchatMessageId\x12\x1d\n\nproject_id\x18\x03 \x01(\tR\tprojectId\x12\'\n\x0forganization_id\x18\x04 \x01(\tR\x0eorganizationId\x12$\n\x0erisk_policy_id\x18\x05 \x01(\tR\x0criskPolicyId\x12.\n\x13risk_policy_version\x18\x06 \x01(\x03R\x11riskPolicyVersion\x12\x1d\n\ncreated_at\x18\x07 \x01(\tR\tcreatedAt\x12\x1b\n\treply_urn\x18\x08 \x01(\tR\x08replyUrn\x12\x18\n\x07\x63ontent\x18\t \x01(\tR\x07\x63ontent\x12\x1a\n\x08\x65ntities\x18\n \x03(\tR\x08\x65ntities\x12\'\n\x0fscore_threshold\x18\x0b \x01(\x01R\x0escoreThreshold:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,5 +36,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PRESIDIOANALYSIS']._loaded_options = None
   _globals['_PRESIDIOANALYSIS']._serialized_options = b'\212\265\030\006\022\004\010\200\365$'
   _globals['_PRESIDIOANALYSIS']._serialized_start=84
-  _globals['_PRESIDIOANALYSIS']._serialized_end=457
+  _globals['_PRESIDIOANALYSIS']._serialized_end=498
 # @@protoc_insertion_point(module_scope)

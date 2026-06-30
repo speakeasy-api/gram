@@ -17,6 +17,7 @@ export type UseIssuerDiscoveryInitial = {
   grantTypesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
+  clientIdMetadataDocumentSupported: boolean;
 } | null;
 
 // Options controlling how `initial` seeds the hook.
@@ -71,6 +72,8 @@ function useIssuerDiscoveryImpl(
             responseTypesSupported: initial.responseTypesSupported,
             tokenEndpointAuthMethodsSupported:
               initial.tokenEndpointAuthMethodsSupported,
+            clientIdMetadataDocumentSupported:
+              initial.clientIdMetadataDocumentSupported,
           }
         : null,
     );
@@ -92,6 +95,8 @@ function useIssuerDiscoveryImpl(
         responseTypesSupported: draft.responseTypesSupported ?? [],
         tokenEndpointAuthMethodsSupported:
           draft.tokenEndpointAuthMethodsSupported ?? [],
+        clientIdMetadataDocumentSupported:
+          draft.clientIdMetadataDocumentSupported,
       };
     },
     onSuccess: (snapshot) => {

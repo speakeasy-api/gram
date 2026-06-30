@@ -156,7 +156,15 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error) {
+func (s *Scanner) ScanForEnforcement(
+	ctx context.Context,
+	organizationID string,
+	projectID uuid.UUID,
+	userID string,
+	text string,
+	messageType message.Type,
+	toolName string,
+) (*ScanResult, error) {
 	// An empty body is only a no-op when there is also no tool attribution: a
 	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
 	// a tool-scoped prompt policy can match, so let those events through.
@@ -421,7 +429,13 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			if s.piiScanner == nil {
 				continue
 			}
-			batchResults, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, policy.PresidioEntities, func() {})
+			batchResults, err := s.piiScanner.AnalyzeBatch(
+				ctx,
+				[]string{text},
+				policy.PresidioEntities,
+				ra.PresidioScoreThresholdFromConfig(policy.AnalyzerConfig),
+				func() {},
+			)
 			if err != nil {
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}

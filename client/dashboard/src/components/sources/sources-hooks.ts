@@ -1,5 +1,5 @@
 import { useToolset } from "@/hooks/toolTypes";
-import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   PulseMcpAuthType,
   extractAuthType,
@@ -9,35 +9,31 @@ import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { useMemo } from "react";
 
 export const useCatalogIconMap = (): Map<string, string> => {
-  const { data: catalogData } = useInfiniteListMCPCatalog();
+  const { data: catalogData } = useListMCPCatalog();
   return useMemo(() => {
-    if (!catalogData?.pages) {
+    if (!catalogData?.servers) {
       return new Map<string, string>();
     }
     return new Map(
-      catalogData.pages.flatMap((page) =>
-        page.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
-      ),
+      catalogData.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
     );
   }, [catalogData]);
 };
 
 const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
-  const { data: catalogData } = useInfiniteListMCPCatalog();
+  const { data: catalogData } = useListMCPCatalog();
 
   return useMemo(() => {
     const result = new Map<string, PulseMcpAuthType>();
 
-    if (!catalogData?.pages) {
+    if (!catalogData?.servers) {
       return result;
     }
 
-    for (const page of catalogData.pages) {
-      for (const server of page.servers) {
-        if (!isPulseMcpServer(server)) continue;
-        const auth = extractAuthType(server);
-        result.set(server.registrySpecifier, auth);
-      }
+    for (const server of catalogData.servers) {
+      if (!isPulseMcpServer(server)) continue;
+      const auth = extractAuthType(server);
+      result.set(server.registrySpecifier, auth);
     }
     return result;
   }, [catalogData]);

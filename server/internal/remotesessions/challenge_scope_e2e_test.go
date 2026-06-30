@@ -95,6 +95,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 
 			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,
 				ClientID:                "scope-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},

@@ -4,8 +4,7 @@ import {
   ExternalMCPTool,
 } from "@gram/client/models/components";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 interface ServerMeta {
   "com.pulsemcp/server"?: {
@@ -39,45 +38,31 @@ export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
   tools?: ExternalMCPTool[];
 };
 
-function useInfiniteListMCPCatalogImpl(search?: string, registryId?: string) {
+// The catalog is small and the backend returns the full list in a single
+// response, so a plain query over the whole catalog is enough — searching,
+// sorting, and filtering all happen client-side. An optional `search` is still
+// forwarded so callers that only need a specific server (e.g. the detail page)
+// can narrow the response.
+function useListMCPCatalogImpl(search?: string, registryId?: string) {
   const client = useSdkClient();
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [search]);
-
-  const query = useInfiniteQuery({
+  return useQuery({
     queryKey: queryKeyListMCPCatalog({
-      search: debouncedSearch,
-      registryId,
+      search: search || undefined,
+      registryId: registryId || undefined,
     }),
-    queryFn: async ({ pageParam }) => {
-      return client.mcpRegistries.listCatalog({
-        search: debouncedSearch || undefined,
+    queryFn: async () =>
+      client.mcpRegistries.listCatalog({
+        search: search || undefined,
         registryId: registryId || undefined,
-        cursor: pageParam,
-      });
-    },
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
+      }),
     staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
   });
-
-  // Return both the query result and the debounced search value
-  // so consumers can check if the query state matches their expected search
-  return { ...query, debouncedSearch };
 }
 
-export function useInfiniteListMCPCatalog(
+export function useListMCPCatalog(
   search?: string,
   registryId?: string,
-): ReturnType<typeof useInfiniteListMCPCatalogImpl> {
-  return useInfiniteListMCPCatalogImpl(search, registryId);
+): ReturnType<typeof useListMCPCatalogImpl> {
+  return useListMCPCatalogImpl(search, registryId);
 }

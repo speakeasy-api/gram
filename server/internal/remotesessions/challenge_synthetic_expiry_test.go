@@ -185,6 +185,7 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
 		ClientID:                "synthetic-cid-" + slugSuffix,
 		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},

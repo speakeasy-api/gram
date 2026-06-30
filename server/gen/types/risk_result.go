@@ -14,6 +14,9 @@ type RiskResult struct {
 	PolicyID string
 	// Policy version when this result was produced.
 	PolicyVersion int64
+	// ID of the durable tool call block recorded for this finding's message, when
+	// one exists. Links to the block page at /blocks/:id.
+	BlockID *string
 	// The chat message that was scanned.
 	ChatMessageID string
 	// The chat session containing the message.

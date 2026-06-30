@@ -1,4 +1,4 @@
-h1:hpN42+B1DTWy6pPJcrGAp+d9OsjXkBvRRQlGuk49QCc=
+h1:lJW4m4ZE+UbVxm0td1NGQ6XrmaiVu2HS3eplKLo+zWw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -229,3 +229,7 @@ h1:hpN42+B1DTWy6pPJcrGAp+d9OsjXkBvRRQlGuk49QCc=
 20260625131148_remotesession-clients-drop-user-session-issuer-id.sql h1:ffRGv1Izk5BLMnzrMVnv7R+w3bIq71gwjCrOHq+xijs=
 20260625160759_add_tool_call_blocks.sql h1:7agv3Tm4njdomfkTZNzBM3Y4NO27t4bp3ZJoDp8l714=
 20260625174452_remote-session-clients-organization-id.sql h1:58GfJycQkGlaRJ0SVITo7f8+x+G9Vl7oRSHc4l5CpoU=
+20260626112524_tunnelled-mcp-servers.sql h1:GzNGqqfGvwSrCfPMbK5tU9orD2ZkobTkb1QzEQj+HFg=
+20260626152018_chats-add-pinned-at.sql h1:GeYCKutkPKW+wiILObCtoHI62pR60gSQhUelef/5xLc=
+20260626175057_add_user_id_to_tool_call_blocks.sql h1:+Mf+8EEzJOBLXgsupc+p4uJ+O7Mx871veaeEYyEAqHE=
+20260629082301_risk-policies-analyzer-config.sql h1:RcX/MVJeVwIUIWxh02Z9WyAF1cfnelNLrYStdv+xrh8=

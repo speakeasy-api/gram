@@ -15,12 +15,16 @@ import {
   invalidateAllListChats,
   useAssistantsGet,
   useListChats,
+  useListChatSources,
 } from "@gram/client/react-query";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { Badge } from "@/components/ui/badge";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
 import {
@@ -80,6 +84,12 @@ const SESSION_FILTERS = defineFilters([
     pinned: true,
     defaultPreset: "30d",
   },
+  {
+    id: "source",
+    label: "Agent type",
+    kind: "multiselect",
+    allLabel: "All",
+  },
   { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
   {
     id: "min_risk_score",
@@ -90,12 +100,45 @@ const SESSION_FILTERS = defineFilters([
   },
 ]);
 
+// Static filter options. The "source" (agent type) options are NOT hardcoded
+// here — they're derived at render from the sources actually present in the
+// project's chats (see useListChatSources below), matching how InsightsAgents
+// builds its client filter.
 const HAS_RISK_OPTIONS: OptionsById = {
   has_risk: [
     { value: "true", label: "With Risk" },
     { value: "false", label: "No Risk" },
   ],
 };
+
+// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
+// their own sessions, so explain why and (for admins) point at the roles page
+// where chat:read is granted.
+function OwnSessionsNotice(): JSX.Element | null {
+  const orgRoutes = useOrgRoutes();
+  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+
+  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+
+  return (
+    <Alert variant="info" dismissible={false} className="text-sm">
+      Only your own sessions are shown.{" "}
+      <code className="font-mono">chat:read</code> is required to view other
+      members&apos; sessions.
+      {hasScope("org:admin") && (
+        <>
+          {" "}
+          <Link
+            to={orgRoutes.access.roles.href()}
+            className="underline underline-offset-2"
+          >
+            Manage roles
+          </Link>
+        </>
+      )}
+    </Alert>
+  );
+}
 
 export function LogsAgentsContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -147,6 +190,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
   const urlSort = searchParams.get("sort") as SortField | null;
@@ -161,6 +205,16 @@ export function LogsAgentsContent(): JSX.Element {
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
+  );
+  const sources = useMemo<string[]>(
+    () =>
+      urlSource
+        ? urlSource
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [],
+    [urlSource],
   );
 
   const customRange = useMemo(() => {
@@ -255,6 +309,15 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setSources = useCallback(
+    (values: string[]) => {
+      updateSearchParams({
+        source: values.length ? values.join(",") : null,
+      });
+    },
+    [updateSearchParams],
+  );
+
   const setMinRiskScore = useCallback(
     (value: number | null) => {
       // A threshold below 1 ("≥ 0" = everything) is meaningless, so treat it as
@@ -280,6 +343,7 @@ export function LogsAgentsContent(): JSX.Element {
       from: null,
       to: null,
       has_risk: null,
+      source: null,
       min_risk_score: null,
     });
   }, [updateSearchParams]);
@@ -314,6 +378,7 @@ export function LogsAgentsContent(): JSX.Element {
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
           assistantId: assistantId || undefined,
+          source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -327,6 +392,24 @@ export function LogsAgentsContent(): JSX.Element {
     );
 
   const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
+
+  // Agent-type filter options derived from the sources actually present in the
+  // project's chats — mirrors how InsightsAgents builds its client filter, so
+  // the list stays in sync with the data instead of a hardcoded catalog.
+  const { data: sourcesData } = useListChatSources(undefined, undefined, {
+    throwOnError: false,
+  });
+  const filterOptions = useMemo<OptionsById>(
+    () => ({
+      ...HAS_RISK_OPTIONS,
+      source: (sourcesData?.sources ?? []).map((s) => ({
+        value: s,
+        label: formatPlatform(s),
+      })),
+    }),
+    [sourcesData?.sources],
+  );
+
   const lastTotalRef = useRef(0);
   if (data?.total !== undefined && data.total > 0) {
     lastTotalRef.current = data.total;
@@ -393,7 +476,9 @@ export function LogsAgentsContent(): JSX.Element {
         title="How can I help you debug?"
         subtitle="Search agent sessions, analyze failures, or explore logs"
         contextInfo={dateRangeContext}
-        hideTrigger={isLogsDisabled}
+        // Hide the docked assistant on this page — the agent-sessions list and
+        // its detail drawer are the primary surface here.
+        hideTrigger
         suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent
@@ -406,6 +491,9 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        sources={sources}
+        setSources={setSources}
+        filterOptions={filterOptions}
         minRiskScore={minRiskScore}
         setMinRiskScore={setMinRiskScore}
         clearAllFilters={clearAllFilters}
@@ -418,6 +506,7 @@ export function LogsAgentsContent(): JSX.Element {
         setSortOrder={setSortOrder}
         chats={chats}
         selectedChat={selectedChat}
+        selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
@@ -444,6 +533,9 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  sources,
+  setSources,
+  filterOptions,
   minRiskScore,
   setMinRiskScore,
   clearAllFilters,
@@ -456,6 +548,7 @@ function AgentSessionsPageContent({
   setSortOrder,
   chats,
   selectedChat,
+  selectedChatId,
   setSelectedChat,
   isLoading,
   error,
@@ -477,6 +570,9 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  sources: string[];
+  setSources: (values: string[]) => void;
+  filterOptions: OptionsById;
   minRiskScore: number | undefined;
   setMinRiskScore: (value: number | null) => void;
   clearAllFilters: () => void;
@@ -489,6 +585,7 @@ function AgentSessionsPageContent({
   setSortOrder: (value: SortOrder) => void;
   chats: ChatOverview[];
   selectedChat: ChatOverview | null;
+  selectedChatId: string | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
   isLoading: boolean;
   error: Error | null;
@@ -573,9 +670,10 @@ function AgentSessionsPageContent({
                   customLabel: null,
                 },
                 has_risk: hasRisk || null,
+                source: sources,
                 min_risk_score: minRiskScore ?? null,
               }}
-              optionsById={HAS_RISK_OPTIONS}
+              optionsById={filterOptions}
               onChange={(id: string, value: FilterValue) => {
                 if (id === "date") {
                   const dateValue = value as {
@@ -594,6 +692,8 @@ function AgentSessionsPageContent({
                   }
                 } else if (id === "has_risk") {
                   setHasRisk((value as string | null) ?? "");
+                } else if (id === "source") {
+                  setSources((value as string[]) ?? []);
                 } else if (id === "min_risk_score") {
                   setMinRiskScore(value as number | null);
                 }
@@ -603,6 +703,8 @@ function AgentSessionsPageContent({
                   setDateRangeParam("30d");
                 } else if (id === "has_risk") {
                   setHasRisk("");
+                } else if (id === "source") {
+                  setSources([]);
                 } else if (id === "min_risk_score") {
                   setMinRiskScore(null);
                 }
@@ -620,6 +722,7 @@ function AgentSessionsPageContent({
               onDirectionChange={setSortOrder}
             />
           </Page.Toolbar>
+          <OwnSessionsNotice />
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">
@@ -659,7 +762,7 @@ function AgentSessionsPageContent({
       </div>
 
       <ChatDetailSheet
-        chatId={selectedChat?.id ?? null}
+        chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}

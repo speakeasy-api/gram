@@ -9,10 +9,15 @@ import (
 )
 
 const (
+	sessionChatCompletionUsageRowPredicate = "(" +
+		"toString(attributes.gen_ai.operation.name) = 'chat' AND " +
+		"toString(attributes.gen_ai.usage.cost) != ''" +
+		")"
 	sessionUsageRowPredicate = "(" +
 		"startsWith(gram_urn, 'claude-code:usage') OR " +
 		"startsWith(gram_urn, 'codex:usage') OR " +
-		"startsWith(gram_urn, 'cursor:usage')" +
+		"startsWith(gram_urn, 'cursor:usage') OR " +
+		sessionChatCompletionUsageRowPredicate +
 		")"
 	sessionHookToolRowPredicate = "(" +
 		"toString(attributes.gram.tool.name) != '' AND " +

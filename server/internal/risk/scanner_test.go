@@ -44,7 +44,7 @@ type instrumentedPIIScanner struct {
 	slowStartOnce sync.Once
 }
 
-func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ func()) ([][]risk_analysis.Finding, error) {
+func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]risk_analysis.Finding, error) {
 	l.callCount.Add(1)
 	cur := l.inflight.Add(1)
 	defer l.inflight.Add(-1)

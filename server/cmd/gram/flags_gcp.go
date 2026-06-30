@@ -13,4 +13,16 @@ var gcpFlags = []cli.Flag{
 		Usage:   "Host to use for the PubSub emulator",
 		EnvVars: []string{"PUBSUB_EMULATOR_HOST"},
 	},
+
+	&cli.BoolFlag{
+		Name:    "disable-bigquery-writes",
+		Usage:   "Disable writes to BigQuery",
+		EnvVars: []string{"DISABLE_BIGQUERY_WRITES"},
+	},
+	&cli.StringFlag{
+		Name:    "bq-risk-findings",
+		Usage:   "BigQuery dataset for risk findings",
+		Value:   "gram.risk_findings",
+		EnvVars: []string{"GRAM_BQ_RISK_FINDINGS"},
+	},
 }

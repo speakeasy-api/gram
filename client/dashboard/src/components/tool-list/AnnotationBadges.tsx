@@ -1,6 +1,5 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Shield, AlertTriangle, Repeat, Globe } from "lucide-react";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export interface ResolvedToolAnnotations {
   readOnly: boolean;
@@ -37,39 +36,40 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
 }
 
 /**
- * Presentational annotation-hint icons, decoupled from the Gram `Tool` model so
+ * Presentational annotation-hint labels, decoupled from the Gram `Tool` model so
  * other tool sources (e.g. remote MCP servers) can render the same badges from
  * their own resolved hints. Returns null when no hint is set.
+ *
+ * Renders the same text labels and variants as the Connect → Catalog → MCP tool
+ * cards (`CatalogDetail`), so the permission labels read identically wherever a
+ * tool is surfaced — including Distribute → MCP → Tools.
  */
 export function AnnotationBadgeIcons({
   readOnly,
   destructive,
   idempotent,
-  openWorld,
 }: ResolvedToolAnnotations): JSX.Element | null {
-  if (!readOnly && !destructive && !idempotent && !openWorld) return null;
+  // Open-world is intentionally not surfaced as a label: it carries little
+  // permission signal, is set on nearly every tool, and Connect → Catalog → MCP
+  // omits it too — so matching that keeps the dense tool list readable.
+  if (!readOnly && !destructive && !idempotent) return null;
 
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 flex-wrap items-center gap-1">
       {readOnly && (
-        <SimpleTooltip tooltip="Read-only">
-          <Shield className="text-muted-foreground/70 size-3.5" />
-        </SimpleTooltip>
+        <Badge variant="neutral" className="text-xs">
+          Read-only
+        </Badge>
       )}
       {destructive && !readOnly && (
-        <SimpleTooltip tooltip="Destructive">
-          <AlertTriangle className="text-muted-foreground/70 size-3.5" />
-        </SimpleTooltip>
+        <Badge variant="warning" className="text-xs">
+          Destructive
+        </Badge>
       )}
       {idempotent && !readOnly && (
-        <SimpleTooltip tooltip="Idempotent">
-          <Repeat className="text-muted-foreground/70 size-3.5" />
-        </SimpleTooltip>
-      )}
-      {openWorld && (
-        <SimpleTooltip tooltip="Open-world">
-          <Globe className="text-muted-foreground/70 size-3.5" />
-        </SimpleTooltip>
+        <Badge variant="information" className="text-xs">
+          Idempotent
+        </Badge>
       )}
     </div>
   );

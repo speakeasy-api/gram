@@ -246,6 +246,20 @@ func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context
 	return int(count)
 }
 
+// remoteSessionClientOrganizationID reads the persisted organization_id of a
+// remote_session_client by id (scoped to its project).
+func remoteSessionClientOrganizationID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, clientID uuid.UUID) string {
+	t.Helper()
+
+	row, err := repo.New(conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID:        clientID,
+		ProjectID: conv.ToNullUUID(projectID),
+	})
+	require.NoError(t, err)
+
+	return row.RemoteSessionClient.OrganizationID.String
+}
+
 // createProject creates a second project in the test's organization so tests
 // can exercise cross-project (cross-tenant) rejection paths.
 func createProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {

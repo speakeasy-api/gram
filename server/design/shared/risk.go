@@ -71,6 +71,11 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
+	Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+		Minimum(0)
+		Maximum(1)
+		Example(0.75)
+	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
@@ -173,6 +178,9 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
 		Format(FormatUUID)
 	})

@@ -5,10 +5,7 @@ import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import {
-  PulseMCPServer,
-  useInfiniteListMCPCatalog,
-} from "@/pages/catalog/hooks";
+import { PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -52,11 +49,10 @@ export default function CatalogDetail(): JSX.Element {
   const decodedSpecifier = serverSpecifier
     ? decodeURIComponent(serverSpecifier)
     : "";
-  // Scope the catalog list to a search hint derived from the specifier's last
-  // segment so the target server is in the first page (backend caps results
-  // at 100 across all registries and only paginates single-registry queries).
-  const searchHint = decodedSpecifier.split("/").pop() ?? "";
-  const { data, isLoading } = useInfiniteListMCPCatalog(searchHint);
+  // The catalog is small and fetched in full, so reuse the unparameterized
+  // catalog query (shared cache key with the list page) and find the server
+  // client-side.
+  const { data, isLoading } = useListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -66,10 +62,8 @@ export default function CatalogDetail(): JSX.Element {
   const { data: toolsetsResult } = useListToolsets();
 
   const server = useMemo(() => {
-    if (!data?.pages || !decodedSpecifier) return null;
-    const allServers = data.pages.flatMap(
-      (page) => page.servers as PulseMCPServer[],
-    );
+    if (!data?.servers || !decodedSpecifier) return null;
+    const allServers = data.servers as PulseMCPServer[];
     return (
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
