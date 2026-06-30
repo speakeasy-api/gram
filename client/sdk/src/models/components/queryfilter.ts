@@ -17,6 +17,8 @@ export const Dimension = {
   Email: "email",
   Model: "model",
   HookSource: "hook_source",
+  AccountType: "account_type",
+  Provider: "provider",
   Role: "role",
   Group: "group",
   ProjectId: "project_id",
