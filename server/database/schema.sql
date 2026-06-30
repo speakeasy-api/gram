@@ -1501,6 +1501,57 @@ CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
 
+-- Claude artifacts (code, HTML, SVG, markdown, mermaid, React) produced inside a
+-- captured agent session. The artifact's binary content lives in the asset store
+-- (referenced by `asset_id`); this table holds the metadata and links the
+-- artifact back to the chat and the assistant message it appeared in.
+-- Currently only populated from the Anthropic compliance import, which exposes
+-- one artifact per `external_artifact_id`. We keep only the latest version, so
+-- re-imports upsert on (project_id, external_artifact_id), replacing the stored
+-- asset and version.
+CREATE TABLE IF NOT EXISTS chat_artifacts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+
+  -- The external (provider) id of the assistant message this artifact appeared
+  -- in. Joins to chat_messages.external_message_id so the UI can render the
+  -- artifact alongside the right turn.
+  external_message_id TEXT NOT NULL CHECK (external_message_id <> '' AND CHAR_LENGTH(external_message_id) <= 300),
+  -- Stable provider id for the artifact across its versions.
+  external_artifact_id TEXT NOT NULL CHECK (external_artifact_id <> '' AND CHAR_LENGTH(external_artifact_id) <= 300),
+  -- The specific provider version whose content we currently have stored.
+  external_version_id TEXT NOT NULL CHECK (external_version_id <> '' AND CHAR_LENGTH(external_version_id) <= 300),
+
+  title TEXT CHECK (title IS NULL OR (title <> '' AND CHAR_LENGTH(title) <= 1000)),
+  -- Provider artifact type, e.g. text/html, image/svg+xml, text/markdown,
+  -- application/vnd.ant.react, application/vnd.ant.mermaid, application/vnd.ant.code.
+  artifact_type TEXT NOT NULL CHECK (artifact_type <> '' AND CHAR_LENGTH(artifact_type) <= 200),
+  -- The asset store row holding the artifact content.
+  asset_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT chat_artifacts_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT chat_artifacts_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+  CONSTRAINT chat_artifacts_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
+);
+
+-- Latest-only: one live row per artifact within a project. Re-imports upsert
+-- against this index, swapping in the newest version's asset.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_artifacts_project_id_external_artifact_id_key
+ON chat_artifacts (project_id, external_artifact_id)
+WHERE deleted IS FALSE;
+
+-- Detail-panel lookup: all artifacts for a chat.
+CREATE INDEX IF NOT EXISTS chat_artifacts_project_id_chat_id_idx
+ON chat_artifacts (project_id, chat_id)
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
 ON chat_messages (chat_id, external_message_id)
 WHERE external_message_id IS NOT NULL;
