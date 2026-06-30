@@ -1,7 +1,4 @@
-// Command tunnel-gateway terminates agent WebSocket upgrades, owns the yamux
-// sessions, and maps internal forward requests onto substreams by tunnel ID.
-// The standalone process uses Postgres for key resolution and Redis for live
-// routes and connection snapshots.
+// Command tunnel-gateway serves public agent connects and internal tunnel forwards.
 package main
 
 import (
@@ -27,13 +24,9 @@ func main() {
 
 	publicListenAddr := envOr("TUNNEL_GATEWAY_PUBLIC_ADDR", envOr("TUNNEL_GATEWAY_ADDR", ":8090"))
 	forwardListenAddr := envOr("TUNNEL_GATEWAY_FORWARD_ADDR", ":8091")
-	// AdvertiseAddr is what gram-server uses to reach this pod; in k8s set it to
-	// the pod IP + port via the downward API. Public agent traffic is expected to
-	// reach this service through TLS-terminating ingress; this address is the
-	// internal gram-server -> gateway route.
+	// AdvertiseAddr is the internal gram-server -> gateway address, not the public agent URL.
 	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "http://tunnel-gateway-forward:8091")
-	// Required (not just checked when present) so a deployment cannot ship with
-	// forward authentication silently disabled.
+	// Require a forward token so internal forwarding cannot ship unauthenticated.
 	forwardToken := strings.TrimSpace(os.Getenv("TUNNEL_GATEWAY_FORWARD_TOKEN"))
 	if forwardToken == "" {
 		logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_FORWARD_TOKEN is required")

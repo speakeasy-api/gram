@@ -99,9 +99,7 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote/tunnelled MCP cards delegate management actions to the detail
-  // page's Settings tab — the delete confirmation needs to enumerate related
-  // mcp_servers and mcp_endpoints, which doesn't fit a card-level dialog.
+  // Remote/tunnelled MCP deletion lives in Settings because it touches linked server/endpoint state.
   const actions =
     asset.type === "remotemcp" || asset.type === "tunnelledmcp"
       ? []

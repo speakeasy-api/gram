@@ -87,8 +87,7 @@ export default function Sources(): JSX.Element {
     useTunnelledMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-  // Remote/tunnelled MCP sources aren't deployment-bound, so the page isn't
-  // ready until every source query has resolved.
+  // Remote/tunnelled sources bypass deployments, so page loading waits on their own queries.
   const isLoading =
     isLoadingDeployment || isLoadingRemoteMcp || isLoadingTunnelledMcp;
 

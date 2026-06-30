@@ -59,8 +59,6 @@ export function SourceTableRow({
   const createdAt = "createdAt" in asset ? asset.createdAt : undefined;
   const updatedAt = "updatedAt" in asset ? asset.updatedAt : undefined;
 
-  // See SourceCard.tsx for why remote/tunnelled MCP delegates management
-  // actions to its detail page Settings tab.
   const actions =
     asset.type === "remotemcp" || asset.type === "tunnelledmcp"
       ? []

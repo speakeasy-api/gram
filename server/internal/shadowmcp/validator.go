@@ -200,8 +200,7 @@ func (c *Client) ValidateRemoteMCPServerCall(
 		ID:        serverID,
 		ProjectID: projectUUID,
 	}); err != nil {
-		// Tunnel sources echo their tunnelled_mcp_servers id, absent from
-		// remote_mcp_servers — fall back to the tunnel table (still project-scoped).
+		// Tunnel echoes are source IDs, so validate against tunnelled_mcp_servers after remote lookup misses.
 		if _, terr := tunnelledmcprepo.New(c.db).GetServerByID(ctx, tunnelledmcprepo.GetServerByIDParams{
 			ID:        serverID,
 			ProjectID: projectUUID,

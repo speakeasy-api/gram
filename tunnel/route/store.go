@@ -1,7 +1,4 @@
-// Package route is the tunnelID -> owning-gateway-pod address cache that lets a
-// separate gram-server pod find the gateway holding a given tunnel's session.
-// Postgres is the durable control-plane store; this package owns the live,
-// TTL-heartbeated routing and connection snapshots in Redis or test memory.
+// Package route stores live tunnelID -> gateway address mappings and connection snapshots.
 package route
 
 import (
@@ -10,20 +7,14 @@ import (
 	"time"
 )
 
-// Store maps a tunnel ID to the internal address (host:port) of the gateway pod
-// currently holding its session.
+// Store maps tunnel IDs to the gateway pod currently holding each session.
 type Store interface {
-	// Publish (re)writes the route with a TTL; gateways refresh on a heartbeat.
 	Publish(ctx context.Context, tunnelID, addr string, ttl time.Duration) error
-	// Lookup returns the gateway address for a tunnel, or ("", false) if absent.
 	Lookup(ctx context.Context, tunnelID string) (string, bool, error)
-	// Delete removes the route (on disconnect/drain).
 	Delete(ctx context.Context, tunnelID string) error
 }
 
-// Connection is the live tunnel session shape cached for the management API.
-// It intentionally mirrors server/internal/mv.TunnelledMcpConnectionCache
-// without importing server packages into the standalone tunnel binaries.
+// Connection mirrors the management cache shape without importing server packages.
 type Connection struct {
 	SessionID              string            `json:"session_id"`
 	ServiceID              string            `json:"service_id"`
@@ -38,14 +29,11 @@ type Connection struct {
 	Metadata               map[string]string `json:"metadata"`
 }
 
-// ConnectionSnapshotStore is implemented by stores that can publish the live
-// connection cache read by /rpc/tunnelledMcp.*.
 type ConnectionSnapshotStore interface {
 	PublishConnections(ctx context.Context, tunnelID string, connections []Connection, ttl time.Duration) error
 	DeleteConnections(ctx context.Context, tunnelID string) error
 }
 
-// Memory is a process-local Store for tests and in-process harnesses.
 type Memory struct {
 	mu     sync.RWMutex
 	routes map[string]memEntry
@@ -56,7 +44,6 @@ type memEntry struct {
 	expiresAt time.Time
 }
 
-// NewMemory returns an empty in-memory store.
 func NewMemory() *Memory { return &Memory{routes: make(map[string]memEntry)} }
 
 func (m *Memory) Publish(_ context.Context, tunnelID, addr string, ttl time.Duration) error {

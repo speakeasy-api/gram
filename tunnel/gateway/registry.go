@@ -11,10 +11,7 @@ import (
 
 const consumerSessionTTL = 5 * time.Minute
 
-// registry is the per-pod, in-memory map of tunnelID -> live yamux sessions.
-// Multiple agents may present the same tunnel key (customer-side HA); the
-// gateway accepts all and round-robins substreams across them, so duplicate
-// registration is defined behavior, not a conflict.
+// Multiple agents may share a tunnel key; forwards round-robin across live sessions.
 type registry struct {
 	mu       sync.RWMutex
 	sessions map[string][]*sessEntry
@@ -36,7 +33,6 @@ func newRegistry() *registry {
 	}
 }
 
-// add registers a session and returns a remove func to call on disconnect.
 func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, connection route.Connection) func() {
 	entry := &sessEntry{
 		id:               sessionID,
@@ -93,8 +89,7 @@ func (r *registry) connections(tunnelID string, heartbeatAt time.Time) []route.C
 	return result
 }
 
-// beginForward returns one live session for the tunnel, round-robining across
-// agents and accounting for the forwarded request in the management snapshot.
+// beginForward reserves one live session and updates snapshot counters.
 func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time, maxStreamsPerSession int) (*sessEntry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -147,7 +142,6 @@ func pruneConsumerSessions(entry *sessEntry, now time.Time) int {
 	return len(entry.consumerSessions)
 }
 
-// kill closes every session for a tunnel (revocation). Returns count killed.
 func (r *registry) kill(tunnelID string) int {
 	r.mu.Lock()
 	list := r.sessions[tunnelID]
@@ -160,7 +154,6 @@ func (r *registry) kill(tunnelID string) int {
 	return len(list)
 }
 
-// activeSessions returns the total number of registered sessions (for metrics).
 func (r *registry) activeSessions() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
