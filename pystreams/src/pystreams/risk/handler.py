@@ -121,7 +121,11 @@ class PresidioHandler:
             )
             published = await self._collect(message, pending)
             publish_ms = (time.perf_counter() - publish_started) * 1000
-            outcome = metrics.OUTCOME_DETECTED
+            # "detected" means at least one finding actually landed. If every
+            # publish failed (all swallowed by ``_collect``), the work is an error
+            # outcome, not a success — keeping those out of the detected bucket so
+            # it stays a clean read of healthy detection latency.
+            outcome = metrics.OUTCOME_DETECTED if published else metrics.OUTCOME_ERROR
 
             # Log entity *types* and counts only — never the matched values or the
             # scanned content — so the line is safe to retain while still being

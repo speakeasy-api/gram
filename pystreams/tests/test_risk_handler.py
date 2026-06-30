@@ -395,6 +395,19 @@ async def test_records_error_outcome_when_scan_fails(recorded_durations):
     assert seconds >= 0.0
 
 
+async def test_records_error_outcome_when_all_publishes_fail(recorded_durations):
+    # Detections found, but every publish fails: nothing landed, so this must not
+    # inflate the "detected" bucket — it is recorded as an error outcome.
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_ERROR
+    assert seconds >= 0.0
+
+
 async def test_does_not_leak_content_or_values_to_logs():
     secret = "my ssn is 123-45-6789"
     scanner = FakeScanner(
