@@ -202,6 +202,7 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.NotEmpty(t, rec.Header().Get("ETag"))
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))

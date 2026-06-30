@@ -22,9 +22,16 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
+
+// clientMetadataDocumentMaxAgeSeconds is the Cache-Control max-age for served
+// CIMD documents. Longer than the well-known metadata TTL: a document is keyed
+// by an immutable client_id and changes only if the client's scope or callback
+// does, so upstream Authorization Servers can safely cache it for an hour.
+const clientMetadataDocumentMaxAgeSeconds = 3600
 
 // cimdClientName is the client_name Gram publishes in every CIMD document. It
 // is what the end user sees on the upstream's consent screen, so it carries the
@@ -134,11 +141,6 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 		return oops.E(oops.CodeUnexpected, err, "marshal client metadata document").LogError(ctx, m.logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return fmt.Errorf("write client metadata document: %w", err)
-	}
-	return nil
+	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
+	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/json; charset=utf-8", clientMetadataDocumentMaxAgeSeconds, body)
 }

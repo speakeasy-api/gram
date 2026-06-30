@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -408,7 +409,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 // if marshaling fails or the result kind is unrecognized, the caller's error
 // handler middleware needs an unwritten ResponseWriter so it can emit the real
 // error status — Go's net/http silently drops a second WriteHeader call.
-func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -423,32 +424,22 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
 // resource metadata body and only commits the 200 OK status once the body is
 // ready. See writeOAuthServerMetadataResponse for the rationale behind the
 // ordering.
-func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
