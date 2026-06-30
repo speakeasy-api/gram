@@ -11,6 +11,7 @@ from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
 
+from pystreams.risk import metrics
 from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, Scanner
 
 # Source label stamped on every finding this handler emits, so all findings
@@ -61,81 +62,99 @@ class PresidioHandler:
         # Zero/unset on the request means "use the default floor".
         score_threshold = message.score_threshold or DEFAULT_SCORE_THRESHOLD
 
-        # The scan (CPU/GIL-bound spaCy + Presidio work plus the false-positive
-        # filter and byte-offset conversion) runs off the event loop inside the
-        # scanner — on a worker thread or in a separate process. Timed as wall
-        # clock, so it includes any wait for a free scan slot / pool worker, which
-        # under load (not the scan itself) can dominate per-message ACK latency.
+        # Time the whole handler end to end and record it as a distribution,
+        # tagged with the terminal outcome. The timer starts here and is recorded
+        # in the ``finally`` so every path — scan failure, nothing detected, or
+        # findings published — contributes, and ``outcome`` defaults to error so a
+        # swallowed scan failure (which returns early) is attributed correctly.
+        process_started = time.perf_counter()
+        outcome = metrics.OUTCOME_ERROR
         try:
-            scan_started = time.perf_counter()
-            detections = await self._scanner.scan(
-                message.content, requested, score_threshold
+            # The scan (CPU/GIL-bound spaCy + Presidio work plus the false-positive
+            # filter and byte-offset conversion) runs off the event loop inside the
+            # scanner — on a worker thread or in a separate process. Timed as wall
+            # clock, so it includes any wait for a free scan slot / pool worker,
+            # which under load (not the scan itself) can dominate per-message ACK
+            # latency.
+            try:
+                scan_started = time.perf_counter()
+                detections = await self._scanner.scan(
+                    message.content, requested, score_threshold
+                )
+                scan_ms = (time.perf_counter() - scan_started) * 1000
+            except Exception as exc:
+                # This is best-effort shadow processing, and the PresidioAnalyzer
+                # subscription declares no dead-letter policy. Letting a scan
+                # failure escape would nack the message, and any input that
+                # deterministically trips the analyzer would then redeliver and
+                # fail again for the full retention window (30 days) — one bad
+                # message poisoning the subscription. Swallow it (so the message is
+                # acked) and log instead. Cancellation derives from BaseException,
+                # not Exception, so graceful shutdown still propagates. Only the
+                # exception *type* is logged: an error string or traceback could
+                # echo the scanned content, which this handler never emits (see the
+                # detection log below).
+                self.logger.error(
+                    "presidio scan failed",
+                    request_id=message.request_id,
+                    reply_urn=message.reply_urn,
+                    requested_entities=requested or [],
+                    error_type=type(exc).__name__,
+                    delivery_attempt=meta.delivery_attempt,
+                )
+                return
+
+            if not detections:
+                outcome = metrics.OUTCOME_CLEAN
+                return
+
+            # Build + serialize + enqueue every finding off the event loop too,
+            # then await the commits. Keeping the proto build and
+            # ``SerializeToString`` on a worker thread (not the loop) is
+            # deliberate: done on the loop it would be per-finding GIL work
+            # competing with message intake. ``asyncify`` copies the contextvar
+            # context into the worker, so trace-context injection on publish is
+            # preserved.
+            publish_started = time.perf_counter()
+            entity_types, pending = await asyncify(self._build_and_dispatch)(
+                message, detections
             )
-            scan_ms = (time.perf_counter() - scan_started) * 1000
-        except Exception as exc:
-            # This is best-effort shadow processing, and the PresidioAnalyzer
-            # subscription declares no dead-letter policy. Letting a scan failure
-            # escape would nack the message, and any input that deterministically
-            # trips the analyzer would then redeliver and fail again for the full
-            # retention window (30 days) — one bad message poisoning the
-            # subscription. Swallow it (so the message is acked) and log instead.
-            # Cancellation derives from BaseException, not Exception, so graceful
-            # shutdown still propagates. Only the exception *type* is logged: an
-            # error string or traceback could echo the scanned content, which this
-            # handler never emits (see the detection log below).
-            self.logger.error(
-                "presidio scan failed",
+            published = await self._collect(message, pending)
+            publish_ms = (time.perf_counter() - publish_started) * 1000
+            outcome = metrics.OUTCOME_DETECTED
+
+            # Log entity *types* and counts only — never the matched values or the
+            # scanned content — so the line is safe to retain while still being
+            # traceable back to the originating request.
+            #
+            # Emitted at debug, not info: this fires once per detection-bearing
+            # message, and rendering it (JSON-encoding the event dict) runs on the
+            # event-loop thread holding the GIL — the per-message loop work that
+            # dominates ACK latency under burst. At the default info level the
+            # filtering bound logger short-circuits ``adebug`` to a no-op before any
+            # rendering, so the line costs nothing in production yet stays available
+            # when debugging. The async ``adebug`` keeps that render off the event
+            # loop on the occasions debug *is* enabled.
+            await self.logger.adebug(
+                "presidio scan detected entities",
                 request_id=message.request_id,
                 reply_urn=message.reply_urn,
                 requested_entities=requested or [],
-                error_type=type(exc).__name__,
+                detected_entity_types=sorted(entity_types),
+                detected_count=sum(entity_types.values()),
+                published_count=published,
                 delivery_attempt=meta.delivery_attempt,
+                # Per-message latency split, safe to retain (durations, never
+                # content): the off-loop scan (incl. scan-slot / pool-worker wait)
+                # vs. the build + publish-dispatch and the wait for those
+                # publishes' commits.
+                scan_ms=round(scan_ms, 1),
+                publish_ms=round(publish_ms, 1),
             )
-            return
-
-        if not detections:
-            return
-
-        # Build + serialize + enqueue every finding off the event loop too, then
-        # await the commits. Keeping the proto build and ``SerializeToString`` on a
-        # worker thread (not the loop) is deliberate: done on the loop it would be
-        # per-finding GIL work competing with message intake. ``asyncify`` copies
-        # the contextvar context into the worker, so trace-context injection on
-        # publish is preserved.
-        publish_started = time.perf_counter()
-        entity_types, pending = await asyncify(self._build_and_dispatch)(
-            message, detections
-        )
-        published = await self._collect(message, pending)
-        publish_ms = (time.perf_counter() - publish_started) * 1000
-
-        # Log entity *types* and counts only — never the matched values or the
-        # scanned content — so the line is safe to retain while still being
-        # traceable back to the originating request.
-        #
-        # Emitted at debug, not info: this fires once per detection-bearing
-        # message, and rendering it (JSON-encoding the event dict) runs on the
-        # event-loop thread holding the GIL — the per-message loop work that
-        # dominates ACK latency under burst. At the default info level the
-        # filtering bound logger short-circuits ``adebug`` to a no-op before any
-        # rendering, so the line costs nothing in production yet stays available
-        # when debugging. The async ``adebug`` keeps that render off the event
-        # loop on the occasions debug *is* enabled.
-        await self.logger.adebug(
-            "presidio scan detected entities",
-            request_id=message.request_id,
-            reply_urn=message.reply_urn,
-            requested_entities=requested or [],
-            detected_entity_types=sorted(entity_types),
-            detected_count=sum(entity_types.values()),
-            published_count=published,
-            delivery_attempt=meta.delivery_attempt,
-            # Per-message latency split, safe to retain (durations, never content):
-            # the off-loop scan (incl. scan-slot / pool-worker wait) vs. the build +
-            # publish-dispatch and the wait for those publishes' commits.
-            scan_ms=round(scan_ms, 1),
-            publish_ms=round(publish_ms, 1),
-        )
+        finally:
+            metrics.record_process_duration(
+                time.perf_counter() - process_started, outcome
+            )
 
     def _build_and_dispatch(
         self,

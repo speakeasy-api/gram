@@ -1,11 +1,14 @@
 import re
 import uuid
 
+import pytest
 import structlog
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
+from pystreams.risk import handler as handler_mod
+from pystreams.risk import metrics
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, _AsyncCloseable
 
@@ -342,6 +345,54 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
     # ...and the summary still lands, reporting zero published.
     summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
     assert summary["published_count"] == 0
+
+
+@pytest.fixture
+def recorded_durations(monkeypatch):
+    """Capture every ``record_process_duration`` call as ``(seconds, outcome)``.
+
+    Patches the helper on the handler's ``metrics`` module so the per-message
+    distribution recording is observable without standing up a real
+    ``MeterProvider`` (which is a process-global singleton, awkward across tests).
+    """
+    calls: list[tuple[float, str]] = []
+
+    def _capture(seconds: float, outcome: str) -> None:
+        calls.append((seconds, outcome))
+
+    monkeypatch.setattr(handler_mod.metrics, "record_process_duration", _capture)
+    return calls
+
+
+async def test_records_detected_outcome_when_findings_published(recorded_durations):
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_DETECTED
+    assert seconds >= 0.0
+
+
+async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
+    handler = _handler(FakeScanner([]))
+
+    await handler.handle(_message("nothing sensitive here"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_CLEAN
+    assert seconds >= 0.0
+
+
+async def test_records_error_outcome_when_scan_fails(recorded_durations):
+    handler = _handler(FakeScanner(error=RuntimeError("boom")))
+
+    await handler.handle(_message("...", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_ERROR
+    assert seconds >= 0.0
 
 
 async def test_does_not_leak_content_or_values_to_logs():
