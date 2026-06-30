@@ -268,11 +268,14 @@ export function InsightsEmployeesContent(): JSX.Element {
         return false;
       if (selectedUserId && item.id !== selectedUserId) return false;
       if (effectiveRoleId && item.role !== roleName) return false;
-      // Personal = has personal-account usage; Team = the implied default
-      // (no personal account), matching the indicator badge.
+      // Each filter matches employees holding at least one account of that type;
+      // an employee with both a team and a personal account shows under either.
       if (selectedAccountType === "personal" && !item.hasPersonalAccount)
         return false;
-      if (selectedAccountType === "team" && item.hasPersonalAccount)
+      if (
+        selectedAccountType === "team" &&
+        !item.accounts.some((a) => a.accountType === "team")
+      )
         return false;
       return true;
     });
