@@ -29,11 +29,10 @@ _OUTCOME_ATTR: Final = "outcome"
 
 _meter = metrics.get_meter("github.com/speakeasy-api/gram/pystreams")
 
-# Bucket boundaries (seconds) span the few-millisecond scan of a tiny clean
-# message all the way to multi-minute processing: Presidio on a large payload
-# (or a long wait for a free scan slot / pool worker under load) can run for
-# minutes, so the distribution reaches a 10-minute upper bound rather than
-# saturating the top bucket on the slow tail that matters most.
+# Bucket boundaries (seconds) span sub-second processing up to multi-minute:
+# Presidio on a large payload (or a long wait for a free scan slot / pool worker
+# under load) can run for minutes, so the distribution reaches a 10-minute upper
+# bound rather than saturating the top bucket on the slow tail that matters most.
 _process_duration = _meter.create_histogram(
     "pystreams.presidio.process.duration",
     unit="s",
@@ -42,10 +41,6 @@ _process_duration = _meter.create_histogram(
         "(scan, incl. scan-slot wait, plus building and publishing findings)."
     ),
     explicit_bucket_boundaries_advisory=[
-        0.005,
-        0.025,
-        0.1,
-        0.25,
         0.5,
         1.0,
         2.5,
