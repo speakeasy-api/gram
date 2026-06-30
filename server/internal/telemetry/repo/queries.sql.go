@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -263,6 +264,7 @@ type UpsertShadowMCPInventoryURLParams struct {
 type ListShadowMCPInventoryURLsParams struct {
 	GramProjectID string
 	Limit         int
+	Cursor        string
 }
 
 type ShadowMCPInventoryURLRow struct {
@@ -316,6 +318,45 @@ type shadowMCPInventoryURLUpsert struct {
 	FirstSeen          time.Time
 	LastSeen           time.Time
 	UpdatedAt          time.Time
+}
+
+type shadowMCPInventoryURLCursor struct {
+	CanonicalServerURL string `json:"canonical_server_url"`
+	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
+}
+
+func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, error) {
+	payload := shadowMCPInventoryURLCursor{
+		CanonicalServerURL: row.CanonicalServerURL,
+		LastSeenUnixNano:   row.LastSeen.UTC().UnixNano(),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encoding shadow mcp inventory url cursor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("decoding shadow mcp inventory url cursor: %w", err)
+	}
+
+	var payload shadowMCPInventoryURLCursor
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("parsing shadow mcp inventory url cursor: %w", err)
+	}
+	if payload.CanonicalServerURL == "" {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("shadow mcp inventory url cursor canonical server url is required")
+	}
+	if payload.LastSeenUnixNano == 0 {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("shadow mcp inventory url cursor last seen is required")
+	}
+
+	return payload, nil
 }
 
 func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
@@ -487,7 +528,16 @@ func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string
 
 func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadowMCPInventoryURLsParams) ([]ShadowMCPInventoryURLRow, error) {
 	limit := clampShadowMCPInventoryLimit(arg.Limit)
-	sb := sq.Select(
+	var cursor shadowMCPInventoryURLCursor
+	if arg.Cursor != "" {
+		var err error
+		cursor, err = decodeShadowMCPInventoryURLCursor(arg.Cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	inventoryRows := sq.Select(
 		"canonical_server_url",
 		"max(url_host) AS url_host",
 		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
@@ -496,9 +546,30 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 	).
 		From("shadow_mcp_inventory_urls").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		GroupBy("gram_project_id", "canonical_server_url").
-		OrderBy("last_seen DESC", "canonical_server_url ASC").
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"url_host",
+		"server_name",
+		"first_seen",
+		"last_seen",
+	).
+		FromSelect(inventoryRows, "inventory_urls").
 		Limit(limit)
+
+	if arg.Cursor != "" {
+		lastSeen := time.Unix(0, cursor.LastSeenUnixNano).UTC()
+		sb = sb.Where(squirrel.Or{
+			squirrel.Expr("last_seen < ?", lastSeen),
+			squirrel.And{
+				squirrel.Expr("last_seen = ?", lastSeen),
+				squirrel.Expr("canonical_server_url > ?", cursor.CanonicalServerURL),
+			},
+		})
+	}
+
+	sb = sb.OrderBy("last_seen DESC", "canonical_server_url ASC")
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
