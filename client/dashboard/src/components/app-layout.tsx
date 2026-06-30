@@ -1,4 +1,8 @@
-import { useIsPlatformAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+} from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
