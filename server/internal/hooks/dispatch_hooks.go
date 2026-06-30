@@ -23,7 +23,7 @@ import (
 //
 // The vouched user_email is trusted within the authenticated org, exactly as the
 // per-tool endpoints already trust the payload's user_email. The org boundary
-// (the agent's key) is the security boundary; see DNO-376 / ADR-0010.
+// (the agent's key) is the security boundary. See DNO-376.
 func (s *Service) Dispatch(ctx context.Context, payload *gen.DispatchPayload) (*gen.DispatchHookResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
