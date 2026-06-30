@@ -95,8 +95,3 @@ func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPay
 		},
 	}
 }
-
-//go:fix inline
-func ptr[T any](v T) *T {
-	return new(v)
-}
