@@ -382,7 +382,7 @@ function OnboardingSection(): ReactElement {
       title="Enterprise admin onboarding"
       description="Send the setup-wizard link to people you want to onboard as enterprise admins of this organization."
     >
-      <div className="space-y-2">
+      <div className="flex flex-col gap-y-2">
         <Input
           name="onboarding_emails"
           placeholder="alice@example.com, bob@example.com"
@@ -390,16 +390,19 @@ function OnboardingSection(): ReactElement {
           onChange={setEmailsInput}
           disabled={sendEmail.isPending}
         />
-        <ActionButton
-          onClick={handleSend}
-          disabled={recipients.length === 0}
-          pending={sendEmail.isPending}
-        >
-          Send to{" "}
-          {recipients.length === 0
-            ? "0 recipients"
-            : `${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`}
-        </ActionButton>
+        <div className="flex items-center justify-end">
+          <ActionButton
+            onClick={handleSend}
+            disabled={recipients.length === 0}
+            pending={sendEmail.isPending}
+          >
+            Send to{" "}
+            {recipients.length === 0
+              ? "0 recipients"
+              : `${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`}
+          </ActionButton>
+        </div>
+
         {sendEmail.data?.setupLink && (
           <p className="text-muted-foreground pt-1 text-[11px] break-all">
             Setup link:{" "}
@@ -415,6 +418,11 @@ function OnboardingSection(): ReactElement {
 
 function OrgOverrideSection(): ReactElement {
   const client = useSdkClient();
+
+  const isOverrideActive = document.cookie
+    .split("; ")
+    .some((cookie) => cookie.startsWith("gram_admin_override="));
+
   return (
     <Section
       icon={ArrowRightLeft}
@@ -436,20 +444,14 @@ function OrgOverrideSection(): ReactElement {
             window.location.href = "/login";
           })(e);
         }}
-        className="space-y-2"
+        className="flex flex-col gap-y-2"
       >
         <Input
           placeholder="organization-slug"
           name="gram_admin_override"
           required
         />
-        <div className="flex items-center gap-2">
-          <button
-            type="submit"
-            className="bg-foreground text-background inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
-          >
-            Go to org
-          </button>
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => {
@@ -462,6 +464,12 @@ function OrgOverrideSection(): ReactElement {
             className="text-muted-foreground hover:text-foreground text-[11px]"
           >
             Clear override
+          </button>
+          <button
+            type="submit"
+            className="bg-foreground text-background inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
+          >
+            Go to org
           </button>
         </div>
       </form>
