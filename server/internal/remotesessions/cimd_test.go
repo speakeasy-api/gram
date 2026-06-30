@@ -322,7 +322,7 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
 
 	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
-	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 
@@ -457,14 +457,20 @@ func TestCreateCimdClient_OrganizationalIssuerDownscope(t *testing.T) {
 	require.NotNil(t, created.ClientIDMetadataURI)
 }
 
-func TestCreateCimdClient_OrganizationalIssuerRequiresProject(t *testing.T) {
+func TestCreateCimdClient_OrganizationalIssuerNoProjectCreatesOrgLevel(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
 	issuerID := createOrgLevelCIMDIssuer(t, ctx, ti, "admin-cimd-orglevel-noproj")
 
-	_, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
 	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.NoError(t, err)
+	require.Empty(t, created.ProjectID, "organization-level client has no project")
+	require.Equal(t, authCtx.ActiveOrganizationID, created.OrganizationID)
+	require.NotNil(t, created.ClientIDMetadataURI)
 }

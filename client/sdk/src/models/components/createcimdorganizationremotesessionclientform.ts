@@ -14,7 +14,7 @@ export type CreateCimdOrganizationRemoteSessionClientForm = {
    */
   audience?: string | undefined;
   /**
-   * Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+   * Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
    */
   projectId?: string | undefined;
   /**

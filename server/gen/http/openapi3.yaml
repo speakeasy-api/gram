@@ -36930,7 +36930,7 @@ components:
                     maxLength: 512
                 project_id:
                     type: string
-                    description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+                    description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
                     format: uuid
                 remote_session_issuer_id:
                     type: string
@@ -37259,7 +37259,7 @@ components:
                     description: Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
                 project_id:
                     type: string
-                    description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+                    description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
                     format: uuid
                 remote_session_issuer_id:
                     type: string
@@ -44487,10 +44487,12 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                organization_id:
+                    type: string
+                    description: The owning organization id. Empty for legacy rows not yet backfilled.
                 project_id:
                     type: string
-                    description: The owning project id.
-                    format: uuid
+                    description: The owning project id. Empty for organization-level clients.
                 remote_session_issuer_id:
                     type: string
                     description: The owning remote_session_issuer id.
@@ -44520,6 +44522,7 @@ components:
             required:
                 - id
                 - project_id
+                - organization_id
                 - remote_session_issuer_id
                 - user_session_issuer_ids
                 - client_id

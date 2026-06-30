@@ -1,7 +1,6 @@
 package mv
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,9 +13,20 @@ import (
 // BuildRemoteSessionClientView renders a remote_session_client API view. The
 // user_session_issuer attachments come from the join table via
 // userSessionIssuerIDs, never the legacy remote_session_clients column.
+//
+// Organization-level clients have a null project_id (and a set organization_id);
+// project_id serializes as an empty string for them, mirroring
+// BuildRemoteSessionIssuerView. The error return is retained for call-site
+// stability even though every value currently renders successfully.
 func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssuerIDs []uuid.UUID) (*types.RemoteSessionClient, error) {
-	if !row.ProjectID.Valid {
-		return nil, fmt.Errorf("remote_session_client %s has null project_id", row.ID)
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
 	}
 
 	var issuedAt string
@@ -34,7 +44,8 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 	}
 	return &types.RemoteSessionClient{
 		ID:                      row.ID.String(),
-		ProjectID:               row.ProjectID.UUID.String(),
+		ProjectID:               projectID,
+		OrganizationID:          organizationID,
 		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
 		UserSessionIssuerIds:    issuerIDs,
 		ClientID:                row.ClientID,

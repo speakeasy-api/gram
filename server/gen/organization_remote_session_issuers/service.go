@@ -135,8 +135,9 @@ type CreateCimdClientPayload struct {
 	// organization and advertise client_id_metadata_document_supported.
 	RemoteSessionIssuerID string
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
@@ -155,8 +156,9 @@ type CreateClientPayload struct {
 	// organization.
 	RemoteSessionIssuerID string
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID string

@@ -248,10 +248,14 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
+WHERE c.id = @id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
 SELECT id
@@ -264,10 +268,12 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.project_id = @project_id
+WHERE (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -278,12 +284,16 @@ LIMIT sqlc.arg('limit_value');
 -- Filters to clients bound to the given user_session_issuer through the join
 -- table, while user_session_issuer_ids reports every issuer each client is
 -- attached to (a correlated subquery independent of the filter join).
+-- Includes both the project's own clients and organization-level clients
+-- (project_id NULL) belonging to the project's org.
 SELECT
     sqlc.embed(c),
     (
         SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS all_link
+        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
+          AND all_usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
@@ -291,7 +301,7 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
   AND usi.deleted IS FALSE
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -319,6 +329,7 @@ RETURNING *;
 INSERT INTO remote_session_clients (
     id,
     project_id,
+    organization_id,
     remote_session_issuer_id,
     client_id,
     client_id_metadata_uri,
@@ -330,6 +341,7 @@ INSERT INTO remote_session_clients (
 VALUES (
     @id,
     @project_id,
+    @organization_id,
     @remote_session_issuer_id,
     @client_id_metadata_uri,
     @client_id_metadata_uri,
@@ -500,7 +512,10 @@ WHERE c.id = @id
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
 -- ChallengeManager. Returns one row per remote_session_client linked to
--- the given user_session_issuer through the join table.
+-- the given user_session_issuer through the join table. Resolves both the
+-- project's own clients and organization-level clients (project_id NULL)
+-- belonging to the project's org, so an org-level client attached to this
+-- project's user_session_issuer is honored at runtime.
 SELECT
     c.id                                   AS client_id,
     c.client_id                            AS external_client_id,
@@ -522,7 +537,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND usi.project_id = @project_id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -530,13 +545,19 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionsByProjectID :many
+-- Scoped by the session's user_session_issuer project, not the client's project:
+-- a remote_session belongs to the project whose user_session_issuer minted it,
+-- so sessions established through an organization-level client (project_id NULL)
+-- bound to this project's user_session_issuer are listed here, while another
+-- project's sessions on the same shared org-level client are not.
 SELECT sqlc.embed(s),
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE c.project_id = @project_id
+WHERE usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
@@ -546,18 +567,27 @@ ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetRemoteSessionByID :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so an organization-level client's session is
+-- reachable from the project whose user_session_issuer minted it.
 SELECT s.*
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-WHERE s.id = @id AND c.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.id = @id AND usi.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
 
 -- name: RevokeRemoteSession :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so a project admin can revoke a session
+-- established through an organization-level client bound to their own
+-- user_session_issuer, but not another project's session on a shared one.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM remote_session_clients AS c
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
-  AND c.project_id = @project_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;

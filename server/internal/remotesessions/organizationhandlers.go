@@ -919,13 +919,16 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgissuersgen.Creat
 }
 
 // resolveOrganizationClientProject determines the owning project for an
-// org-admin-created standalone remote_session_client. A remote_session_client
-// must be project-scoped, so a project-specific issuer's client inherits its
-// project while an organization-level issuer requires the caller to name one. A
-// supplied project_id (validated to belong to the org) downscopes a client
-// under an organization-level issuer; for a project-specific issuer it must
-// match the issuer's own project so the client stays reachable from it. Must
-// run inside the create transaction. Shared by CreateClient and CreateCimdClient.
+// org-admin-created standalone remote_session_client, mirroring how createIssuer
+// scopes an issuer: a supplied project_id (validated to belong to the org)
+// scopes the client to that project, an omitted project_id inherits a
+// project-specific issuer's own project, and an omitted project_id under an
+// organization-level issuer yields an invalid NullUUID that persists as a NULL
+// project_id — an organization-level client every project in the org can attach.
+// For a project-specific issuer a supplied project_id must match the issuer's
+// own project so the client stays reachable from it. An organization-level
+// client can therefore only arise from an organization-level issuer. Must run
+// inside the create transaction. Shared by CreateClient and CreateCimdClient.
 func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, issuer repo.RemoteSessionIssuer, payloadProjectID *string, organizationID string) (uuid.NullUUID, error) {
 	clientProjectID := issuer.ProjectID
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
@@ -946,9 +949,6 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 			return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
 		}
 		clientProjectID = conv.ToNullUUID(pid)
-	}
-	if !clientProjectID.Valid {
-		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id is required when the issuer is organization-level").LogError(ctx, logger)
 	}
 	return clientProjectID, nil
 }
@@ -1018,6 +1018,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgissuersgen.C
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
+		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
 		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),

@@ -4550,6 +4550,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 	res := &RemoteSessionClientResponseBody{
 		ID:                      v.ID,
 		ProjectID:               v.ProjectID,
+		OrganizationID:          v.OrganizationID,
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
 		ClientID:                v.ClientID,
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,

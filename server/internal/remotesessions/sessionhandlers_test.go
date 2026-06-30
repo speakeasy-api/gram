@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -33,7 +32,7 @@ func TestListRemoteSessions(t *testing.T) {
 	// Soft-delete one row directly so it must be excluded from the listing.
 	_, err := repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        soft.ID,
-		ProjectID: conv.ToNullUUID(liveProjectID(t, ctx)),
+		ProjectID: liveProjectID(t, ctx),
 	})
 	require.NoError(t, err)
 
@@ -56,6 +55,92 @@ func TestListRemoteSessions(t *testing.T) {
 	}
 	require.True(t, ids[live.ID.String()], "live session must be returned")
 	require.False(t, ids[soft.ID.String()], "soft-deleted session must be excluded")
+}
+
+// TestListRemoteSessions_OrgLevelClientScopedByUserSessionIssuerProject proves
+// the project session list is scoped by the session's user_session_issuer
+// project: a session established through an organization-level client bound to
+// this project's user_session_issuer is listed, while another project's session
+// on the same shared org-level client is not.
+func TestListRemoteSessions_OrgLevelClientScopedByUserSessionIssuerProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-orglevel-issuer")
+	callerUserIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-orglevel-caller")
+	otherProject := createProject(t, ctx, ti.conn, "rs-orglevel-other-project")
+	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-rs-orglevel-other")
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-orglevel-client", callerUserIssuer, otherUserIssuer)
+
+	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_mine"), callerUserIssuer.String(), orgClient.String())
+	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_theirs"), otherUserIssuer.String(), orgClient.String())
+
+	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{})
+	require.NoError(t, err)
+
+	ids := make(map[string]bool, len(result.Items))
+	for _, item := range result.Items {
+		ids[item.ID] = true
+	}
+	require.True(t, ids[mine.ID.String()], "org-level client session for this project's user_session_issuer must be listed")
+	require.False(t, ids[theirs.ID.String()], "another project's session on the shared org-level client must not be listed")
+}
+
+// TestRevokeRemoteSession_OrgLevelClientFromOwningProject confirms a project
+// admin can revoke a session established through an organization-level client
+// bound to their own user_session_issuer.
+func TestRevokeRemoteSession_OrgLevelClientFromOwningProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-revoke-issuer")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-revoke")
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-revoke-client", userIssuer)
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_revoke"), userIssuer.String(), orgClient.String())
+
+	require.NoError(t, ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{ID: session.ID.String()}))
+
+	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{})
+	require.NoError(t, err)
+	for _, item := range result.Items {
+		require.NotEqual(t, session.ID.String(), item.ID, "revoked session must no longer be listed")
+	}
+}
+
+// TestRevokeRemoteSession_OtherProjectsOrgLevelSessionNotRevoked confirms a
+// project admin cannot revoke a session on a shared organization-level client
+// that belongs to another project's user_session_issuer; the revoke resolves to
+// a no-op and the session stays active.
+func TestRevokeRemoteSession_OtherProjectsOrgLevelSessionNotRevoked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-xproj-issuer")
+	otherProject := createProject(t, ctx, ti.conn, "rs-xproj-other-project")
+	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-rs-xproj-other")
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-xproj-client", otherUserIssuer)
+	subject := urn.NewUserSubject("user_xproj")
+	session := insertRemoteSession(t, ctx, ti.conn, subject, otherUserIssuer.String(), orgClient.String())
+
+	require.NoError(t, ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{ID: session.ID.String()}))
+
+	got, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: orgClient,
+	})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, got.ID, "another project's session must remain active")
 }
 
 func TestListRemoteSessions_ResolvesUserSubjectIdentity(t *testing.T) {
