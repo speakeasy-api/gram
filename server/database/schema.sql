@@ -1843,6 +1843,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS device_owners_organization_id_provider_device_
 ON device_owners (organization_id, provider, device_id)
 WHERE deleted_at IS NULL;
 
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The unique
+-- index above is partial (excludes soft-deleted rows), so it can't serve a cascade
+-- delete, which must match every row for the org including deleted ones; without this
+-- a tenant deletion sequentially scans device_owners.
+CREATE INDEX IF NOT EXISTS device_owners_organization_id_idx
+ON device_owners (organization_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
