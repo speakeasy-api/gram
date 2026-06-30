@@ -88,6 +88,15 @@ COPY --from=builder /usr/lib/*-linux-gnu/libz.so.1 /usr/lib/
 # the project environment without activation.
 ENV PATH="/app/.venv/bin:$PATH"
 
+# The CI build-push composite injects GIT_SHA=$GITHUB_SHA as a build arg into
+# every image. Surface it as GRAM_GIT_SHA so the `pystream` entrypoint's
+# --git-sha flag (envvar GRAM_GIT_SHA) stamps the build commit onto OTel traces
+# and metrics for Datadog's source-code links. A plain local `docker build`
+# leaves it empty, which is fine: the git.commit.sha resource attribute is then
+# simply omitted.
+ARG GIT_SHA=""
+ENV GRAM_GIT_SHA=${GIT_SHA}
+
 # Kubernetes liveness/readiness probes hit GET /healthz and /readyz on this port
 # (override with --control-port / GRAM_PYSTREAMS_CONTROL_PORT). EXPOSE is purely
 # documentation; the kubelet reaches the probe via the pod IP regardless.
