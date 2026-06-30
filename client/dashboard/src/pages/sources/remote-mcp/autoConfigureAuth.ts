@@ -189,6 +189,8 @@ export async function autoConfigureRemoteMcpAuth({
           responseTypesSupported: draft.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? [],
+          clientIdMetadataDocumentSupported:
+            draft.clientIdMetadataDocumentSupported,
           oidc: draft.oidc,
           passthrough: draft.passthrough,
         },

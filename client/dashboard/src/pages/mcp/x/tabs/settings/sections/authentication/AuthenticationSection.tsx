@@ -58,8 +58,9 @@ export function AuthenticationSection({
   const authorizationServer =
     protectedResourceMetadata?.authorizationServers?.[0];
 
-  // NOTE(AGE-2494): listRemoteSessionIssuers is project-scope only. When
-  // org-level records land, add them to this selectable list.
+  // listRemoteSessionIssuers returns both this project's issuers and inherited
+  // organization-level ones (project_id IS NULL, same org), so the selectable
+  // list spans organizational and project-scoped providers.
   const { data: issuersResult, isLoading: isLoadingIssuers } =
     useRemoteSessionIssuers();
   const allIssuers = useMemo(

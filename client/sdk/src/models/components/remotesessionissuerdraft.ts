@@ -17,6 +17,10 @@ export type RemoteSessionIssuerDraft = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
+   */
+  clientIdMetadataDocumentSupported: boolean;
+  /**
    * Warnings describing any RFC 8414 deviations encountered during discovery.
    */
   discoveryWarnings: Array<string>;
@@ -57,6 +61,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorization_endpoint: z.optional(z.string()),
+    client_id_metadata_document_supported: z.boolean(),
     discovery_warnings: z.array(z.string()),
     grant_types_supported: z.optional(z.array(z.string())),
     issuer: z.string(),
@@ -72,6 +77,8 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
+      "client_id_metadata_document_supported":
+        "clientIdMetadataDocumentSupported",
       "discovery_warnings": "discoveryWarnings",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",

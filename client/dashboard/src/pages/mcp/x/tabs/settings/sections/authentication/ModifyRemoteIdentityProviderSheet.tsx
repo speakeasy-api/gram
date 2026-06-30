@@ -142,6 +142,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
+    clientIdMetadataDocumentSupported: issuer.clientIdMetadataDocumentSupported,
   });
   const {
     issuerUrl,
@@ -212,6 +213,10 @@ function ModifyRemoteIdentityProviderSheetBody({
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
+          // undefined when no snapshot — the server COALESCEs to keep the
+          // stored CIMD-support value; a fresh discovery overwrites it.
+          clientIdMetadataDocumentSupported:
+            discoveredSnapshot?.clientIdMetadataDocumentSupported,
         },
       });
 

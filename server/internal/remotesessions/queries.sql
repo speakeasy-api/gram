@@ -20,6 +20,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
     oidc,
     passthrough
 )
@@ -38,6 +39,7 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    @client_id_metadata_document_supported,
     @oidc,
     @passthrough
 )
@@ -107,6 +109,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -226,6 +229,19 @@ WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id = @project_id;
 
+-- name: GetRemoteSessionClientForClientMetadataDocument :one
+-- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+-- endpoint is unauthenticated and addresses clients by their globally unique
+-- primary key, and the served document exposes only the client identity Gram
+-- already sends the upstream AS as client_id (CIMD rows never carry a secret).
+-- Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
+-- client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
+SELECT client_id_metadata_uri, scope
+FROM remote_session_clients
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE;
+
 -- name: GetRemoteSessionClientByID :one
 SELECT
     sqlc.embed(c),
@@ -292,6 +308,36 @@ SET
     audience = COALESCE(sqlc.narg('audience'), audience),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: CreateRemoteSessionClientCIMD :one
+-- Create a client directly in Client ID Metadata Document (CIMD) mode. The
+-- createCimd handler generates the row id and the document URL up front, so
+-- client_id and client_id_metadata_uri are both set to that URL in a single
+-- INSERT (kept equal by the remote_session_clients_client_id_metadata_uri_check
+-- constraint). The row carries no secret and token_endpoint_auth_method is none.
+INSERT INTO remote_session_clients (
+    id,
+    project_id,
+    remote_session_issuer_id,
+    client_id,
+    client_id_metadata_uri,
+    client_id_issued_at,
+    token_endpoint_auth_method,
+    scope,
+    audience
+)
+VALUES (
+    @id,
+    @project_id,
+    @remote_session_issuer_id,
+    @client_id_metadata_uri,
+    @client_id_metadata_uri,
+    @client_id_issued_at,
+    'none',
+    sqlc.narg('scope')::text[],
+    @audience
+)
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
@@ -583,6 +629,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

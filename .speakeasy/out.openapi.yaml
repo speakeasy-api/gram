@@ -13551,6 +13551,102 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/organizationRemoteSessionIssuers.createCimdClient:
+    post:
+      description: 'Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
+      operationId: createCimdOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCimdOrganizationRemoteSessionClientForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createCimdClient organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: createCimdClient
+      x-speakeasy-react-hook:
+        name: CreateCimdOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionIssuers.createClient:
     post:
       description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -20977,6 +21073,111 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: CreateRemoteSessionClient
+  /rpc/remoteSessionClients.createCimd:
+    post:
+      description: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+      operationId: createCimdRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCimdForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createCimd remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: createCimd
+      x-speakeasy-react-hook:
+        name: CreateCimdRemoteSessionClient
   /rpc/remoteSessionClients.delete:
     delete:
       description: Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.
@@ -36264,6 +36465,60 @@ components:
         - model
         - instructions
         - toolsets
+    CreateCimdForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        remote_session_issuer_id:
+          type: string
+          description: The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
+      description: Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
+      required:
+        - remote_session_issuer_id
+    CreateCimdOrganizationRemoteSessionClientForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        project_id:
+          type: string
+          description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+      description: Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
+      required:
+        - remote_session_issuer_id
     CreateCustomDetectionRuleRequestBody:
       type: object
       properties:
@@ -36431,6 +36686,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
         grant_types_supported:
           type: array
           items:
@@ -36807,6 +37065,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
         grant_types_supported:
           type: array
           items:
@@ -43786,6 +44047,9 @@ components:
         client_id_issued_at:
           type: string
           format: date-time
+        client_id_metadata_uri:
+          type: string
+          description: 'When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.'
         client_secret_expires_at:
           type: string
           description: Null when the secret does not expire.
@@ -43842,6 +44106,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
         created_at:
           type: string
           format: date-time
@@ -43911,6 +44178,7 @@ components:
         - issuer
         - oidc
         - passthrough
+        - client_id_metadata_document_supported
         - created_at
         - updated_at
     RemoteSessionIssuerDraft:
@@ -43919,6 +44187,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
         discovery_warnings:
           type: array
           items:
@@ -43963,6 +44234,7 @@ components:
         - issuer
         - oidc
         - passthrough
+        - client_id_metadata_document_supported
         - discovery_warnings
     RemoveClientFromMcpServerRequestBody:
       type: object
@@ -48716,6 +48988,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
         grant_types_supported:
           type: array
           items:

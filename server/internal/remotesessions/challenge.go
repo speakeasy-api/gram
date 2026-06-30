@@ -283,7 +283,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL(parent.RouteBase)
+	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
@@ -499,13 +499,22 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	return nil
 }
 
+// canonicalCallbackRouteBase is the route base the outbound remote-login
+// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
+// and /x/mcp and recovers the originating slug from the cached login state, so
+// one canonical base serves either surface. A single stable redirect_uri also
+// matches the lone redirect_uri a CIMD client publishes in its metadata
+// document; the originating surface lives in the login state's RouteBase for
+// the post-callback bounce.
+const canonicalCallbackRouteBase = "mcp"
+
 // callbackURL is the route-base-scoped path the upstream provider redirects
 // back to after the user authenticates. Empty routeBase falls back to "mcp"
 // for back-compat with callers that haven't been threaded with a RouteBase
 // yet (and for in-flight states minted before this parameter landed).
 func (m *ChallengeManager) callbackURL(routeBase string) string {
 	if routeBase == "" {
-		routeBase = "mcp"
+		routeBase = canonicalCallbackRouteBase
 	}
 	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }

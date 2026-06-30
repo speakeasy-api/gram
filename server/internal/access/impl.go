@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -42,24 +40,26 @@ import (
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
-// FeatureCacheWriter updates the Redis cache entry for a feature flag after a
-// direct DB write, keeping the cache consistent with the authoritative state.
-type FeatureCacheWriter interface {
+// ProductFeatures is the subset of *productfeatures.Client the access service
+// needs: enabling RBAC for an org (seed grants + flag, atomically) and keeping
+// the feature cache consistent after a direct DB write.
+type ProductFeatures interface {
+	EnableRBAC(ctx context.Context, organizationID string) error
 	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	chConn       driver.Conn
-	auth         *auth.Auth
-	authz        *authz.Engine
-	roleMgr      *RoleManager
-	featureCache FeatureCacheWriter
-	audit        *audit.Logger
-	jwtSecret    string
-	accessStore  accesscontrol.Store
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	chConn          driver.Conn
+	auth            *auth.Auth
+	authz           *authz.Engine
+	roleMgr         *RoleManager
+	productFeatures ProductFeatures
+	audit           *audit.Logger
+	jwtSecret       string
+	accessStore     accesscontrol.Store
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -73,7 +73,7 @@ func NewService(
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
-	featureCache FeatureCacheWriter,
+	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
 	jwtSecret string,
 	accessStore accesscontrol.Store,
@@ -81,17 +81,17 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:       logger,
-		db:           db,
-		chConn:       chConn,
-		auth:         auth.New(logger, db, sessions, authz),
-		authz:        authz,
-		roleMgr:      roleMgr,
-		featureCache: featureCache,
-		audit:        auditLogger,
-		jwtSecret:    jwtSecret,
-		accessStore:  accessStore,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:          logger,
+		db:              db,
+		chConn:          chConn,
+		auth:            auth.New(logger, db, sessions, authz),
+		authz:           authz,
+		roleMgr:         roleMgr,
+		productFeatures: productFeatures,
+		audit:           auditLogger,
+		jwtSecret:       jwtSecret,
+		accessStore:     accessStore,
 	}
 }
 
@@ -596,26 +596,10 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	if err != nil {
 		return err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
-
-	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "seed system role grants").LogError(ctx, logger)
+	if err := s.productFeatures.EnableRBAC(ctx, ac.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC").LogError(ctx, s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID)))
 	}
 
-	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
-			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").LogError(ctx, logger)
-	}
-
-	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
 	return nil
 }
 
@@ -637,7 +621,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
 	}
 
-	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
+	s.productFeatures.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
 	return nil
 }
 

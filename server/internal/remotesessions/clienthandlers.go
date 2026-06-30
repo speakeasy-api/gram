@@ -139,40 +139,8 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	// Reject the remote session issuer if it isn't reachable from the caller's
-	// project, so a client can't be attached to another tenant's issuer. The
-	// lookup accepts both the project's own issuers and organization-level
-	// issuers.
-	if _, err = txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      conv.ToNullUUID(*authCtx.ProjectID),
-		OrganizationID: conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
-	}
-
-	// Reject any user session issuer that belongs to a different project (so a
-	// binding can't cross a tenant boundary) and any pairing that would put a
-	// second client on the same (user_session_issuer, remote_session_issuer)
-	// pair. Validate every issuer before creating the row so a bad request never
-	// leaves a half-attached client behind.
-	for _, userIssuerID := range userIssuerIDs {
-		if _, err = txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
-			ID:        userIssuerID,
-			ProjectID: *authCtx.ProjectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-		}
-
-		if err = s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, userIssuerID, issuerID, uuid.Nil); err != nil {
-			return nil, err
-		}
+	if _, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
+		return nil, err
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
@@ -192,19 +160,151 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, created, userIssuerIDs)
+}
+
+// CreateCimd registers a remote_session_client in Client ID Metadata Document
+// (CIMD) mode. Unlike the manual create path the caller supplies no client_id
+// or secret: Gram generates the row id, derives the platform-canonical document
+// URL from it, and writes that URL as both client_id and client_id_metadata_uri
+// in a single INSERT (token_endpoint_auth_method none, no secret). The owning
+// issuer must advertise client_id_metadata_document support.
+func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload) (*types.RemoteSessionClient, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	issuerID, err := uuid.Parse(payload.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").LogError(ctx, logger)
+	}
+
+	userIssuerIDs, err := parseUserSessionIssuerIDs(payload.UserSessionIssuerIds)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_ids").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	issuer, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pre-flight against the issuer's discovered capabilities so an unsupported
+	// pairing fails at create time, not at the first outbound call.
+	if err := preflightCIMDIssuer(issuer); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "issuer does not support client id metadata documents").LogError(ctx, logger)
+	}
+
+	// Generate the id up front so the document URL (which embeds it) can be the
+	// client_id on a single INSERT. uuid.NewV7 preserves the time-ordered shape
+	// the id cursor pagination relies on, matching the DB default generate_uuidv7().
+	clientID, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
+	}
+
+	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
+		ID:                    clientID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		RemoteSessionIssuerID: issuerID,
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+		Scope:                 payload.Scope,
+		Audience:              conv.PtrToPGText(payload.Audience),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
+	}
+
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, created, userIssuerIDs)
+}
+
+// validateNewClientIssuers checks the remote_session_issuer is reachable from
+// the caller's project and that every user_session_issuer belongs to the
+// project and is not already bound to another client for the same remote
+// issuer. Returns the issuer row so callers that need its capabilities (the
+// CIMD pre-flight) can use it. Must run inside the create transaction.
+func (s *Service) validateNewClientIssuers(
+	ctx context.Context,
+	logger *slog.Logger,
+	txRepo *repo.Queries,
+	projectID uuid.UUID,
+	organizationID string,
+	issuerID uuid.UUID,
+	userIssuerIDs []uuid.UUID,
+) (repo.RemoteSessionIssuer, error) {
+	// The lookup accepts both the project's own issuers and organization-level
+	// issuers, so a client can't be attached to another tenant's issuer.
+	issuer, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:             issuerID,
+		ProjectID:      conv.ToNullUUID(projectID),
+		OrganizationID: conv.ToPGTextEmpty(organizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repo.RemoteSessionIssuer{}, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+		}
+		return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
+	}
+
+	// Reject any user session issuer that belongs to a different project (so a
+	// binding can't cross a tenant boundary) and any pairing that would put a
+	// second client on the same (user_session_issuer, remote_session_issuer)
+	// pair. Validate every issuer before creating the row so a bad request never
+	// leaves a half-attached client behind.
 	for _, userIssuerID := range userIssuerIDs {
-		if err = txRepo.AttachRemoteSessionClientToUserSessionIssuer(
-			ctx,
-			repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: created.ID,
-				UserSessionIssuerID:   userIssuerID,
-			},
-		); err != nil {
-			return nil, oops.E(
-				oops.CodeUnexpected,
-				err,
-				"failed to attach remote session client to user session issuer",
-			).LogError(ctx, logger)
+		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
+			ID:        userIssuerID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return repo.RemoteSessionIssuer{}, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+			}
+			return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+		}
+
+		if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, projectID, userIssuerID, issuerID, uuid.Nil); err != nil {
+			return repo.RemoteSessionIssuer{}, err
+		}
+	}
+
+	return issuer, nil
+}
+
+// finalizeClientCreate binds a freshly created client to each
+// user_session_issuer, records the create audit event, commits the
+// transaction, and returns the API view. Shared by the manual and CIMD create
+// paths, which differ only in how the row is inserted.
+func (s *Service) finalizeClientCreate(
+	ctx context.Context,
+	logger *slog.Logger,
+	dbtx pgx.Tx,
+	txRepo *repo.Queries,
+	authCtx contextvalues.AuthContext,
+	created repo.RemoteSessionClient,
+	userIssuerIDs []uuid.UUID,
+) (*types.RemoteSessionClient, error) {
+	for _, userIssuerID := range userIssuerIDs {
+		if err := txRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: created.ID,
+			UserSessionIssuerID:   userIssuerID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach remote session client to user session issuer").LogError(ctx, logger)
 		}
 	}
 

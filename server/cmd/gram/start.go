@@ -468,11 +468,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
 			defer db.Close()
 
 			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
@@ -538,6 +533,8 @@ func newStartCommand() *cli.Command {
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -550,6 +547,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -597,7 +595,6 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
 
@@ -1043,6 +1040,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)

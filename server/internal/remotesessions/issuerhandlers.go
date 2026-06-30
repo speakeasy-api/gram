@@ -47,6 +47,11 @@ type rfc8414Document struct {
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	// ClientIDMetadataDocumentSupported comes from the OAuth CIMD draft
+	// (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414: whether
+	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
+	// pre-flight outbound CIMD opt-in.
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
 // DiscoverRemoteSessionIssuer fetches the upstream issuer's RFC 8414 metadata
@@ -92,6 +97,7 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: doc.TokenEndpointAuthMethodsSupported,
+		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
 		DiscoveryWarnings:                 warnings,
@@ -149,6 +155,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
 	})
@@ -251,6 +258,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
 		ID:                                issuerID,

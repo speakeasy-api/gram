@@ -78,7 +78,7 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if err := seedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
+	if err := SeedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
 		return err
 	}
 
@@ -89,7 +89,12 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 	return nil
 }
 
-func seedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+// SeedSystemRoleGrantsTx seeds the fixed grant sets for system roles using the
+// caller's transaction. Use this when seeding must be atomic with other writes
+// in an existing transaction (e.g. provisioning an org from a WorkOS webhook).
+// Callers that only have a pool should use SeedSystemRoleGrants. Idempotent:
+// roles that already hold grants are skipped.
+func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)

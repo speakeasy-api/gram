@@ -55,6 +55,10 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	// When true, the MCP client registers and transacts directly with this issuer.
 	// Default false.
 	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerRequestBody is the type of the
@@ -85,6 +89,9 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	Oidc                              *bool    `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
 	Passthrough                       *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
 // DiscoverRemoteSessionIssuerResponseBody is the type of the
@@ -109,6 +116,9 @@ type DiscoverRemoteSessionIssuerResponseBody struct {
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer advertises support for a Client ID Metadata Document URL
+	// as client_id (OAuth CIMD draft), parsed from the discovery document.
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
@@ -146,9 +156,12 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -184,9 +197,12 @@ type UpdateRemoteSessionIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionIssuersResponseBody is the type of the
@@ -230,9 +246,12 @@ type GetRemoteSessionIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DiscoverRemoteSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1407,9 +1426,12 @@ type RemoteSessionIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewDiscoverRemoteSessionIssuerResponseBody builds the HTTP response body
@@ -1417,13 +1439,14 @@ type RemoteSessionIssuerResponseBody struct {
 // "remoteSessionIssuers" service.
 func NewDiscoverRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuerDraft) *DiscoverRemoteSessionIssuerResponseBody {
 	body := &DiscoverRemoteSessionIssuerResponseBody{
-		Issuer:                res.Issuer,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
+		Issuer:                            res.Issuer,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -1465,21 +1488,22 @@ func NewDiscoverRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuerDr
 // "remoteSessionIssuers" service.
 func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateRemoteSessionIssuerResponseBody {
 	body := &CreateRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -1513,21 +1537,22 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 // "remoteSessionIssuers" service.
 func NewUpdateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateRemoteSessionIssuerResponseBody {
 	body := &UpdateRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -1583,21 +1608,22 @@ func NewListRemoteSessionIssuersResponseBody(res *remotesessionissuers.ListRemot
 // "remoteSessionIssuers" service.
 func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetRemoteSessionIssuerResponseBody {
 	body := &GetRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2543,16 +2569,17 @@ func NewDiscoverRemoteSessionIssuerPayload(body *DiscoverRemoteSessionIssuerRequ
 // createRemoteSessionIssuer endpoint payload.
 func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.CreateRemoteSessionIssuerPayload {
 	v := &remotesessionissuers.CreateRemoteSessionIssuerPayload{
-		Slug:                  *body.Slug,
-		Issuer:                *body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		Slug:                              *body.Slug,
+		Issuer:                            *body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -2589,17 +2616,18 @@ func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestB
 // updateRemoteSessionIssuer endpoint payload.
 func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.UpdateRemoteSessionIssuerPayload {
 	v := &remotesessionissuers.UpdateRemoteSessionIssuerPayload{
-		ID:                    *body.ID,
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		ID:                                *body.ID,
+		Slug:                              body.Slug,
+		Issuer:                            body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
