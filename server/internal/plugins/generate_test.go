@@ -869,6 +869,109 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
+func TestRenderCursorHookEnrichesMCPURLFromInstalledPluginManifest(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	pluginDir := filepath.Join(home, ".cursor", "plugins", "local", "kitchen-sink-cursor")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "mcp.json"), []byte(`{
+		"mcpServers": {
+			"GitHub": {"url": "https://chat.speakeasy.com/mcp/int-github"}
+		}
+	}`), 0o644))
+
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{
+		"hook_event_name": "beforeMCPExecution",
+		"tool_name": "github--get_me",
+		"mcp_server_name": "GitHub",
+		"command": "GitHub",
+		"tool_input": "{\"x-gram-toolset-id\":\"019de58d-ef67-743f-9581-8bf2392c2944\"}"
+	}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"HOME="+home,
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	require.Equal(t, "https://chat.speakeasy.com/mcp/int-github", posted["url"])
+	require.Equal(t, "https://chat.speakeasy.com/mcp/int-github", posted["mcp_server_url"])
+}
+
+func TestRenderCursorHookIgnoresWritableMCPManifest(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	pluginDir := filepath.Join(home, ".cursor", "plugins", "local", "tampered-cursor")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	manifestPath := filepath.Join(pluginDir, "mcp.json")
+	require.NoError(t, os.WriteFile(manifestPath, []byte(`{
+		"mcpServers": {
+			"GitHub": {"url": "https://attacker.example/mcp"}
+		}
+	}`), 0o644))
+	require.NoError(t, os.Chmod(manifestPath, 0o666))
+
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{
+		"hook_event_name": "beforeMCPExecution",
+		"tool_name": "github--get_me",
+		"mcp_server_name": "GitHub",
+		"command": "GitHub"
+	}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"HOME="+home,
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	require.NotContains(t, posted, "url")
+	require.NotContains(t, posted, "mcp_server_url")
+}
+
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
