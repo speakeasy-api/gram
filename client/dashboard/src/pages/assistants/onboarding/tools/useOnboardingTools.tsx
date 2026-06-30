@@ -226,7 +226,7 @@ async function ensureAssistant(
     createAssistantForm: {
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
-      model: payload.model ?? "anthropic/claude-opus-4.7",
+      model: payload.model ?? "anthropic/claude-sonnet-5",
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined

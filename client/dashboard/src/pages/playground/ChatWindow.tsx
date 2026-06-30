@@ -61,8 +61,8 @@ type CoreTool = {
 };
 
 const defaultModel = {
-  label: "Claude 4.5 Sonnet",
-  value: "anthropic/claude-sonnet-4.5",
+  label: "Claude Sonnet 5",
+  value: "anthropic/claude-sonnet-5",
 };
 
 export type ChatConfig = React.RefObject<{

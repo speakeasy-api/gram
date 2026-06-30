@@ -34,6 +34,7 @@ const OpenRouterBaseURL = "https://openrouter.ai/api"
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,
 	"anthropic/claude-sonnet-4.6":   true,

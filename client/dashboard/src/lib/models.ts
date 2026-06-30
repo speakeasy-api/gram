@@ -4,6 +4,7 @@ export type AvailableModel = {
 };
 
 export const AVAILABLE_MODELS: AvailableModel[] = [
+  { value: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
   { value: "anthropic/claude-opus-4.8", label: "Claude Opus 4.8 (Expensive)" },
   { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (Expensive)" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
