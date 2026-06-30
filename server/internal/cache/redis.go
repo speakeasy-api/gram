@@ -200,7 +200,24 @@ func (r *RedisCacheAdapter) ListRange(ctx context.Context, key string, start, st
 	if err != nil {
 		return fmt.Errorf("lrange: %w", err)
 	}
+	return r.unmarshalListItems(result, value)
+}
 
+func (r *RedisCacheAdapter) ListDrain(ctx context.Context, key string, value any) error {
+	result, err := r.client.Eval(ctx, `
+local values = redis.call("LRANGE", KEYS[1], 0, -1)
+if #values > 0 then
+  redis.call("DEL", KEYS[1])
+end
+return values
+`, []string{key}).StringSlice()
+	if err != nil {
+		return fmt.Errorf("drain list: %w", err)
+	}
+	return r.unmarshalListItems(result, value)
+}
+
+func (r *RedisCacheAdapter) unmarshalListItems(result []string, value any) error {
 	// If no results, return nil (empty list)
 	if len(result) == 0 {
 		return nil

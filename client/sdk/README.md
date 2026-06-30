@@ -285,6 +285,7 @@ run();
 ### [Hooks](docs/sdks/hooks/README.md)
 
 * [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+* [hooksNumberClaudeMessages](docs/sdks/hooks/README.md#hooksnumberclaudemessages) - claudeMessages hooks
 * [hooksNumberCodex](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
@@ -761,6 +762,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`hooksHooksNumberClaudeMessages`](docs/sdks/hooks/README.md#hooksnumberclaudemessages) - claudeMessages hooks
 - [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
@@ -1146,6 +1148,7 @@ To learn about this feature and how to get started, check
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
+- [`useHooksHooksNumberClaudeMessagesMutation`](docs/sdks/hooks/README.md#hooksnumberclaudemessages) - claudeMessages hooks
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`useHooksHooksNumberCodexMutation`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks

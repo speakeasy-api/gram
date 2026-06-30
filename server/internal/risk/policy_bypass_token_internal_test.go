@@ -32,6 +32,7 @@ func (s stubCache) ListAppend(_ context.Context, _ string, _ any, _ time.Duratio
 	return nil
 }
 func (s stubCache) ListRange(_ context.Context, _ string, _, _ int64, _ any) error { return nil }
+func (s stubCache) ListDrain(_ context.Context, _ string, _ any) error             { return nil }
 func (s stubCache) DeleteByPrefix(_ context.Context, _ string) error               { return nil }
 
 // TestParsePolicyBypassRequestToken_CacheUnavailable verifies that an

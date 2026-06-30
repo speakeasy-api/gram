@@ -19,6 +19,12 @@ type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
+	// Idempotent batch capture of Claude Code transcript messages emitted on Stop
+	// and SubagentStop. Each message carries a stable external_id; the server
+	// stores it as external_message_id and deduplicates per chat, so re-delivery
+	// from multiple plugin installations persists each message exactly once. Same
+	// optional plugin-auth + session-metadata fallback as Method("claude").
+	ClaudeMessages(context.Context, *ClaudeMessagesPayload) (err error)
 	// Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop,
 	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
 	// postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
@@ -54,7 +60,38 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"claude", "cursor", "codex", "logs", "metrics"}
+var MethodNames = [6]string{"claude", "claudeMessages", "cursor", "codex", "logs", "metrics"}
+
+// A captured Claude Code transcript message, deduplicated per chat by
+// external_id.
+type ClaudeCapturedMessage struct {
+	// Stable message identifier; stored as external_message_id and used as the
+	// per-chat dedup key.
+	ExternalID string
+	// Message role
+	Role string
+	// Message text content
+	Content *string
+	// Model identifier (assistant messages)
+	Model *string
+	// Tool call requests as a JSON array (assistant tool-call messages)
+	ToolCalls any
+	// ID of the tool call this result answers (tool messages)
+	ToolCallID *string
+	// Prompt/input token count
+	PromptTokens *int64
+	// Completion/output token count
+	CompletionTokens *int64
+	// Total token count
+	TotalTokens *int64
+	// RFC3339 transcript timestamp; stored as created_at
+	Timestamp *string
+	// Subagent id when the message originated from a subagent transcript
+	// (SubagentStop)
+	AgentID *string
+	// Subagent type when applicable
+	AgentType *string
+}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -76,6 +113,23 @@ type ClaudeHookResult struct {
 	Reason *string
 }
 
+// ClaudeMessagesPayload is the payload type of the hooks service
+// claudeMessages method.
+type ClaudeMessagesPayload struct {
+	// The Claude Code session ID
+	SessionID string
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string
+	// Captured transcript messages in order
+	Messages []*ClaudeCapturedMessage
+	// Optional API key for plugin-driven attribution.
+	ApikeyToken *string
+	// Optional project slug for plugin-driven attribution.
+	ProjectSlugInput *string
+	// Optional endpoint hostname supplied by the Gram hook plugin.
+	HookHostname *string
+}
+
 // ClaudePayload is the payload type of the hooks service claude method.
 type ClaudePayload struct {
 	// Optional API key for plugin-driven attribution.
@@ -87,6 +141,11 @@ type ClaudePayload struct {
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
 	IdempotencyKey *string
+	// Plugin hook protocol version. At or above the Stop-collection version the
+	// per-event handlers skip persistence (blocking only) — conversation capture
+	// instead arrives idempotently via Method("claudeMessages"). Absent/older
+	// versions persist on the per-event handlers as before.
+	HookVersion *int
 	// The type of hook event
 	HookEventName string
 	// The name of the tool (for tool-related events)

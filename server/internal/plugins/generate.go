@@ -118,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "4"
+const pluginGeneratorVersion = "6"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -169,30 +169,57 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
 // PreToolUse and UserPromptSubmit are blocking so Claude waits for the
-// deny/allow decision. Stop must also be blocking: when async=true,
-// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
-// — an apparent bug on the client side. Marking it synchronous is the
-// only reliable way to get Stop events to fire. All other events
-// (including ConfigChange, which has no allow/deny decision to honor)
-// return true for fire-and-forget telemetry so Claude is not held up while
-// the MCP inventory is re-synced mid-session.
+// deny/allow decision. Stop and SubagentStop must also be dispatched
+// synchronously: when async=true, Cowork (Claude Code) appears to skip
+// dispatching Stop-class hooks entirely — an apparent bug on the client side.
+// They never block in practice because their command is the self-backgrounding
+// hook_async.sh wrapper (see claudeHookScriptName), which forks the real work
+// and returns immediately. All other events (including ConfigChange, which has
+// no allow/deny decision to honor) return true for fire-and-forget telemetry so
+// Claude is not held up while the MCP inventory is re-synced mid-session.
 //
-// When observabilityMode is set, every event is forced async so the plugin
-// can only observe and report — no hook can deny or delay a tool call. This
-// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
-// errors or brief server unavailability disrupting the user.
+// When observabilityMode is set, the deny-capable events are forced async so no
+// hook can deny or delay a tool call — the low-risk path for POC rollouts in
+// orgs that cannot tolerate hook errors or brief server unavailability
+// disrupting the user. Stop and SubagentStop stay synchronous even here: they
+// are terminal (nothing to deny or delay) and forcing them async would suppress
+// transcript capture entirely. The hook_async.sh wrapper keeps them off the
+// critical path.
 func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
+	switch event {
+	case "Stop", "SubagentStop":
+		f := false
+		return &f
+	}
 	if observabilityMode {
 		t := true
 		return &t
 	}
 	switch event {
-	case "UserPromptSubmit", "PreToolUse", "Stop":
+	case "UserPromptSubmit", "PreToolUse":
 		f := false
 		return &f
 	default:
 		t := true
 		return &t
+	}
+}
+
+// claudeHookScriptName picks the hook script for a Claude event. SessionStart
+// and ConfigChange enrich the payload with an MCP inventory first. Stop and
+// SubagentStop run through the self-backgrounding hook_async.sh wrapper: they
+// must be dispatched synchronously (Cowork drops async Stop-class hooks) but
+// carry no deny decision, so the wrapper forks the transcript capture and
+// returns immediately to keep them off the critical path. Everything else uses
+// the standard blocking hook.sh.
+func claudeHookScriptName(event string) string {
+	switch event {
+	case "SessionStart", "ConfigChange":
+		return "mcp_inventory.sh"
+	case "Stop", "SubagentStop":
+		return "hook_async.sh"
+	default:
+		return "hook.sh"
 	}
 }
 
@@ -211,6 +238,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
+	"SubagentStop",
 	"Notification",
 }
 
@@ -614,12 +642,8 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
-		script := "hook.sh"
-		if event == "SessionStart" || event == "ConfigChange" {
-			script = "mcp_inventory.sh"
-		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + claudeHookScriptName(event) + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -631,6 +655,10 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
+	// Stop/SubagentStop are dispatched synchronously (Cowork drops async
+	// Stop-class hooks) but run through this self-backgrounding wrapper so they
+	// never block the turn — see claudeHookScriptName.
+	files[path.Join(subdir, "hooks/hook_async.sh")] = renderAsyncHookWrapperScript()
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 	// Sourced by both mcp_inventory.sh (SessionStart/ConfigChange) and hook.sh
 	// (PreToolUse inline-gather fallback). Only the Claude plugin ships it.
@@ -775,7 +803,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
-	files[path.Join(subdir, "hooks/hook_async.sh")] = renderCodexAsyncHookScript()
+	files[path.Join(subdir, "hooks/hook_async.sh")] = renderAsyncHookWrapperScript()
 
 	return nil
 }
@@ -1088,6 +1116,14 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	if len(keyPrefix) > 12 {
 		keyPrefix = keyPrefix[:12]
 	}
+
+	// cursorScope uniquely identifies this installation (destination + project +
+	// hooks key) so two plugins sharing a transcript but reporting to different
+	// installations keep independent Stop cursors — server URL + project slug
+	// alone are not globally unique. Hashed so no key material lands in the
+	// cursor filename.
+	cursorSum := sha256.Sum256([]byte(cfg.ServerURL + "\x00" + cfg.ProjectSlug + "\x00" + cfg.HooksAPIKey))
+	cursorScope := hex.EncodeToString(cursorSum[:8])
 
 	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 2)
 
@@ -1424,6 +1460,10 @@ exit 0
 set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+# Hashed installation identity (server + project + hooks key); scopes the
+# per-transcript Stop cursor so two plugins sharing a transcript but reporting to
+# different installations keep independent cursors.
+gram_cursor_scope="%s"
 
 %s
 %s
@@ -1519,11 +1559,271 @@ if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
+# Stop-collection protocol version. Advertise it only when jq is available to
+# parse and normalize the transcript; otherwise the server must keep the legacy
+# per-event PG persistence path enabled. Must match
+# claudeHookStopCollectionVersion on the server.
+batch_capture_available=false
+hook_version_header=()
+if command -v jq >/dev/null 2>&1; then
+  batch_capture_available=true
+  hook_version_header=(-H "X-Gram-Hook-Version: 2")
+fi
+
+# transcript_cursor_file echoes the path of the per-transcript cursor checkpoint
+# for this event, or nothing when the transcript path is unknown. Keyed on a
+# checksum of the transcript path so the parent transcript and each subagent
+# transcript get an independent cursor.
+transcript_cursor_file() {
+  local hook_payload="$1" hook_event="$2" tpath sid key
+  if [ "$hook_event" = "SubagentStop" ]; then
+    tpath=$(printf '%%s' "$hook_payload" | jq -r '.agent_transcript_path // empty' 2>/dev/null || true)
+  else
+    tpath=$(printf '%%s' "$hook_payload" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+  fi
+  [ -z "$tpath" ] && return 0
+  sid=$(printf '%%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)
+  sid=$(printf '%%s' "$sid" | tr -cd 'A-Za-z0-9_-' | cut -c1-128)
+  key=$(printf '%%s' "$tpath" | cksum | awk '{print $1}')
+  # gram_cursor_scope is the baked per-installation identity (see top of script).
+  printf '%%s/gram-hooks/cursor-%%s-%%s-%%s' "${TMPDIR:-/tmp}" "$sid" "$key" "$gram_cursor_scope"
+}
+
+build_capture_body() {
+  local hook_payload="$1"
+  local hook_event="$2"
+  local cursor="${3:-}"
+  local transcript_path session_id user_email agent_id agent_type tools_only
+
+  session_id=$(printf '%%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)
+  if [ -z "$session_id" ]; then
+    return 1
+  fi
+
+  if [ "$hook_event" = "SubagentStop" ]; then
+    transcript_path=$(printf '%%s' "$hook_payload" | jq -r '.agent_transcript_path // empty' 2>/dev/null || true)
+    agent_id=$(printf '%%s' "$hook_payload" | jq -r '.agent_id // empty' 2>/dev/null || true)
+    agent_type=$(printf '%%s' "$hook_payload" | jq -r '.agent_type // empty' 2>/dev/null || true)
+    tools_only=true
+  else
+    transcript_path=$(printf '%%s' "$hook_payload" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+    agent_id=""
+    agent_type=""
+    tools_only=false
+  fi
+  user_email=$(printf '%%s' "$hook_payload" | jq -r '.user_email // empty' 2>/dev/null || true)
+
+  if [ -z "$transcript_path" ] || [ ! -r "$transcript_path" ]; then
+    return 1
+  fi
+
+  # Parse each JSONL line independently first (fromjson? drops unparseable
+  # lines) so a partial trailing line — common when Stop fires while the
+  # transcript is still flushing — cannot abort the whole slurp and empty the
+  # batch.
+  jq -R 'fromjson? // empty' "$transcript_path" 2>/dev/null \
+  | jq -c -s \
+    --arg session_id "$session_id" \
+    --arg user_email "$user_email" \
+    --arg agent_id "$agent_id" \
+    --arg agent_type "$agent_type" \
+    --arg cursor "$cursor" \
+    --argjson tools_only "$tools_only" '
+def command_wrapper:
+  test("^\\s*<(command-name|command-message|command-args|local-command-stdout|local-command-caveat)\\b");
+
+def content_string($v):
+  if ($v | type) == "string" then $v
+  elif $v == null then ""
+  else ($v | tojson)
+  end;
+
+def maybe_ts($ts):
+  if $ts == "" then . else . + {timestamp: $ts} end;
+
+def maybe_agent($agent_id; $agent_type):
+  . + (if $agent_id == "" then {} else {agent_id: $agent_id} end)
+    + (if $agent_type == "" then {} else {agent_type: $agent_type} end);
+
+def maybe_model($model):
+  if $model == "" then . else . + {model: $model} end;
+
+def number_or_zero($v):
+  try ($v // 0 | tonumber) catch 0;
+
+def usage_fields($message):
+  # prompt_tokens folds in cache read/creation so the total matches the
+  # OpenRouter proxy path, whose prompt_tokens already includes cached input.
+  # Claude transcripts report them separately, so input_tokens alone
+  # undercounts cached turns badly.
+  (number_or_zero($message.usage.input_tokens)
+    + number_or_zero($message.usage.cache_read_input_tokens)
+    + number_or_zero($message.usage.cache_creation_input_tokens)) as $pt
+  | (number_or_zero($message.usage.output_tokens)) as $ct
+  | {}
+    + (if $pt == 0 then {} else {prompt_tokens: $pt} end)
+    + (if $ct == 0 then {} else {completion_tokens: $ct} end)
+    + (if ($pt + $ct) == 0 then {} else {total_tokens: ($pt + $ct)} end);
+
+def base_msg($external_id; $role; $ts; $agent_id; $agent_type; $content):
+  {external_id: $external_id, role: $role, content: $content}
+  | maybe_ts($ts)
+  | maybe_agent($agent_id; $agent_type);
+
+def tool_calls($blocks):
+  [
+    $blocks[]?
+    | select(.type == "tool_use")
+    | {
+        id: (.id // ""),
+        type: "function",
+        function: {
+          name: (.name // ""),
+          arguments: ((.input // {}) | tojson)
+        }
+      }
+  ];
+
+def emit($tools_only; $agent_id; $agent_type):
+  . as $entry
+  | ($entry.uuid // "") as $uid
+  | select($uid != "")
+  | ($entry.type // "") as $entry_type
+  | ($entry.timestamp // "") as $ts
+  | if $entry_type == "user" then
+      if (($entry.message.content? | type) == "array") then
+        (
+          $entry.message.content[]?
+          | select(.type == "tool_result")
+          | (.tool_use_id // "") as $tool_call_id
+          | select($tool_call_id != "")
+          | base_msg($tool_call_id; "tool"; $ts; $agent_id; $agent_type; content_string(.content))
+            + {tool_call_id: $tool_call_id}
+        ),
+        (
+          # Text blocks in an array-form user turn (e.g. a prompt pasted with an
+          # image/file) would otherwise be dropped. Emit them as one user
+          # message keyed on the entry uuid, unless this is a tools-only
+          # subagent transcript, a meta entry, or a slash-command wrapper.
+          select(($tools_only | not) and (($entry.isMeta // false) != true))
+          | [ $entry.message.content[]? | select(.type == "text" and (.text // "") != "") | .text ] as $texts
+          | select(($texts | length) > 0)
+          | ($texts | join("\n")) as $content
+          | select(($content | command_wrapper) | not)
+          | base_msg($uid; "user"; $ts; $agent_id; $agent_type; $content)
+        )
+      elif $tools_only then
+        empty
+      else
+        ($entry.message.content? // "") as $content
+        | select(($content | type) == "string")
+        | select(($entry.isMeta // false) != true)
+        | select(($content | command_wrapper) | not)
+        | base_msg($uid; "user"; $ts; $agent_id; $agent_type; $content)
+      end
+    elif $entry_type == "assistant" then
+      ($entry.message.content? // []) as $blocks
+      | select(($blocks | type) == "array")
+      | [ $blocks[]? | select(.type == "text" and (.text // "") != "") | .text ] as $texts
+      | tool_calls($blocks) as $tools
+      | ($entry.message.model // "") as $model
+      | if ($tools | length) > 0 then
+          base_msg($uid; "assistant"; $ts; $agent_id; $agent_type; ($texts | join(" ")))
+          | maybe_model($model)
+          | . + {tool_calls: $tools}
+          | . + usage_fields($entry.message)
+        elif (($texts | length) > 0 and ($tools_only | not)) then
+          base_msg($uid; "assistant"; $ts; $agent_id; $agent_type; ($texts | join(" ")))
+          | maybe_model($model)
+          | . + usage_fields($entry.message)
+        else
+          empty
+        end
+    elif ($entry_type == "system" and ($tools_only | not)) then
+      ($entry.message.content? // $entry.content? // "") as $content
+      | select(($content | type) == "string" and $content != "")
+      | base_msg($uid; "system"; $ts; $agent_id; $agent_type; $content)
+    else
+      empty
+    end;
+
+([.[] | .uuid // ""]) as $uids
+| ([.[] | .uuid // empty] | last) as $new_cursor
+| (if $cursor == "" then 0 else (($uids | index($cursor)) // -1) + 1 end) as $start
+| [.[$start:][] | emit($tools_only; $agent_id; $agent_type)] as $messages
+| {
+    cursor: ($new_cursor // ""),
+    body: (if ($messages | length) > 0
+           then {session_id: $session_id, messages: $messages}
+                + (if $user_email == "" then {} else {user_email: $user_email} end)
+           else null end)
+  }
+' 2>/dev/null
+}
+
+# Stop and SubagentStop carry the completed transcript. Conversation capture is
+# idempotent server-side (deduped by external_id), so these route to the batch
+# capture endpoint built from the transcript file rather than the per-event
+# path when jq is available. A per-transcript cursor (the last sent entry uuid)
+# means each Stop only sends messages appended since the previous Stop instead
+# of resending the whole transcript every turn; the cursor only advances after a
+# 2xx, and a stale/missing cursor just resends (the server dedupes by
+# external_id). If Stop extraction or delivery fails, fall back to the legacy
+# per-event endpoint without the v2 header. SubagentStop has no legacy endpoint
+# representation, so failed batch capture is best-effort.
+hook_event=""
+if command -v jq >/dev/null 2>&1; then
+  hook_event=$(printf '%%s' "$payload" | jq -r '.hook_event_name // empty' 2>/dev/null || true)
+fi
+if [ -z "$hook_event" ]; then
+  hook_event=$(printf '%%s' "$payload" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+fi
+
+if [ "$hook_event" = "Stop" ] || [ "$hook_event" = "SubagentStop" ]; then
+  if [ "$batch_capture_available" = true ]; then
+    cursor_file=$(transcript_cursor_file "$payload" "$hook_event")
+    old_cursor=""
+    if [ -n "$cursor_file" ] && [ -r "$cursor_file" ]; then
+      old_cursor=$(cat "$cursor_file" 2>/dev/null || true)
+    fi
+    capture_result=$(build_capture_body "$payload" "$hook_event" "$old_cursor" || true)
+    if [ -n "$capture_result" ]; then
+      # build succeeded (a non-empty result is always a {cursor, body} object).
+      capture_body=$(printf '%%s' "$capture_result" | jq -c 'select(.body != null) | .body' 2>/dev/null || true)
+      new_cursor=$(printf '%%s' "$capture_result" | jq -r '.cursor // empty' 2>/dev/null || true)
+      if [ -n "$capture_body" ]; then
+        gram_http_post "${server_url}/rpc/hooks.claudeMessages" "$capture_body" 10 \
+          ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+          ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+          ${hook_version_header[@]+"${hook_version_header[@]}"}
+        http_code="$GRAM_HTTP_CODE"
+        if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+          if [ -n "$cursor_file" ] && [ -n "$new_cursor" ]; then
+            mkdir -p "$(dirname "$cursor_file")" 2>/dev/null || true
+            printf '%%s' "$new_cursor" >"$cursor_file" 2>/dev/null || true
+          fi
+          exit 0
+        fi
+        # Delivery failed: leave the cursor unadvanced so the next Stop retries
+        # these messages, and fall through to the legacy fallback below.
+      else
+        # Nothing new since the last cursor — already captured, nothing to send.
+        exit 0
+      fi
+    fi
+    if [ "$hook_event" = "SubagentStop" ]; then
+      exit 0
+    fi
+    hook_version_header=()
+  fi
+fi
+
 # gram_http_post (http.sh) retries transient resets so a single reset no
 # longer blocks the tool call; the server still decides allow/block.
 gram_http_post "${server_url}/rpc/hooks.%s" "$payload" 10 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  ${hook_version_header[@]+"${hook_version_header[@]}"}
 
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
@@ -1539,7 +1839,10 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null;
 fi
 
 reason=""
-if command -v python3 >/dev/null 2>&1; then
+if command -v jq >/dev/null 2>&1; then
+  reason=$(printf '%%s' "$body" | jq -r '.message // empty' 2>/dev/null || true)
+fi
+if [ -z "$reason" ] && command -v python3 >/dev/null 2>&1; then
   reason=$(printf '%%s' "$body" | python3 -c "
 import json, sys
 try:
@@ -1551,20 +1854,30 @@ fi
 
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), platform)
+`, keyPrefix, cfg.ServerURL, cursorScope, authConfigSnippet, renderIdentitySourceSnippet(), platform)
 }
 
-func renderCodexAsyncHookScript() []byte {
+// renderAsyncHookWrapperScript emits hook_async.sh: a wrapper that keeps an
+// event off the critical path when hooks.json async=true is unavailable or
+// unreliable. Codex does not support async=true at all; Cowork (Claude Code)
+// drops async Stop-class hooks. In both cases the event must be registered
+// synchronously so the client dispatches it, so this wrapper copies stdin and
+// forks the real hook.sh in the background, then returns immediately. Used for
+// telemetry-only and terminal (Stop/SubagentStop) events that carry no deny
+// decision.
+func renderAsyncHookWrapperScript() []byte {
 	return []byte(`#!/usr/bin/env bash
 # Generated by Gram. Do not edit - overwritten on every publish.
 #
-# Codex does not support hooks.json async=true yet. This wrapper keeps
-# telemetry-only events off the critical path by copying stdin before the
-# parent hook exits, then forwarding the payload in a background process.
+# Wrapper that keeps an event off the critical path when hooks.json async=true
+# is unavailable (Codex) or unreliable (Cowork drops async Stop-class hooks).
+# The event is registered synchronously so the client dispatches it; this script
+# copies stdin before the parent hook exits, then forwards the payload in a
+# background process.
 
 set -u
 
-tmp="$(mktemp "${TMPDIR:-/tmp}/gram-codex-hook.XXXXXX")" || exit 0
+tmp="$(mktemp "${TMPDIR:-/tmp}/gram-hook.XXXXXX")" || exit 0
 if ! cat > "$tmp"; then
   rm -f "$tmp"
   exit 0

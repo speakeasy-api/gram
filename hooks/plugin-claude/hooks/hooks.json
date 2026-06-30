@@ -38,7 +38,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook_async.sh\"",
+            "async": false
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook_async.sh\"",
             "async": false
           }
         ]

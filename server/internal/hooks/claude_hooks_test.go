@@ -29,7 +29,7 @@ func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ stri
 }
 
 func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
-	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block", Version: 1}, nil
 }
 
 func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
@@ -48,7 +48,7 @@ func (s userScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Cont
 	if userID != s.userID {
 		return nil, nil
 	}
-	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block", Version: 1}, nil
 }
 
 func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {

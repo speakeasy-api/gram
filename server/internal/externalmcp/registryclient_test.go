@@ -913,6 +913,10 @@ func (c *registryTestCache) ListRange(_ context.Context, _ string, _ int64, _ in
 	return errors.New("list range is not supported")
 }
 
+func (c *registryTestCache) ListDrain(_ context.Context, _ string, _ any) error {
+	return errors.New("list drain is not supported")
+}
+
 func (c *registryTestCache) DeleteByPrefix(_ context.Context, prefix string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

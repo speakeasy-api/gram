@@ -11,11 +11,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -28,16 +31,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
+type pendingShadowMCPBlockFinding struct {
+	ID                string `json:"id"`
+	ToolCallID        string `json:"tool_call_id"`
+	PolicyID          string `json:"policy_id"`
+	RiskPolicyVersion int64  `json:"risk_policy_version"`
+	Description       string `json:"description"`
+	Match             string `json:"match"`
+}
+
 // decodeBodySampleLimit caps how many bytes of a failing request body get
 // logged, so we don't dump megabytes of OTLP into the logs on every bad
 // payload.
 const decodeBodySampleLimit = 1024
+
+// claudeHookStopCollectionVersion is the plugin hook protocol version at which
+// the plugin captures the full transcript via ClaudeMessages on Stop/SubagentStop.
+// At or above it, the per-event handlers are blocking-only and persist nothing —
+// see recordHook. Plugins sending no X-Gram-Hook-Version (older builds) persist
+// on the per-event handlers as before.
+const claudeHookStopCollectionVersion = 2
 
 const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
 
@@ -784,14 +804,28 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
+	// Stop-collection plugins persist chat_messages via ClaudeMessages on Stop, so
+	// persisting them on the per-event handlers too would double-write. ClickHouse
+	// tool telemetry stays per-event regardless of version (it needs per-event
+	// context like duration and the live MCP snapshot) and is deduped across
+	// installs inside persistToolCallEvent. Versionless plugins persist everything
+	// per-event, so a server deploy is safe for hooks already in the field.
+	stopCollection := payload.HookVersion != nil && *payload.HookVersion >= claudeHookStopCollectionVersion
+
 	if isConversationEvent(payload.HookEventName) {
+		// Conversation events never wrote ClickHouse, only chat_messages — nothing
+		// to do here once that moves to the Stop batch.
+		if stopCollection {
+			return
+		}
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
 		}
-	} else {
-		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
-		}
+		return
+	}
+
+	if err := s.persistToolCallEvent(ctx, payload, metadata, stopCollection); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
 	}
 }
 
@@ -1125,12 +1159,12 @@ func (s *Service) handlePostToolUse(ctx context.Context, ev *hookevents.AfterToo
 	return makeHookResult(ev.RawEventType), nil
 }
 
-// recordShadowMCPBlockFinding writes a risk_results row so the Recent
-// Findings table reflects live hook-time blocks alongside batch-scanner
-// findings. Best-effort: the block decision has already been made and
-// returned to the user, so failures here just log. The chat_message_id
-// FK requires that recordHook successfully persisted the tool-call
-// message (gated by FeatureSessionCapture) — when it didn't, we skip.
+// recordShadowMCPBlockFinding writes a risk_results row so the Recent Findings
+// table reflects live hook-time blocks alongside batch-scanner findings.
+// Best-effort: the block decision has already been made and returned to the
+// user, so failures here just log. If the matching chat_message is not present
+// yet, buffer the finding and attach it after the per-event write or Stop batch
+// persists the real assistant tool-call row.
 func (s *Service) recordShadowMCPBlockFinding(
 	ctx context.Context,
 	payload *gen.ClaudePayload,
@@ -1157,6 +1191,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		return uuid.Nil, uuid.Nil, false
 	}
 
+	pending := buildPendingShadowMCPBlockFinding(*payload.ToolUseID, policy, matched, serverPrefix, detail)
 	chatID := sessionIDToUUID(*payload.SessionID)
 	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
 		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
@@ -1164,65 +1199,27 @@ func (s *Service) recordShadowMCPBlockFinding(
 		ToolCallID: *payload.ToolUseID,
 	})
 	if err != nil {
-		// Most common cause: SessionCapture feature flag is off, so the
-		// tool-call chat_message was never persisted. The ClickHouse path
-		// still records the block; only the Recent Findings surfacing is
-		// skipped.
-		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
+		// No chat_message yet — common for stop-collection (v2) sessions, where
+		// per-event persistence is skipped and the row arrives with the Stop
+		// batch. Buffer the finding (with its pre-minted id) for the flush to
+		// insert rather than dropping it. The durable block row links no finding
+		// yet; the flush surfaces it in Recent Findings when the message lands.
+		if bErr := s.bufferShadowMCPBlockFinding(ctx, *payload.SessionID, pending); bErr != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp block: failed to buffer risk_result pending chat_message",
+				attr.SlogEvent("claude_hook_block_finding_buffer_failed"),
+				attr.SlogError(bErr),
+			)
+			return uuid.Nil, uuid.Nil, false
+		}
+		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; buffered risk_result",
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
 		return uuid.Nil, uuid.Nil, false
 	}
 
-	// match identifies the server in the dashboard's Recent Findings row and
-	// is also the value the "Exclude from policy" action sends back to
-	// approveShadowMCP. Prefer the URL for HTTP/SSE entries, then the stdio
-	// Command for local servers, and finally fall back to the server-prefix
-	// portion of the tool name (e.g. "mise" from "mcp__mise__run_task") when
-	// the snapshot didn't yield a matched entry — anything but the raw tool
-	// name, which is too granular to allowlist on.
-	match := ""
-	if matched != nil {
-		switch {
-		case matched.URL != "":
-			match = matched.URL
-		case matched.Command != "":
-			match = matched.Command
-		}
-	}
-	if match == "" {
-		match = serverPrefix
-	}
-	description := detail
-	if matched != nil && matched.Name != "" {
-		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
-	}
-
-	// Use UUIDv7 so the row sorts in insertion order alongside scanner
-	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
-	// DESC, which only behaves as "most recent first" when every inserted
-	// id is time-ordered. uuid.New() (v4) is random and would interleave
-	// hook-time block rows at arbitrary positions in the Recent Findings
-	// table.
-	resultID, err := uuid.NewV7()
+	resultID, err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, pending)
 	if err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
-			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return uuid.Nil, uuid.Nil, false
-	}
-	insertParams := repo.InsertShadowMCPBlockResultParams{
-		ID:                resultID,
-		ProjectID:         projectID,
-		OrganizationID:    metadata.GramOrgID,
-		RiskPolicyID:      policyID,
-		RiskPolicyVersion: policy.Version,
-		ChatMessageID:     msgID,
-		Description:       pgtype.Text{String: description, Valid: description != ""},
-		Match:             pgtype.Text{String: match, Valid: match != ""},
-		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
-	}
-	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
@@ -1230,6 +1227,118 @@ func (s *Service) recordShadowMCPBlockFinding(
 		return uuid.Nil, uuid.Nil, false
 	}
 	return resultID, msgID, true
+}
+
+func buildPendingShadowMCPBlockFinding(toolCallID string, policy *risk.ShadowMCPPolicy, matched *MCPServerEntry, serverPrefix string, detail string) pendingShadowMCPBlockFinding {
+	match := shadowMCPBlockFindingMatch(matched, serverPrefix)
+	description := detail
+	if matched != nil && matched.Name != "" {
+		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
+	}
+	return pendingShadowMCPBlockFinding{
+		ID:                "",
+		ToolCallID:        toolCallID,
+		PolicyID:          policy.ID,
+		RiskPolicyVersion: policy.Version,
+		Description:       description,
+		Match:             match,
+	}
+}
+
+func shadowMCPBlockFindingMatch(matched *MCPServerEntry, serverPrefix string) string {
+	if matched != nil {
+		switch {
+		case matched.URL != "":
+			return matched.URL
+		case matched.Command != "":
+			return matched.Command
+		}
+	}
+	return serverPrefix
+}
+
+func (s *Service) insertShadowMCPBlockFinding(
+	ctx context.Context,
+	metadata *SessionMetadata,
+	projectID uuid.UUID,
+	policyID uuid.UUID,
+	msgID uuid.UUID,
+	finding pendingShadowMCPBlockFinding,
+) (uuid.UUID, error) {
+	// Use UUIDv7 so the row sorts in insertion order alongside scanner
+	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
+	// DESC, which only behaves as "most recent first" when every inserted
+	// id is time-ordered. uuid.New() (v4) is random and would interleave
+	// hook-time block rows at arbitrary positions in the Recent Findings
+	// table. A buffered finding reuses the id it was minted with so the
+	// durable block row and the eventual insert agree.
+	var resultID uuid.UUID
+	if finding.ID != "" {
+		parsed, err := uuid.Parse(finding.ID)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("parse pending result id: %w", err)
+		}
+		resultID = parsed
+	} else {
+		var err error
+		resultID, err = uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("generate uuidv7: %w", err)
+		}
+	}
+	// Serialize concurrent duplicate-install deliveries on the dedupe tuple so
+	// the NOT EXISTS check and the insert are atomic — risk_results has no unique
+	// constraint on the tuple, only a plain index. The advisory lock is
+	// transaction-scoped, so the insert must share its transaction.
+	dedupeKey := strings.Join([]string{
+		projectID.String(),
+		policyID.String(),
+		strconv.FormatInt(finding.RiskPolicyVersion, 10),
+		msgID.String(),
+	}, ":")
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin shadow-mcp block tx: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := s.repo.WithTx(tx)
+
+	if err := qtx.AcquireShadowMCPDedupeLock(ctx, dedupeKey); err != nil {
+		return uuid.Nil, fmt.Errorf("acquire shadow-mcp dedupe lock: %w", err)
+	}
+
+	insertParams := repo.InsertShadowMCPBlockResultParams{
+		ID:                resultID,
+		ProjectID:         projectID,
+		OrganizationID:    metadata.GramOrgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: finding.RiskPolicyVersion,
+		ChatMessageID:     msgID,
+		Description:       pgtype.Text{String: finding.Description, Valid: finding.Description != ""},
+		Match:             pgtype.Text{String: finding.Match, Valid: finding.Match != ""},
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+	}
+	rows, err := qtx.InsertShadowMCPBlockResult(ctx, insertParams)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			// PK conflict: a row with this exact id already exists (e.g. a
+			// buffered finding flushed twice). That id is valid to link.
+			return resultID, nil
+		}
+		return uuid.Nil, fmt.Errorf("insert shadow-mcp block result: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit shadow-mcp block tx: %w", err)
+	}
+	if rows == 0 {
+		// Deduped by NOT EXISTS: an existing finding with a different id already
+		// covers this tuple. Return Nil so the caller leaves the durable block's
+		// risk_result_id null instead of linking the id we minted but never wrote.
+		return uuid.Nil, nil
+	}
+	return resultID, nil
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a

@@ -13,11 +13,30 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+)
+
+const (
+	// shadowMCPBlockFindingBufferTTL bounds how long a live block finding waits
+	// for its chat_message to land before it ages out. For stop-collection
+	// plugins the chat_message arrives with the Stop batch, so this must outlast
+	// a long agentic turn rather than the few-minute buffers used for metadata.
+	shadowMCPBlockFindingBufferTTL = time.Hour
+
+	// maxPendingClaudeMessagesFlushRetries caps how many times a failing Stop
+	// batch is re-buffered before it is dropped. Re-buffering resets the item
+	// TTL, so without a cap a permanently-failing (poison) batch never ages out
+	// while the session keeps generating flush triggers.
+	maxPendingClaudeMessagesFlushRetries = 5
+
+	// pendingClaudeMessagesFlushRetryTTL bounds the lifetime of the retry
+	// counter so it self-cleans on idle sessions.
+	pendingClaudeMessagesFlushRetryTTL = time.Hour
 )
 
 // hookDuplicateContextKey marks a request whose idempotency token was already
@@ -112,8 +131,13 @@ func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) s
 	return ""
 }
 
-// persistToolCallEvent writes a hook event to ClickHouse with full session context
-func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
+// persistToolCallEvent writes a hook event to ClickHouse and (unless
+// skipPGPersist) to Postgres chat_messages. ClickHouse always runs — it carries
+// per-event context (duration, live MCP snapshot) that the Stop batch lacks — but
+// is deduped across duplicate plugin installations on the tool_use_id. Postgres
+// is skipped for Stop-collection plugins, which capture chat_messages via
+// ClaudeMessages on Stop instead.
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, skipPGPersist bool) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
@@ -137,16 +161,27 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 	}
 
 	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
-		})
+		// The claim key is per (session, tool call, event) so PreToolUse and
+		// PostToolUse stay distinct while duplicate installs collapse. Fall open to
+		// logging if tool_use_id is somehow absent rather than drop telemetry.
+		toolUseID := conv.PtrValOr(payload.ToolUseID, "")
+		write := toolUseID == "" || s.claimHookIdempotency(ctx, "claude-tool-telemetry:"+conv.PtrValOr(payload.SessionID, "")+":"+toolUseID+":"+payload.HookEventName)
+		if write {
+			s.telemetryLogger.Log(ctx, telemetry.LogParams{
+				Timestamp:  time.Now(),
+				ToolInfo:   toolInfo,
+				UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+				Attributes: attrs,
+			})
 
-		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
-			attr.SlogEvent("hook_written"),
-		)
+			s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
+				attr.SlogEvent("hook_written"),
+			)
+		}
+	}
+
+	if skipPGPersist {
+		return nil
 	}
 
 	if payload.HookEventName == "PreToolUse" {
@@ -557,6 +592,8 @@ func isDeltaTemporality(v any) bool {
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
 // Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	defer s.flushPendingClaudeMessages(ctx, sessionID, metadata)
+
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudePayload
 	key := hookPendingCacheKey(sessionID)
@@ -579,5 +616,181 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 	// Delete the list after successful processing
 	if err := s.cache.Delete(ctx, key); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
+	}
+}
+
+func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	var payloads []gen.ClaudeMessagesPayload
+	key := claudeMessagesPendingCacheKey(sessionID)
+
+	if err := s.cache.ListDrain(ctx, key, &payloads); err != nil {
+		s.logger.DebugContext(ctx, "No pending claude message captures to flush or error reading list", attr.SlogError(err))
+		return
+	}
+
+	if len(payloads) == 0 {
+		return
+	}
+
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("ClaudeMessages"),
+		attr.SlogGenAIConversationID(sessionID),
+	)
+	failedPayloads := make([]gen.ClaudeMessagesPayload, 0)
+	for i := range payloads {
+		if err := s.persistClaudeMessages(ctx, &payloads[i], *metadata, logger); err != nil {
+			logger.ErrorContext(ctx, "Failed to persist pending claude message capture", attr.SlogError(err))
+			failedPayloads = append(failedPayloads, payloads[i])
+		}
+	}
+
+	if len(failedPayloads) > 0 {
+		if !s.allowClaudeMessagesFlushRetry(ctx, sessionID) {
+			logger.ErrorContext(ctx, "dropping pending claude message capture after exhausting flush retries",
+				attr.SlogEvent("claude_messages_pending_flush_exhausted"),
+			)
+			return
+		}
+		for i := range failedPayloads {
+			if err := s.bufferClaudeMessages(ctx, sessionID, &failedPayloads[i]); err != nil {
+				logger.ErrorContext(ctx, "Failed to restore pending claude message capture", attr.SlogError(err))
+			}
+		}
+		logger.WarnContext(ctx, "keeping pending claude message capture buffer after replay failure",
+			attr.SlogEvent("claude_messages_pending_flush_failed"),
+		)
+		return
+	}
+
+	if err := s.cache.Delete(ctx, claudeMessagesFlushRetryCounterCacheKey(sessionID)); err != nil {
+		s.logger.DebugContext(ctx, "failed to clear claude messages flush retry counter", attr.SlogError(err))
+	}
+	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending claude message captures", len(payloads)))
+}
+
+// allowClaudeMessagesFlushRetry reports whether a failing Stop batch may be
+// re-buffered for another flush attempt. It counts attempts per session and
+// returns false once the cap is exceeded so a poison batch is dropped instead
+// of looping forever (each re-buffer resets the item TTL). The counter is
+// cleared on the first successful flush.
+func (s *Service) allowClaudeMessagesFlushRetry(ctx context.Context, sessionID string) bool {
+	// The counter must outlive the request: a cancelled context could skip the
+	// increment (bypassing the cap) or leave the counter stale.
+	ctx = context.WithoutCancel(ctx)
+	key := claudeMessagesFlushRetryCounterCacheKey(sessionID)
+	var attempts int
+	_ = s.cache.Get(ctx, key, &attempts)
+	attempts++
+	if attempts > maxPendingClaudeMessagesFlushRetries {
+		if err := s.cache.Delete(ctx, key); err != nil {
+			s.logger.DebugContext(ctx, "failed to clear claude messages flush retry counter", attr.SlogError(err))
+		}
+		return false
+	}
+	if err := s.cache.Set(ctx, key, attempts, pendingClaudeMessagesFlushRetryTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to persist claude messages flush retry counter", attr.SlogError(err))
+	}
+	return true
+}
+
+func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID string, finding pendingShadowMCPBlockFinding) error {
+	if sessionID == "" || finding.ToolCallID == "" {
+		return nil
+	}
+	if finding.ID == "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate shadow-mcp block finding id: %w", err)
+		}
+		finding.ID = id.String()
+	}
+	item := map[string]any{
+		"id":                  finding.ID,
+		"tool_call_id":        finding.ToolCallID,
+		"policy_id":           finding.PolicyID,
+		"risk_policy_version": finding.RiskPolicyVersion,
+		"description":         finding.Description,
+		"match":               finding.Match,
+	}
+	if err := s.cache.ListAppend(context.WithoutCancel(ctx), shadowMCPBlockFindingsPendingCacheKey(sessionID), item, shadowMCPBlockFindingBufferTTL); err != nil {
+		return fmt.Errorf("append shadow-mcp block finding to list: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	if s.repo == nil || sessionID == "" || metadata == nil {
+		return
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id while flushing pending findings",
+			attr.SlogEvent("claude_hook_block_finding_flush_skip"),
+			attr.SlogError(err),
+		)
+		return
+	}
+	chatID := sessionIDToUUID(sessionID)
+
+	var findings []pendingShadowMCPBlockFinding
+	key := shadowMCPBlockFindingsPendingCacheKey(sessionID)
+	if err := s.cache.ListDrain(ctx, key, &findings); err != nil {
+		s.logger.DebugContext(ctx, "No pending shadow-mcp block findings to flush or error reading list", attr.SlogError(err))
+		return
+	}
+	if len(findings) == 0 {
+		return
+	}
+
+	failedFindings := make([]pendingShadowMCPBlockFinding, 0)
+	for i := range findings {
+		finding := findings[i]
+		if finding.ToolCallID == "" || finding.PolicyID == "" {
+			continue
+		}
+		policyID, err := uuid.Parse(finding.PolicyID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id while flushing pending finding",
+				attr.SlogEvent("claude_hook_block_finding_flush_skip"),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+			ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+			ChatID:     chatID,
+			ToolCallID: finding.ToolCallID,
+		})
+		if err != nil {
+			failedFindings = append(failedFindings, finding)
+			s.logger.DebugContext(ctx, "shadow-mcp block: chat_message still missing while flushing pending finding",
+				attr.SlogEvent("claude_hook_block_finding_flush_no_message"),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		if _, err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, finding); err != nil {
+			failedFindings = append(failedFindings, finding)
+			s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert pending risk_result",
+				attr.SlogEvent("claude_hook_block_finding_flush_insert_failed"),
+				attr.SlogError(err),
+			)
+		}
+	}
+
+	if len(failedFindings) > 0 {
+		for i := range failedFindings {
+			if err := s.bufferShadowMCPBlockFinding(ctx, sessionID, failedFindings[i]); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to restore pending shadow-mcp block finding", attr.SlogError(err))
+			}
+		}
+		s.logger.WarnContext(ctx, "keeping pending shadow-mcp block finding buffer after replay failure",
+			attr.SlogEvent("claude_hook_block_finding_flush_failed"),
+		)
+		return
 	}
 }

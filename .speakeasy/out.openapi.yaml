@@ -10057,6 +10057,14 @@ paths:
           schema:
             type: string
             description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+        - name: X-Gram-Hook-Version
+          in: header
+          description: Plugin hook protocol version. At or above the Stop-collection version the per-event handlers skip persistence (blocking only) — conversation capture instead arrives idempotently via Method("claudeMessages"). Absent/older versions persist on the per-event handlers as before.
+          allowEmptyValue: true
+          schema:
+            type: integer
+            description: Plugin hook protocol version. At or above the Stop-collection version the per-event handlers skip persistence (blocking only) — conversation capture instead arrives idempotently via Method("claudeMessages"). Absent/older versions persist on the per-event handlers as before.
+            format: int64
       requestBody:
         required: true
         content:
@@ -10070,6 +10078,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaudeHookResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /rpc/hooks.claudeMessages:
+    post:
+      tags:
+        - hooks
+      summary: claudeMessages hooks
+      description: Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").
+      operationId: hooks#claudeMessages
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: Optional API key for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional API key for plugin-driven attribution.
+        - name: Gram-Project
+          in: header
+          description: Optional project slug for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional project slug for plugin-driven attribution.
+        - name: X-Gram-Hook-Hostname
+          in: header
+          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional endpoint hostname supplied by the Gram hook plugin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaudeMessagesRequestBody'
+      responses:
+        "202":
+          description: Accepted response.
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -36104,6 +36204,56 @@ components:
       required:
         - turns
         - tools
+    ClaudeCapturedMessage:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: Subagent id when the message originated from a subagent transcript (SubagentStop)
+        agent_type:
+          type: string
+          description: Subagent type when applicable
+        completion_tokens:
+          type: integer
+          description: Completion/output token count
+          format: int64
+        content:
+          type: string
+          description: Message text content
+        external_id:
+          type: string
+          description: Stable message identifier; stored as external_message_id and used as the per-chat dedup key.
+        model:
+          type: string
+          description: Model identifier (assistant messages)
+        prompt_tokens:
+          type: integer
+          description: Prompt/input token count
+          format: int64
+        role:
+          type: string
+          description: Message role
+          enum:
+            - user
+            - assistant
+            - system
+            - tool
+        timestamp:
+          type: string
+          description: RFC3339 transcript timestamp; stored as created_at
+        tool_call_id:
+          type: string
+          description: ID of the tool call this result answers (tool messages)
+        tool_calls:
+          description: Tool call requests as a JSON array (assistant tool-call messages)
+        total_tokens:
+          type: integer
+          description: Total token count
+          format: int64
+      description: A captured Claude Code transcript message, deduplicated per chat by external_id.
+      required:
+        - external_id
+        - role
     ClaudeHookPayload:
       type: object
       properties:
@@ -36205,6 +36355,23 @@ components:
           type: string
           description: Warning message shown to the user in the terminal
       description: Unified result for all Claude Code hook events with proper response structure
+    ClaudeMessagesRequestBody:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaudeCapturedMessage'
+          description: Captured transcript messages in order
+        session_id:
+          type: string
+          description: The Claude Code session ID
+        user_email:
+          type: string
+          description: Email of the authenticated user from the Speakeasy device agent, if available
+      required:
+        - session_id
+        - messages
     ClaudeToolUsage:
       type: object
       properties:

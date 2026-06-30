@@ -929,6 +929,11 @@ func TestClaudeObservabilityHookEventsRegistersToolFailureEvent(t *testing.T) {
 	require.Contains(t, ClaudeObservabilityHookEvents, "PostToolUseFailure")
 }
 
+func TestClaudeObservabilityHookEventsRegistersSubagentStop(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, ClaudeObservabilityHookEvents, "SubagentStop")
+}
+
 func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -992,7 +997,13 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 	require.True(t, *parsed.Hooks["ConfigChange"][0].Hooks[0].Async, "ConfigChange must be async")
 
 	for event, matchers := range parsed.Hooks {
-		if event == "SessionStart" || event == "ConfigChange" {
+		switch event {
+		case "SessionStart", "ConfigChange":
+			continue
+		case "Stop", "SubagentStop":
+			// Terminal events run through the self-backgrounding wrapper so they
+			// are dispatched (Cowork drops async Stop-class hooks) without blocking.
+			require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook_async.sh", "event %q should use the async wrapper", event)
 			continue
 		}
 		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh", "event %q should still use hook.sh", event)
@@ -1015,7 +1026,7 @@ func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
 
-	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop", "SubagentStop"} {
 		matchers, ok := parsed.Hooks[event]
 		require.True(t, ok, "%s must be registered", event)
 		require.NotNil(t, matchers[0].Hooks[0].Async)
@@ -1023,9 +1034,13 @@ func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
 	}
 }
 
-// With observability mode on, every hook event is emitted async so the plugin
-// can only observe and report — no hook can deny or delay a tool call.
-func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
+// With observability mode on, deny-capable and telemetry events are emitted
+// async so no hook can deny or delay a tool call. Stop and SubagentStop are the
+// exception: they must be dispatched synchronously (Cowork drops async
+// Stop-class hooks, which would lose transcript capture entirely) but carry no
+// deny decision, so they route to the self-backgrounding hook_async.sh wrapper
+// to stay off the critical path.
+func TestGenerateClaudeObservabilityModeKeepsStopSyncViaAsyncWrapper(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		OrgName:           "Acme",
@@ -1041,10 +1056,19 @@ func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
 	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
 
 	require.NotEmpty(t, parsed.Hooks)
+	stopClass := map[string]bool{"Stop": true, "SubagentStop": true}
 	for event, matchers := range parsed.Hooks {
 		require.NotNil(t, matchers[0].Hooks[0].Async, "event %q must carry an async flag", event)
+		if stopClass[event] {
+			require.False(t, *matchers[0].Hooks[0].Async, "event %q must be dispatched synchronously so Cowork does not drop it", event)
+			require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook_async.sh", "event %q must run through the self-backgrounding wrapper", event)
+			continue
+		}
 		require.True(t, *matchers[0].Hooks[0].Async, "event %q must be async in observability mode", event)
 	}
+
+	// The wrapper must actually ship in the plugin.
+	require.NotEmpty(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook_async.sh"], "Claude plugin must ship hook_async.sh")
 }
 
 // mcp_inventory.sh enriches the payload with MCP inventory and posts to the

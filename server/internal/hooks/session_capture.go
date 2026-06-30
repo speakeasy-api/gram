@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -163,15 +165,78 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-			// ClickHouse always gets the technical reason; the user_message
-			// override only changes what the agent / end user sees.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			// The scan re-runs on a retry so the user stays blocked, but the
+			// block side-effects must not double-write — a retry re-sends the
+			// same idempotency token, which tags the context as a duplicate.
+			// Resolve metadata once and reuse it for both writes.
+			if !s.isHookDuplicate(ctx) {
+				if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, conv.PtrValOr(payload.UserEmail, "")); err == nil {
+					// ClickHouse always gets the technical reason; the
+					// user_message override only changes what the agent / end
+					// user sees.
+					s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+					if payload.HookVersion != nil && *payload.HookVersion >= claudeHookStopCollectionVersion {
+						s.persistBlockedClaudePrompt(ctx, &metadata, payload)
+					}
+				}
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
 	return makeHookResult(ev.RawEventType), nil
+}
+
+func (s *Service) persistBlockedClaudePrompt(ctx context.Context, metadata *SessionMetadata, payload *gen.ClaudePayload) {
+	if payload == nil || payload.SessionID == nil || *payload.SessionID == "" {
+		return
+	}
+	content := conv.PtrValOr(payload.Prompt, "")
+	if content == "" {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+
+	// A blocked prompt is erased from Claude's context, so it never reaches the
+	// Stop transcript — this is its only capture. Persist it through the batch
+	// path with a deterministic external_message_id (session + prompt) so the
+	// write itself is idempotent: duplicate installs that each block the same
+	// prompt collapse to one row at the DB (ON CONFLICT), and a transient failure
+	// can be safely retried without either duplicating the row or being silently
+	// dropped by a pre-claimed idempotency token.
+	sum := sha256.Sum256([]byte(*payload.SessionID + "\x00" + content))
+	externalID := "claude-blocked-prompt:" + hex.EncodeToString(sum[:])
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("UserPromptSubmit"),
+		attr.SlogGenAIConversationID(*payload.SessionID),
+	)
+	msgPayload := &gen.ClaudeMessagesPayload{
+		SessionID:        *payload.SessionID,
+		UserEmail:        payload.UserEmail,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		HookHostname:     nil,
+		Messages: []*gen.ClaudeCapturedMessage{{
+			ExternalID:       externalID,
+			Role:             "user",
+			Content:          &content,
+			Model:            nil,
+			ToolCalls:        nil,
+			ToolCallID:       nil,
+			PromptTokens:     nil,
+			CompletionTokens: nil,
+			TotalTokens:      nil,
+			Timestamp:        nil,
+			AgentID:          nil,
+			AgentType:        nil,
+		}},
+	}
+	if err := s.persistClaudeMessages(ctx, msgPayload, *metadata, logger); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to persist blocked claude prompt",
+			attr.SlogEvent("claude_blocked_prompt_persist_failed"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // handleStop captures the assistant's final response text.
@@ -414,7 +479,11 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
+		return err
+	}
+	s.flushPendingShadowMCPBlockFindings(ctx, conv.PtrValOr(payload.SessionID, ""), metadata)
+	return nil
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.

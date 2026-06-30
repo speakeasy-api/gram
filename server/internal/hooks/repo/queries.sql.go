@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireShadowMCPDedupeLock = `-- name: AcquireShadowMCPDedupeLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Transaction-level advisory lock keyed on the shadow-MCP dedupe tuple. Held with
+// InsertShadowMCPBlockResult in one transaction, it serializes concurrent
+// duplicate-install deliveries so the NOT EXISTS check and the insert are atomic
+// without a unique constraint (risk_results has only a plain index on the tuple).
+func (q *Queries) AcquireShadowMCPDedupeLock(ctx context.Context, dedupeKey string) error {
+	_, err := q.db.Exec(ctx, acquireShadowMCPDedupeLock, dedupeKey)
+	return err
+}
+
 const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
 WITH latest_user_message AS (
   SELECT chat_messages.id
@@ -87,7 +100,7 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
-const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
+const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :execrows
 INSERT INTO risk_results (
     id
   , project_id
@@ -102,7 +115,7 @@ INSERT INTO risk_results (
   , match
   , confidence
 )
-VALUES (
+SELECT
     $1
   , $2
   , $3
@@ -115,6 +128,14 @@ VALUES (
   , $7
   , $8
   , $9
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM risk_results existing
+  WHERE existing.project_id = $2
+    AND existing.risk_policy_id = $4
+    AND existing.risk_policy_version = $5
+    AND existing.chat_message_id = $6
+    AND existing.source = 'shadow_mcp'
 )
 `
 
@@ -130,8 +151,14 @@ type InsertShadowMCPBlockResultParams struct {
 	Confidence        pgtype.Float8
 }
 
-func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) error {
-	_, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
+// Dedupe live hook-time block findings across duplicate plugin installs: each
+// install delivers its own block with a distinct id and idempotency token, but
+// they resolve to the same (project, policy, version, chat_message). Run under
+// AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
+// collapses them atomically. Returns the row count so the caller can tell an
+// insert (1) from a dedup no-op (0) and avoid linking a non-existent finding id.
+func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
 		arg.ID,
 		arg.ProjectID,
 		arg.OrganizationID,
@@ -142,7 +169,10 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 		arg.Match,
 		arg.Confidence,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
@@ -285,7 +315,10 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET
+    updated_at = NOW()
+  , user_id = COALESCE(NULLIF(EXCLUDED.user_id, ''), chats.user_id)
+  , external_user_id = COALESCE(NULLIF(EXCLUDED.external_user_id, ''), chats.external_user_id)
 RETURNING id
 `
 

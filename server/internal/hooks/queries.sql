@@ -36,7 +36,10 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET
+    updated_at = NOW()
+  , user_id = COALESCE(NULLIF(EXCLUDED.user_id, ''), chats.user_id)
+  , external_user_id = COALESCE(NULLIF(EXCLUDED.external_user_id, ''), chats.external_user_id)
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec
@@ -73,7 +76,20 @@ WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message
   AND sqlc.arg(message_id)::text <> ''
   AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
--- name: InsertShadowMCPBlockResult :exec
+-- name: AcquireShadowMCPDedupeLock :exec
+-- Transaction-level advisory lock keyed on the shadow-MCP dedupe tuple. Held with
+-- InsertShadowMCPBlockResult in one transaction, it serializes concurrent
+-- duplicate-install deliveries so the NOT EXISTS check and the insert are atomic
+-- without a unique constraint (risk_results has only a plain index on the tuple).
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(dedupe_key)::text, 0));
+
+-- name: InsertShadowMCPBlockResult :execrows
+-- Dedupe live hook-time block findings across duplicate plugin installs: each
+-- install delivers its own block with a distinct id and idempotency token, but
+-- they resolve to the same (project, policy, version, chat_message). Run under
+-- AcquireShadowMCPDedupeLock in the same transaction, the NOT EXISTS guard
+-- collapses them atomically. Returns the row count so the caller can tell an
+-- insert (1) from a dedup no-op (0) and avoid linking a non-existent finding id.
 INSERT INTO risk_results (
     id
   , project_id
@@ -88,7 +104,7 @@ INSERT INTO risk_results (
   , match
   , confidence
 )
-VALUES (
+SELECT
     sqlc.arg(id)
   , sqlc.arg(project_id)
   , sqlc.arg(organization_id)
@@ -101,6 +117,14 @@ VALUES (
   , sqlc.arg(description)
   , sqlc.arg(match)
   , sqlc.arg(confidence)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM risk_results existing
+  WHERE existing.project_id = sqlc.arg(project_id)
+    AND existing.risk_policy_id = sqlc.arg(risk_policy_id)
+    AND existing.risk_policy_version = sqlc.arg(risk_policy_version)
+    AND existing.chat_message_id = sqlc.arg(chat_message_id)
+    AND existing.source = 'shadow_mcp'
 );
 
 -- name: InsertToolCallBlock :exec
