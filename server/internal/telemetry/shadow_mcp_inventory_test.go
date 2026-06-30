@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -52,6 +53,7 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	rows := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
 		Limit:         50,
+		Cursor:        "",
 	}, 1)
 
 	require.Len(t, rows, 1)
@@ -60,6 +62,80 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	assert.Equal(t, "Speakeasy", rows[0].ServerName)
 	assert.Equal(t, firstSeen, rows[0].FirstSeen)
 	assert.Equal(t, lastSeen, rows[0].LastSeen)
+}
+
+func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 12, 30, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{GramProjectID: projectID, CanonicalServerURL: "https://gamma.example.com/mcp", URLHost: "gamma.example.com", ServerName: "Gamma", SeenAt: base.Add(3 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://alpha.example.com/mcp", URLHost: "alpha.example.com", ServerName: "Alpha", SeenAt: base.Add(2 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://beta.example.com/mcp", URLHost: "beta.example.com", ServerName: "Beta", SeenAt: base.Add(2 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://delta.example.com/mcp", URLHost: "delta.example.com", ServerName: "Delta", SeenAt: base.Add(time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+	}))
+
+	firstPage := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         2,
+		Cursor:        "",
+	}, 2)
+	require.Equal(t, []string{
+		"https://gamma.example.com/mcp",
+		"https://alpha.example.com/mcp",
+	}, inventoryURLRows(firstPage))
+
+	cursor, err := telemetryRepo.EncodeShadowMCPInventoryURLCursor(firstPage[1])
+	require.NoError(t, err)
+
+	secondPage := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         2,
+		Cursor:        cursor,
+	}, 2)
+	assert.Equal(t, []string{
+		"https://beta.example.com/mcp",
+		"https://delta.example.com/mcp",
+	}, inventoryURLRows(secondPage))
+}
+
+func TestShadowMCPInventoryURLs_RejectsInvalidCursor(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	lastSeen := time.Date(2026, 6, 29, 12, 45, 0, 0, time.UTC)
+
+	invalidBase64 := "not base64"
+	invalidJSON := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
+	missingURL := encodeRawInventoryURLCursor(t, map[string]any{
+		"last_seen_unix_nano": lastSeen.UnixNano(),
+	})
+	missingLastSeen := encodeRawInventoryURLCursor(t, map[string]any{
+		"canonical_server_url": "https://alpha.example.com/mcp",
+	})
+
+	invalidCursors := []struct {
+		name   string
+		cursor string
+	}{
+		{name: "invalid base64", cursor: invalidBase64},
+		{name: "invalid JSON", cursor: invalidJSON},
+		{name: "missing URL", cursor: missingURL},
+		{name: "missing last seen", cursor: missingLastSeen},
+	}
+
+	for _, invalidCursor := range invalidCursors {
+		_, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         2,
+			Cursor:        invalidCursor.cursor,
+		})
+		require.Error(t, err, invalidCursor.name)
+	}
 }
 
 func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
@@ -178,6 +254,7 @@ func TestLoggerUpsertShadowMCPInventoryURLs(t *testing.T) {
 	rows := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
 		Limit:         50,
+		Cursor:        "",
 	}, 1)
 
 	require.Len(t, rows, 1)
@@ -235,6 +312,7 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	rows := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
 		Limit:         50,
+		Cursor:        "",
 	}, 1)
 
 	require.Len(t, rows, 1)
@@ -347,4 +425,20 @@ func requireShadowMCPInventoryUsersEventually(
 	}, 5*time.Second, 100*time.Millisecond)
 
 	return rows
+}
+
+func inventoryURLRows(rows []telemetryRepo.ShadowMCPInventoryURLRow) []string {
+	urls := make([]string, 0, len(rows))
+	for _, row := range rows {
+		urls = append(urls, row.CanonicalServerURL)
+	}
+	return urls
+}
+
+func encodeRawInventoryURLCursor(t *testing.T, payload map[string]any) string {
+	t.Helper()
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString(data)
 }
