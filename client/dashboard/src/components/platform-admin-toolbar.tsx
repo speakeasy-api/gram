@@ -1,14 +1,25 @@
 import { ReactElement } from "react";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+} from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
+import {
+  PlatformAdminFeaturesPanel,
+  PlatformAdminInfoPanel,
+  PlatformAdminOnboardingPanel,
+} from "./platform-admin-panel";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
-  Crown,
   GripVertical,
+  Info,
+  Mail,
   Shield,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   useCallback,
@@ -21,8 +32,17 @@ import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
-const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
+
+// Shared className for the toolkit's top-level tabs. shrink-0 keeps tabs from
+// compressing; the tab bar scrolls horizontally when they overflow the panel.
+const tabClass = (active: boolean) =>
+  `-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
+    active
+      ? "border-foreground text-foreground"
+      : "text-muted-foreground hover:text-foreground border-transparent"
+  }`;
 
 type ResourceType = "org" | "project" | "environment" | "mcp" | "chat";
 
@@ -208,9 +228,9 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "chat", label: "Agent Sessions" },
 ];
 
-export function RBACDevToolbar(): ReactElement | null {
+export function PlatformAdminToolbar(): ReactElement | null {
   const { session } = useSession();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const [hidden, setHidden] = useState(
     () => localStorage.getItem(HIDDEN_KEY) === "1",
   );
@@ -238,12 +258,12 @@ export function RBACDevToolbar(): ReactElement | null {
   // Don't render when unauthenticated (e.g. login page) to avoid firing
   // API calls like toolsets.listForOrg that will 401 and trigger the error boundary.
   if (!session) return null;
-  // Always visible in dev; in other environments, restricted to superadmins.
+  // Always visible in dev; in other environments, restricted to platform admins.
   if (!(import.meta.env.DEV || isAdmin)) return null;
   if (hidden) return null;
 
   return (
-    <RBACDevToolbarInner
+    <PlatformAdminToolbarInner
       onHide={() => {
         localStorage.setItem(HIDDEN_KEY, "1");
         setHidden(true);
@@ -252,13 +272,13 @@ export function RBACDevToolbar(): ReactElement | null {
   );
 }
 
-function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
+function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
-  const [superAdmin, setSuperAdmin] = useState(
-    () => localStorage.getItem(SUPER_ADMIN_KEY) === "1",
+  const [platformAdmin, setPlatformAdmin] = useState(
+    () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
   const queryClient = useQueryClient();
   const organization = useOrganization();
@@ -529,15 +549,11 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
         {!collapsed && (
           <div className="border-t border-inherit">
             {/* Tab bar */}
-            <div className="flex border-b border-inherit px-2">
+            <div className="flex overflow-x-auto border-b border-inherit px-2">
               <button
                 type="button"
                 onClick={() => setActiveTab("rbac")}
-                className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
-                  activeTab === "rbac"
-                    ? "border-foreground text-foreground"
-                    : "text-muted-foreground hover:text-foreground border-transparent"
-                }`}
+                className={tabClass(activeTab === "rbac")}
               >
                 <Shield className="h-3 w-3" />
                 RBAC
@@ -547,42 +563,78 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                   </span>
                 )}
               </button>
-              {import.meta.env.DEV && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("superadmin")}
-                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
-                    activeTab === "superadmin"
-                      ? "border-foreground text-foreground"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
-                  }`}
-                >
-                  <Crown className="h-3 w-3" />
-                  Super Admin
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab("info")}
+                className={tabClass(activeTab === "info")}
+              >
+                <Info className="h-3 w-3" />
+                Info
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("features")}
+                className={tabClass(activeTab === "features")}
+              >
+                <SlidersHorizontal className="h-3 w-3" />
+                Features
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("onboarding")}
+                className={tabClass(activeTab === "onboarding")}
+              >
+                <Mail className="h-3 w-3" />
+                Onboarding
+              </button>
             </div>
 
-            {/* RBAC tab */}
-            {activeTab === "superadmin" && (
-              <div className="flex items-center justify-between px-3.5 py-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${superAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
-                  />
-                  <span className="text-foreground text-xs font-medium">
-                    {superAdmin ? "Super admin active" : "Super admin off"}
-                  </span>
-                </div>
-                <Switch
-                  checked={superAdmin}
-                  onCheckedChange={(checked) => {
-                    setSuperAdmin(checked);
-                    localStorage.setItem(SUPER_ADMIN_KEY, checked ? "1" : "0");
-                    invalidate();
-                  }}
-                  aria-label="Toggle super admin"
-                />
+            {/* Info tab: org info + override, plus the dev impersonation toggle */}
+            {activeTab === "info" && (
+              <div className="max-h-[440px] space-y-2 overflow-y-auto px-3 py-3">
+                {/* Dev-only impersonation toggle: flips useIsPlatformAdmin
+                    locally so non-admins can exercise admin-gated UI. */}
+                {import.meta.env.DEV && (
+                  <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                      />
+                      <span className="text-foreground text-xs font-medium">
+                        {platformAdmin
+                          ? "Platform admin active"
+                          : "Platform admin off"}
+                      </span>
+                    </div>
+                    <Switch
+                      checked={platformAdmin}
+                      onCheckedChange={(checked) => {
+                        setPlatformAdmin(checked);
+                        localStorage.setItem(
+                          PLATFORM_ADMIN_KEY,
+                          checked ? "1" : "0",
+                        );
+                        invalidate();
+                      }}
+                      aria-label="Toggle platform admin"
+                    />
+                  </div>
+                )}
+                <PlatformAdminInfoPanel />
+              </div>
+            )}
+
+            {/* Features tab: RBAC enable/disable + product feature toggles */}
+            {activeTab === "features" && (
+              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                <PlatformAdminFeaturesPanel />
+              </div>
+            )}
+
+            {/* Onboarding tab: enterprise admin onboarding email */}
+            {activeTab === "onboarding" && (
+              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                <PlatformAdminOnboardingPanel />
               </div>
             )}
 

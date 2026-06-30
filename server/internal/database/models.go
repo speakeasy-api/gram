@@ -268,6 +268,7 @@ type Chat struct {
 	Title            pgtype.Text
 	TitleManuallySet bool
 	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
@@ -435,6 +436,20 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
+}
+
+type DeviceOwner struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+	LinkedUserID   pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type DirectoryGroup struct {
@@ -1651,6 +1666,24 @@ type User struct {
 	DeletedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type UserAccount struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	UserID              pgtype.Text
+	Provider            string
+	ExternalOrgID       pgtype.Text
+	ExternalAccountUuid string
+	ExternalAccountID   pgtype.Text
+	Email               pgtype.Text
+	AccountType         pgtype.Text
+	FirstSeenAt         pgtype.Timestamptz
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type UserOauthToken struct {

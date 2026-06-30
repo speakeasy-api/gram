@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 1c1f01d020c4295493ff8908ecb4480d
+  docChecksum: bde6b81767dcd282045a980b7cc94260
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -3557,7 +3557,7 @@ trackedFiles:
   docs/sdks/organizationremotesessionissuers/README.md:
     last_write_checksum: sha1:bf95d55c7d56064e3a551797379d8934fc9547f7
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:d8eceef43b2a8f6f1511db17dc5a842435358c66
+    last_write_checksum: sha1:51991dbff59cde3b4667127e74779a127f70bdd4
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/overview/README.md:
@@ -3961,7 +3961,7 @@ trackedFiles:
   src/funcs/organizationsRevokeInvite.ts:
     last_write_checksum: sha1:4fea492b55ea1f99efd2e2ee15fdbb7089ba055c
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts:
-    last_write_checksum: sha1:7c694e36a7050afa7323e8fcc3b73ace83196ea6
+    last_write_checksum: sha1:eeb54a033677f181a41274de6697c3ae2d7d9945
   src/funcs/organizationsSendInvite.ts:
     last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
   src/funcs/organizationsUpdateInviteRole.ts:
@@ -6879,7 +6879,7 @@ trackedFiles:
   src/react-query/sendAssistantMessage.ts:
     last_write_checksum: sha1:cbdfe34cf025e983d032459977d72b05d0d459eb
   src/react-query/sendEnterpriseAdminOnboardingEmail.ts:
-    last_write_checksum: sha1:b0d0f7dbf81ecdf5dba9acd42e8dfb542e82269c
+    last_write_checksum: sha1:1f074b271a3fb81f1345b82be124eb919c1a030b
   src/react-query/sendInvite.ts:
     last_write_checksum: sha1:e8ddaa87274318dee9be969d0c320125e8897f5f
   src/react-query/serveChatAttachment.core.ts:
@@ -7127,7 +7127,7 @@ trackedFiles:
   src/sdk/organizationremotesessionissuers.ts:
     last_write_checksum: sha1:4927551e972c88d0fc04c8cb68b5a1de232b814a
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:52e6012bb229d10c24e26d655303bce57fb932a4
+    last_write_checksum: sha1:02928fa24806ca4411fa72710a8da6734ef154cc
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/overview.ts:

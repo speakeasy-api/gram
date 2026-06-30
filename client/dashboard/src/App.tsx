@@ -34,7 +34,7 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { RBACDevToolbar } from "./components/dev-toolbar";
+import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
@@ -148,7 +148,7 @@ function AppContent() {
           </>
         )}
         <RouteProvider />
-        <RBACDevToolbar />
+        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );

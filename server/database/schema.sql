@@ -1209,6 +1209,15 @@ CREATE TABLE IF NOT EXISTS chats (
   -- dedicated section above recents; the timestamp orders them by pin time.
   pinned_at timestamptz,
 
+  -- Personal-account tracking: the external AI account (user_accounts row) this
+  -- session belongs to. Join to user_accounts for provider, account_type
+  -- (team/personal), external_org_id, the owning employee, etc. — set by ingest.
+  -- NULL for older rows, non-agent chats, or sessions whose account can't be
+  -- determined. No FK constraint because user_accounts is declared after chats
+  -- (it depends on users, declared later), matching how chats.user_id is
+  -- referenced without a FK; integrity is maintained by ingest.
+  user_account_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1732,6 +1741,114 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
+
+-- user_accounts is the registry of external AI provider accounts (Claude today;
+-- other providers in the future) observed for a Gram organization, each linked to
+-- the employee (Gram user) who owns it. It is the entity behind personal-account
+-- tracking: the per-employee account selector, the enrollment page's personal-vs-
+-- enterprise plan breakdown, and the org dashboard's list of personal accounts all
+-- read from here. An account is linked to its employee either directly (a team
+-- account whose email resolves to an org member) or via the device bridge (a
+-- personal account whose device owner is known — see device_owners).
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- The employee who owns this account. NULL until the account can be attributed
+  -- (e.g. a personal account before its device's owner is known).
+  user_id TEXT,
+  -- The AI provider. 'anthropic' today; the model generalizes to other providers
+  -- (e.g. 'openai') as personal-account tracking expands.
+  provider TEXT NOT NULL DEFAULT 'anthropic',
+  -- The provider's organization id for the account (Claude `organization.id`). For
+  -- Anthropic this is the personal-vs-team discriminator; distinct from organization_id.
+  external_org_id TEXT,
+  -- The provider's stable per-account identity (Claude `user.account_uuid`). The
+  -- account entity key — unique per account even when external_org_id is shared
+  -- across employees (as it is for a Claude enterprise org).
+  external_account_uuid TEXT NOT NULL,
+  -- The provider's tagged account id (Claude `user.account_id`, e.g. user_01…).
+  external_account_id TEXT,
+  -- Email associated with the account; may differ from the employee's work email
+  -- (a personal account typically uses a personal email).
+  email TEXT,
+  -- 'team' (company/enterprise account) or 'personal' (Max/individual). NULL until classified.
+  account_type TEXT
+    CONSTRAINT user_accounts_account_type_check
+    CHECK (account_type IN ('team', 'personal')),
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT user_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Partial unique index so a soft-deleted account doesn't block re-enrolling the
+-- same external account (a plain UNIQUE constraint would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uuid_key
+ON user_accounts (organization_id, provider, external_account_uuid)
+WHERE deleted_at IS NULL;
+
+-- The dashboard lists an employee's accounts by (organization_id, user_id).
+CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx
+ON user_accounts (organization_id, user_id);
+
+-- Classification looks accounts up by provider org (CountEmployeesForExternalOrg
+-- and the enterprise-org disambiguation), so index the lookup key.
+CREATE INDEX IF NOT EXISTS user_accounts_org_provider_external_org_idx
+ON user_accounts (organization_id, provider, external_org_id);
+
+-- device_owners is the linking mechanism that lets us attribute a personal account
+-- to an employee. A per-device anonymous id (e.g. Claude's user.id) is stable across
+-- the accounts logged in on one machine, so a team session (email resolves to an org
+-- member) teaches us that device -> employee; a personal session later seen on the
+-- same device is then attributed to that employee (and a user_accounts row linked).
+-- Provider-scoped so the same physical machine can be tracked per provider. This is
+-- an internal index, not a user-facing entity.
+CREATE TABLE IF NOT EXISTS device_owners (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- The AI provider this device id belongs to (e.g. 'anthropic', 'openai').
+  provider TEXT NOT NULL DEFAULT 'anthropic',
+  -- The per-device anonymous id (e.g. Claude's user.id), stable across accounts on the device.
+  device_id TEXT NOT NULL,
+  -- The owning employee, learned from a team session's resolved email. Nullable so
+  -- the FK can ON DELETE SET NULL if the user is removed (the device row stays).
+  linked_user_id TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT device_owners_pkey PRIMARY KEY (id),
+  CONSTRAINT device_owners_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT device_owners_linked_user_id_fkey FOREIGN KEY (linked_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Partial unique index so a soft-deleted device row doesn't block re-creating the
+-- same (org, provider, device) mapping (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_owners_organization_id_provider_device_id_key
+ON device_owners (organization_id, provider, device_id)
+WHERE deleted_at IS NULL;
+
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The unique
+-- index above is partial (excludes soft-deleted rows), so it can't serve a cascade
+-- delete, which must match every row for the org including deleted ones; without this
+-- a tenant deletion sequentially scans device_owners.
+CREATE INDEX IF NOT EXISTS device_owners_organization_id_idx
+ON device_owners (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);

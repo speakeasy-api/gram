@@ -18,6 +18,13 @@ def service_options() -> Sequence[click.Option]:
             help="Set the environment.",
         ),
         click.Option(
+            ["--git-sha"],
+            type=str,
+            envvar="GRAM_GIT_SHA",
+            help="Build commit SHA, stamped onto telemetry for Datadog "
+            "source-code links.",
+        ),
+        click.Option(
             ["--log-level"],
             type=click.Choice(
                 ["debug", "info", "warning", "error", "critical"],
@@ -33,5 +40,19 @@ def service_options() -> Sequence[click.Option]:
             default=False,
             envvar="GRAM_LOG_PRETTY",
             help="Enable pretty logging output.",
+        ),
+        click.Option(
+            ["--enable-tracing"],
+            is_flag=True,
+            default=False,
+            envvar="GRAM_ENABLE_OTEL_TRACES",
+            help="Export OpenTelemetry traces via OTLP.",
+        ),
+        click.Option(
+            ["--enable-metrics"],
+            is_flag=True,
+            default=False,
+            envvar="GRAM_ENABLE_OTEL_METRICS",
+            help="Export OpenTelemetry metrics via OTLP.",
         ),
     ]
