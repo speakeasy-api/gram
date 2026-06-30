@@ -78,6 +78,30 @@ func TestDispatch_UnknownProjectSlugErrors(t *testing.T) {
 	require.Error(t, err, "an override slug not in the org must error, not silently fall back")
 }
 
+// The agent vouches for user_email within its org (DNO-376). For Claude, a
+// stale cached session email (e.g. after an AI-tool-account switch — the exact
+// bypass we guard against) must not override the vouched email.
+func TestDispatch_VouchedEmailBeatsCachedSession(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := authCtx.ActiveOrganizationID
+
+	got := ti.service.mergeClaudeAuthContextMetadata(ctx,
+		SessionMetadata{UserEmail: "vouched@corp.example", GramOrgID: org},
+		SessionMetadata{UserEmail: "switched@personal.example"})
+	require.Equal(t, "vouched@corp.example", got.UserEmail,
+		"the auth/vouched email must win over a cached session email")
+
+	// An absent auth email still falls back to the cached session email.
+	gap := ti.service.mergeClaudeAuthContextMetadata(ctx,
+		SessionMetadata{UserEmail: "", GramOrgID: org},
+		SessionMetadata{UserEmail: "cached@personal.example"})
+	require.Equal(t, "cached@personal.example", gap.UserEmail,
+		"cached email should still fill a gap when no email is vouched")
+}
+
 func TestDispatch_UnknownToolErrors(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

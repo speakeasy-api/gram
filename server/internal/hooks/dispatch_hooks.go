@@ -35,18 +35,21 @@ func (s *Service) Dispatch(ctx context.Context, payload *gen.DispatchPayload) (*
 		return nil, err
 	}
 
-	// The agent key is org-scoped (ProjectID nil). Inject the resolved project so
-	// the reused per-tool handlers — which read authCtx.ProjectID — attribute the
-	// event to the right project.
+	// The agent key is org-scoped (ProjectID nil) and authCtx.Email is the key
+	// creator's, not the acting user. Inject the resolved project so the reused
+	// per-tool handlers attribute to the right project, and the vouched email so
+	// any path that reads authCtx.Email (e.g. Claude's no-session_id fallback)
+	// attributes to the user the agent is acting for, not the key creator.
+	email := payload.UserEmail
 	scoped := *authCtx
 	scoped.ProjectID = &projectID
+	scoped.Email = &email
 	scopedCtx := contextvalues.SetAuthContext(ctx, &scoped)
 
 	rawPayload, err := json.Marshal(payload.Payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "agent hook dispatch: unmarshalable payload")
 	}
-	email := payload.UserEmail
 
 	switch payload.Tool {
 	case "cursor":
