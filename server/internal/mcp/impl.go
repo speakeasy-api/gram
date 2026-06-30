@@ -28,7 +28,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -46,7 +45,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -359,6 +357,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
@@ -1288,49 +1287,6 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
-}
-
-//nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
-func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
-	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
-	if err != nil {
-		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(sessionCtx)
-	if !ok || authCtx == nil {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-
-	oauthConfig := externalmcp.ResolveOAuthConfig(toolset)
-	if oauthConfig == nil {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "invalid toolset ID")
-	}
-
-	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
-		UserID:         authCtx.UserID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      toolsetID,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
-	}
-
-	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
-		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
-	}
-
-	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "unable to access oauth token")
-	}
-
-	return accessToken, nil
 }
 
 // HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).

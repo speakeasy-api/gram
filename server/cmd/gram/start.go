@@ -379,12 +379,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "external-mcp-oauth-redirect-domains",
-			Usage:    "Comma separated list of allowed redirect domains for external MCP OAuth flows. Useful when using ngrok, tailscale, or some other custom host for local development.",
-			EnvVars:  []string{"GRAM_EXTERNAL_MCP_OAUTH_REDIRECT_DOMAINS"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "workos-endpoint",
 			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
@@ -625,31 +619,6 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
-			externalMcpOAuthConfig := oauth.ExternalOAuthServiceConfig{
-				ServerURL:            serverURL,
-				AllowedRedirectHosts: []string{},
-			}
-
-			redirectDomains := c.String("external-mcp-oauth-redirect-domains")
-			if redirectDomains == "" {
-				// Default: allow server's own hostname
-				externalMcpOAuthConfig.AllowedRedirectHosts = []string{serverURL.Hostname()}
-			} else {
-				for host := range strings.SplitSeq(redirectDomains, ",") {
-					host = strings.TrimSpace(host)
-					if host == "" {
-						continue // skip empty entries from trailing commas
-					}
-					externalMcpOAuthConfig.AllowedRedirectHosts = append(
-						externalMcpOAuthConfig.AllowedRedirectHosts,
-						host,
-					)
-				}
-				if len(externalMcpOAuthConfig.AllowedRedirectHosts) == 0 {
-					return errors.New("no valid hosts in external-mcp-oauth-redirect-domains")
-				}
-			}
-
 			siteURL, err := url.Parse(c.String("site-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse site url: %w", err)
@@ -734,7 +703,6 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			authorizer := auth.New(logger, db, sessionManager, authzEngine)
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
@@ -777,8 +745,6 @@ func newStartCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				serverURL,
 			)
-
-			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, remoteChallengeManager, externalMcpOAuthConfig)
 
 			remoteProxyManager := remotemcp.NewProxyManager(
 				logger,
@@ -1088,7 +1054,6 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
