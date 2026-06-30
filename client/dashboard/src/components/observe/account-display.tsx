@@ -3,6 +3,7 @@ import {
   type DisplayAccount,
   providerLabel,
 } from "@/components/observe/account-display-utils";
+import { cn } from "@/lib/utils";
 import { Badge } from "@speakeasy-api/moonshine";
 
 // The per-account type marker. Personal reuses the shared amber badge; team is
@@ -29,11 +30,13 @@ export function AccountTypePill({
 // by the employees-list popover and the employee detail accounts card.
 export function AccountRow({
   account,
+  className,
 }: {
   account: DisplayAccount;
+  className?: string;
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className={cn("flex items-center justify-between gap-2", className)}>
       <div className="min-w-0">
         <p className="truncate text-sm">{account.email || "(no email)"}</p>
         <p className="text-muted-foreground text-xs">

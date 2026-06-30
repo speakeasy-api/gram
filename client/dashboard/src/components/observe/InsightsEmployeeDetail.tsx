@@ -1556,6 +1556,13 @@ function AccountScopeSelector({
   const scopable = accounts.filter((a) => (a.externalOrgId ?? "") !== "");
   if (scopable.length === 0) return null;
 
+  // Compact single-line label for the trigger; the dropdown list uses the full
+  // two-line AccountRow (the trigger line-clamps, which would mangle it).
+  const selected = scopable.find((a) => a.externalOrgId === value);
+  const triggerLabel = selected
+    ? `${selected.email || "(no email)"} · ${providerLabel(selected.provider)}`
+    : "All accounts";
+
   return (
     <Select
       value={value === "" ? ALL_ACCOUNTS_VALUE : value}
@@ -1563,7 +1570,7 @@ function AccountScopeSelector({
       disabled={disabled}
     >
       <SelectTrigger className="w-[240px]">
-        <SelectValue placeholder="All accounts" />
+        <SelectValue placeholder="All accounts">{triggerLabel}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL_ACCOUNTS_VALUE}>All accounts</SelectItem>
@@ -1571,8 +1578,18 @@ function AccountScopeSelector({
           <SelectItem
             key={`${account.externalOrgId}:${i}`}
             value={account.externalOrgId!}
+            // The Select wraps item content in a content-width flex-col; force it
+            // full-width so AccountRow's justify-between right-aligns the badge.
+            className="[&>div]:w-full"
           >
-            {`${account.email || "(no email)"} · ${providerLabel(account.provider)}`}
+            <AccountRow
+              account={{
+                email: account.email ?? "",
+                provider: account.provider,
+                accountType: account.accountType ?? "",
+              }}
+              className="w-full"
+            />
           </SelectItem>
         ))}
       </SelectContent>
