@@ -1,4 +1,8 @@
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+} from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -31,7 +35,7 @@ export const LoginCheck = (): JSX.Element => {
 };
 
 export const AppLayout = (): JSX.Element => {
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;
 
@@ -179,7 +183,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const OrgLayout = (): JSX.Element => {
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;
 

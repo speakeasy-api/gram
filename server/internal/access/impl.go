@@ -575,7 +575,7 @@ func connectedUser(ctx context.Context, db database.DBTX, organizationID string,
 }
 
 func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -592,7 +592,7 @@ func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload
 }
 
 func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
@@ -604,7 +604,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 }
 
 func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
@@ -625,13 +625,13 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 	return nil
 }
 
-// requireSuperAdmin returns the auth context and an error if the caller is not
-// a Speakeasy employee. Mirrors the exact condition used by the super-admin
+// requirePlatformAdmin returns the auth context and an error if the caller is not
+// a Speakeasy employee. Mirrors the exact condition used by the platform-admin
 // impersonation feature in auth/impl.go: email domain OR admin DB flag.
 // Email is read from the auth context (session cache). Admin is read from the
 // DB because AuthContext does not carry it; the DB value is synced from the
 // Speakeasy provider on every login so it matches the session cache.
-func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)

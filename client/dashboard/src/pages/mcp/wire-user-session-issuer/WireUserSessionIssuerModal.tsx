@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
@@ -634,7 +634,7 @@ function ClientStrategyChooser({
   // oauth_proxy_provider and re-persists them server-side. That credential
   // motion is admin-only — non-admins are restricted to Register (DCR) or
   // Manual paste.
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const visibleOptions = isAdmin
     ? STRATEGY_OPTIONS
     : STRATEGY_OPTIONS.filter((opt) => opt.key !== "clone");

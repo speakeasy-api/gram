@@ -537,7 +537,7 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 `authz.Engine.ShouldEnforce` decides whether checks should actually be applied. Today, RBAC is enforced for authenticated enterprise requests when the RBAC feature flag is enabled for the active organization, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
 
-Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only superadmins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
+Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
 That means RBAC is not currently enforced for API key requests, non-enterprise accounts, or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 

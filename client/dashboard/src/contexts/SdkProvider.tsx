@@ -11,7 +11,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useTelemetry } from "./Telemetry";
 import {
-  IsAdminContext,
+  IsPlatformAdminContext,
   SdkContext,
   queryClient,
   useProjectSlugForRequests,
@@ -27,7 +27,7 @@ export const SdkProvider = ({
   const { projectSlug: pathProjectSlug } = useSlugs();
   const telemetry = useTelemetry();
 
-  const isAdminRef = useRef(false);
+  const isPlatformAdminRef = useRef(false);
   const previousProjectSlug = useRef(projectSlug);
 
   // Memoize the httpClient and gram instances
@@ -43,7 +43,7 @@ export const SdkProvider = ({
         }
 
         const scopeOverride = getRBACScopeOverrideHeader(
-          import.meta.env.DEV || isAdminRef.current,
+          import.meta.env.DEV || isPlatformAdminRef.current,
         );
         if (scopeOverride) {
           newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
@@ -98,12 +98,12 @@ export const SdkProvider = ({
   }, [projectSlug]);
 
   return (
-    <IsAdminContext.Provider value={isAdminRef}>
+    <IsPlatformAdminContext.Provider value={isPlatformAdminRef}>
       <QueryClientProvider client={queryClient}>
         <GramProvider client={gram}>
           <SdkContext.Provider value={gram}>{children}</SdkContext.Provider>
         </GramProvider>
       </QueryClientProvider>
-    </IsAdminContext.Provider>
+    </IsPlatformAdminContext.Provider>
   );
 };

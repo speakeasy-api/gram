@@ -62,7 +62,7 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 // GetScopeOverrides returns the parsed scope overrides from the request context
 // if they are present AND the caller is authorised to use them. In local dev
 // any authenticated user may use the override header; in production only
-// superadmins can. Returns nil, false when overrides are absent or disallowed.
+// platform admins can. Returns nil, false when overrides are absent or disallowed.
 func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	overrides, ok := readScopeOverrides(ctx)
 	if !ok {

@@ -545,7 +545,7 @@ func matchingAllowGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 }
 
 // allScopeGrants returns wildcard grants for every user-visible scope. Used to
-// give superadmins (e.g. during org impersonation) unrestricted access without
+// give platform admins (e.g. during org impersonation) unrestricted access without
 // exposing internal blocklist storage scopes as standalone permissions.
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
