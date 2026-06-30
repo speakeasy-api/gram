@@ -129,6 +129,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogAuthUserEmail(session.UserEmail),
 		)
 
+		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
+
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
@@ -176,6 +178,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
 				)
+			}
+		}
+		if metadataErr != nil {
+			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
+			if err == nil {
+				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
 			}
 		}
 
