@@ -213,7 +213,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "chat", label: "Agent Sessions" },
 ];
 
-export function RBACDevToolbar(): ReactElement | null {
+export function PlatformAdminToolbar(): ReactElement | null {
   const { session } = useSession();
   const isAdmin = useIsPlatformAdmin();
   const [hidden, setHidden] = useState(
@@ -248,7 +248,7 @@ export function RBACDevToolbar(): ReactElement | null {
   if (hidden) return null;
 
   return (
-    <RBACDevToolbarInner
+    <PlatformAdminToolbarInner
       onHide={() => {
         localStorage.setItem(HIDDEN_KEY, "1");
         setHidden(true);
@@ -257,7 +257,7 @@ export function RBACDevToolbar(): ReactElement | null {
   );
 }
 
-function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
+function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");

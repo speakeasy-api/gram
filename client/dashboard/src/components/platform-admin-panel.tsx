@@ -30,7 +30,7 @@ import { toast } from "sonner";
 // PlatformAdminPanel surfaces the Platform Admin tooling (org override,
 // product features, RBAC, enterprise onboarding) inside the Developer Toolkit.
 // It replaces the standalone OrgAdminSettings page; the layout is compact so it
-// fits the narrow dev-toolbar panel. Every control here hits a platform-admin
+// fits the narrow platform-admin-toolbar panel. Every control here hits a platform-admin
 // guarded endpoint, so a non-platform-admin caller sees graceful error states.
 
 function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
@@ -197,7 +197,7 @@ function RBACManagementSection(): ReactElement {
       </div>
 
       {confirmAction !== null && (
-        // Inline confirmation instead of a modal: the dev-toolbar collapses on
+        // Inline confirmation instead of a modal: the platform-admin-toolbar collapses on
         // outside clicks, which would tear down a portalled dialog mid-flow.
         <div className="border-border bg-muted/40 rounded-md border p-2">
           <p className="text-foreground mb-2 text-[11px] leading-snug">
