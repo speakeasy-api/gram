@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -134,15 +132,13 @@ func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) er
 		return fmt.Errorf("seed system role grants: %w", err)
 	}
 
+	// EnableFeature upserts on the partial unique index (org, feature) WHERE
+	// deleted IS FALSE, so re-enabling an already-enabled org is a clean no-op
+	// rather than a UniqueViolation that would poison the transaction.
 	if _, err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureRBAC),
 	}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
-			return nil
-		}
 		return fmt.Errorf("enable RBAC feature flag: %w", err)
 	}
 

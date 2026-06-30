@@ -293,13 +293,22 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	case err != nil:
 		return nil, err
 	case resolved.isNew:
-		if err := createOrganizationFromWorkOSEvent(ctx, dbtx, repo, payload, event.ID, resolved.organizationID); err != nil {
+		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
 			return nil, err
 		}
 	default:
 		if err := updateOrganizationFromWorkOSEvent(ctx, repo, resolved.row, payload, event.ID); err != nil {
 			return nil, err
 		}
+	}
+
+	// Ensure RBAC is enabled for any org this event touches, new or existing.
+	// The login-time provisioning path (auth/identity) enables RBAC best-effort
+	// and can leave a freshly created org unseeded if that call fails; once that
+	// row exists this backstop would otherwise resolve it as existing and skip
+	// seeding forever. EnableRBACTx is idempotent, so re-asserting here is safe.
+	if err := productfeatures.EnableRBACTx(ctx, dbtx, resolved.organizationID); err != nil {
+		return nil, fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
 	}
 
 	if resolved.needsExternalIDUpdate {
@@ -356,7 +365,7 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	}
 }
 
-func createOrganizationFromWorkOSEvent(ctx context.Context, dbtx database.DBTX, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
+func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
 	// A zero row makes the normal cursor check accept genuine creates while
 	// keeping the create path consistent if a row appears between resolve and
 	// insert.
@@ -387,13 +396,6 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, dbtx database.DBTX, 
 	})
 	if err != nil {
 		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
-	}
-
-	// Enable RBAC for the newly provisioned org, atomically with its creation in
-	// this transaction, so WorkOS-origin orgs come up with access control on.
-	// Idempotent.
-	if err := productfeatures.EnableRBACTx(ctx, dbtx, organizationID); err != nil {
-		return fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
 	}
 
 	return nil

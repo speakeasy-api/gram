@@ -15,6 +15,8 @@ INSERT INTO organization_features (
     @organization_id,
     @feature_name
 )
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: DeleteFeature :one

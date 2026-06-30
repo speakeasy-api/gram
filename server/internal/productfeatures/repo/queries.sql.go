@@ -47,6 +47,8 @@ INSERT INTO organization_features (
     $1,
     $2
 )
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
 `
 
