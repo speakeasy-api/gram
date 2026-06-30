@@ -378,6 +378,8 @@ function remoteSessionIssuer(
     grantTypesSupported: [],
     responseTypesSupported: [],
     tokenEndpointAuthMethodsSupported: [],
+    clientIdMetadataDocumentSupported:
+      overrides.clientIdMetadataDocumentSupported ?? false,
     oidc: false,
     passthrough: false,
     createdAt: new Date(0),

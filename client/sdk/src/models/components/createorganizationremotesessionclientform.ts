@@ -9,17 +9,19 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export const TokenEndpointAuthMethod = {
-  ClientSecretBasic: "client_secret_basic",
-  ClientSecretPost: "client_secret_post",
-  None: "none",
-} as const;
+export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod =
+  {
+    ClientSecretBasic: "client_secret_basic",
+    ClientSecretPost: "client_secret_post",
+    None: "none",
+  } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export type TokenEndpointAuthMethod = ClosedEnum<
-  typeof TokenEndpointAuthMethod
->;
+export type CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod =
+  ClosedEnum<
+    typeof CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod
+  >;
 
 /**
  * Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.
@@ -52,13 +54,16 @@ export type CreateOrganizationRemoteSessionClientForm = {
   /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
-  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
+  tokenEndpointAuthMethod?:
+    | CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod
+    | undefined;
 };
 
 /** @internal */
-export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
-  typeof TokenEndpointAuthMethod
-> = z.enum(TokenEndpointAuthMethod);
+export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod
+  > = z.enum(CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod);
 
 /** @internal */
 export type CreateOrganizationRemoteSessionClientForm$Outbound = {
@@ -85,7 +90,7 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),
       tokenEndpointAuthMethod: z.optional(
-        TokenEndpointAuthMethod$outboundSchema,
+        CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
       ),
     }),
     z.transform((v) => {

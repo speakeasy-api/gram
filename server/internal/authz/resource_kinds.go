@@ -7,4 +7,5 @@ const (
 	ResourceKindOrg         = "org"
 	ResourceKindEnvironment = "environment"
 	ResourceKindRiskPolicy  = "risk_policy"
+	ResourceKindChat        = "chat"
 )

@@ -351,6 +351,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
 	}
 
+	analyzerConfig, err := ra.WithPresidioScoreThreshold(nil, payload.PresidioScoreThreshold)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -365,6 +370,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PolicyType:           policyType,
 		Sources:              sources,
 		PresidioEntities:     createPolicyDetectionField(policyType, payload.PresidioEntities),
+		AnalyzerConfig:       analyzerConfig,
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
@@ -517,6 +523,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	presidioEntities := current.PresidioEntities
 	if payload.PresidioEntities != nil {
 		presidioEntities = payload.PresidioEntities
+	}
+
+	analyzerConfig := current.AnalyzerConfig
+	if payload.PresidioScoreThreshold != nil {
+		updated, err := ra.WithPresidioScoreThreshold(current.AnalyzerConfig, payload.PresidioScoreThreshold)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
 	}
 
 	promptInjectionRules := current.PromptInjectionRules
@@ -681,6 +696,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Name:                 name,
 		Sources:              sources,
 		PresidioEntities:     presidioEntities,
+		AnalyzerConfig:       analyzerConfig,
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
@@ -2213,7 +2229,8 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*g
 		}, nil
 	}
 	entity := strings.ToUpper(strings.TrimPrefix(ruleID, "pii."))
-	batches, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, []string{entity}, nil)
+	// No policy context here; apply the default threshold (0 resolves to it).
+	batches, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, []string{entity}, ra.DefaultPresidioScoreThreshold, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run presidio").LogError(ctx, s.logger)
 	}
@@ -2342,31 +2359,32 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	return &types.RiskPolicy{
-		ID:                    row.ID.String(),
-		ProjectID:             row.ProjectID.String(),
-		Name:                  row.Name,
-		PolicyType:            row.PolicyType,
-		Sources:               row.Sources,
-		PresidioEntities:      row.PresidioEntities,
-		PromptInjectionRules:  row.PromptInjectionRules,
-		DisabledRules:         row.DisabledRules,
-		CustomRuleIds:         row.CustomRuleIds,
-		MessageTypes:          row.MessageTypes,
-		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
-		Enabled:               row.Enabled,
-		Action:                row.Action,
-		AudienceType:          row.AudienceType,
-		AudiencePrincipalUrns: audiencePrincipalURNs,
-		AutoName:              row.AutoName,
-		UserMessage:           conv.FromPGText[string](row.UserMessage),
-		Prompt:                conv.FromPGText[string](row.Prompt),
-		ModelConfig:           unmarshalModelConfig(row.ModelConfig),
-		Version:               row.Version,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:       pendingMessages,
-		TotalMessages:         totalMessages,
+		ID:                     row.ID.String(),
+		ProjectID:              row.ProjectID.String(),
+		Name:                   row.Name,
+		PolicyType:             row.PolicyType,
+		Sources:                row.Sources,
+		PresidioEntities:       row.PresidioEntities,
+		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		PromptInjectionRules:   row.PromptInjectionRules,
+		DisabledRules:          row.DisabledRules,
+		CustomRuleIds:          row.CustomRuleIds,
+		MessageTypes:           row.MessageTypes,
+		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                row.Enabled,
+		Action:                 row.Action,
+		AudienceType:           row.AudienceType,
+		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		AutoName:               row.AutoName,
+		UserMessage:            conv.FromPGText[string](row.UserMessage),
+		Prompt:                 conv.FromPGText[string](row.Prompt),
+		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Version:                row.Version,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:        pendingMessages,
+		TotalMessages:          totalMessages,
 	}, nil
 }
 
@@ -2375,31 +2393,32 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		audiencePrincipalURNs = []string{}
 	}
 	return &types.RiskPolicy{
-		ID:                    row.ID.String(),
-		ProjectID:             row.ProjectID.String(),
-		Name:                  row.Name,
-		PolicyType:            row.PolicyType,
-		Sources:               row.Sources,
-		PresidioEntities:      row.PresidioEntities,
-		PromptInjectionRules:  row.PromptInjectionRules,
-		DisabledRules:         row.DisabledRules,
-		CustomRuleIds:         row.CustomRuleIds,
-		MessageTypes:          row.MessageTypes,
-		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
-		Enabled:               row.Enabled,
-		Action:                row.Action,
-		AudienceType:          row.AudienceType,
-		AudiencePrincipalUrns: audiencePrincipalURNs,
-		AutoName:              row.AutoName,
-		UserMessage:           conv.FromPGText[string](row.UserMessage),
-		Prompt:                conv.FromPGText[string](row.Prompt),
-		ModelConfig:           unmarshalModelConfig(row.ModelConfig),
-		Version:               row.Version,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:       -1,
-		TotalMessages:         -1,
+		ID:                     row.ID.String(),
+		ProjectID:              row.ProjectID.String(),
+		Name:                   row.Name,
+		PolicyType:             row.PolicyType,
+		Sources:                row.Sources,
+		PresidioEntities:       row.PresidioEntities,
+		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		PromptInjectionRules:   row.PromptInjectionRules,
+		DisabledRules:          row.DisabledRules,
+		CustomRuleIds:          row.CustomRuleIds,
+		MessageTypes:           row.MessageTypes,
+		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                row.Enabled,
+		Action:                 row.Action,
+		AudienceType:           row.AudienceType,
+		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		AutoName:               row.AutoName,
+		UserMessage:            conv.FromPGText[string](row.UserMessage),
+		Prompt:                 conv.FromPGText[string](row.Prompt),
+		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Version:                row.Version,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:        -1,
+		TotalMessages:          -1,
 	}
 }
 

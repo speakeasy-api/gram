@@ -7,6 +7,7 @@ INSERT INTO risk_policies (
   , policy_type
   , sources
   , presidio_entities
+  , analyzer_config
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
@@ -30,6 +31,7 @@ VALUES (
   , COALESCE(NULLIF(@policy_type, ''), 'standard')
   , @sources
   , @presidio_entities
+  , COALESCE(sqlc.narg(analyzer_config)::jsonb, '{}'::jsonb)
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
@@ -87,6 +89,7 @@ UPDATE risk_policies
 SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
+  , analyzer_config = COALESCE(sqlc.narg(analyzer_config)::jsonb, '{}'::jsonb)
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
@@ -103,6 +106,7 @@ SET name = @name
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
+        OR analyzer_config IS DISTINCT FROM COALESCE(sqlc.narg(analyzer_config)::jsonb, '{}'::jsonb)
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])

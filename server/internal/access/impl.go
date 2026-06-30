@@ -259,6 +259,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts. Members can always read their own sessions, no one else's; this grant adds access to everyone else's.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -536,6 +537,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
+		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 	}
 }
 

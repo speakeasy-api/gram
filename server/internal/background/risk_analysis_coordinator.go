@@ -97,7 +97,10 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					Sources:          policy.Sources,
 					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
-					CustomRuleIds:    policy.CustomRuleIds,
+					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
+					// left unset here to avoid a second config source.
+					PresidioScoreThreshold: 0,
+					CustomRuleIds:          policy.CustomRuleIds,
 				})
 				futures = append(futures, f)
 			}

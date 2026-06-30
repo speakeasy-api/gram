@@ -20,7 +20,7 @@ func TestPresidio_DetectsPersonName(t *testing.T) {
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My name is John Smith and I live in New York",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -34,7 +34,7 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please contact me at john.smith@globex.com for details",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -62,7 +62,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 		messages[i] = fmt.Sprintf("message %03d contact %s end", i, emails[i])
 	}
 
-	results, err := client.AnalyzeBatch(t.Context(), messages, []string{"EMAIL_ADDRESS"}, nil)
+	results, err := client.AnalyzeBatch(t.Context(), messages, []string{"EMAIL_ADDRESS"}, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, len(messages))
 
@@ -85,7 +85,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 		"My credit card number is 4111111111111111",
 		"Card: 5500-0000-0000-0004",
 		"Amex 371449635398431",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
@@ -101,7 +101,7 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please call my phone number 425-882-8080 to confirm the appointment",
 		"My phone is +44 20 7946 0958",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -123,7 +123,7 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -143,7 +143,7 @@ func TestPresidio_NoFalsePositiveOnVersionNumbers(t *testing.T) {
 		"Version 1.234.567.890 was released",
 		"API v2.0.0-beta.1 is now available",
 		"Build number: 20260423-001",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	for i, findings := range results {
 		highConfidence := filterHighConfidence(findings, 0.7)
@@ -157,7 +157,7 @@ func TestPresidio_NoFalsePositiveOnUUIDs(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Transaction ID: 550e8400-e29b-41d4-a716-446655440000",
 		"Session: a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	for i, findings := range results {
 		highConfidence := filterHighConfidence(findings, 0.7)
@@ -172,7 +172,7 @@ func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 		`func main() { fmt.Println("hello world") }`,
 		`SELECT * FROM users WHERE id = 12345`,
 		`const API_ENDPOINT = "https://api.example.com/v1"`,
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	for i, findings := range results {
 		piiFindings := filterBySource(findings, "presidio")
@@ -194,7 +194,7 @@ func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 		"Please review the pull request when you get a chance.",
 		"We should refactor the authentication module next sprint.",
 		"The API response time improved by 30% after the optimization.",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	for i, findings := range results {
 		highConfidence := filterHighConfidence(findings, 0.7)
@@ -214,7 +214,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	gitleaksFindings, err := risk_analysis.ScanWithGitleaks(content)
 	require.NoError(t, err)
 
-	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, nil)
+	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, 0, nil)
 	require.NoError(t, err)
 
 	allFindings := slices.Concat(gitleaksFindings, presidioResults[0])
@@ -248,7 +248,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := client.AnalyzeBatch(t.Context(), messages, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), messages, nil, 0, nil)
 	elapsed := time.Since(start)
 	require.NoError(t, err)
 	require.Len(t, results, 200)

@@ -13,6 +13,14 @@ import (
 // truncation — streamed responses are not subject to this cap.
 var ErrBodyTooLarge = errors.New("body exceeded max size")
 
+// ErrUndecodableJSONRPCBody is returned by [readJSONRPCBody] when the upstream
+// returned a non-empty body on the buffered (non-SSE) path that does not decode
+// as a single JSON-RPC message — e.g. a bare heartbeat scalar emitted by a
+// non-spec-compliant remote. The proxy relays such bodies to the client
+// verbatim instead of surfacing a 5xx, mirroring the SSE relay path which skips
+// interception for events that fail to decode.
+var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc message")
+
 // ErrBatchRequest is returned by [UserRequest.ParseJSONRPCMessages] when the
 // inbound POST body is a JSON array. MCP Streamable HTTP § Sending Messages to
 // the Server disallows batched (array) request bodies in the current spec

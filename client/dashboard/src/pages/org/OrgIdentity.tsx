@@ -21,7 +21,7 @@ type IdentitySectionId = "sso" | "directory_sync";
 type IdentityCardProps = {
   sectionId: IdentitySectionId;
   heading: string;
-  description: string;
+  description: React.ReactNode;
   providerIcon: React.ReactNode;
   providerTitle: string;
   providerSubtitle: string;
@@ -241,7 +241,7 @@ function IdentitySection({
         <Heading variant="h5" className="mb-1">
           {heading}
         </Heading>
-        <Type muted small className="mb-4">
+        <Type as="div" muted small className="mb-4">
           {description}
         </Type>
         <div className="border-border overflow-hidden rounded-lg border">
@@ -332,7 +332,19 @@ function OrgIdentityInner() {
         <IdentitySection
           sectionId="directory_sync"
           heading="Directory Sync"
-          description="Automatically provision and deprovision users from your identity provider."
+          description={
+            <>
+              Sync members and roles directly from your identity provider:
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                <li>
+                  Members are provisioned automatically from your directory
+                </li>
+                <li>Roles are assigned from your IDP group mappings</li>
+                <li>Members can&apos;t be invited manually</li>
+                <li>Roles can&apos;t be assigned to members manually</li>
+              </ul>
+            </>
+          }
           providerIcon={
             <FolderSync className="text-muted-foreground h-5 w-5" />
           }

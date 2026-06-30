@@ -220,6 +220,7 @@ run();
 * [delete](docs/sdks/chat/README.md#delete) - deleteChat chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
+* [listSources](docs/sdks/chat/README.md#listsources) - listSources chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 * [setPinned](docs/sdks/chat/README.md#setpinned) - setPinned chat
 * [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
@@ -344,6 +345,7 @@ run();
 
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
 
+* [createCimdClient](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
 * [createClient](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
 * [createIssuer](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 * [deleteClient](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
@@ -440,6 +442,7 @@ run();
 * [attachUserSessionIssuer](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 * [cloneClientFromOAuthProxyProvider](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 * [create](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
+* [createCimd](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 * [delete](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 * [detachUserSessionIssuer](docs/sdks/remotesessionclients/README.md#detachusersessionissuer) - detachUserSessionIssuer remoteSessionClients
 * [get](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
@@ -717,6 +720,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
+- [`chatListSources`](docs/sdks/chat/README.md#listsources) - listSources chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
@@ -790,6 +794,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationRemoteSessionIssuersCreateCimdClient`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersCreateClient`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersCreateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersDeleteClient`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
@@ -865,6 +870,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionClientsAttachUserSessionIssuer`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`remoteSessionClientsCloneClientFromOAuthProxyProvider`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`remoteSessionClientsCreate`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
+- [`remoteSessionClientsCreateCimd`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`remoteSessionClientsDelete`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 - [`remoteSessionClientsDetachUserSessionIssuer`](docs/sdks/remotesessionclients/README.md#detachusersessionissuer) - detachUserSessionIssuer remoteSessionClients
 - [`remoteSessionClientsGet`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
@@ -1053,6 +1059,8 @@ To learn about this feature and how to get started, check
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
+- [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
+- [`useCreateCimdRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
@@ -1155,6 +1163,7 @@ To learn about this feature and how to get started, check
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
+- [`useListChatSources`](docs/sdks/chat/README.md#listsources) - listSources chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments

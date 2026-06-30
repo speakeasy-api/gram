@@ -108,10 +108,30 @@ type PIIScanner interface {
 	// findings for each. The outer slice is indexed by input position.
 	// When entities is non-empty, only those entity types are detected.
 	//
+	// scoreThreshold is the minimum recognizer confidence a match must clear
+	// to be returned. A value <=0 or >1 is treated as unset and the default
+	// (DefaultPresidioScoreThreshold) is applied.
+	//
 	// Permanent per-message failures surface as a single Finding with
 	// DeadLetterReason populated rather than as an error; the returned
 	// error is non-nil only on outer-ctx cancellation.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) ([][]Finding, error)
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]Finding, error)
+}
+
+// DefaultPresidioScoreThreshold is the minimum recognizer confidence applied
+// when a policy does not pin its own presidio_score_threshold.
+const DefaultPresidioScoreThreshold = 0.5
+
+// resolvePresidioScoreThreshold substitutes the default for an unset or
+// out-of-range threshold. Presidio scores live in [0,1]; the zero value
+// carried by AnalyzeBatchArgs when a policy omits the field (and any value
+// outside the range) means "unset", so we apply the default floor rather than
+// disabling it entirely.
+func resolvePresidioScoreThreshold(v float64) float64 {
+	if v <= 0 || v > 1 {
+		return DefaultPresidioScoreThreshold
+	}
+	return v
 }
 
 // presidioMaxMessageBytes serves a dual role:
@@ -330,11 +350,13 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 // Returns a non-nil error only on outer-ctx cancellation. Per-message
 // failures surface as DeadLetterReason sentinels so the rest of the batch
 // can still write.
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
 	}
+
+	scoreThreshold = resolvePresidioScoreThreshold(scoreThreshold)
 
 	// Short-circuit when every input is empty: /analyze would either 500 on
 	// the empty array or return no findings, so we save the HTTP round-trip
@@ -376,7 +398,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	var wg sync.WaitGroup
 	for i, text := range texts {
 		wg.Go(func() {
-			finding, dl := p.analyzeOne(ctx, i, text, entities, onProgress)
+			finding, dl := p.analyzeOne(ctx, i, text, entities, scoreThreshold, onProgress)
 			results[i] = finding
 			if dl {
 				deadLetters.Add(1)
@@ -396,7 +418,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 // analyzeOne runs the retry loop for a single text. Returns the per-text
 // findings slice (real findings, or a single dead-letter sentinel) and a
 // boolean indicating whether the result was a dead letter.
-func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, onProgress func()) ([]Finding, bool) {
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, bool) {
 	if onProgress != nil {
 		onProgress()
 	}
@@ -428,7 +450,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 			return nil, false
 		}
 
-		findings, err := p.analyzeOnce(ctx, text, entities, onProgress)
+		findings, err := p.analyzeOnce(ctx, text, entities, scoreThreshold, onProgress)
 		if err == nil {
 			return findings, false
 		}
@@ -492,14 +514,14 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 // analyzeOnce issues a single POST /analyze for one text, gated by the
 // byte-budget semaphore. Returns Presidio's findings on 200, or an error
 // (HTTP failure, non-200, decode failure) on anything else. No retry.
-func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, onProgress func()) ([]Finding, error) {
+func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, error) {
 	cost := requestByteCost(text, p.throttleBudget)
 	if err := p.acquireThrottle(ctx, cost, onProgress); err != nil {
 		return nil, err
 	}
 	defer p.throttle.Release(cost)
 
-	return p.analyze(ctx, text, entities)
+	return p.analyze(ctx, text, entities, scoreThreshold)
 }
 
 // requestByteCost returns the semaphore cost for a single-text request,
@@ -534,7 +556,7 @@ func (p *PresidioClient) acquireThrottle(ctx context.Context, cost int64, onProg
 	}
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
+func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string, scoreThreshold float64) (_ []Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -554,7 +576,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	body, err := json.Marshal(presidioRequest{
 		Text:     []string{text},
 		Language: "en",
-		ScoreMin: 0.5,
+		ScoreMin: scoreThreshold,
 		Entities: entities,
 	})
 	if err != nil {
@@ -783,6 +805,6 @@ func isCancelErr(err error) bool {
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ func()) ([][]Finding, error) {
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]Finding, error) {
 	return make([][]Finding, len(texts)), nil
 }

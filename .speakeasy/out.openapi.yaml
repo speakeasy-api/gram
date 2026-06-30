@@ -6129,6 +6129,13 @@ paths:
             description: Filter by external user ID
             type: string
         - allowEmptyValue: true
+          description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+          in: query
+          name: source
+          schema:
+            description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+            type: string
+        - allowEmptyValue: true
           description: Filter to chats produced by this assistant
           in: query
           name: assistant_id
@@ -6320,6 +6327,105 @@ paths:
       x-speakeasy-react-hook:
         name: ListChats
         type: query
+  /rpc/chat.listSources:
+    get:
+      description: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
+      operationId: listChatSources
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSourcesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: listSources chat
+      tags:
+        - chat
+      x-speakeasy-name-override: listSources
+      x-speakeasy-react-hook:
+        name: ListChatSources
+        type: query
   /rpc/chat.load:
     get:
       description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).'
@@ -6380,19 +6486,19 @@ paths:
             description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
             type: boolean
         - allowEmptyValue: true
-          description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+          description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
           in: query
           name: risk_only
           schema:
             default: false
-            description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+            description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
             type: boolean
         - allowEmptyValue: true
-          description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+          description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
           in: query
           name: query
           schema:
-            description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+            description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
             maxLength: 200
             minLength: 1
             type: string
@@ -13445,6 +13551,102 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/organizationRemoteSessionIssuers.createCimdClient:
+    post:
+      description: 'Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
+      operationId: createCimdOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCimdOrganizationRemoteSessionClientForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createCimdClient organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: createCimdClient
+      x-speakeasy-react-hook:
+        name: CreateCimdOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionIssuers.createClient:
     post:
       description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -20871,6 +21073,111 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: CreateRemoteSessionClient
+  /rpc/remoteSessionClients.createCimd:
+    post:
+      description: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+      operationId: createCimdRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCimdForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createCimd remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: createCimd
+      x-speakeasy-react-hook:
+        name: CreateCimdRemoteSessionClient
   /rpc/remoteSessionClients.delete:
     delete:
       description: Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.
@@ -35501,12 +35808,6 @@ components:
           items:
             $ref: '#/components/schemas/RiskSegment'
           description: 'Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment''s cursors to expand it.'
-        match_seqs:
-          type: array
-          items:
-            type: integer
-            format: int64
-          description: 'Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.'
         max_generation:
           type: integer
           description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
@@ -35594,6 +35895,9 @@ components:
         id:
           type: string
           description: The ID of the message
+        is_risk:
+          type: boolean
+          description: 'Present only in `risk_only` mode: true when this message has an active risk finding, false for the surrounding-context messages padded around it.'
         model:
           type: string
           description: The model that generated the message
@@ -36161,6 +36465,60 @@ components:
         - model
         - instructions
         - toolsets
+    CreateCimdForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        remote_session_issuer_id:
+          type: string
+          description: The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
+      description: Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
+      required:
+        - remote_session_issuer_id
+    CreateCimdOrganizationRemoteSessionClientForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        project_id:
+          type: string
+          description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+      description: Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
+      required:
+        - remote_session_issuer_id
     CreateCustomDetectionRuleRequestBody:
       type: object
       properties:
@@ -36328,6 +36686,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
         grant_types_supported:
           type: array
           items:
@@ -36704,6 +37065,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
         grant_types_supported:
           type: array
           items:
@@ -36935,6 +37299,13 @@ components:
           items:
             type: string
           description: Presidio entity types to detect.
+        presidio_score_threshold:
+          type: number
+          description: Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
+          example: 0.75
+          format: double
+          minimum: 0
+          maximum: 1
         prompt:
           type: string
           description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.'
@@ -40684,6 +41055,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         selectors:
           type: array
           items:
@@ -40714,6 +41086,7 @@ components:
               - environment:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
+              - chat:read
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -40839,6 +41212,16 @@ components:
             $ref: '#/components/schemas/ShadowMCPApprovalRequest'
       required:
         - requests
+    ListSourcesResult:
+      type: object
+      properties:
+        sources:
+          type: array
+          items:
+            type: string
+          description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
+      required:
+        - sources
     ListToolFiltersResult:
       type: object
       properties:
@@ -43664,6 +44047,9 @@ components:
         client_id_issued_at:
           type: string
           format: date-time
+        client_id_metadata_uri:
+          type: string
+          description: 'When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.'
         client_secret_expires_at:
           type: string
           description: Null when the secret does not expire.
@@ -43720,6 +44106,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
         created_at:
           type: string
           format: date-time
@@ -43789,6 +44178,7 @@ components:
         - issuer
         - oidc
         - passthrough
+        - client_id_metadata_document_supported
         - created_at
         - updated_at
     RemoteSessionIssuerDraft:
@@ -43797,6 +44187,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
         discovery_warnings:
           type: array
           items:
@@ -43841,6 +44234,7 @@ components:
         - issuer
         - oidc
         - passthrough
+        - client_id_metadata_document_supported
         - discovery_warnings
     RemoveClientFromMcpServerRequestBody:
       type: object
@@ -44410,6 +44804,13 @@ components:
           items:
             type: string
           description: Presidio entity types to scan for. When empty, scans all entities.
+        presidio_score_threshold:
+          type: number
+          description: Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
+          example: 0.75
+          format: double
+          minimum: 0
+          maximum: 1
         project_id:
           type: string
           description: The project ID.
@@ -44971,6 +45372,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         selectors:
           type: array
           items:
@@ -45055,6 +45457,7 @@ components:
             - mcp
             - environment
             - risk_policy
+            - chat
         slug:
           type: string
           description: Unique scope identifier.
@@ -45079,6 +45482,7 @@ components:
             - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - chat:read
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -45507,6 +45911,7 @@ components:
             - org
             - environment
             - risk_policy
+            - chat
             - '*'
         server_url:
           type: string
@@ -48583,6 +48988,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
         grant_types_supported:
           type: array
           items:
@@ -48749,6 +49157,13 @@ components:
           items:
             type: string
           description: Presidio entity types to detect.
+        presidio_score_threshold:
+          type: number
+          description: Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
+          example: 0.75
+          format: double
+          minimum: 0
+          maximum: 1
         prompt:
           type: string
           description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.'

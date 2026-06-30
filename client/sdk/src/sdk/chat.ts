@@ -6,6 +6,7 @@ import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
+import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
@@ -84,6 +85,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListChatsResult> {
     return unwrapAsync(chatList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSources chat
+   *
+   * @remarks
+   * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
+   */
+  async listSources(
+    request?: operations.ListChatSourcesRequest | undefined,
+    security?: operations.ListChatSourcesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListSourcesResult> {
+    return unwrapAsync(chatListSources(
       this,
       request,
       security,

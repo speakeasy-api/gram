@@ -82,6 +82,7 @@ pubsub:
           string reply_urn = 8;
           string content = 9;
           repeated string entities = 10;
+          double score_threshold = 11;
         }
       type: PROTOCOL_BUFFER
   subscriptions:
@@ -123,12 +124,26 @@ pubsub:
         name: gram-ping-v2-message
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-bq-writer
+      topic_proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding-bq-writer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-finding
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analyzer
       topic_proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -142,7 +157,7 @@ pubsub:
     name: gram-risk-v1-presidio-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s

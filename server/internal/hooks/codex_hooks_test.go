@@ -38,6 +38,138 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 	require.Contains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
 }
 
+func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := "codex-session-gram-mcp-meta-tool"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "speakeasy-team",
+		URL:           "https://app.getgram.ai/mcp/speakeasy-team-8g3az",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "o_auth",
+		ConnectorUUID: "",
+		ToolPrefix:    "speakeasy_team",
+	}}, sessionMCPListTTL))
+
+	toolName := "list_mcp_resources"
+	userEmail := "anonymous-codex@example.com"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"server": "speakeasy-team"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Decision)
+	require.Nil(t, result.Reason)
+}
+
+func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := "codex-session-external-mcp-meta-tool"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "platform-logs",
+		URL:           "https://chat.speakeasy.com/mcp/speakeasy-team-62awx",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "bearer_token",
+		ConnectorUUID: "",
+		ToolPrefix:    "platform_logs",
+	}}, sessionMCPListTTL))
+
+	toolName := "list_mcp_resources"
+	userEmail := "anonymous-codex@example.com"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"server": "platform-logs"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Decision)
+	require.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	require.Contains(t, *result.Reason, "not Gram-hosted")
+	require.Contains(t, *result.Reason, "https://chat.speakeasy.com/mcp/speakeasy-team-62awx")
+	require.Contains(t, *result.Reason, "Request access:")
+}
+
+func TestCodex_PreToolUse_ShadowMCPBlocksUnverifiedMetaTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := "codex-session-unverified-mcp-meta-tool"
+	toolName := "list_mcp_resources"
+	userEmail := "anonymous-codex@example.com"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"server": "platform-logs"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Decision)
+	require.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	require.Contains(t, *result.Reason, "could not be verified from Codex inventory")
+}
+
+func TestCodex_PreToolUse_ShadowMCPBlocksMetaToolMissingServer(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]any{
+		"nil input":         nil,
+		"missing server":    map[string]any{},
+		"blank server":      map[string]any{"server": "  "},
+		"non-string server": map[string]any{"server": 42},
+	}
+	for name, toolInput := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+			sessionID := "codex-session-missing-meta-server-" + name
+			toolName := "list_mcp_resources"
+			userEmail := "anonymous-codex@example.com"
+			result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+				HookEventName: "PreToolUse",
+				SessionID:     &sessionID,
+				UserEmail:     &userEmail,
+				ToolName:      &toolName,
+				ToolInput:     toolInput,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, result.Decision)
+			require.Equal(t, "deny", *result.Decision)
+			require.NotNil(t, result.Reason)
+			require.Contains(t, *result.Reason, `Codex MCP meta-tool "list_mcp_resources" is missing required tool_input.server`)
+		})
+	}
+}
+
 func TestCodex_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -211,6 +343,46 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 	require.Equal(t, "get_issue", attrs[attr.ToolNameKey])
 }
 
+func TestBuildCodexTelemetryAttributes_EnrichesMCPMetaToolFromInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-telemetry-meta-inventory"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "platform-logs",
+		URL:           "https://chat.example.com/mcp/platform-logs",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "bearer_token",
+		ConnectorUUID: "",
+		ToolPrefix:    "platform_logs",
+	}}, sessionMCPListTTL))
+
+	toolName := "list_mcp_resources"
+	attrs := ti.service.buildCodexTelemetryAttributes(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"server": "platform-logs"},
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   "",
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPServerURLKey])
+	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPMatchKey])
+	require.Equal(t, "platform-logs", attrs[attr.ToolCallSourceKey])
+	require.Equal(t, "list_mcp_resources", attrs[attr.ToolNameKey])
+}
+
 func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -252,6 +424,77 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
 	require.NotNil(t, matched)
 
+	metaTool := "list_mcp_resources"
+	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &metaTool,
+		ToolInput:     map[string]any{"server": "int-linear"},
+	})
+	require.Equal(t, "int-linear", evidence.ServerIdentity)
+	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
+	require.NotNil(t, matched)
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "datadog",
+		URL:           "https://app.getgram.ai/mcp/datadog",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "o_auth",
+		ConnectorUUID: "",
+		ToolPrefix:    "datadog",
+	}, {
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "datadog",
+		URL:           "https://third-party.example.com/mcp/datadog",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "unsupported",
+		ConnectorUUID: "",
+		ToolPrefix:    "datadog",
+	}}, sessionMCPListTTL))
+	ambiguousTool := "mcp__datadog__query"
+	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &ambiguousTool,
+	})
+	require.Equal(t, "datadog", evidence.ServerIdentity)
+	require.Empty(t, evidence.FullURL)
+	require.Nil(t, matched, "ambiguous Codex namespaces must not resolve to the first matching inventory row")
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "int-linear",
+		URL:           "https://chat.example.com/mcp/int-linear",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "o_auth",
+		ConnectorUUID: "",
+		ToolPrefix:    "int_linear",
+	}, {
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "local-tool",
+		URL:           "",
+		Command:       "npx -y some-server",
+		Transport:     "STDIO",
+		Status:        "unknown",
+		StatusRaw:     "",
+		ConnectorUUID: "",
+		ToolPrefix:    "local_tool",
+	}}, sessionMCPListTTL))
 	stdioTool := "mcp__local_tool__run"
 	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
@@ -271,61 +514,6 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Equal(t, "unknown", evidence.ServerIdentity)
 	require.Empty(t, evidence.FullURL)
 	require.Nil(t, matched)
-}
-
-func TestCodexInventoryProvenanceDetail(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	external := &MCPServerEntry{
-		RawLine:       "",
-		Source:        "local",
-		PluginName:    "",
-		Name:          "evil",
-		URL:           "https://mcp.attacker.example/mcp",
-		Command:       "",
-		Transport:     "HTTP",
-		Status:        "unknown",
-		StatusRaw:     "",
-		ConnectorUUID: "",
-		ToolPrefix:    "",
-	}
-	detail := ti.service.codexInventoryProvenanceDetail(ctx, external, "org-id")
-	require.Contains(t, detail, "not Gram-hosted")
-	require.Contains(t, detail, "https://mcp.attacker.example/mcp")
-
-	stdio := &MCPServerEntry{
-		RawLine:       "",
-		Source:        "local",
-		PluginName:    "",
-		Name:          "local-tool",
-		URL:           "",
-		Command:       "npx -y some-server",
-		Transport:     "STDIO",
-		Status:        "unknown",
-		StatusRaw:     "",
-		ConnectorUUID: "",
-		ToolPrefix:    "local_tool",
-	}
-	detail = ti.service.codexInventoryProvenanceDetail(ctx, stdio, "org-id")
-	require.Contains(t, detail, "local stdio server")
-
-	gramHosted := &MCPServerEntry{
-		RawLine:       "",
-		Source:        "local",
-		PluginName:    "",
-		Name:          "gram",
-		URL:           "https://app.getgram.ai/mcp/acme",
-		Command:       "",
-		Transport:     "HTTP",
-		Status:        "unknown",
-		StatusRaw:     "",
-		ConnectorUUID: "",
-		ToolPrefix:    "",
-	}
-	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, gramHosted, "org-id"))
-
-	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, nil, "org-id"))
 }
 
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {

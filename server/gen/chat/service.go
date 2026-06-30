@@ -44,6 +44,9 @@ type Service interface {
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
+	// List the distinct agent sources present in this project's chats, for
+	// populating the agent-type filter on the Agent Sessions page.
+	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -68,7 +71,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback"}
+var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -104,10 +107,6 @@ type Chat struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegment
-	// Present only when `query` was requested: the `seq` of every message whose
-	// text matched the query, ascending. These are the jump-to-match navigation
-	// targets; surrounding-context messages in `messages` are not listed here.
-	MatchSeqs []int64
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -155,6 +154,9 @@ type ChatMessage struct {
 	// contiguous (the sequence is shared across chats), so do not infer gaps from
 	// arithmetic differences.
 	Seq int64
+	// Present only in `risk_only` mode: true when this message has an active risk
+	// finding, false for the surrounding-context messages padded around it.
+	IsRisk *bool
 	// The role of the message
 	Role string
 	// The content of the message — string for plain text, array for
@@ -335,6 +337,11 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by agent source. Comma-separated list of exact source values (e.g.
+	// 'claude-code,Codex,playground') matched against each session's inferred
+	// source; empty for no filter. Use chat.listSources to discover the available
+	// values.
+	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
@@ -366,6 +373,21 @@ type ListChatsResult struct {
 	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
+}
+
+// ListSourcesPayload is the payload type of the chat service listSources
+// method.
+type ListSourcesPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+}
+
+// ListSourcesResult is the result type of the chat service listSources method.
+type ListSourcesResult struct {
+	// The distinct agent sources present in this project's chats (raw source
+	// strings such as 'claude-code', 'Codex', 'playground').
+	Sources []string
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.
@@ -405,18 +427,18 @@ type LoadChatPayload struct {
 	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
-	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
-	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
-	// exclusive with `query`.
+	// segments (see `risk_segments`). The flagged messages themselves are marked
+	// with `is_risk` on each `ChatMessage` (surrounding context is `is_risk:
+	// false`). Cursors are ignored in this mode; expand a segment with a follow-up
+	// `before_seq`/`after_seq` request. Mutually exclusive with `query`.
 	RiskOnly bool
 	// When set (and `risk_only` is false), return only messages whose text matches
 	// this query (case-insensitive substring over message text, tool
 	// names/arguments, and structured content), each padded with a fixed window of
 	// surrounding messages, grouped into contiguous segments (see
-	// `match_segments`). The seqs that actually matched are listed in
-	// `match_seqs`. Cursors are ignored on the initial request; expand a segment
-	// with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with
-	// `risk_only`.
+	// `match_segments`). Cursors are ignored on the initial request; expand a
+	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
+	// exclusive with `risk_only`.
 	Query *string
 }
 

@@ -10,6 +10,11 @@ import {
 import { Type } from "@/components/ui/type";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import {
+  CLIENT_TYPE_LABELS,
+  clientTypeHelp,
+  type ClientType,
+} from "./issuerFormUtils";
 
 // Shared form-field components used by both AttachRemoteIdentityProviderSheet
 // and ModifyRemoteIdentityProviderSheet. The state lives in the parent sheet;
@@ -179,32 +184,11 @@ export function EndpointsFields({
   );
 }
 
-// DcrNotice replaces the OAuth Client Credentials form when the issuer
-// advertises a registration_endpoint. In Add we still call proxy-register to
-// obtain credentials; in Modify the existing client_id is kept and only
-// scope/audience can drift. The token_endpoint_auth_method field stays
-// editable in both DCR and manual modes — see TokenEndpointAuthMethodField.
-export function DcrNotice({
-  description,
-}: {
-  description?: string;
-}): JSX.Element {
-  return (
-    <Stack gap={2} className="border-t pt-6">
-      <Label className="text-sm font-medium">OAuth Client Credentials</Label>
-      <Type muted small>
-        {description ??
-          "The issuer advertises a registration endpoint (RFC 7591), so the platform will automatically register a client on save."}
-      </Type>
-    </Stack>
-  );
-}
-
 // TokenEndpointAuthMethodField is the standalone Select for the upstream
-// token endpoint auth method. It renders in both DCR mode (alongside
-// DcrNotice so operators can override the upstream-assigned default) and in
-// the manual ClientCredentialsFields. Extracted so the two paths stay in
-// lockstep on the enum values and placeholder copy.
+// token endpoint auth method. It renders for the DCR client type (so operators
+// can override the upstream-assigned default) and inside the manual
+// ClientCredentialsFields. Extracted so the two paths stay in lockstep on the
+// enum values and placeholder copy.
 export function TokenEndpointAuthMethodField({
   value,
   onChange,
@@ -385,6 +369,100 @@ export function OverridesFields({
           return JWT access tokens.
         </Type>
       </Stack>
+    </Stack>
+  );
+}
+
+// ClientTypeFields renders the Client Type selector (DCR / CIMD / Manual) and
+// the credentials inputs the chosen type needs. Used by both the org-admin
+// CreateRemoteSessionClientSheet and the Attach sheet so the two stay in
+// lockstep on the available-types logic and per-type copy. The selector hides
+// when only one type is available (nothing to choose). The owning sheet holds
+// `clientType` so its submit handler can branch on it.
+export function ClientTypeFields({
+  availableTypes,
+  clientType,
+  onClientTypeChange,
+  clientId,
+  clientSecret,
+  tokenEndpointAuthMethod,
+  onClientIdChange,
+  onClientSecretChange,
+  onTokenEndpointAuthMethodChange,
+}: {
+  availableTypes: ClientType[];
+  clientType: ClientType;
+  onClientTypeChange: (value: ClientType) => void;
+  clientId: string;
+  clientSecret: string;
+  tokenEndpointAuthMethod:
+    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
+    | "";
+  onClientIdChange: (value: string) => void;
+  onClientSecretChange: (value: string) => void;
+  onTokenEndpointAuthMethodChange: (
+    value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  ) => void;
+}): JSX.Element {
+  let credentials: JSX.Element | null;
+  switch (clientType) {
+    case "dcr":
+      // DCR mints the client_id/client_secret at save time, so the only input
+      // is the token endpoint auth method forwarded to the registration call.
+      credentials = (
+        <TokenEndpointAuthMethodField
+          value={tokenEndpointAuthMethod}
+          onChange={onTokenEndpointAuthMethodChange}
+        />
+      );
+      break;
+    case "cimd":
+      // CIMD has no credentials to collect, and the selector help text above
+      // already explains the hosted-document flow, so render nothing here.
+      credentials = null;
+      break;
+    case "manual":
+      credentials = (
+        <ClientCredentialsFields
+          showHeading={false}
+          clientId={clientId}
+          clientSecret={clientSecret}
+          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+          onClientIdChange={onClientIdChange}
+          onClientSecretChange={onClientSecretChange}
+          onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
+        />
+      );
+  }
+
+  return (
+    <Stack gap={4}>
+      <Stack gap={2}>
+        {availableTypes.length > 1 && (
+          <>
+            <Label className="text-muted-foreground text-xs">Client Type</Label>
+            <Select
+              value={clientType}
+              onValueChange={(value) => onClientTypeChange(value as ClientType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {CLIENT_TYPE_LABELS[type]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <Type muted small>
+          {clientTypeHelp(clientType, availableTypes)}
+        </Type>
+      </Stack>
+      {credentials}
     </Stack>
   );
 }

@@ -17,6 +17,7 @@ const (
 	subjectTypeAssistantMemory          subjectType = "assistant_memory"
 	subjectTypeAsset                    subjectType = "asset"
 	subjectTypeBillingMetadata          subjectType = "billing_metadata"
+	subjectTypeChatSession              subjectType = "chat_session"
 	subjectTypeCustomDomain             subjectType = "custom_domain"
 	subjectTypeDeployment               subjectType = "deployment"
 	subjectTypeEnvironment              subjectType = "environment"

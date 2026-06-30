@@ -15,6 +15,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { TokenEndpointAuthMethodField } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
   narrowTokenEndpointAuthMethod,
@@ -127,7 +128,7 @@ export function SettingsTab({
       {showDelete && (
         <DeleteClientDialog
           clientId={client.id}
-          clientLabel={client.clientId}
+          clientLabel={remoteSessionClientDisplayName(client)}
           onClose={() => setShowDelete(false)}
           onDeleted={() =>
             orgRoutes.remoteIdentityProviders.issuerDetail.goTo(issuerId)

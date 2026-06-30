@@ -13,6 +13,10 @@ export type UpdateRemoteSessionIssuerForm = {
    * Upstream authorization endpoint.
    */
   authorizationEndpoint?: string | undefined;
+  /**
+   * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+   */
+  clientIdMetadataDocumentSupported?: boolean | undefined;
   grantTypesSupported?: Array<string> | undefined;
   /**
    * The remote_session_issuer id.
@@ -56,6 +60,7 @@ export type UpdateRemoteSessionIssuerForm = {
 /** @internal */
 export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
+  client_id_metadata_document_supported?: boolean | undefined;
   grant_types_supported?: Array<string> | undefined;
   id: string;
   issuer?: string | undefined;
@@ -79,6 +84,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     grantTypesSupported: z.optional(z.array(z.string())),
     id: z.string(),
     issuer: z.optional(z.string()),
@@ -97,6 +103,8 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      clientIdMetadataDocumentSupported:
+        "client_id_metadata_document_supported",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",

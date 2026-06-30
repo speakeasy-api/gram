@@ -53,6 +53,10 @@ WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $3
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -96,6 +100,17 @@ candidate_chats AS (
       $10::int < 0
       OR COALESCE(rc.cnt, 0) >= $10::int
     )
+    AND (
+      coalesce(cardinality($11::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY ($11::text[])
+    )
 ),
 chat_activity AS (
   SELECT
@@ -122,6 +137,7 @@ type CountChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
+	Sources        []string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -139,6 +155,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
+		arg.Sources,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -187,6 +204,9 @@ WHERE c.project_id = $1
       $8::text = 'true' AND EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = $1
           AND rr.found IS TRUE
@@ -198,6 +218,9 @@ WHERE c.project_id = $1
       $8::text = 'false' AND NOT EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = $1
           AND rr.found IS TRUE
@@ -548,6 +571,9 @@ SELECT
     SELECT COUNT(*)::bigint FROM ordered o
     WHERE EXISTS (
       SELECT 1 FROM risk_results rr
+      -- Only count a finding while its policy is enabled and not deleted (see
+      -- the risk_counts CTE / risk.results.list for the same gate).
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
       WHERE rr.chat_message_id = o.id
         AND rr.project_id = $1::uuid
         AND rr.found IS TRUE
@@ -1435,11 +1461,63 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 	return items, nil
 }
 
+const listChatSources = `-- name: ListChatSources :many
+WITH latest_sources AS (
+  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
+  FROM chats c
+  JOIN chat_messages cm ON cm.chat_id = c.id
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND ($2::text = '' OR c.external_user_id = $2::text)
+    AND ($3::text = '' OR c.user_id = $3::text)
+    AND cm.source IS NOT NULL
+  ORDER BY cm.chat_id, cm.created_at DESC
+)
+SELECT DISTINCT source
+FROM latest_sources
+WHERE source IS NOT NULL
+ORDER BY source
+`
+
+type ListChatSourcesParams struct {
+	ProjectID      uuid.UUID
+	ExternalUserID string
+	UserID         string
+}
+
+// Distinct inferred source (the latest non-null message source) across the
+// project's chats, honoring the same visibility scoping as ListChats. Feeds the
+// agent-type filter options on the Agent Sessions page so the list reflects the
+// sources actually present in the data rather than a hardcoded catalog.
+func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listChatSources, arg.ProjectID, arg.ExternalUserID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var source pgtype.Text
+		if err := rows.Scan(&source); err != nil {
+			return nil, err
+		}
+		items = append(items, source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChats = `-- name: ListChats :many
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $1
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -1490,6 +1568,17 @@ candidate_chats AS (
       $8::int < 0
       OR COALESCE(rc.cnt, 0) >= $8::int
     )
+    AND (
+      coalesce(cardinality($9::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY ($9::text[])
+    )
 ),
 chat_stats AS (
   SELECT
@@ -1513,8 +1602,8 @@ filtered_chats AS (
     cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($9::timestamptz IS NULL OR cs.last_message_timestamp >= $9)
-    AND ($10::timestamptz IS NULL OR cs.last_message_timestamp <= $10)
+  WHERE ($10::timestamptz IS NULL OR cs.last_message_timestamp >= $10)
+    AND ($11::timestamptz IS NULL OR cs.last_message_timestamp <= $11)
 ),
 limited_chats AS (
   SELECT
@@ -1530,14 +1619,14 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $11 = 'num_messages' AND $12 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $11 = 'num_messages' AND $12 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $12 = 'num_messages' AND $13 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $12 = 'num_messages' AND $13 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $14
-  OFFSET $13
+  LIMIT $15
+  OFFSET $14
 )
 SELECT
   lc.id,
@@ -1562,6 +1651,7 @@ type ListChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
+	Sources        []string
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
@@ -1597,6 +1687,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
+		arg.Sources,
 		arg.FromTime,
 		arg.ToTime,
 		arg.SortBy,
@@ -1714,6 +1805,10 @@ risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
     SELECT 1 FROM risk_results rr
+    -- is_risk only fires while the finding's policy is enabled and not deleted,
+    -- so a since-disabled policy drops out of the "Risky only" view too (matches
+    -- risk.results.list, which drives the highlight detail).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
     WHERE rr.chat_message_id = o.id
       AND rr.project_id = $3::uuid
       AND rr.found IS TRUE
@@ -1721,7 +1816,9 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
@@ -1771,6 +1868,7 @@ type ListRiskWindowedMessagesRow struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
 	Total             int64
+	IsRisk            bool
 }
 
 // Risk-only view: returns every message within +/- @context_size ordinal
@@ -1779,7 +1877,9 @@ type ListRiskWindowedMessagesRow struct {
 // is the generation's message count, so the caller can fold consecutive rn into
 // contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 // messages remain to be expanded. Overlapping windows merge naturally via set
-// membership.
+// membership. is_risk flags the seed rows (the flagged messages themselves) so
+// the caller can return the explicit risk seq list (context rows are
+// is_risk = false).
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
@@ -1828,6 +1928,7 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.RiskAnalyzedAt,
 			&i.Rn,
 			&i.Total,
+			&i.IsRisk,
 		); err != nil {
 			return nil, err
 		}
@@ -2165,6 +2266,55 @@ type SeedChatMessageContentParams struct {
 // id, for exercising the text-search windowed view.
 func (q *Queries) SeedChatMessageContent(ctx context.Context, arg SeedChatMessageContentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedChatMessageContent, arg.ChatID, arg.ProjectID, arg.Content)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatMessageWithSource = `-- name: SeedChatMessageWithSource :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
+VALUES ($1, $2, 'user', 'test message', $3, COALESCE($4::timestamptz, clock_timestamp()))
+RETURNING id
+`
+
+type SeedChatMessageWithSourceParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Source    pgtype.Text
+	CreatedAt pgtype.Timestamptz
+}
+
+// Test fixture: insert a chat message carrying a specific source. The per-chat
+// inferred source (used by the agent-type filter and ListChatSources) is the
+// latest non-null message source, so source-filter tests seed messages this way.
+func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMessageWithSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatMessageWithSource,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Source,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedDisabledRiskPolicy = `-- name: SeedDisabledRiskPolicy :one
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
+VALUES ($1, $2, 'test-policy-disabled', '{}', FALSE, 'flag', TRUE, 1)
+RETURNING id
+`
+
+type SeedDisabledRiskPolicyParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: insert a disabled risk policy and return its id. Findings under
+// a disabled (or deleted) policy must drop out of every risk surface — the
+// per-chat count, the is_risk flag, and the risk.results.list detail alike.
+func (q *Queries) SeedDisabledRiskPolicy(ctx context.Context, arg SeedDisabledRiskPolicyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedDisabledRiskPolicy, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

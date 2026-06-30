@@ -28,6 +28,11 @@ var _ = Service("risk", func() {
 			})
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
@@ -133,6 +138,11 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")

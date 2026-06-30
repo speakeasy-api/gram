@@ -12,6 +12,11 @@ func CreateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.create"
 }
 
+// CreateCimdRemoteSessionClientsPath returns the URL path to the remoteSessionClients service createCimd HTTP endpoint.
+func CreateCimdRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.createCimd"
+}
+
 // CloneClientFromOAuthProxyProviderRemoteSessionClientsPath returns the URL path to the remoteSessionClients service cloneClientFromOAuthProxyProvider HTTP endpoint.
 func CloneClientFromOAuthProxyProviderRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider"

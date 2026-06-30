@@ -551,6 +551,29 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationRemoteSessionClient"}`)
 	})
 
+	Method("createCimdClient", func() {
+		Description("Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
+
+		Payload(func() {
+			Extend(CreateCimdOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsclients.RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.createCimdClient")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createCimdOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateCimdOrganizationRemoteSessionClient"}`)
+	})
+
 	Method("updateClient", func() {
 		Description("Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.")
 
@@ -722,6 +745,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Token endpoint auth methods advertised by the issuer.")
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour. Default false.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer. Default false.")
+	Attribute("client_id_metadata_document_supported", Boolean, "When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.")
 
 	Required("slug", "issuer")
 })
@@ -748,6 +772,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("oidc", Boolean)
 	Attribute("passthrough", Boolean)
+	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
 
 	Required("id")
 })
@@ -780,6 +805,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
+	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -787,7 +813,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "slug", "issuer", "oidc", "passthrough", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "slug", "issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "created_at", "updated_at")
 })
 
 var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
@@ -806,9 +832,10 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
+	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.")
 	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered during discovery.")
 
-	Required("issuer", "oidc", "passthrough", "discovery_warnings")
+	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "discovery_warnings")
 })
 
 var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func() {
