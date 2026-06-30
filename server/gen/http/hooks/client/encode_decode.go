@@ -744,6 +744,236 @@ func DecodeCodexResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 	}
 }
 
+// BuildDispatchRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "dispatch" endpoint
+func (c *Client) BuildDispatchRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DispatchHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "dispatch", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDispatchRequest returns an encoder for requests sent to the hooks
+// dispatch server.
+func EncodeDispatchRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.DispatchPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "dispatch", "*hooks.DispatchPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewDispatchRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "dispatch", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDispatchResponse returns a decoder for responses returned by the hooks
+// dispatch endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeDispatchResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDispatchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DispatchResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			res := NewDispatchHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DispatchUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DispatchForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DispatchBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DispatchNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DispatchConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DispatchUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DispatchInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DispatchInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+				}
+				err = ValidateDispatchInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+				}
+				return nil, NewDispatchInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DispatchUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+				}
+				err = ValidateDispatchUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+				}
+				return nil, NewDispatchUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "dispatch", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DispatchGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "dispatch", err)
+			}
+			err = ValidateDispatchGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "dispatch", err)
+			}
+			return nil, NewDispatchGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "dispatch", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {

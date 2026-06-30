@@ -138,6 +138,31 @@ var CodexHookResult = Type("CodexHookResult", func() {
 	Attribute("reason", String, "Reason for the decision, shown to the user")
 })
 
+// DispatchHookPayload is the agent-forwarded hook envelope. The device-agent
+// daemon authenticates with its agent-scoped org_token (not a hooks key, which
+// it never holds) and forwards a tool's hook event, vouching for the user's
+// email. The server resolves the project from the org (see the dispatch method).
+var DispatchHookPayload = Type("DispatchHookPayload", func() {
+	Description("Agent-forwarded hook event: the device agent authenticates with its agent-scoped key and forwards a tool's hook event on behalf of a user.")
+	Required("tool", "user_email", "payload")
+	Attribute("tool", String, "Source AI tool the event came from", func() {
+		Enum("cursor", "claude_code", "codex")
+	})
+	Attribute("user_email", String, "Email of the user the agent resolved and is vouching for, attributed within the authenticated org.")
+	Attribute("payload", Any, "The tool's raw hook event JSON, opaque to the transport.")
+	Attribute("project_slug", String, "Optional project override. When omitted, the event attributes to the org's default project; when set, it must name a project in the authenticated org. The override hook exists for future multi-project routing; the agent does not populate it today.")
+	Attribute("hook_hostname", String, "Optional originating hostname.")
+	Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so a redelivered event is stored once.")
+})
+
+// DispatchHookResult is the normalized decision the agent shim renders per tool.
+var DispatchHookResult = Type("DispatchHookResult", func() {
+	Description("Normalized hook decision.")
+	Attribute("permission", String, "Decision for blocking events: allow or deny.")
+	Attribute("user_message", String, "Human-facing explanation for a deny.")
+	Attribute("agent_message", String, "Agent-facing explanation for a deny.")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -230,6 +255,33 @@ var _ = Service("hooks", func() {
 			Header("hook_hostname:X-Gram-Hook-Hostname")
 			Header("idempotency_key:Idempotency-Key")
 		})
+	})
+
+	Method("dispatch", func() {
+		Description("Agent-forwarded hook dispatch. The device-agent daemon authenticates with its agent-scoped key and forwards a tool's hook event, vouching for the user's email. Unlike the per-tool endpoints (which take a hooks-scoped key + Gram-Project), the agent stays org-scoped: the event attributes to the org's default project unless an optional project_slug override is supplied. Fans out to the same per-tool event handling and returns a normalized decision.")
+
+		// Agent scope — the device agent's org_token — NOT the hooks scope the
+		// published bundles use. No ProjectSlug: the project is resolved from the
+		// org server-side.
+		Security(security.ByKey, func() {
+			Scope("agent")
+		})
+
+		Payload(func() {
+			Extend(DispatchHookPayload)
+			security.ByKeyPayload()
+		})
+
+		Result(DispatchHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.dispatch")
+			security.ByKeyHeader()
+		})
+
+		Meta("openapi:operationId", "dispatchAgentHook")
+		Meta("openapi:extension:x-speakeasy-name-override", "dispatch")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DispatchAgentHook"}`)
 	})
 
 	Method("logs", func() {

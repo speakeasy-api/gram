@@ -26,6 +26,13 @@ type Service interface {
 	// Endpoint for Codex hook events. Handles SessionStart, PreToolUse,
 	// PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
 	Codex(context.Context, *CodexPayload) (res *CodexHookResult, err error)
+	// Agent-forwarded hook dispatch. The device-agent daemon authenticates with
+	// its agent-scoped key and forwards a tool's hook event, vouching for the
+	// user's email. Unlike the per-tool endpoints (which take a hooks-scoped key +
+	// Gram-Project), the agent stays org-scoped: the event attributes to the org's
+	// default project unless an optional project_slug override is supplied. Fans
+	// out to the same per-tool event handling and returns a normalized decision.
+	Dispatch(context.Context, *DispatchPayload) (res *DispatchHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -54,7 +61,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"claude", "cursor", "codex", "logs", "metrics"}
+var MethodNames = [6]string{"claude", "cursor", "codex", "dispatch", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -262,6 +269,38 @@ type CursorPayload struct {
 	// Execution duration in milliseconds, excluding approval wait time
 	// (afterMCPExecution only)
 	Duration *float64
+}
+
+// DispatchHookResult is the result type of the hooks service dispatch method.
+type DispatchHookResult struct {
+	// Decision for blocking events: allow or deny.
+	Permission *string
+	// Human-facing explanation for a deny.
+	UserMessage *string
+	// Agent-facing explanation for a deny.
+	AgentMessage *string
+}
+
+// DispatchPayload is the payload type of the hooks service dispatch method.
+type DispatchPayload struct {
+	ApikeyToken *string
+	// Source AI tool the event came from
+	Tool string
+	// Email of the user the agent resolved and is vouching for, attributed within
+	// the authenticated org.
+	UserEmail string
+	// The tool's raw hook event JSON, opaque to the transport.
+	Payload any
+	// Optional project override. When omitted, the event attributes to the org's
+	// default project; when set, it must name a project in the authenticated org.
+	// The override hook exists for future multi-project routing; the agent does
+	// not populate it today.
+	ProjectSlug *string
+	// Optional originating hostname.
+	HookHostname *string
+	// Optional per-invocation token reused across retries so a redelivered event
+	// is stored once.
+	IdempotencyKey *string
 }
 
 // LogsPayload is the payload type of the hooks service logs method.
