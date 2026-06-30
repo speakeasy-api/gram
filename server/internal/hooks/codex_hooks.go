@@ -268,7 +268,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	}
 
 	if payload.HookEventName == "SessionStart" {
-		s.captureCodexMCPListSnapshot(ctx, payload)
+		s.captureCodexMCPListSnapshot(ctx, payload, metadata.ProjectID)
 		if metadata.SessionID != "" && metadata.UserEmail != "" {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
@@ -309,7 +309,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 // sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
 // Claude flows so downstream matching and telemetry enrichment work
 // unchanged.
-func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload, projectID string) {
 	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
 		return
 	}
@@ -319,6 +319,7 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
+	s.upsertShadowMCPInventoryURLs(ctx, projectID, *payload.SessionID, entries)
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),

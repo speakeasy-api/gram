@@ -446,6 +446,15 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	projectID := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		projectID = authCtx.ProjectID.String()
+	} else if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
+		projectID = metadata.ProjectID
+	}
+	if projectID != "" {
+		s.upsertShadowMCPInventoryURLs(ctx, projectID, *payload.SessionID, entries)
+	}
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
