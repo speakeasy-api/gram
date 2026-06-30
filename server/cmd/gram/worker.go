@@ -370,11 +370,6 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
 			defer db.Close()
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{

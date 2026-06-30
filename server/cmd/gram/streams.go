@@ -55,9 +55,9 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:     "database-url",
-			Usage:    "Database URL",
-			EnvVars:  []string{"GRAM_DATABASE_URL"},
+			Name:     "database-read-replica-url",
+			Usage:    "Database read replica URL",
+			EnvVars:  []string{"GRAM_DATABASE_READ_REPLICA_URL"},
 			Required: true,
 		},
 		&cli.BoolFlag{
@@ -149,18 +149,13 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = guardianPolicy
 
-			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
+			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
-			defer db.Close()
+			defer replicaDB.Close()
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -223,7 +218,7 @@ func newStreamsCommand() *cli.Command {
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					[]*o11y.NamedResource[client.Client]{},
 				))
