@@ -122,7 +122,7 @@ func seedOutboxEntry(t *testing.T, conn *pgxpool.Pool, orgID, eventType string, 
 func enableWebhooksFeature(t *testing.T, conn *pgxpool.Pool, orgID string) {
 	t.Helper()
 	ctx := t.Context()
-	_, err := productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+	err := productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: orgID,
 		FeatureName:    string(productfeatures.FeatureWebhooks),
 	})
