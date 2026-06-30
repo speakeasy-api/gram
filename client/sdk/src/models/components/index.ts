@@ -100,6 +100,8 @@ export * from "./deploymentpackage.js";
 export * from "./deploymentsummary.js";
 export * from "./discoverprotectedresourcemetadatarequestbody.js";
 export * from "./discoverremotesessionissuerrequestbody.js";
+export * from "./dispatchhookpayload.js";
+export * from "./dispatchhookresult.js";
 export * from "./employeedataflowedge.js";
 export * from "./employeedataflownode.js";
 export * from "./environment.js";

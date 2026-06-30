@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e42dcef80811fc4fc58b157f3524e32d
+  docChecksum: 1c1f01d020c4295493ff8908ecb4480d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -304,6 +304,12 @@ trackedFiles:
     last_write_checksum: sha1:dcc0161026e6559d55f9bbdaa0cb23ac90d8601b
   docs/models/components/discoverremotesessionissuerrequestbody.md:
     last_write_checksum: sha1:855425544cda46eb247637c4536ddebf66b2a8b7
+  docs/models/components/dispatchhookpayload.md:
+    last_write_checksum: sha1:8e77f0c05fcebca7cda6c7373fc1d879486fcef6
+  docs/models/components/dispatchhookpayloadtool.md:
+    last_write_checksum: sha1:b0c2b4a63a6526a7163028ca0b00e7f9403d7dac
+  docs/models/components/dispatchhookresult.md:
+    last_write_checksum: sha1:4373d7f9bccdb53866cc2fa72c987d0ee6d95185
   docs/models/components/disposition.md:
     last_write_checksum: sha1:d51c0ffed16ab9b7706cd9c7d439d66379aac4e7
   docs/models/components/employeedataflowedge.md:
@@ -1946,6 +1952,10 @@ trackedFiles:
     last_write_checksum: sha1:050e35c7cbbeb05aadb55ec770f8e557d0b4a7b2
   docs/models/operations/discoverremotesessionissuersecurityoption2.md:
     last_write_checksum: sha1:6a07601f7e8558f0aaae8d9eb2f77d3824c03e66
+  docs/models/operations/dispatchagenthookrequest.md:
+    last_write_checksum: sha1:9a0ccb11ae7133f143d33560c5bbe73004d20757
+  docs/models/operations/dispatchagenthooksecurity.md:
+    last_write_checksum: sha1:53be3d2bd6ff3268684c0e27e59aa815be88465e
   docs/models/operations/disposition.md:
     last_write_checksum: sha1:992bcd1368243b137655375b5600f69f826a8dd2
   docs/models/operations/downloadcodexinstallscriptrequest.md:
@@ -3527,7 +3537,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:b358e97cbb93411c91775accf0e39c886e650e48
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:b6b7f4764780d4c20142274c93f1a749ee4ff327
+    last_write_checksum: sha1:da9159547b6c32ade6d85a66413f554f86b5265a
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -3820,6 +3830,8 @@ trackedFiles:
     last_write_checksum: sha1:032131634ce2e674c86d4d9de97fee54678aed0d
   src/funcs/featuresSet.ts:
     last_write_checksum: sha1:e7e9879ac653fabe88e32a86fdec4a034365ca33
+  src/funcs/hooksDispatch.ts:
+    last_write_checksum: sha1:278da57cfcee5cab0daeb222fcce1e3990fbe726
   src/funcs/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:c4344337cef79a7745dbc165df00f4015f25c18d
   src/funcs/hooksHooksNumberCodex.ts:
@@ -4527,6 +4539,10 @@ trackedFiles:
     last_write_checksum: sha1:1f8f8a7840c2951d4102a9b562ddc580e9385574
   src/models/components/discoverremotesessionissuerrequestbody.ts:
     last_write_checksum: sha1:a5e07e068cde80ee4d9f385dce489b0567c7598b
+  src/models/components/dispatchhookpayload.ts:
+    last_write_checksum: sha1:b47365f85a3314af833ef15776a4001dc7c1775b
+  src/models/components/dispatchhookresult.ts:
+    last_write_checksum: sha1:d4908331ba8519dc7ee2762e8f4cb15bb2c2ae20
   src/models/components/employeedataflowedge.ts:
     last_write_checksum: sha1:855573fcfb5701e2f15aac5936024cd55656ec32
   src/models/components/employeedataflownode.ts:
@@ -4655,7 +4671,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:607da1867fbde7e8d953b4fbc4529b42d13c7fee
+    last_write_checksum: sha1:d856d61eb3eb22e897896824dc65578eed8b912d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -5572,6 +5588,8 @@ trackedFiles:
     last_write_checksum: sha1:ec03266ab87604fb54b2a9aeabf9bc8e781779a5
   src/models/operations/discoverremotesessionissuer.ts:
     last_write_checksum: sha1:75936df81d56ce661b9a4899e072193f536f288a
+  src/models/operations/dispatchagenthook.ts:
+    last_write_checksum: sha1:238a64080e716367378577cecfa2abf22106aaff
   src/models/operations/downloadcodexinstallscript.ts:
     last_write_checksum: sha1:de32b01199abe1ad1bc3f8f0df772bcd7cea71e5
   src/models/operations/downloadobservabilityplugin.ts:
@@ -5718,7 +5736,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d5ea882ff67e8aa437a791a9bd19169d8a550564
+    last_write_checksum: sha1:0e4e6a7f6a21793e0a0d332159afedff36cfa13a
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6292,6 +6310,8 @@ trackedFiles:
     last_write_checksum: sha1:f06017e5dc3fa7c59ab5268a4caf62e4018cc369
   src/react-query/discoverRemoteSessionIssuer.ts:
     last_write_checksum: sha1:0ef6b377db58b03e3551156f7e5988bf4cbb46aa
+  src/react-query/dispatchAgentHook.ts:
+    last_write_checksum: sha1:a3c3bf5a6e06e2273b7da484cae29b4006d1b7e7
   src/react-query/enableRBAC.ts:
     last_write_checksum: sha1:2bd979ac77780bbea2d588e97b5b9cef9c24f69a
   src/react-query/enableWebhooks.ts:
@@ -6416,7 +6436,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:aa9f9c1f103f87037db69825aa1d39a1fd133c4f
+    last_write_checksum: sha1:7f0dabfba0537856168dd396650b01283fd3f849
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -7085,7 +7105,7 @@ trackedFiles:
   src/sdk/features.ts:
     last_write_checksum: sha1:e5e6eab854cb041574ed2d580e58d0107db8e49d
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:252d201a6d5cbdc9e255084999186bce98eb52bc
+    last_write_checksum: sha1:379a07b0924d4d3742a7c9f6c2430fdbd4c4ed84
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -10844,5 +10864,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  dispatchAgentHook:
+    speakeasy-default-dispatch-agent-hook:
+      requestBody:
+        application/json: {"payload": "<value>", "tool": "codex", "user_email": "<value>"}
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

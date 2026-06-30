@@ -93,6 +93,7 @@ export * from "./disablerbac.js";
 export * from "./disablewebhooks.js";
 export * from "./discoverremotemcpprotectedresourcemetadata.js";
 export * from "./discoverremotesessionissuer.js";
+export * from "./dispatchagenthook.js";
 export * from "./downloadcodexinstallscript.js";
 export * from "./downloadobservabilityplugin.js";
 export * from "./downloadpluginpackage.js";
