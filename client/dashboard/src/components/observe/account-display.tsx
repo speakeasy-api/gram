@@ -1,29 +1,9 @@
 import { AccountTypeBadge } from "@/components/account-type-badge";
+import {
+  type DisplayAccount,
+  providerLabel,
+} from "@/components/observe/account-display-utils";
 import { Badge } from "@speakeasy-api/moonshine";
-
-// A single linked AI account in display shape. Identity is (provider, email):
-// the same email on two providers is two distinct accounts, so provider is
-// always shown alongside the email.
-export type DisplayAccount = {
-  email: string;
-  provider: string;
-  // "team" | "personal" | "" (unclassified).
-  accountType: string;
-};
-
-// Friendly labels for the AI providers an account can belong to. Falls back to a
-// capitalized provider slug so a newly-added provider still renders sensibly.
-const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Claude",
-  openai: "Codex",
-  cursor: "Cursor",
-};
-
-export function providerLabel(provider: string): string {
-  if (PROVIDER_LABELS[provider]) return PROVIDER_LABELS[provider];
-  if (!provider) return "Unknown";
-  return provider.charAt(0).toUpperCase() + provider.slice(1);
-}
 
 // The per-account type marker. Personal reuses the shared amber badge; team is
 // shown explicitly (this is the detailed view, so every account is labeled).

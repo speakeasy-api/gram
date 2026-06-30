@@ -41,10 +41,8 @@ import type {
   UserAccount,
   UserSummary,
 } from "@gram/client/models/components";
-import {
-  AccountRow,
-  providerLabel,
-} from "@/components/observe/account-display";
+import { AccountRow } from "@/components/observe/account-display";
+import { providerLabel } from "@/components/observe/account-display-utils";
 import {
   Select,
   SelectContent,
