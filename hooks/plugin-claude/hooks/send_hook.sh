@@ -14,6 +14,11 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 
+# Per-installation cursor scope (server + project + key), hashed so no key
+# material lands in the cursor filename. Keeps two plugins sharing a transcript
+# but reporting to different installations on independent Stop cursors.
+gram_cursor_scope=$(printf '%s' "${server_url}|${GRAM_HOOKS_PROJECT_SLUG:-}|${GRAM_HOOKS_API_KEY:-}" | cksum | awk '{print $1}')
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
@@ -71,7 +76,7 @@ fi
 # checksum of the transcript path so the parent transcript and each subagent
 # transcript get an independent cursor.
 transcript_cursor_file() {
-  local hook_payload="$1" hook_event="$2" tpath sid key scope
+  local hook_payload="$1" hook_event="$2" tpath sid key
   if [ "$hook_event" = "SubagentStop" ]; then
     tpath=$(printf '%s' "$hook_payload" | jq -r '.agent_transcript_path // empty' 2>/dev/null || true)
   else
@@ -81,11 +86,8 @@ transcript_cursor_file() {
   sid=$(printf '%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)
   sid=$(printf '%s' "$sid" | tr -cd 'A-Za-z0-9_-' | cut -c1-128)
   key=$(printf '%s' "$tpath" | cksum | awk '{print $1}')
-  # Scope the cursor per installation (destination + project) so two plugins
-  # sharing a transcript but reporting to different servers/projects keep
-  # independent cursors and each still posts its own capture.
-  scope=$(printf '%s' "${server_url}|${GRAM_HOOKS_PROJECT_SLUG:-}" | cksum | awk '{print $1}')
-  printf '%s/gram-hooks/cursor-%s-%s-%s' "${TMPDIR:-/tmp}" "$sid" "$key" "$scope"
+  # gram_cursor_scope is the per-installation identity (see top of script).
+  printf '%s/gram-hooks/cursor-%s-%s-%s' "${TMPDIR:-/tmp}" "$sid" "$key" "$gram_cursor_scope"
 }
 
 build_capture_body() {

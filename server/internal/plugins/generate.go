@@ -1117,6 +1117,14 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 		keyPrefix = keyPrefix[:12]
 	}
 
+	// cursorScope uniquely identifies this installation (destination + project +
+	// hooks key) so two plugins sharing a transcript but reporting to different
+	// installations keep independent Stop cursors — server URL + project slug
+	// alone are not globally unique. Hashed so no key material lands in the
+	// cursor filename.
+	cursorSum := sha256.Sum256([]byte(cfg.ServerURL + "\x00" + cfg.ProjectSlug + "\x00" + cfg.HooksAPIKey))
+	cursorScope := hex.EncodeToString(cursorSum[:8])
+
 	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 2)
 
 	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
@@ -1452,10 +1460,10 @@ exit 0
 set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-# Baked project slug; scopes the per-transcript Stop cursor per installation so
-# two plugins sharing a transcript but reporting to different projects keep
-# independent cursors.
-gram_cursor_project="%s"
+# Hashed installation identity (server + project + hooks key); scopes the
+# per-transcript Stop cursor so two plugins sharing a transcript but reporting to
+# different installations keep independent cursors.
+gram_cursor_scope="%s"
 
 %s
 %s
@@ -1567,7 +1575,7 @@ fi
 # checksum of the transcript path so the parent transcript and each subagent
 # transcript get an independent cursor.
 transcript_cursor_file() {
-  local hook_payload="$1" hook_event="$2" tpath sid key scope
+  local hook_payload="$1" hook_event="$2" tpath sid key
   if [ "$hook_event" = "SubagentStop" ]; then
     tpath=$(printf '%%s' "$hook_payload" | jq -r '.agent_transcript_path // empty' 2>/dev/null || true)
   else
@@ -1577,11 +1585,8 @@ transcript_cursor_file() {
   sid=$(printf '%%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)
   sid=$(printf '%%s' "$sid" | tr -cd 'A-Za-z0-9_-' | cut -c1-128)
   key=$(printf '%%s' "$tpath" | cksum | awk '{print $1}')
-  # Scope the cursor per installation (destination + project) so two plugins
-  # sharing a transcript but reporting to different servers/projects keep
-  # independent cursors and each still posts its own capture.
-  scope=$(printf '%%s' "${server_url}|${GRAM_HOOKS_PROJECT_SLUG:-$gram_cursor_project}" | cksum | awk '{print $1}')
-  printf '%%s/gram-hooks/cursor-%%s-%%s-%%s' "${TMPDIR:-/tmp}" "$sid" "$key" "$scope"
+  # gram_cursor_scope is the baked per-installation identity (see top of script).
+  printf '%%s/gram-hooks/cursor-%%s-%%s-%%s' "${TMPDIR:-/tmp}" "$sid" "$key" "$gram_cursor_scope"
 }
 
 build_capture_body() {
@@ -1849,7 +1854,7 @@ fi
 
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, cfg.ProjectSlug, authConfigSnippet, renderIdentitySourceSnippet(), platform)
+`, keyPrefix, cfg.ServerURL, cursorScope, authConfigSnippet, renderIdentitySourceSnippet(), platform)
 }
 
 // renderAsyncHookWrapperScript emits hook_async.sh: a wrapper that keeps an
