@@ -80,6 +80,21 @@ type GenerateConfig struct {
 	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
 	// server unavailability disrupting the user.
 	ObservabilityMode bool
+	// ProxyHooksViaAgent emits the device-agent-proxied hook command
+	// (`speakeasyd hook --tool <x>`) instead of the bash `hook.sh` invocation. A
+	// single native-binary command that works on Windows/macOS/Linux for every
+	// tool (no bash/PowerShell), routing the event through the daemon pipeline
+	// (ADR-0010 in the device-agent repo). Opt-in: it makes the running daemon a
+	// hard dependency and the control-plane auth contract for agent-forwarded
+	// hooks is still open (DNO-376), so it stays off until that lands.
+	ProxyHooksViaAgent bool
+}
+
+// agentHookCommand is the device-agent-proxied hook command for a tool: a single
+// native invocation the agent shim handles on every OS. The tool ids match the
+// agent's `--tool` values (and its control-plane endpoint mapping).
+func agentHookCommand(tool string) string {
+	return "speakeasyd hook --tool " + tool
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -614,12 +629,21 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
-		script := "hook.sh"
-		if event == "SessionStart" || event == "ConfigChange" {
-			script = "mcp_inventory.sh"
+		// Under the agent proxy, one command serves every event — the daemon does
+		// identity, MCP-inventory gathering and async routing — so the per-event
+		// script selection (mcp_inventory.sh) collapses. The async flag is kept:
+		// it tells Claude whether to wait, and the daemon still returns fast for
+		// async events.
+		command := agentHookCommand("claude_code")
+		if !cfg.ProxyHooksViaAgent {
+			script := "hook.sh"
+			if event == "SessionStart" || event == "ConfigChange" {
+				script = "mcp_inventory.sh"
+			}
+			command = `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`
 		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: command, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -670,9 +694,13 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	// Same hooks/ subdirectory layout as the Claude side. Cursor follows the
 	// same convention as Claude Code; flat-layout plugins register but their
 	// hooks never fire.
+	cursorCommand := `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`
+	if cfg.ProxyHooksViaAgent {
+		cursorCommand = agentHookCommand("cursor")
+	}
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents))
 	for _, event := range CursorObservabilityHookEvents {
-		hookEvents[event] = []cursorHookCommand{{Command: `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`}}
+		hookEvents[event] = []cursorHookCommand{{Command: cursorCommand}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})
 	if err != nil {
@@ -763,7 +791,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	for _, event := range CodexObservabilityHookEvents {
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
-			Hooks:   []codexHookCommand{{Type: "command", Command: codexHookCommandString(marketplace, plugin, codexHookScriptName(event))}},
+			Hooks:   []codexHookCommand{{Type: "command", Command: codexHookCommandString(marketplace, plugin, codexHookScriptName(event), cfg.ProxyHooksViaAgent)}},
 		}}
 	}
 	hooksJSON, err := marshalJSON(codexHooksConfig{Hooks: hookEvents})
@@ -2055,9 +2083,9 @@ func codexEventSnakeCase(event string) string {
 //
 // The command uses the literal string "$HOME" (not expanded), so the hash is
 // deterministic for a given marketplace + plugin name pair.
-func computeCodexHookHash(event, marketplace, plugin string) (string, error) {
+func computeCodexHookHash(event, marketplace, plugin string, proxyViaAgent bool) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
-	command := codexHookCommandString(marketplace, plugin, codexHookScriptName(event))
+	command := codexHookCommandString(marketplace, plugin, codexHookScriptName(event), proxyViaAgent)
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
@@ -2088,11 +2116,11 @@ func computeCodexHookHash(event, marketplace, plugin string) (string, error) {
 
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
 // Codex observability hook events for a given marketplace and plugin name.
-func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
+func computeCodexHookApprovals(marketplace, plugin string, proxyViaAgent bool) ([]codexHookApproval, error) {
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		hash, err := computeCodexHookHash(event, marketplace, plugin)
+		hash, err := computeCodexHookHash(event, marketplace, plugin, proxyViaAgent)
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s: %w", event, err)
 		}
@@ -2113,7 +2141,14 @@ func codexHookScriptName(event string) string {
 	}
 }
 
-func codexHookCommandString(marketplace, plugin, script string) string {
+func codexHookCommandString(marketplace, plugin, script string, proxyViaAgent bool) string {
+	if proxyViaAgent {
+		// One native command for every event; the daemon owns identity, MCP
+		// inventory and async routing, so the hook.sh/hook_async.sh split (script)
+		// collapses. This string is part of the Codex trust hash, so
+		// computeCodexHookHash must compute it identically (it does, via this fn).
+		return agentHookCommand("codex")
+	}
 	return fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/%s"`, marketplace, plugin, script)
 }
 
@@ -2129,7 +2164,7 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, cfg.ProxyHooksViaAgent)
 	if err != nil {
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
