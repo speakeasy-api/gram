@@ -10,10 +10,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const meterFindingRowsInserted = "gram.risk_findings.bq_rows_inserted"
+const (
+	meterFindingRowsInserted    = "gram.risk_findings.bq_rows_inserted"
+	meterFindingMessagesSkipped = "gram.risk_findings.bq_messages_skipped"
+)
 
 type metrics struct {
-	rowsInserted metric.Int64Counter
+	rowsInserted    metric.Int64Counter
+	messagesSkipped metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -29,8 +33,18 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingRowsInserted), attr.SlogError(err))
 	}
 
+	messagesSkipped, err := meter.Int64Counter(
+		meterFindingMessagesSkipped,
+		metric.WithDescription("Number of risk finding messages skipped before being submitted to BigQuery"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingMessagesSkipped), attr.SlogError(err))
+	}
+
 	return &metrics{
-		rowsInserted: rowsInserted,
+		rowsInserted:    rowsInserted,
+		messagesSkipped: messagesSkipped,
 	}
 }
 
@@ -41,4 +55,13 @@ func (m *metrics) RecordFindingBQInserts(ctx context.Context, count int, outcome
 		return
 	}
 	m.rowsInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
+}
+
+// RecordFindingSkipped records a risk finding message that was dropped before
+// reaching BigQuery, tagged with the reason it was skipped.
+func (m *metrics) RecordFindingSkipped(ctx context.Context, reason string) {
+	if m.messagesSkipped == nil {
+		return
+	}
+	m.messagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }
