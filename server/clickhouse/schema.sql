@@ -213,6 +213,19 @@ FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
 
+CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
+    gram_project_id UUID,
+    canonical_server_url String,
+    url_host String,
+    server_name String,
+    first_seen DateTime64(9, 'UTC'),
+    last_seen DateTime64(9, 'UTC'),
+    updated_at DateTime64(9, 'UTC')
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (gram_project_id, canonical_server_url)
+SETTINGS index_granularity = 8192
+COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
+
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
     gram_project_id UUID,
