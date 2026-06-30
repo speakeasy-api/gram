@@ -420,10 +420,6 @@ function OnboardingSection(): ReactElement {
 function OrgOverrideSection(): ReactElement {
   const client = useSdkClient();
 
-  const isOverrideActive = document.cookie
-    .split("; ")
-    .some((cookie) => cookie.startsWith("gram_admin_override="));
-
   return (
     <Section
       icon={ArrowRightLeft}
