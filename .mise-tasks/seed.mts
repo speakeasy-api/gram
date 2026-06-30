@@ -29,6 +29,7 @@ import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
+import { seedTunnel } from "./seed/tunnel.mts";
 
 type Asset = {
   slug: string;
@@ -331,7 +332,7 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
-  log.info("Run `mise run seed:tunnel` to seed the local Postgres MCP tunnel.");
+  await seedTunnel();
 
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];

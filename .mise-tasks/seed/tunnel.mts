@@ -2,8 +2,8 @@
 
 //MISE description="Seed the local Postgres MCP tunnel fixture"
 //MISE dir="{{ config_root }}"
-//MISE depends=["seed"]
 
+import { pathToFileURL } from "node:url";
 import { $ } from "zx";
 
 const SEEDED_PROJECT_SLUG = "ecommerce-api";
@@ -20,7 +20,7 @@ type TunnelFixture = {
   mcpServerId: string;
 };
 
-async function seedTunnel() {
+export async function seedTunnel() {
   const dbUser = process.env.DB_USER || "gram";
   const dbName = process.env.DB_NAME || "gram";
   const sql = `
@@ -118,4 +118,9 @@ FROM source, endpoint, mcp_server;
   );
 }
 
-seedTunnel();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  await seedTunnel();
+}
