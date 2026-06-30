@@ -2442,6 +2442,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		TargetLimit:        25,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,

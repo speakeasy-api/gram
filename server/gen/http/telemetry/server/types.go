@@ -272,6 +272,8 @@ type GetToolUsageSummaryRequestBody struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 }
 
 // ListToolUsageTracesRequestBody is the type of the "telemetry" service
@@ -8783,8 +8785,9 @@ func NewGetHooksSummaryPayload(body *GetHooksSummaryRequestBody, apikeyToken *st
 // endpoint payload.
 func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageSummaryPayload {
 	v := &telemetry.GetToolUsageSummaryPayload{
-		From: *body.From,
-		To:   *body.To,
+		From:        *body.From,
+		To:          *body.To,
+		AccountType: body.AccountType,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))

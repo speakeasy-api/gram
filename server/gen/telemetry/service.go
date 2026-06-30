@@ -394,6 +394,8 @@ type GetToolUsageSummaryPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service

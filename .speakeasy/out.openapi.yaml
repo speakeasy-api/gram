@@ -39860,6 +39860,9 @@ components:
     GetToolUsageSummaryPayload:
       type: object
       properties:
+        account_type:
+          type: string
+          description: Optional account type filter ('team' or 'personal').
         from:
           type: string
           description: Start time in ISO 8601 format
