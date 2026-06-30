@@ -49,7 +49,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/tools"
 	_ "github.com/speakeasy-api/gram/server/design/toolsets"
 	_ "github.com/speakeasy-api/gram/server/design/triggers"
-	_ "github.com/speakeasy-api/gram/server/design/tunnelledmcp"
+	_ "github.com/speakeasy-api/gram/server/design/tunneledmcp"
 	_ "github.com/speakeasy-api/gram/server/design/usage"
 	_ "github.com/speakeasy-api/gram/server/design/usersessionclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessionconsents"

@@ -2646,10 +2646,10 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 
 func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
 	servers, err := mcpserversRepo.New(s.db).ListMCPServersByProjectID(ctx, mcpserversRepo.ListMCPServersByProjectIDParams{
-		ProjectID:            projectID,
-		RemoteMcpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunnelledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ProjectID:           projectID,
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list project MCP servers: %w", err)
@@ -2660,9 +2660,9 @@ func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid
 		targetType := repo.ToolUsageTargetTypeHostedMCP
 		sourceID := ""
 		switch {
-		case server.TunnelledMcpServerID.Valid:
-			targetType = repo.ToolUsageTargetTypeTunnelledMCP
-			sourceID = server.TunnelledMcpServerID.UUID.String()
+		case server.TunneledMcpServerID.Valid:
+			targetType = repo.ToolUsageTargetTypeTunneledMCP
+			sourceID = server.TunneledMcpServerID.UUID.String()
 		case server.RemoteMcpServerID.Valid:
 			sourceID = server.RemoteMcpServerID.UUID.String()
 		default:

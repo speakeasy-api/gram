@@ -15055,7 +15055,7 @@ paths:
                 name: GetMcpServer
     /rpc/mcpServers.list:
         get:
-            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
             operationId: listMcpServers
             parameters:
                 - allowEmptyValue: true
@@ -15067,11 +15067,11 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Filter to MCP servers backed by this tunnelled MCP server
+                  description: Filter to MCP servers backed by this tunneled MCP server
                   in: query
-                  name: tunnelled_mcp_server_id
+                  name: tunneled_mcp_server_id
                   schema:
-                    description: Filter to MCP servers backed by this tunnelled MCP server
+                    description: Filter to MCP servers backed by this tunneled MCP server
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -15290,7 +15290,7 @@ paths:
                 name: ListMcpServerToolFilters
     /rpc/mcpServers.update:
         post:
-            description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.'
+            description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.'
             operationId: updateMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -33877,10 +33877,10 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateTrigger
-    /rpc/tunnelledMcp.createServer:
+    /rpc/tunneledMcp.createServer:
         post:
-            description: Create a new tunnelled MCP server source. Returns the tunnel key once.
-            operationId: createTunnelledMcpServer
+            description: Create a new tunneled MCP server source. Returns the tunnel key once.
+            operationId: createTunneledMcpServer
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -33907,14 +33907,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateTunnelledMcpServerForm'
+                            $ref: '#/components/schemas/CreateTunneledMcpServerForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/CreateTunnelledMcpServerResult'
+                                $ref: '#/components/schemas/CreateTunneledMcpServerResult'
                     description: OK response.
                 "400":
                     content:
@@ -33975,24 +33975,24 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: createServer tunnelledMcp
+            summary: createServer tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: createServer
             x-speakeasy-react-hook:
-                name: CreateTunnelledMcpServer
-    /rpc/tunnelledMcp.deleteServer:
+                name: CreateTunneledMcpServer
+    /rpc/tunneledMcp.deleteServer:
         delete:
-            description: Delete a tunnelled MCP server source
-            operationId: deleteTunnelledMcpServer
+            description: Delete a tunneled MCP server source
+            operationId: deleteTunneledMcpServer
             parameters:
                 - allowEmptyValue: true
-                  description: The ID of the tunnelled MCP server to delete
+                  description: The ID of the tunneled MCP server to delete
                   in: query
                   name: id
                   required: true
                   schema:
-                    description: The ID of the tunnelled MCP server to delete
+                    description: The ID of the tunneled MCP server to delete
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -34078,24 +34078,24 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: deleteServer tunnelledMcp
+            summary: deleteServer tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: deleteServer
             x-speakeasy-react-hook:
-                name: DeleteTunnelledMcpServer
-    /rpc/tunnelledMcp.getServer:
+                name: DeleteTunneledMcpServer
+    /rpc/tunneledMcp.getServer:
         get:
-            description: Get a tunnelled MCP server by ID
-            operationId: getTunnelledMcpServer
+            description: Get a tunneled MCP server by ID
+            operationId: getTunneledMcpServer
             parameters:
                 - allowEmptyValue: true
-                  description: The ID of the tunnelled MCP server
+                  description: The ID of the tunneled MCP server
                   in: query
                   name: id
                   required: true
                   schema:
-                    description: The ID of the tunnelled MCP server
+                    description: The ID of the tunneled MCP server
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -34124,7 +34124,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/TunnelledMcpServer'
+                                $ref: '#/components/schemas/TunneledMcpServer'
                     description: OK response.
                 "400":
                     content:
@@ -34185,16 +34185,16 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: getServer tunnelledMcp
+            summary: getServer tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: getServer
             x-speakeasy-react-hook:
-                name: GetTunnelledMcpServer
-    /rpc/tunnelledMcp.listServers:
+                name: GetTunneledMcpServer
+    /rpc/tunneledMcp.listServers:
         get:
-            description: List all tunnelled MCP server sources for a project
-            operationId: listTunnelledMcpServers
+            description: List all tunneled MCP server sources for a project
+            operationId: listTunneledMcpServers
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -34222,7 +34222,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListTunnelledMcpServersResult'
+                                $ref: '#/components/schemas/ListTunneledMcpServersResult'
                     description: OK response.
                 "400":
                     content:
@@ -34283,16 +34283,16 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: listServers tunnelledMcp
+            summary: listServers tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: listServers
             x-speakeasy-react-hook:
-                name: TunnelledMcpServers
-    /rpc/tunnelledMcp.rotateServerKey:
+                name: TunneledMcpServers
+    /rpc/tunneledMcp.rotateServerKey:
         post:
-            description: Rotate a tunnelled MCP server source key. Returns the new tunnel key once.
-            operationId: rotateTunnelledMcpServerKey
+            description: Rotate a tunneled MCP server source key. Returns the new tunnel key once.
+            operationId: rotateTunneledMcpServerKey
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -34319,14 +34319,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RotateTunnelledMcpServerKeyForm'
+                            $ref: '#/components/schemas/RotateTunneledMcpServerKeyForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/RotateTunnelledMcpServerKeyResult'
+                                $ref: '#/components/schemas/RotateTunneledMcpServerKeyResult'
                     description: OK response.
                 "400":
                     content:
@@ -34387,16 +34387,16 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: rotateServerKey tunnelledMcp
+            summary: rotateServerKey tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: rotateServerKey
             x-speakeasy-react-hook:
-                name: RotateTunnelledMcpServerKey
-    /rpc/tunnelledMcp.updateServer:
+                name: RotateTunneledMcpServerKey
+    /rpc/tunneledMcp.updateServer:
         post:
-            description: Update a tunnelled MCP server source
-            operationId: updateTunnelledMcpServer
+            description: Update a tunneled MCP server source
+            operationId: updateTunneledMcpServer
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -34423,14 +34423,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateTunnelledMcpServerForm'
+                            $ref: '#/components/schemas/UpdateTunneledMcpServerForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/TunnelledMcpServer'
+                                $ref: '#/components/schemas/TunneledMcpServer'
                     description: OK response.
                 "400":
                     content:
@@ -34491,12 +34491,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: updateServer tunnelledMcp
+            summary: updateServer tunneledMcp
             tags:
-                - tunnelledMcp
+                - tunneledMcp
             x-speakeasy-name-override: updateServer
             x-speakeasy-react-hook:
-                name: UpdateTunnelledMcpServer
+                name: UpdateTunneledMcpServer
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -39703,9 +39703,9 @@ components:
                     type: string
                     description: The ID of the toolset to use as the backend
                     format: uuid
-                tunnelled_mcp_server_id:
+                tunneled_mcp_server_id:
                     type: string
-                    description: The ID of the tunnelled MCP server to use as the backend
+                    description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
                 user_session_issuer_id:
                     type: string
@@ -39718,7 +39718,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.
+            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
             required:
                 - name
                 - visibility
@@ -40499,24 +40499,24 @@ components:
                 - target_ref
                 - target_display
                 - config
-        CreateTunnelledMcpServerForm:
+        CreateTunneledMcpServerForm:
             type: object
             properties:
                 name:
                     type: string
-                    description: Human-readable display name for the tunnelled MCP server
-            description: Form for creating a new tunnelled MCP server source
+                    description: Human-readable display name for the tunneled MCP server
+            description: Form for creating a new tunneled MCP server source
             required:
                 - name
-        CreateTunnelledMcpServerResult:
+        CreateTunneledMcpServerResult:
             type: object
             properties:
                 server:
-                    $ref: '#/components/schemas/TunnelledMcpServer'
+                    $ref: '#/components/schemas/TunneledMcpServer'
                 tunnel_key:
                     type: string
                     description: Plaintext tunnel key. Only returned at creation time.
-            description: Created tunnelled MCP server plus the one-time tunnel key
+            description: Created tunneled MCP server plus the one-time tunnel key
             required:
                 - server
                 - tunnel_key
@@ -42725,7 +42725,7 @@ components:
                         description: Tool usage target type
                         enum:
                             - hosted_mcp_server
-                            - tunnelled_mcp_server
+                            - tunneled_mcp_server
                             - shadow_mcp_server
                             - local_tool
                             - skill
@@ -44568,7 +44568,7 @@ components:
                         description: Tool usage target type
                         enum:
                             - hosted_mcp_server
-                            - tunnelled_mcp_server
+                            - tunneled_mcp_server
                             - shadow_mcp_server
                             - local_tool
                             - skill
@@ -44663,16 +44663,16 @@ components:
                     description: The trigger instances for the current project.
             required:
                 - triggers
-        ListTunnelledMcpServersResult:
+        ListTunneledMcpServersResult:
             type: object
             properties:
-                tunnelled_mcp_servers:
+                tunneled_mcp_servers:
                     type: array
                     items:
-                        $ref: '#/components/schemas/TunnelledMcpServer'
-            description: Result type for listing tunnelled MCP servers
+                        $ref: '#/components/schemas/TunneledMcpServer'
+            description: Result type for listing tunneled MCP servers
             required:
-                - tunnelled_mcp_servers
+                - tunneled_mcp_servers
         ListUserGrantsResult:
             type: object
             properties:
@@ -45149,9 +45149,9 @@ components:
                     type: string
                     description: The ID of the toolset used as the backend
                     format: uuid
-                tunnelled_mcp_server_id:
+                tunneled_mcp_server_id:
                     type: string
-                    description: The ID of the tunnelled MCP server used as the backend
+                    description: The ID of the tunneled MCP server used as the backend
                     format: uuid
                 updated_at:
                     type: string
@@ -48918,6 +48918,7 @@ components:
                 - total_tokens
                 - total_chats
 <<<<<<< HEAD
+<<<<<<< HEAD
         SaveRiskEvalReviewRequestBody:
             type: object
             properties:
@@ -48942,24 +48943,27 @@ components:
                 - verdict
 =======
         RotateTunnelledMcpServerKeyForm:
+=======
+        RotateTunneledMcpServerKeyForm:
+>>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
             type: object
             properties:
                 id:
                     type: string
-                    description: The ID of the tunnelled MCP server
+                    description: The ID of the tunneled MCP server
                     format: uuid
-            description: Form for rotating a tunnelled MCP server source key
+            description: Form for rotating a tunneled MCP server source key
             required:
                 - id
-        RotateTunnelledMcpServerKeyResult:
+        RotateTunneledMcpServerKeyResult:
             type: object
             properties:
                 server:
-                    $ref: '#/components/schemas/TunnelledMcpServer'
+                    $ref: '#/components/schemas/TunneledMcpServer'
                 tunnel_key:
                     type: string
                     description: Plaintext tunnel key. Only returned after rotation.
-            description: Rotated tunnelled MCP server plus the one-time replacement tunnel key
+            description: Rotated tunneled MCP server plus the one-time replacement tunnel key
             required:
                 - server
                 - tunnel_key
@@ -49818,9 +49822,9 @@ components:
                     description: The contracted monthly tokens under management limit. Omit to clear.
                     format: int64
                     minimum: 0
-                tunnelled_mcp_server_limit:
+                tunneled_mcp_server_limit:
                     type: integer
-                    description: The contracted tunnelled MCP server source cap. Omit to use the plan default.
+                    description: The contracted tunneled MCP server source cap. Omit to use the plan default.
                     format: int64
                     minimum: 0
             required:
@@ -50729,9 +50733,9 @@ components:
                     type: integer
                     description: Tokens under management consumed during the active billing cycle
                     format: int64
-                tunnelled_mcp_server_limit:
+                tunneled_mcp_server_limit:
                     type: integer
-                    description: The contracted tunnelled MCP server source cap, if one has been configured
+                    description: The contracted tunneled MCP server source cap, if one has been configured
                     format: int64
             required:
                 - period_start
@@ -50999,7 +51003,7 @@ components:
                     description: Tool usage target type
                     enum:
                         - hosted_mcp_server
-                        - tunnelled_mcp_server
+                        - tunneled_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -51050,7 +51054,7 @@ components:
                     description: Tool usage target type
                     enum:
                         - hosted_mcp_server
-                        - tunnelled_mcp_server
+                        - tunneled_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -51100,7 +51104,7 @@ components:
                     description: Tool usage target type
                     enum:
                         - hosted_mcp_server
-                        - tunnelled_mcp_server
+                        - tunneled_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -51236,7 +51240,7 @@ components:
                     description: Tool usage target type
                     enum:
                         - hosted_mcp_server
-                        - tunnelled_mcp_server
+                        - tunneled_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -51433,7 +51437,7 @@ components:
                     description: Tool usage target type
                     enum:
                         - hosted_mcp_server
-                        - tunnelled_mcp_server
+                        - tunneled_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -52065,7 +52069,7 @@ components:
                     minimum: 0
             required:
                 - id
-        TunnelledMcpConnection:
+        TunneledMcpConnection:
             type: object
             properties:
                 active_consumer_sessions:
@@ -52117,7 +52121,7 @@ components:
                 - active_substreams
                 - active_consumer_sessions
                 - metadata
-        TunnelledMcpServer:
+        TunneledMcpServer:
             type: object
             properties:
                 active_connection_count:
@@ -52133,7 +52137,7 @@ components:
                     description: Most recent agent version reported by the tunnel
                 connection_status:
                     type: string
-                    description: Derived live connection status for a tunnelled MCP server source
+                    description: Derived live connection status for a tunneled MCP server source
                     enum:
                         - connected
                         - inactive
@@ -52141,15 +52145,15 @@ components:
                 connections:
                     type: array
                     items:
-                        $ref: '#/components/schemas/TunnelledMcpConnection'
+                        $ref: '#/components/schemas/TunneledMcpConnection'
                     description: Live tunnel connections currently visible in Redis
                 created_at:
                     type: string
-                    description: When the tunnelled MCP server source was created
+                    description: When the tunneled MCP server source was created
                     format: date-time
                 id:
                     type: string
-                    description: The ID of the tunnelled MCP server
+                    description: The ID of the tunneled MCP server
                     format: uuid
                 key_prefix:
                     type: string
@@ -52160,21 +52164,21 @@ components:
                     format: date-time
                 name:
                     type: string
-                    description: Human-readable name for the tunnelled MCP server
+                    description: Human-readable name for the tunneled MCP server
                 project_id:
                     type: string
-                    description: The project ID this tunnelled MCP server belongs to
+                    description: The project ID this tunneled MCP server belongs to
                     format: uuid
                 status:
                     type: string
-                    description: Stored lifecycle status for a tunnelled MCP server source
+                    description: Stored lifecycle status for a tunneled MCP server source
                     enum:
                         - created
                         - active
                         - revoked
                 updated_at:
                     type: string
-                    description: When the tunnelled MCP server source was last updated
+                    description: When the tunneled MCP server source was last updated
                     format: date-time
             description: A customer-hosted MCP server connected through a tunnel
             required:
@@ -52404,9 +52408,9 @@ components:
                     type: string
                     description: The ID of the toolset to use as the backend
                     format: uuid
-                tunnelled_mcp_server_id:
+                tunneled_mcp_server_id:
                     type: string
-                    description: The ID of the tunnelled MCP server to use as the backend
+                    description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
                 user_session_issuer_id:
                     type: string
@@ -52419,7 +52423,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
@@ -53143,17 +53147,17 @@ components:
                     description: The opaque target reference.
             required:
                 - id
-        UpdateTunnelledMcpServerForm:
+        UpdateTunneledMcpServerForm:
             type: object
             properties:
                 id:
                     type: string
-                    description: The ID of the tunnelled MCP server to update
+                    description: The ID of the tunneled MCP server to update
                     format: uuid
                 name:
                     type: string
-                    description: Human-readable display name for the tunnelled MCP server
-            description: Form for updating a tunnelled MCP server source
+                    description: Human-readable display name for the tunneled MCP server
+            description: Form for updating a tunneled MCP server source
             required:
                 - id
                 - name
@@ -53998,8 +54002,8 @@ tags:
       description: Managed toolsets for gram AI consumers.
     - name: triggers
       description: Manage project trigger instances and static trigger definitions.
-    - name: tunnelledMcp
-      description: Managing customer-hosted tunnelled MCP servers.
+    - name: tunneledMcp
+      description: Managing customer-hosted tunneled MCP servers.
     - name: usage
       description: Read usage for gram.
     - name: userSessionClients

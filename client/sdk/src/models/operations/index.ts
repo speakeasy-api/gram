@@ -56,7 +56,7 @@ export * from "./createtemplate.js";
 export * from "./createtoolset.js";
 export * from "./createtopupcheckout.js";
 export * from "./createtriggerinstance.js";
-export * from "./createtunnelledmcpserver.js";
+export * from "./createtunneledmcpserver.js";
 export * from "./createusersessionissuer.js";
 export * from "./creditusage.js";
 export * from "./deleteaiintegrationconfig.js";
@@ -91,7 +91,7 @@ export * from "./deletetemplate.js";
 export * from "./deletetoolset.js";
 export * from "./deletetoolsetenvironmentlink.js";
 export * from "./deletetriggerinstance.js";
-export * from "./deletetunnelledmcpserver.js";
+export * from "./deletetunneledmcpserver.js";
 export * from "./deleteusersessionissuer.js";
 export * from "./denyriskpolicybypassrequest.js";
 export * from "./denyshadowmcpapprovalrequest.js";
@@ -168,7 +168,7 @@ export * from "./gettoolsetenvironment.js";
 export * from "./gettoolusagefilteroptions.js";
 export * from "./gettoolusagesummary.js";
 export * from "./gettriggerinstance.js";
-export * from "./gettunnelledmcpserver.js";
+export * from "./gettunneledmcpserver.js";
 export * from "./getusermetricssummary.js";
 export * from "./getusersessionclient.js";
 export * from "./getusersessionissuer.js";
@@ -247,7 +247,7 @@ export * from "./listtoolusagetraces.js";
 export * from "./listtoolvariationgroups.js";
 export * from "./listtriggerdefinitions.js";
 export * from "./listtriggerinstances.js";
-export * from "./listtunnelledmcpservers.js";
+export * from "./listtunneledmcpservers.js";
 export * from "./listusersessionclients.js";
 export * from "./listusersessionconsents.js";
 export * from "./listusersessionfacets.js";
@@ -287,10 +287,14 @@ export * from "./revokeusersession.js";
 export * from "./revokeusersessionclient.js";
 export * from "./revokeusersessionconsent.js";
 <<<<<<< HEAD
+<<<<<<< HEAD
 export * from "./saveriskevalreview.js";
 =======
 export * from "./rotatetunnelledmcpserverkey.js";
 >>>>>>> 685f2d905 (fix: address tunnelled mcp review)
+=======
+export * from "./rotatetunneledmcpserverkey.js";
+>>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
 export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";
@@ -350,7 +354,7 @@ export * from "./updateshadowmcpaccessrule.js";
 export * from "./updatetemplate.js";
 export * from "./updatetoolset.js";
 export * from "./updatetriggerinstance.js";
-export * from "./updatetunnelledmcpserver.js";
+export * from "./updatetunneledmcpserver.js";
 export * from "./updateusersessionissuer.js";
 export * from "./uploadchatattachment.js";
 export * from "./uploadfunctions.js";

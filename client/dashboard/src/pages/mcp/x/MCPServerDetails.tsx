@@ -336,7 +336,7 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           id: server.id,
           name: server.name ?? undefined,
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunnelledMcpServerId: server.tunnelledMcpServerId ?? undefined,
+          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
@@ -402,7 +402,7 @@ function MCPServerHero({ server }: { server: McpServer | undefined }) {
   const enabled = server?.visibility !== "disabled";
   const isPublic = server?.visibility === "public";
   const isHostedServer =
-    !!server?.remoteMcpServerId || !!server?.tunnelledMcpServerId;
+    !!server?.remoteMcpServerId || !!server?.tunneledMcpServerId;
   return (
     <DetailHero actions={server && <MCPServerStatusDropdown server={server} />}>
       <Stack gap={2}>

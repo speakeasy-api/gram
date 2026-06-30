@@ -84,12 +84,12 @@ func TestToolUsageFilteredSelect_BuildsWithMCPServerMatchers(t *testing.T) {
 		MCPServerMatchers: []MCPServerMatcher{
 			{
 				SourceID:    "source-id",
-				TargetType:  ToolUsageTargetTypeTunnelledMCP,
+				TargetType:  ToolUsageTargetTypeTunneledMCP,
 				TargetID:    "postgres-tunnel",
-				TargetLabel: "Tunnelled Postgres MCP",
+				TargetLabel: "Tunneled Postgres MCP",
 			},
 		},
-		TargetTypes:        []string{ToolUsageTargetTypeTunnelledMCP},
+		TargetTypes:        []string{ToolUsageTargetTypeTunneledMCP},
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,

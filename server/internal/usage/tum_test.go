@@ -399,16 +399,16 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	tunnelLimit := 7
 	email := "billing-alerts@example.test"
 	result, err := svc.SetBillingMetadata(ctx, &gen.SetBillingMetadataPayload{
-		MonthlyTokenLimit:       &limit,
-		TunnelledMcpServerLimit: &tunnelLimit,
-		AlertEmail:              &email,
-		BillingCycleAnchorDay:   5,
+		MonthlyTokenLimit:      &limit,
+		TunneledMcpServerLimit: &tunnelLimit,
+		AlertEmail:             &email,
+		BillingCycleAnchorDay:  5,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.MonthlyTokenLimit)
 	require.Equal(t, int64(1_000_000), *result.MonthlyTokenLimit)
-	require.NotNil(t, result.TunnelledMcpServerLimit)
-	require.Equal(t, 7, *result.TunnelledMcpServerLimit)
+	require.NotNil(t, result.TunneledMcpServerLimit)
+	require.Equal(t, 7, *result.TunneledMcpServerLimit)
 	require.NotNil(t, result.AlertEmail)
 	require.Equal(t, email, *result.AlertEmail)
 	require.Equal(t, 5, result.BillingCycleAnchorDay)
@@ -423,7 +423,7 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.MonthlyTokenLimit)
 	require.Equal(t, int64(2_000_000), *result.MonthlyTokenLimit)
-	require.Nil(t, result.TunnelledMcpServerLimit)
+	require.Nil(t, result.TunneledMcpServerLimit)
 	require.Nil(t, result.AlertEmail)
 	require.Equal(t, 12, result.BillingCycleAnchorDay)
 
@@ -436,23 +436,23 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 	require.NoError(t, err)
 	require.InDelta(t, float64(1_000_000), beforeSnapshot["tum_monthly_token_limit"], 0)
-	require.InDelta(t, float64(7), beforeSnapshot["tunnelled_mcp_server_limit"], 0)
+	require.InDelta(t, float64(7), beforeSnapshot["tunneled_mcp_server_limit"], 0)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.InDelta(t, float64(2_000_000), afterSnapshot["tum_monthly_token_limit"], 0)
-	require.Nil(t, afterSnapshot["tunnelled_mcp_server_limit"])
+	require.Nil(t, afterSnapshot["tunneled_mcp_server_limit"])
 }
 
-func TestSetBillingMetadata_RejectsOversizedTunnelledMcpServerLimit(t *testing.T) {
+func TestSetBillingMetadata_RejectsOversizedTunneledMcpServerLimit(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org-tum-oversized-tunnel-limit"
 	svc, _, _, _ := newTUMTestService(t, orgID)
-	tooLarge := maxTunnelledMcpServerLimit + 1
+	tooLarge := maxTunneledMcpServerLimit + 1
 
 	_, err := svc.SetBillingMetadata(testAdminAuthContext(orgID), &gen.SetBillingMetadataPayload{
-		TunnelledMcpServerLimit: &tooLarge,
-		BillingCycleAnchorDay:   1,
+		TunneledMcpServerLimit: &tooLarge,
+		BillingCycleAnchorDay:  1,
 	})
 
 	require.Error(t, err)

@@ -21,13 +21,13 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "catalog", label: "Catalog" },
     { value: "custom", label: "Custom" },
     { value: "remote", label: "Remote URL" },
-    { value: "tunnelled", label: "Tunnelled" },
+    { value: "tunneled", label: "Tunneled" },
   ],
 };
 
 export interface McpFacets {
   status: "public" | "private" | "disabled";
-  source: "catalog" | "custom" | "remote" | "tunnelled";
+  source: "catalog" | "custom" | "remote" | "tunneled";
 }
 
 export function toolsetFacets(toolset: ToolsetEntry): McpFacets {
@@ -50,7 +50,7 @@ export function mcpServerFacets(server: McpServer): McpFacets {
         : "disabled";
   return {
     status,
-    source: server.tunnelledMcpServerId ? "tunnelled" : "remote",
+    source: server.tunneledMcpServerId ? "tunneled" : "remote",
   };
 }
 

@@ -19,9 +19,9 @@ export type SetBillingMetadataRequestBody = {
    */
   monthlyTokenLimit?: number | undefined;
   /**
-   * The contracted tunnelled MCP server source cap. Omit to use the plan default.
+   * The contracted tunneled MCP server source cap. Omit to use the plan default.
    */
-  tunnelledMcpServerLimit?: number | undefined;
+  tunneledMcpServerLimit?: number | undefined;
 };
 
 /** @internal */
@@ -29,7 +29,7 @@ export type SetBillingMetadataRequestBody$Outbound = {
   alert_email?: string | undefined;
   billing_cycle_anchor_day: number;
   monthly_token_limit?: number | undefined;
-  tunnelled_mcp_server_limit?: number | undefined;
+  tunneled_mcp_server_limit?: number | undefined;
 };
 
 /** @internal */
@@ -41,14 +41,14 @@ export const SetBillingMetadataRequestBody$outboundSchema: z.ZodMiniType<
     alertEmail: z.optional(z.string()),
     billingCycleAnchorDay: z.int(),
     monthlyTokenLimit: z.optional(z.int()),
-    tunnelledMcpServerLimit: z.optional(z.int()),
+    tunneledMcpServerLimit: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
       alertEmail: "alert_email",
       billingCycleAnchorDay: "billing_cycle_anchor_day",
       monthlyTokenLimit: "monthly_token_limit",
-      tunnelledMcpServerLimit: "tunnelled_mcp_server_limit",
+      tunneledMcpServerLimit: "tunneled_mcp_server_limit",
     });
   }),
 );

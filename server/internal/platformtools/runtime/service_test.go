@@ -46,7 +46,7 @@ func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
 	}, got)
 }
 
-func TestManagedAssistantLogsToolsDescribesTunnelledMCPUsage(t *testing.T) {
+func TestManagedAssistantLogsToolsDescribesTunneledMCPUsage(t *testing.T) {
 	t.Parallel()
 
 	tools := ManagedAssistantLogsTools(nil)
@@ -54,7 +54,7 @@ func TestManagedAssistantLogsToolsDescribesTunnelledMCPUsage(t *testing.T) {
 		if tool.Executor.Descriptor().Name != "platform_get_tool_usage_summary" {
 			continue
 		}
-		require.Contains(t, tool.Executor.Descriptor().Description, "tunnelled_mcp_server")
+		require.Contains(t, tool.Executor.Descriptor().Description, "tunneled_mcp_server")
 		return
 	}
 

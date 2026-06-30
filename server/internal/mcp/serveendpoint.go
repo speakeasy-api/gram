@@ -140,12 +140,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
 		}
 		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
-	case mcpServer.TunnelledMcpServerID.Valid:
+	case mcpServer.TunneledMcpServerID.Valid:
 		upstreamToken, err := singleUpstreamToken(upstreamTokens)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunnelled MCP backend").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunneled MCP backend").LogError(ctx, logger)
 		}
-		return s.serveTunnelledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -396,8 +396,8 @@ func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) e
 	}
 }
 
-// Tunnelled MCP reuses the remote proxy stack; Gram injects the tunnel ID header server-side.
-func (s *Service) serveTunnelledBackend(
+// Tunneled MCP reuses the remote proxy stack; Gram injects the tunnel ID header server-side.
+func (s *Service) serveTunneledBackend(
 	w http.ResponseWriter,
 	r *http.Request,
 	logger *slog.Logger,
@@ -406,7 +406,7 @@ func (s *Service) serveTunnelledBackend(
 	upstreamAuth string,
 ) error {
 	ctx := r.Context()
-	tunnelID := mcpServer.TunnelledMcpServerID.UUID.String()
+	tunnelID := mcpServer.TunneledMcpServerID.UUID.String()
 	logger = logger.With(attr.SlogResourceID(tunnelID))
 
 	var err error

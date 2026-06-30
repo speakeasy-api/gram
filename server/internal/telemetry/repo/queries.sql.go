@@ -1999,11 +1999,11 @@ type HooksServerSummaryRow struct {
 }
 
 const (
-	ToolUsageTargetTypeHostedMCP    = "hosted_mcp_server"
-	ToolUsageTargetTypeTunnelledMCP = "tunnelled_mcp_server"
-	ToolUsageTargetTypeShadowMCP    = "shadow_mcp_server"
-	ToolUsageTargetTypeLocalTool    = "local_tool"
-	ToolUsageTargetTypeSkill        = "skill"
+	ToolUsageTargetTypeHostedMCP   = "hosted_mcp_server"
+	ToolUsageTargetTypeTunneledMCP = "tunneled_mcp_server"
+	ToolUsageTargetTypeShadowMCP   = "shadow_mcp_server"
+	ToolUsageTargetTypeLocalTool   = "local_tool"
+	ToolUsageTargetTypeSkill       = "skill"
 
 	toolUsageTargetKindServer     = "server"
 	toolUsageTargetKindLocalTools = "local_tools"
@@ -2029,7 +2029,7 @@ type HostedMCPMatcher struct {
 }
 
 // MCPServerMatcher maps direct MCP server source ids from telemetry to their
-// fronting mcp_servers target. Remote-backed servers stay hosted MCP; tunnelled
+// fronting mcp_servers target. Remote-backed servers stay hosted MCP; tunneled
 // servers receive their own target type.
 type MCPServerMatcher struct {
 	SourceID    string

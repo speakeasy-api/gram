@@ -86,8 +86,8 @@ export * from "./createsignedchatattachmenturlform2.js";
 export * from "./createsignedchatattachmenturlresult.js";
 export * from "./createtoolsetrequestbody.js";
 export * from "./createtriggerinstanceform.js";
-export * from "./createtunnelledmcpserverform.js";
-export * from "./createtunnelledmcpserverresult.js";
+export * from "./createtunneledmcpserverform.js";
+export * from "./createtunneledmcpserverresult.js";
 export * from "./createusersessionissuerform.js";
 export * from "./creditusageresponsebody.js";
 export * from "./cursorhookpayload.js";
@@ -254,7 +254,7 @@ export * from "./listtoolusagetracesresult.js";
 export * from "./listtoolvariationgroupsresult.js";
 export * from "./listtriggerdefinitionsresult.js";
 export * from "./listtriggerinstancesresult.js";
-export * from "./listtunnelledmcpserversresult.js";
+export * from "./listtunneledmcpserversresult.js";
 export * from "./listusergrantsresult.js";
 export * from "./listusersessionclientsresult.js";
 export * from "./listusersessionconsentsresult.js";
@@ -405,11 +405,16 @@ export * from "./role.js";
 export * from "./rolegrant.js";
 export * from "./rolesummary.js";
 <<<<<<< HEAD
+<<<<<<< HEAD
 export * from "./saveriskevalreviewrequestbody.js";
 =======
 export * from "./rotatetunnelledmcpserverkeyform.js";
 export * from "./rotatetunnelledmcpserverkeyresult.js";
 >>>>>>> 685f2d905 (fix: address tunnelled mcp review)
+=======
+export * from "./rotatetunneledmcpserverkeyform.js";
+export * from "./rotatetunneledmcpserverkeyresult.js";
+>>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
 export * from "./scopedefinition.js";
 export * from "./searchchatsfilter.js";
 export * from "./searchchatspayload.js";
@@ -501,8 +506,8 @@ export * from "./triggerinstance.js";
 export * from "./triggerriskanalysisrequestbody.js";
 export * from "./tumperiod.js";
 export * from "./tumperiodday.js";
-export * from "./tunnelledmcpconnection.js";
-export * from "./tunnelledmcpserver.js";
+export * from "./tunneledmcpconnection.js";
+export * from "./tunneledmcpserver.js";
 export * from "./updateassistantform.js";
 export * from "./updatecustomdetectionrulerequestbody.js";
 export * from "./updatedomainrequestbody.js";
@@ -530,7 +535,7 @@ export * from "./updateserverform.js";
 export * from "./updateshadowmcpaccessruleform.js";
 export * from "./updatetoolsetrequestbody.js";
 export * from "./updatetriggerinstanceform.js";
-export * from "./updatetunnelledmcpserverform.js";
+export * from "./updatetunneledmcpserverform.js";
 export * from "./updateusersessionissuerform.js";
 export * from "./uploadchatattachmentresult.js";
 export * from "./uploadfunctionsresult.js";

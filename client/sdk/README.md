@@ -620,14 +620,14 @@ run();
 * [resume](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 * [update](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
 
-### [TunnelledMcp](docs/sdks/tunnelledmcp/README.md)
+### [TunneledMcp](docs/sdks/tunneledmcp/README.md)
 
-* [createServer](docs/sdks/tunnelledmcp/README.md#createserver) - createServer tunnelledMcp
-* [deleteServer](docs/sdks/tunnelledmcp/README.md#deleteserver) - deleteServer tunnelledMcp
-* [getServer](docs/sdks/tunnelledmcp/README.md#getserver) - getServer tunnelledMcp
-* [listServers](docs/sdks/tunnelledmcp/README.md#listservers) - listServers tunnelledMcp
-* [rotateServerKey](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
-* [updateServer](docs/sdks/tunnelledmcp/README.md#updateserver) - updateServer tunnelledMcp
+* [createServer](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+* [deleteServer](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+* [getServer](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+* [listServers](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+* [rotateServerKey](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+* [updateServer](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -1020,12 +1020,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`triggersPause`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`triggersResume`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`triggersUpdate`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
-- [`tunnelledMcpCreateServer`](docs/sdks/tunnelledmcp/README.md#createserver) - createServer tunnelledMcp
-- [`tunnelledMcpDeleteServer`](docs/sdks/tunnelledmcp/README.md#deleteserver) - deleteServer tunnelledMcp
-- [`tunnelledMcpGetServer`](docs/sdks/tunnelledmcp/README.md#getserver) - getServer tunnelledMcp
-- [`tunnelledMcpListServers`](docs/sdks/tunnelledmcp/README.md#listservers) - listServers tunnelledMcp
-- [`tunnelledMcpRotateServerKey`](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
-- [`tunnelledMcpUpdateServer`](docs/sdks/tunnelledmcp/README.md#updateserver) - updateServer tunnelledMcp
+- [`tunneledMcpCreateServer`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+- [`tunneledMcpDeleteServer`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+- [`tunneledMcpGetServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+- [`tunneledMcpListServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`tunneledMcpRotateServerKey`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+- [`tunneledMcpUpdateServer`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -1146,7 +1146,7 @@ To learn about this feature and how to get started, check
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
-- [`useCreateTunnelledMcpServerMutation`](docs/sdks/tunnelledmcp/README.md#createserver) - createServer tunnelledMcp
+- [`useCreateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
@@ -1172,7 +1172,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
-- [`useDeleteTunnelledMcpServerMutation`](docs/sdks/tunnelledmcp/README.md#deleteserver) - deleteServer tunnelledMcp
+- [`useDeleteTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
 - [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -1208,7 +1208,7 @@ To learn about this feature and how to get started, check
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
 - [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
-- [`useGetTunnelledMcpServer`](docs/sdks/tunnelledmcp/README.md#getserver) - getServer tunnelledMcp
+- [`useGetTunneledMcpServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalRemoteSessionClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
@@ -1360,7 +1360,7 @@ To learn about this feature and how to get started, check
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
-- [`useRotateTunnelledMcpServerKeyMutation`](docs/sdks/tunnelledmcp/README.md#rotateserverkey) - rotateServerKey tunnelledMcp
+- [`useRotateTunneledMcpServerKeyMutation`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1393,7 +1393,7 @@ To learn about this feature and how to get started, check
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
-- [`useTunnelledMcpServers`](docs/sdks/tunnelledmcp/README.md#listservers) - listServers tunnelledMcp
+- [`useTunneledMcpServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
@@ -1417,7 +1417,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
-- [`useUpdateTunnelledMcpServerMutation`](docs/sdks/tunnelledmcp/README.md#updateserver) - updateServer tunnelledMcp
+- [`useUpdateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`useUpdateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets

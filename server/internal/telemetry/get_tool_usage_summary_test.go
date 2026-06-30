@@ -16,7 +16,7 @@ import (
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	tunnelledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunnelledmcp/repo"
+	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -230,15 +230,15 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func TestGetToolUsageSummary_ClassifiesDirectTunnelledMCP(t *testing.T) {
+func TestGetToolUsageSummary_ClassifiesDirectTunneledMCP(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
-	fixture := createTunnelledMCPServerFixture(t, ctx, ti, tunnelledMCPServerFixtureParams{
-		name: "Tunnelled Postgres MCP",
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
 		slug: "postgres-tunnel",
 	})
 	now := time.Now().UTC()
@@ -256,7 +256,7 @@ func TestGetToolUsageSummary_ClassifiesDirectTunnelledMCP(t *testing.T) {
 		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
 			From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 			To:          now.Add(1 * time.Hour).Format(time.RFC3339),
-			TargetTypes: []gen.ToolUsageTargetType{"tunnelled_mcp_server"},
+			TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
 		})
 		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
 			return
@@ -269,12 +269,12 @@ func TestGetToolUsageSummary_ClassifiesDirectTunnelledMCP(t *testing.T) {
 		}
 
 		targets := toolUsageTargetsByKey(res.Targets)
-		tunnelled := targets["tunnelled_mcp_server:server:postgres-tunnel"]
-		if assert.NotNil(c, tunnelled) {
-			assert.Equal(c, "Tunnelled Postgres MCP", tunnelled.TargetLabel)
-			assert.Equal(c, int64(1), tunnelled.EventCount)
-			assert.Equal(c, int64(1), tunnelled.SuccessCount)
-			assert.Equal(c, int64(0), tunnelled.FailureCount)
+		tunneled := targets["tunneled_mcp_server:server:postgres-tunnel"]
+		if assert.NotNil(c, tunneled) {
+			assert.Equal(c, "Tunneled Postgres MCP", tunneled.TargetLabel)
+			assert.Equal(c, int64(1), tunneled.EventCount)
+			assert.Equal(c, int64(1), tunneled.SuccessCount)
+			assert.Equal(c, int64(0), tunneled.FailureCount)
 		}
 		assert.Nil(c, targets["shadow_mcp_server:server:"+fixture.sourceID.String()])
 	}, 10*time.Second, 200*time.Millisecond)
@@ -531,17 +531,17 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 }
 
-type tunnelledMCPServerFixtureParams struct {
+type tunneledMCPServerFixtureParams struct {
 	name string
 	slug string
 }
 
-type tunnelledMCPServerFixture struct {
+type tunneledMCPServerFixture struct {
 	sourceID    uuid.UUID
 	mcpServerID uuid.UUID
 }
 
-func createTunnelledMCPServerFixture(t *testing.T, ctx context.Context, ti *testInstance, p tunnelledMCPServerFixtureParams) tunnelledMCPServerFixture {
+func createTunneledMCPServerFixture(t *testing.T, ctx context.Context, ti *testInstance, p tunneledMCPServerFixtureParams) tunneledMCPServerFixture {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -549,7 +549,7 @@ func createTunnelledMCPServerFixture(t *testing.T, ctx context.Context, ti *test
 	require.NotNil(t, authCtx.ProjectID)
 
 	sourceID := uuid.New()
-	source, err := tunnelledmcpRepo.New(ti.conn).CreateServer(ctx, tunnelledmcpRepo.CreateServerParams{
+	source, err := tunneledmcpRepo.New(ti.conn).CreateServer(ctx, tunneledmcpRepo.CreateServerParams{
 		ID:        sourceID,
 		ProjectID: *authCtx.ProjectID,
 		Name:      p.name,
@@ -567,14 +567,14 @@ func createTunnelledMCPServerFixture(t *testing.T, ctx context.Context, ti *test
 		EnvironmentID:         uuid.NullUUID{},
 		UserSessionIssuerID:   uuid.NullUUID{},
 		RemoteMcpServerID:     uuid.NullUUID{},
-		TunnelledMcpServerID:  uuid.NullUUID{UUID: source.ID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: source.ID, Valid: true},
 		ToolsetID:             uuid.NullUUID{},
 		ToolVariationsGroupID: uuid.NullUUID{},
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
 
-	return tunnelledMCPServerFixture{
+	return tunneledMCPServerFixture{
 		sourceID:    source.ID,
 		mcpServerID: server.ID,
 	}

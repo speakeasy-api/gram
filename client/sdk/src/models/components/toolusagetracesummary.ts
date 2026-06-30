@@ -49,7 +49,7 @@ export type ToolUsageTraceSummaryTargetKind = ClosedEnum<
  */
 export const ToolUsageTraceSummaryTargetType = {
   HostedMcpServer: "hosted_mcp_server",
-  TunnelledMcpServer: "tunnelled_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",

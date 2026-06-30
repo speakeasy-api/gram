@@ -39,9 +39,9 @@ export type TokensUnderManagement = {
    */
   tokens: number;
   /**
-   * The contracted tunnelled MCP server source cap, if one has been configured
+   * The contracted tunneled MCP server source cap, if one has been configured
    */
-  tunnelledMcpServerLimit?: number | undefined;
+  tunneledMcpServerLimit?: number | undefined;
 };
 
 /** @internal */
@@ -63,7 +63,7 @@ export const TokensUnderManagement$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     tokens: z.int(),
-    tunnelled_mcp_server_limit: z.optional(z.int()),
+    tunneled_mcp_server_limit: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -72,7 +72,7 @@ export const TokensUnderManagement$inboundSchema: z.ZodMiniType<
       "monthly_token_limit": "monthlyTokenLimit",
       "period_end": "periodEnd",
       "period_start": "periodStart",
-      "tunnelled_mcp_server_limit": "tunnelledMcpServerLimit",
+      "tunneled_mcp_server_limit": "tunneledMcpServerLimit",
     });
   }),
 );
