@@ -122,6 +122,13 @@ type UpdateRiskPolicyRequestBody struct {
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 }
 
+// UnmaskRiskResultRequestBody is the type of the "risk" service
+// "unmaskRiskResult" endpoint HTTP request body.
+type UnmaskRiskResultRequestBody struct {
+	// The resource ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // CreateRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "createRiskPolicyBypassRequest" endpoint HTTP request body.
 type CreateRiskPolicyBypassRequestRequestBody struct {
@@ -535,7 +542,8 @@ type ListRiskResultsForAgentResponseBody struct {
 type UnmaskRiskResultResponseBody struct {
 	// The risk result ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The plaintext matched secret or sensitive data for this result.
+	// The plaintext matched secret or sensitive data for this result. Empty string
+	// when the finding has no top-level match (e.g. a spans-only finding).
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
 }
 
@@ -7896,6 +7904,15 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	return body
 }
 
+// NewUnmaskRiskResultRequestBody builds the HTTP request body from the payload
+// of the "unmaskRiskResult" endpoint of the "risk" service.
+func NewUnmaskRiskResultRequestBody(p *risk.UnmaskRiskResultPayload) *UnmaskRiskResultRequestBody {
+	body := &UnmaskRiskResultRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
 // NewCreateRiskPolicyBypassRequestRequestBody builds the HTTP request body
 // from the payload of the "createRiskPolicyBypassRequest" endpoint of the
 // "risk" service.
@@ -9413,7 +9430,7 @@ func NewListRiskResultsForAgentGatewayError(body *ListRiskResultsForAgentGateway
 func NewUnmaskRiskResultRiskUnmaskResultResultOK(body *UnmaskRiskResultResponseBody) *risk.RiskUnmaskResultResult {
 	v := &risk.RiskUnmaskResultResult{
 		ID:    *body.ID,
-		Match: body.Match,
+		Match: *body.Match,
 	}
 
 	return v
@@ -14290,6 +14307,9 @@ func ValidateListRiskResultsForAgentResponseBody(body *ListRiskResultsForAgentRe
 func ValidateUnmaskRiskResultResponseBody(body *UnmaskRiskResultResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

@@ -628,12 +628,15 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 
 // BuildUnmaskRiskResultPayload builds the payload for the risk
 // unmaskRiskResult endpoint from CLI flags.
-func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultID string, riskUnmaskRiskResultApikeyToken string, riskUnmaskRiskResultSessionToken string, riskUnmaskRiskResultProjectSlugInput string) (*risk.UnmaskRiskResultPayload, error) {
+func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultBody string, riskUnmaskRiskResultApikeyToken string, riskUnmaskRiskResultSessionToken string, riskUnmaskRiskResultProjectSlugInput string) (*risk.UnmaskRiskResultPayload, error) {
 	var err error
-	var id string
+	var body UnmaskRiskResultRequestBody
 	{
-		id = riskUnmaskRiskResultID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		err = json.Unmarshal([]byte(riskUnmaskRiskResultBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -656,8 +659,9 @@ func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultID string, riskUnmaskRiskR
 			projectSlugInput = &riskUnmaskRiskResultProjectSlugInput
 		}
 	}
-	v := &risk.UnmaskRiskResultPayload{}
-	v.ID = id
+	v := &risk.UnmaskRiskResultPayload{
+		ID: body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: de8c18495f63659819bace39cff02d96
+  docChecksum: 5a4d9eee1403fc8b62f4012257c15a34
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -951,7 +951,7 @@ trackedFiles:
   docs/models/components/riskspanredacted.md:
     last_write_checksum: sha1:9e70001c47cb1598313f2d293c3655db67aaf3fb
   docs/models/components/riskunmaskresultresult.md:
-    last_write_checksum: sha1:4f7d9c7c001960a127382daccb06fb63db0b1546
+    last_write_checksum: sha1:340ac2117071316eeb808a9f749538fd3196f64a
   docs/models/components/riskuserbreakdownresult.md:
     last_write_checksum: sha1:c2aca44d9079416a4a520e104fe7f7407b877304
   docs/models/components/role.md:
@@ -3243,7 +3243,7 @@ trackedFiles:
   docs/models/operations/triggerriskanalysissecurityoption2.md:
     last_write_checksum: sha1:6e2953808adb0fc62b282857c0ad298c5a50d67e
   docs/models/operations/unmaskriskresultrequest.md:
-    last_write_checksum: sha1:ed831976f615b0d863ec19400268f450a92da203
+    last_write_checksum: sha1:ace1693e064e75e036e4f52627cb4813421a22a9
   docs/models/operations/unmaskriskresultsecurity.md:
     last_write_checksum: sha1:45157ddcc760eb657e12f445f7ea7e8b8a630260
   docs/models/operations/unmaskriskresultsecurityoption1.md:
@@ -3583,7 +3583,7 @@ trackedFiles:
   docs/sdks/resources/README.md:
     last_write_checksum: sha1:a69ba6f2f7a90c991953a89759a60ae8ae42a932
   docs/sdks/results/README.md:
-    last_write_checksum: sha1:b344f6cf761667e31c5a3da9274ded5d24b6aed5
+    last_write_checksum: sha1:8f328d9e070782f7da39c9da8ebc9471646a1cb5
   docs/sdks/rules/README.md:
     last_write_checksum: sha1:835fdf585088a0365eb525dfca783bd2efa5438c
   docs/sdks/telemetry/README.md:
@@ -4145,7 +4145,7 @@ trackedFiles:
   src/funcs/riskResultsListForAgent.ts:
     last_write_checksum: sha1:0ed3fe424a04033bfc0028338fe5ee3fd2758e57
   src/funcs/riskResultsUnmask.ts:
-    last_write_checksum: sha1:1c56e3658cb68ad3a202e85813b28d261db819fb
+    last_write_checksum: sha1:45294100591724002f8319105462e11d0284cbc2
   src/funcs/riskRulesTest.ts:
     last_write_checksum: sha1:c4a76f9f4070433bc7f1331991a438ffe69c1641
   src/funcs/telemetryCaptureEvent.ts:
@@ -5089,7 +5089,7 @@ trackedFiles:
   src/models/components/riskspanredacted.ts:
     last_write_checksum: sha1:7d5f7a72db5fe08c954d438589112ea8b707a266
   src/models/components/riskunmaskresultresult.ts:
-    last_write_checksum: sha1:399626454ca8f262d541d2352b92f65815a797c7
+    last_write_checksum: sha1:3dc8d5b961362d494d040c1791467035aa1d0921
   src/models/components/riskuserbreakdownresult.ts:
     last_write_checksum: sha1:8eb12073e8221606906bcbd25abea020551cec87
   src/models/components/role.ts:
@@ -6003,7 +6003,7 @@ trackedFiles:
   src/models/operations/triggerriskanalysis.ts:
     last_write_checksum: sha1:cc24d7b20e84ea9c94e6e95f7d84bcc03f789484
   src/models/operations/unmaskriskresult.ts:
-    last_write_checksum: sha1:7e2ff49b9c20fb70a778679628bbdd0d44d29f89
+    last_write_checksum: sha1:77cbd17d0a15b302a65f3fc9bdb8a2799ad6fe8e
   src/models/operations/updateassistant.ts:
     last_write_checksum: sha1:ca824c89066a8ef218198391eb9ba7010859e56b
   src/models/operations/updatecollection.ts:
@@ -10867,9 +10867,11 @@ examples:
       parameters:
         query:
           id: "62812167-ce5a-438e-bcc0-10d7ab10b11f"
+      requestBody:
+        application/json: {"id": "62812167-ce5a-438e-bcc0-10d7ab10b11f"}
       responses:
         "200":
-          application/json: {"id": "19916053-7fed-4f9c-be0d-51f5fa499d5d"}
+          application/json: {"id": "19916053-7fed-4f9c-be0d-51f5fa499d5d", "match": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

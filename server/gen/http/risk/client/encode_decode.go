@@ -1756,7 +1756,7 @@ func DecodeListRiskResultsForAgentResponse(decoder func(*http.Response) goahttp.
 // and path set to call the "risk" service "unmaskRiskResult" endpoint
 func (c *Client) BuildUnmaskRiskResultRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UnmaskRiskResultRiskPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("risk", "unmaskRiskResult", u.String(), err)
 	}
@@ -1787,9 +1787,10 @@ func EncodeUnmaskRiskResultRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		values := req.URL.Query()
-		values.Add("id", p.ID)
-		req.URL.RawQuery = values.Encode()
+		body := NewUnmaskRiskResultRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "unmaskRiskResult", err)
+		}
 		return nil
 	}
 }

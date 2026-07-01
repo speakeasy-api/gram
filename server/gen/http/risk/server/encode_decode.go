@@ -1795,17 +1795,30 @@ func DecodeUnmaskRiskResultRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (*risk.UnmaskRiskResultPayload, error) {
 		var payload *risk.UnmaskRiskResultPayload
 		var (
-			id               string
+			body UnmaskRiskResultRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUnmaskRiskResultRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1818,10 +1831,7 @@ func DecodeUnmaskRiskResultRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewUnmaskRiskResultPayload(id, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewUnmaskRiskResultPayload(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

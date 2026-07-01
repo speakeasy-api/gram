@@ -124,6 +124,13 @@ type UpdateRiskPolicyRequestBody struct {
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 }
 
+// UnmaskRiskResultRequestBody is the type of the "risk" service
+// "unmaskRiskResult" endpoint HTTP request body.
+type UnmaskRiskResultRequestBody struct {
+	// The resource ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // CreateRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "createRiskPolicyBypassRequest" endpoint HTTP request body.
 type CreateRiskPolicyBypassRequestRequestBody struct {
@@ -537,8 +544,9 @@ type ListRiskResultsForAgentResponseBody struct {
 type UnmaskRiskResultResponseBody struct {
 	// The risk result ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The plaintext matched secret or sensitive data for this result.
-	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// The plaintext matched secret or sensitive data for this result. Empty string
+	// when the finding has no top-level match (e.g. a spans-only finding).
+	Match string `form:"match" json:"match" xml:"match"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -13764,9 +13772,10 @@ func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, categor
 
 // NewUnmaskRiskResultPayload builds a risk service unmaskRiskResult endpoint
 // payload.
-func NewUnmaskRiskResultPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UnmaskRiskResultPayload {
-	v := &risk.UnmaskRiskResultPayload{}
-	v.ID = id
+func NewUnmaskRiskResultPayload(body *UnmaskRiskResultRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UnmaskRiskResultPayload {
+	v := &risk.UnmaskRiskResultPayload{
+		ID: *body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -14230,6 +14239,18 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
+	}
+	return
+}
+
+// ValidateUnmaskRiskResultRequestBody runs the validations defined on
+// UnmaskRiskResultRequestBody
+func ValidateUnmaskRiskResultRequestBody(body *UnmaskRiskResultRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

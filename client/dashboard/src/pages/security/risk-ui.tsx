@@ -137,8 +137,8 @@ function useUnmaskedMatch(resultId: string): {
   const reveal = useCallback(() => {
     if (value !== null || isPending) return;
     mutate(
-      { request: { id: resultId } },
-      { onSuccess: (res) => setValue(res.match ?? "") },
+      { request: { riskIDRequestBody: { id: resultId } } },
+      { onSuccess: (res) => setValue(res.match) },
     );
   }, [mutate, resultId, value, isPending]);
   return { value, isLoading: isPending, reveal };
@@ -160,8 +160,12 @@ export function MaskedMatch({
   const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
   // Only sync when the global toggle actually fires (generation changes).
   // Depending on the context object would clobber per-row clicks on every
-  // render.
-  const lastSyncedGeneration = useRef(generation);
+  // render. Starts at `undefined` (never equal to a real generation number)
+  // rather than the current `generation`, so a row that mounts *after*
+  // "reveal all" is already on (e.g. a paginated page loading more rows)
+  // still runs this sync once on mount and picks up the active reveal-all
+  // state, instead of staying masked until the next explicit toggle.
+  const lastSyncedGeneration = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (generation === undefined) return;
     if (lastSyncedGeneration.current === generation) return;

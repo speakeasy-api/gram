@@ -25992,19 +25992,10 @@ paths:
       x-speakeasy-react-hook:
         name: RiskListResultsForAgent
   /rpc/risk.results.unmask:
-    get:
+    post:
       description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
       operationId: unmaskRiskResult
       parameters:
-        - allowEmptyValue: true
-          description: The risk result ID.
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The risk result ID.
-            format: uuid
-            type: string
         - allowEmptyValue: true
           description: API Key header
           in: header
@@ -26026,6 +26017,12 @@ paths:
           schema:
             description: project header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
       responses:
         "200":
           content:
@@ -45388,9 +45385,10 @@ components:
           format: uuid
         match:
           type: string
-          description: The plaintext matched secret or sensitive data for this result.
+          description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
       required:
         - id
+        - match
     RiskUserBreakdownResult:
       type: object
       properties:

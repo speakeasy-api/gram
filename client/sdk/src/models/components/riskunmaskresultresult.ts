@@ -13,9 +13,9 @@ export type RiskUnmaskResultResult = {
    */
   id: string;
   /**
-   * The plaintext matched secret or sensitive data for this result.
+   * The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
    */
-  match?: string | undefined;
+  match: string;
 };
 
 /** @internal */
@@ -24,7 +24,7 @@ export const RiskUnmaskResultResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   id: z.string(),
-  match: z.optional(z.string()),
+  match: z.string(),
 });
 
 export function riskUnmaskResultResultFromJSON(

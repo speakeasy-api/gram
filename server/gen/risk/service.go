@@ -754,8 +754,9 @@ type RiskRuleBreakdownResult struct {
 type RiskUnmaskResultResult struct {
 	// The risk result ID.
 	ID string
-	// The plaintext matched secret or sensitive data for this result.
-	Match *string
+	// The plaintext matched secret or sensitive data for this result. Empty string
+	// when the finding has no top-level match (e.g. a spans-only finding).
+	Match string
 }
 
 // RiskUserBreakdownResult is the result type of the risk service

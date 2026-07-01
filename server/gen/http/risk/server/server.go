@@ -89,7 +89,7 @@ func New(
 			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.policies.delete"},
 			{"ListRiskResults", "GET", "/rpc/risk.results.list"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.results.listForAgent"},
-			{"UnmaskRiskResult", "GET", "/rpc/risk.results.unmask"},
+			{"UnmaskRiskResult", "POST", "/rpc/risk.results.unmask"},
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
 			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
 			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
@@ -621,7 +621,7 @@ func MountUnmaskRiskResultHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.results.unmask", f)
+	mux.Handle("POST", "/rpc/risk.results.unmask", f)
 }
 
 // NewUnmaskRiskResultHandler creates a HTTP handler which loads the HTTP

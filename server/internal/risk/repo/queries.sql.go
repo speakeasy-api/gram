@@ -1231,7 +1231,11 @@ const getRiskResultByID = `-- name: GetRiskResultByID :one
 SELECT rr.id, rr.match, rr.source, cm.chat_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
-WHERE rr.id = $1 AND rr.project_id = $2
+WHERE rr.id = $1
+  AND rr.project_id = $2
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
 `
 
 type GetRiskResultByIDParams struct {
@@ -1248,7 +1252,9 @@ type GetRiskResultByIDRow struct {
 
 // Single-row lookup backing risk.results.unmask: fetch a result's raw match
 // plus its owning chat_id so the caller can authorize a chat:read check
-// before returning the plaintext.
+// before returning the plaintext. Applies the same found/excluded/
+// false-positive filters as every other risk_results read so a stale result
+// id (excluded or swept as noise since it was listed) can't be unmasked.
 func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDParams) (GetRiskResultByIDRow, error) {
 	row := q.db.QueryRow(ctx, getRiskResultByID, arg.ID, arg.ProjectID)
 	var i GetRiskResultByIDRow
@@ -2905,6 +2911,28 @@ func (q *Queries) ReverseExclusionFlagsBatch(ctx context.Context, arg ReverseExc
 		return nil, err
 	}
 	return items, nil
+}
+
+const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultExcludedForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultExcludedForTest, id)
+	return err
+}
+
+const setRiskResultFalsePositiveForTest = `-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
+	return err
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one

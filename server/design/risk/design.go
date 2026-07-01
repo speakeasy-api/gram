@@ -334,11 +334,14 @@ var _ = Service("risk", func() {
 		Result(RiskUnmaskResultResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.unmask")
+			// POST, not GET: unmasking has a side effect (an audit log write
+			// per reveal), so it isn't a safe/idempotent request — a GET here
+			// would be cacheable/prefetchable by browsers and proxies.
+			POST("/rpc/risk.results.unmask")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Param("id")
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -1224,8 +1227,8 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 	Attribute("id", String, "The risk result ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("match", String, "The plaintext matched secret or sensitive data for this result.")
-	Required("id")
+	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
+	Required("id", "match")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {

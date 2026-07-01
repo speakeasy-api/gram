@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import * as components from "../components/index.js";
 
 export type UnmaskRiskResultSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -22,10 +23,6 @@ export type UnmaskRiskResultSecurity = {
 
 export type UnmaskRiskResultRequest = {
   /**
-   * The risk result ID.
-   */
-  id: string;
-  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -37,6 +34,7 @@ export type UnmaskRiskResultRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  riskIDRequestBody: components.RiskIDRequestBody;
 };
 
 /** @internal */
@@ -142,10 +140,10 @@ export function unmaskRiskResultSecurityToJSON(
 
 /** @internal */
 export type UnmaskRiskResultRequest$Outbound = {
-  id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  RiskIDRequestBody: components.RiskIDRequestBody$Outbound;
 };
 
 /** @internal */
@@ -154,16 +152,17 @@ export const UnmaskRiskResultRequest$outboundSchema: z.ZodMiniType<
   UnmaskRiskResultRequest
 > = z.pipe(
   z.object({
-    id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    riskIDRequestBody: components.RiskIDRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
+      riskIDRequestBody: "RiskIDRequestBody",
     });
   }),
 );

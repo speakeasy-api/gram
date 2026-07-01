@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // TestListRiskResults_ByChatID_RawWithChatReadGrant covers the scoped bypass:
@@ -128,8 +129,7 @@ func TestUnmaskRiskResult_HappyPath(t *testing.T) {
 	unmasked, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: resultID})
 	require.NoError(t, err)
 	require.Equal(t, resultID, unmasked.ID)
-	require.NotNil(t, unmasked.Match)
-	require.Equal(t, "AKIAIOSFODNN7EXAMPLE", *unmasked.Match)
+	require.Equal(t, "AKIAIOSFODNN7EXAMPLE", unmasked.Match)
 
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
 	require.NoError(t, err)
@@ -139,6 +139,77 @@ func TestUnmaskRiskResult_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "risk_result", rec.SubjectType)
 	require.Equal(t, chatID.String(), rec.SubjectSlug, "audit records which chat the unmasked secret came from")
+}
+
+// TestUnmaskRiskResult_ExcludedNotFound covers the same found/excluded/
+// false-positive filters every other risk_results read applies: a result
+// excluded after being listed (e.g. by a new exclusion rule) can't still be
+// unmasked via its now-stale id.
+func TestUnmaskRiskResult_ExcludedNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Unmask Excluded")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+
+	listed, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, listed.Results, 1)
+	resultID := listed.Results[0].ID
+
+	id, err := uuid.Parse(resultID)
+	require.NoError(t, err)
+	require.NoError(t, riskrepo.New(ti.conn).SetRiskResultExcludedForTest(ctx, id))
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: resultID})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// TestUnmaskRiskResult_FalsePositiveNotFound is the same as
+// TestUnmaskRiskResult_ExcludedNotFound but for the offline false-positive
+// sweep instead of an exclusion rule.
+func TestUnmaskRiskResult_FalsePositiveNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Unmask False Positive")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+
+	listed, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, listed.Results, 1)
+	resultID := listed.Results[0].ID
+
+	id, err := uuid.Parse(resultID)
+	require.NoError(t, err)
+	require.NoError(t, riskrepo.New(ti.conn).SetRiskResultFalsePositiveForTest(ctx, id))
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: resultID})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // TestUnmaskRiskResult_Forbidden covers a caller with org:admin (able to see

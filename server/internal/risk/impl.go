@@ -1111,7 +1111,7 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 
 	return &gen.RiskUnmaskResultResult{
 		ID:    row.ID.String(),
-		Match: conv.FromPGText[string](row.Match),
+		Match: conv.FromPGTextOrEmpty[string](row.Match),
 	}, nil
 }
 

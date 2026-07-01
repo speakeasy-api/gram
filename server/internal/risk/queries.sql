@@ -709,11 +709,17 @@ WHERE risk_policy_id = @risk_policy_id
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
 -- plus its owning chat_id so the caller can authorize a chat:read check
--- before returning the plaintext.
+-- before returning the plaintext. Applies the same found/excluded/
+-- false-positive filters as every other risk_results read so a stale result
+-- id (excluded or swept as noise since it was listed) can't be unmasked.
 SELECT rr.id, rr.match, rr.source, cm.chat_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
-WHERE rr.id = @id AND rr.project_id = @project_id;
+WHERE rr.id = @id
+  AND rr.project_id = @project_id
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL;
 
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
@@ -1189,3 +1195,13 @@ RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.rea
   tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
+
+-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = @id;
