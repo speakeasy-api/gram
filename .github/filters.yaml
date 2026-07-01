@@ -1,10 +1,12 @@
 server:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "agents/**"
   - "server/**"
 
 client:
+  - ".github/**"
   - "client/**"
   - "package.json"
   - "pnpm-lock.yaml"
@@ -13,6 +15,7 @@ client:
   - "sdks/typescript/**"
 
 functions:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "functions/**"
@@ -58,11 +61,13 @@ db-migrations:
   - "server/clickhouse/migrations/**"
 
 plog:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "plog/**"
 
 infra:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "infra/**"
@@ -75,6 +80,7 @@ infra:
   - ".mise-tasks/gen/infra.sh"
 
 pystreams:
+  - ".github/**"
   - "uv.lock"
   - "pyproject.toml"
   - "pystreams/**"
