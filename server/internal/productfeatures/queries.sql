@@ -26,3 +26,30 @@ WHERE organization_id = @organization_id
   AND feature_name = @feature_name
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListSessionCaptureExclusions :many
+SELECT user_id
+FROM session_capture_exclusions
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY user_id;
+
+-- name: AddSessionCaptureExclusion :one
+INSERT INTO session_capture_exclusions (
+    organization_id,
+    user_id
+) VALUES (
+    @organization_id,
+    @user_id
+)
+ON CONFLICT (organization_id, user_id) WHERE (deleted IS FALSE)
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: ClearSessionCaptureExclusions :many
+UPDATE session_capture_exclusions
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING user_id;

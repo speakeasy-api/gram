@@ -23,6 +23,14 @@ type SetProductFeatureRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
+// SetSessionCaptureExclusionsRequestBody is the type of the "features" service
+// "setSessionCaptureExclusions" endpoint HTTP request body.
+type SetSessionCaptureExclusionsRequestBody struct {
+	// Gram user IDs to exclude. The provided list replaces any existing exclusions
+	// for the organization.
+	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
+}
+
 // GetProductFeaturesResponseBody is the type of the "features" service
 // "getProductFeatures" endpoint HTTP response body.
 type GetProductFeaturesResponseBody struct {
@@ -43,6 +51,20 @@ type GetProductFeaturesResponseBody struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled bool `form:"observability_mode_enabled" json:"observability_mode_enabled" xml:"observability_mode_enabled"`
+}
+
+// ListSessionCaptureExclusionsResponseBody is the type of the "features"
+// service "listSessionCaptureExclusions" endpoint HTTP response body.
+type ListSessionCaptureExclusionsResponseBody struct {
+	// Gram user IDs (matching the Team roster IDs) excluded from session capture.
+	UserIds []string `form:"user_ids" json:"user_ids" xml:"user_ids"`
+}
+
+// SetSessionCaptureExclusionsResponseBody is the type of the "features"
+// service "setSessionCaptureExclusions" endpoint HTTP response body.
+type SetSessionCaptureExclusionsResponseBody struct {
+	// Gram user IDs (matching the Team roster IDs) excluded from session capture.
+	UserIds []string `form:"user_ids" json:"user_ids" xml:"user_ids"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -418,6 +440,386 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSessionCaptureExclusionsUnauthorizedResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListSessionCaptureExclusionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsForbiddenResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "forbidden" error.
+type ListSessionCaptureExclusionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsBadRequestResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "bad_request" error.
+type ListSessionCaptureExclusionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsNotFoundResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "not_found" error.
+type ListSessionCaptureExclusionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsConflictResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "conflict" error.
+type ListSessionCaptureExclusionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsUnsupportedMediaResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListSessionCaptureExclusionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsInvalidResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "invalid" error.
+type ListSessionCaptureExclusionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsInvariantViolationResponseBody is the type of
+// the "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListSessionCaptureExclusionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsUnexpectedResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "unexpected" error.
+type ListSessionCaptureExclusionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionCaptureExclusionsGatewayErrorResponseBody is the type of the
+// "features" service "listSessionCaptureExclusions" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListSessionCaptureExclusionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsUnauthorizedResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetSessionCaptureExclusionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsForbiddenResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "forbidden" error.
+type SetSessionCaptureExclusionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsBadRequestResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "bad_request" error.
+type SetSessionCaptureExclusionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsNotFoundResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "not_found" error.
+type SetSessionCaptureExclusionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsConflictResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "conflict" error.
+type SetSessionCaptureExclusionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsUnsupportedMediaResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetSessionCaptureExclusionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsInvalidResponseBody is the type of the "features"
+// service "setSessionCaptureExclusions" endpoint HTTP response body for the
+// "invalid" error.
+type SetSessionCaptureExclusionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsInvariantViolationResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetSessionCaptureExclusionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsUnexpectedResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "unexpected" error.
+type SetSessionCaptureExclusionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSessionCaptureExclusionsGatewayErrorResponseBody is the type of the
+// "features" service "setSessionCaptureExclusions" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetSessionCaptureExclusionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // NewGetProductFeaturesResponseBody builds the HTTP response body from the
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
@@ -430,6 +832,38 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		SsoEnabled:                   res.SsoEnabled,
 		ScimEnabled:                  res.ScimEnabled,
 		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsResponseBody builds the HTTP response body
+// from the result of the "listSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewListSessionCaptureExclusionsResponseBody(res *features.SessionCaptureExclusionsResult) *ListSessionCaptureExclusionsResponseBody {
+	body := &ListSessionCaptureExclusionsResponseBody{}
+	if res.UserIds != nil {
+		body.UserIds = make([]string, len(res.UserIds))
+		for i, val := range res.UserIds {
+			body.UserIds[i] = val
+		}
+	} else {
+		body.UserIds = []string{}
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsResponseBody builds the HTTP response body
+// from the result of the "setSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewSetSessionCaptureExclusionsResponseBody(res *features.SessionCaptureExclusionsResult) *SetSessionCaptureExclusionsResponseBody {
+	body := &SetSessionCaptureExclusionsResponseBody{}
+	if res.UserIds != nil {
+		body.UserIds = make([]string, len(res.UserIds))
+		for i, val := range res.UserIds {
+			body.UserIds[i] = val
+		}
+	} else {
+		body.UserIds = []string{}
 	}
 	return body
 }
@@ -727,6 +1161,306 @@ func NewSetProductFeatureGatewayErrorResponseBody(res *goa.ServiceError) *SetPro
 	return body
 }
 
+// NewListSessionCaptureExclusionsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsUnauthorizedResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsUnauthorizedResponseBody {
+	body := &ListSessionCaptureExclusionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsForbiddenResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsForbiddenResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsForbiddenResponseBody {
+	body := &ListSessionCaptureExclusionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsBadRequestResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsBadRequestResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsBadRequestResponseBody {
+	body := &ListSessionCaptureExclusionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewListSessionCaptureExclusionsNotFoundResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsNotFoundResponseBody {
+	body := &ListSessionCaptureExclusionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsConflictResponseBody builds the HTTP response
+// body from the result of the "listSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewListSessionCaptureExclusionsConflictResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsConflictResponseBody {
+	body := &ListSessionCaptureExclusionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsUnsupportedMediaResponseBody {
+	body := &ListSessionCaptureExclusionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsInvalidResponseBody builds the HTTP response
+// body from the result of the "listSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewListSessionCaptureExclusionsInvalidResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsInvalidResponseBody {
+	body := &ListSessionCaptureExclusionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listSessionCaptureExclusions"
+// endpoint of the "features" service.
+func NewListSessionCaptureExclusionsInvariantViolationResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsInvariantViolationResponseBody {
+	body := &ListSessionCaptureExclusionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsUnexpectedResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsUnexpectedResponseBody {
+	body := &ListSessionCaptureExclusionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionCaptureExclusionsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewListSessionCaptureExclusionsGatewayErrorResponseBody(res *goa.ServiceError) *ListSessionCaptureExclusionsGatewayErrorResponseBody {
+	body := &ListSessionCaptureExclusionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsUnauthorizedResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsUnauthorizedResponseBody {
+	body := &SetSessionCaptureExclusionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsForbiddenResponseBody builds the HTTP response
+// body from the result of the "setSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewSetSessionCaptureExclusionsForbiddenResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsForbiddenResponseBody {
+	body := &SetSessionCaptureExclusionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsBadRequestResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsBadRequestResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsBadRequestResponseBody {
+	body := &SetSessionCaptureExclusionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsNotFoundResponseBody builds the HTTP response
+// body from the result of the "setSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewSetSessionCaptureExclusionsNotFoundResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsNotFoundResponseBody {
+	body := &SetSessionCaptureExclusionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsConflictResponseBody builds the HTTP response
+// body from the result of the "setSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewSetSessionCaptureExclusionsConflictResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsConflictResponseBody {
+	body := &SetSessionCaptureExclusionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsUnsupportedMediaResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsUnsupportedMediaResponseBody {
+	body := &SetSessionCaptureExclusionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsInvalidResponseBody builds the HTTP response
+// body from the result of the "setSessionCaptureExclusions" endpoint of the
+// "features" service.
+func NewSetSessionCaptureExclusionsInvalidResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsInvalidResponseBody {
+	body := &SetSessionCaptureExclusionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsInvariantViolationResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsInvariantViolationResponseBody {
+	body := &SetSessionCaptureExclusionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsUnexpectedResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsUnexpectedResponseBody {
+	body := &SetSessionCaptureExclusionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSessionCaptureExclusionsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+func NewSetSessionCaptureExclusionsGatewayErrorResponseBody(res *goa.ServiceError) *SetSessionCaptureExclusionsGatewayErrorResponseBody {
+	body := &SetSessionCaptureExclusionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetProductFeaturesPayload builds a features service getProductFeatures
 // endpoint payload.
 func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeaturesPayload {
@@ -742,6 +1476,28 @@ func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToke
 	v := &features.SetProductFeaturePayload{
 		FeatureName: *body.FeatureName,
 		Enabled:     *body.Enabled,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListSessionCaptureExclusionsPayload builds a features service
+// listSessionCaptureExclusions endpoint payload.
+func NewListSessionCaptureExclusionsPayload(sessionToken *string) *features.ListSessionCaptureExclusionsPayload {
+	v := &features.ListSessionCaptureExclusionsPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetSessionCaptureExclusionsPayload builds a features service
+// setSessionCaptureExclusions endpoint payload.
+func NewSetSessionCaptureExclusionsPayload(body *SetSessionCaptureExclusionsRequestBody, sessionToken *string) *features.SetSessionCaptureExclusionsPayload {
+	v := &features.SetSessionCaptureExclusionsPayload{}
+	v.UserIds = make([]string, len(body.UserIds))
+	for i, val := range body.UserIds {
+		v.UserIds[i] = val
 	}
 	v.SessionToken = sessionToken
 
@@ -765,6 +1521,23 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 	if body.FeatureName != nil {
 		if utf8.RuneCountInString(*body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", *body.FeatureName, utf8.RuneCountInString(*body.FeatureName), 60, false))
+		}
+	}
+	return
+}
+
+// ValidateSetSessionCaptureExclusionsRequestBody runs the validations defined
+// on SetSessionCaptureExclusionsRequestBody
+func ValidateSetSessionCaptureExclusionsRequestBody(body *SetSessionCaptureExclusionsRequestBody) (err error) {
+	if body.UserIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_ids", "body"))
+	}
+	if len(body.UserIds) > 1000 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids", body.UserIds, len(body.UserIds), 1000, false))
+	}
+	for _, e := range body.UserIds {
+		if utf8.RuneCountInString(e) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids[*]", e, utf8.RuneCountInString(e), 256, false))
 		}
 	}
 	return

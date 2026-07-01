@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,4 +114,56 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
+}
+
+func TestService_ListUsers_LoggingExcluded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+
+	// Before exclusion: LoggingExcluded must be false.
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var found *gen.OrganizationUser
+	for _, u := range res.Users {
+		if u.UserID == authCtx.UserID {
+			found = u
+			break
+		}
+	}
+	require.NotNil(t, found, "expected user in list before exclusion")
+	require.False(t, found.LoggingExcluded)
+
+	// Add exclusion.
+	_, err = pfRepo.New(ti.conn).AddSessionCaptureExclusion(ctx, pfRepo.AddSessionCaptureExclusionParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	// After exclusion: LoggingExcluded must be true.
+	res, err = ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	found = nil
+	for _, u := range res.Users {
+		if u.UserID == authCtx.UserID {
+			found = u
+			break
+		}
+	}
+	require.NotNil(t, found, "expected user in list after exclusion")
+	require.True(t, found.LoggingExcluded)
 }

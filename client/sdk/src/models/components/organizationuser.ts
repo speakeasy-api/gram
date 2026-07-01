@@ -23,6 +23,10 @@ export type OrganizationUser = {
    */
   lastLogin?: Date | undefined;
   /**
+   * Whether this user is excluded from session capture for the active organization.
+   */
+  loggingExcluded: boolean;
+  /**
    * User display name.
    */
   name: string;
@@ -60,6 +64,7 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
     last_login: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    logging_excluded: z.boolean(),
     name: z.string(),
     organization_id: z.string(),
     photo_url: z.optional(z.string()),
@@ -74,6 +79,7 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "last_login": "lastLogin",
+      "logging_excluded": "loggingExcluded",
       "organization_id": "organizationId",
       "photo_url": "photoUrl",
       "updated_at": "updatedAt",

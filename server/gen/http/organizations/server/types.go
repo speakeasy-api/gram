@@ -2847,6 +2847,9 @@ type OrganizationUserResponseBody struct {
 	UpdatedAt          string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// Timestamp of the user's most recent login.
 	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
+	// Whether this user is excluded from session capture for the active
+	// organization.
+	LoggingExcluded bool `form:"logging_excluded" json:"logging_excluded" xml:"logging_excluded"`
 }
 
 // OnboardingHookEventResponseBody is used to define fields on response body

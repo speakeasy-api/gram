@@ -2850,6 +2850,9 @@ type OrganizationUserResponseBody struct {
 	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// Timestamp of the user's most recent login.
 	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
+	// Whether this user is excluded from session capture for the active
+	// organization.
+	LoggingExcluded *bool `form:"logging_excluded,omitempty" json:"logging_excluded,omitempty" xml:"logging_excluded,omitempty"`
 }
 
 // OnboardingHookEventResponseBody is used to define fields on response body
@@ -8870,6 +8873,9 @@ func ValidateOrganizationUserResponseBody(body *OrganizationUserResponseBody) (e
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.LoggingExcluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logging_excluded", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
