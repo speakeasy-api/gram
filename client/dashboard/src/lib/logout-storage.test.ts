@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  ASSISTANT_SETUP_THREAD_STORAGE_PREFIX,
   PREFERRED_THEME_STORAGE_KEY,
   PROJECT_FAVORITES_STORAGE_PREFIX,
 } from "./local-storage-keys";
@@ -43,9 +44,11 @@ describe("clearStorageForLogout", () => {
 
   it("preserves preferred theme and organization favorites while clearing other local storage", () => {
     const favoritesKey = `${PROJECT_FAVORITES_STORAGE_PREFIX}org_123`;
+    const setupThreadKey = `${ASSISTANT_SETUP_THREAD_STORAGE_PREFIX}proj_1:user_1:asst_1`;
 
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
     window.localStorage.setItem(favoritesKey, '["project_123"]');
+    window.localStorage.setItem(setupThreadKey, "thread_abc");
     window.localStorage.setItem("preferredProject", "project-slug");
     window.localStorage.setItem("pylon_user_email", "user@example.com");
 
@@ -55,6 +58,7 @@ describe("clearStorageForLogout", () => {
       "light",
     );
     expect(window.localStorage.getItem(favoritesKey)).toBe('["project_123"]');
+    expect(window.localStorage.getItem(setupThreadKey)).toBe("thread_abc");
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
   });

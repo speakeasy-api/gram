@@ -7,18 +7,23 @@ import { getServerURL } from "@/lib/utils";
 import {
   Chat,
   GramElementsProvider,
+  useThreadId,
   type MCPServerEntry,
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
 import { useAssistantDraft } from "./useAssistantDraft";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
+import {
+  readStoredSetupThreadId,
+  writeStoredSetupThreadId,
+} from "./setupThreadMemory";
 import {
   buildSystemPrompt,
   buildWelcome,
@@ -107,7 +112,20 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const { theme: resolvedTheme } = useMoonshineConfig();
   const [searchParams] = useSearchParams();
 
-  const initialThreadId = searchParams.get("threadId") ?? undefined;
+  // Restore the assistant's setup conversation on reopen: an explicit
+  // ?threadId= (e.g. a shared link) wins, otherwise fall back to the thread
+  // remembered for this assistant (written by SetupThreadSync below). Captured
+  // once at mount — the provider only consumes initialThreadId once, and
+  // re-reading storage after SetupThreadSync starts writing would churn the
+  // config for no reason. In create mode there is no assistant id yet, so a
+  // brand-new assistant always starts a fresh thread.
+  const draftAssistantId = draft.assistantId;
+  const [storedThreadId] = useState(() =>
+    draftAssistantId
+      ? readStoredSetupThreadId(project.id, session.user.id, draftAssistantId)
+      : undefined,
+  );
+  const initialThreadId = searchParams.get("threadId") ?? storedThreadId;
 
   const onboarding = useOnboardingTools();
 
@@ -253,10 +271,68 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
         }}
       >
+        <SetupThreadSync assistantId={draftAssistantId} />
         <div className="h-full overflow-hidden">
           <Chat />
         </div>
       </GramElementsProvider>
     </div>
   );
+}
+
+/**
+ * Keeps the assistant's setup-thread pointer fresh: whenever the active chat
+ * thread gains a persisted id, record it against the assistant (localStorage)
+ * and mirror it into the ?threadId= URL param, so reopening or reloading this
+ * assistant resumes the same conversation instead of starting a blank one.
+ * Must render inside GramElementsProvider — useThreadId reads the chat
+ * runtime. Renders nothing.
+ *
+ * In the create flow assistantId starts null and is set once the assistant is
+ * created mid-chat; the effect re-runs at that point and records the thread
+ * under the new assistant's key.
+ */
+function SetupThreadSync({
+  assistantId,
+}: {
+  assistantId: string | null;
+}): null {
+  const session = useSession();
+  const project = useProject();
+  const { threadId } = useThreadId();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlThreadId = searchParams.get("threadId");
+  useEffect(() => {
+    // threadId is null until the thread is persisted (first message sent) —
+    // don't record empty threads.
+    if (!threadId) return;
+    if (assistantId) {
+      writeStoredSetupThreadId(
+        project.id,
+        session.user.id,
+        assistantId,
+        threadId,
+      );
+    }
+    if (urlThreadId !== threadId) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("threadId", threadId);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [
+    threadId,
+    assistantId,
+    project.id,
+    session.user.id,
+    urlThreadId,
+    setSearchParams,
+  ]);
+
+  return null;
 }
