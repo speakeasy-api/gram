@@ -7695,6 +7695,166 @@ paths:
             tags:
                 - chatSessions
             x-speakeasy-name-override: revoke
+    /rpc/cliAuth.authorize:
+        post:
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin.
+            operationId: cliAuthAuthorize
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AuthorizeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthorizeResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: authorize cliAuth
+            tags:
+                - cliAuth
+            x-speakeasy-name-override: authorize
+    /rpc/cliAuth.redeem:
+        post:
+            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
+            operationId: cliAuthRedeem
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RedeemRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RedeemResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: redeem cliAuth
+            tags:
+                - cliAuth
+            x-speakeasy-name-override: redeem
     /rpc/collections.attachServer:
         post:
             description: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
@@ -35883,6 +36043,38 @@ components:
                 - value
                 - display_name
                 - count
+        AuthorizeRequestBody:
+            type: object
+            properties:
+                code_challenge:
+                    type: string
+                    description: 'PKCE code challenge: base64url(sha256(code_verifier)).'
+                    minLength: 43
+                    maxLength: 128
+                code_challenge_method:
+                    type: string
+                    description: PKCE challenge method. Only S256 is supported.
+                    enum:
+                        - S256
+                project_slug:
+                    type: string
+                    description: Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+            required:
+                - code_challenge
+                - code_challenge_method
+        AuthorizeResponseBody:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: The opaque one-time code. Hand this to the device agent, which redeems it with its code_verifier.
+                expires_in:
+                    type: integer
+                    description: Lifetime of the code in seconds.
+                    format: int64
+            required:
+                - code
+                - expires_in
         AuthzChallenge:
             type: object
             properties:
@@ -44462,6 +44654,36 @@ components:
                     description: Whether RBAC enforcement is currently enabled for this organization.
             required:
                 - rbac_enabled
+        RedeemRequestBody:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: The opaque one-time code issued by authorize.
+                code_verifier:
+                    type: string
+                    description: The PKCE code verifier whose base64url(sha256(...)) equals the stored code_challenge.
+                    minLength: 43
+                    maxLength: 128
+            required:
+                - code
+                - code_verifier
+        RedeemResponseBody:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                    description: The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+                project_slug:
+                    type: string
+                    description: Slug of the project the key is scoped to.
+                user_email:
+                    type: string
+                    description: Email of the user the key was minted for.
+            required:
+                - access_token
+                - user_email
+                - project_slug
         RedeployRequestBody:
             type: object
             properties:
@@ -50839,6 +51061,8 @@ tags:
       description: Managed chats for gram AI consumers.
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
+    - name: cliAuth
+      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: domains
