@@ -917,6 +917,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
 
+-- Slug uniqueness for global issuers (project_id NULL AND organization_id NULL).
+-- The (project_id, slug) index above treats every NULL project_id as distinct,
+-- so it does not constrain globals; this partial index keeps global slugs unique
+-- across the shared catalog.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_global_slug_key
+ON remote_session_issuers (slug)
+WHERE deleted IS FALSE AND project_id IS NULL AND organization_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
 ON remote_session_issuers (organization_id)
 WHERE deleted IS FALSE;
