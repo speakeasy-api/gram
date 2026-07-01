@@ -55,6 +55,13 @@ export default defineConfig({
     rolldownOptions: {
       // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
       output: {
+        // react-shim.ts intentionally exports both a default (the whole Shimmed
+        // React object, aliased to `react`) and named APIs (useState, Fragment,
+        // …), mirroring React's own dual interface. Rolldown can't auto-pick a
+        // CJS export mode for a mixed entry, so pin "named": named APIs land on
+        // module.exports directly, the default stays reachable via `.default`
+        // with the standard __esModule interop marker.
+        exports: "named",
         globals: {
           react: "React",
           "react-dom": "ReactDOM",
