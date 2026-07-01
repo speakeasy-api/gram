@@ -163,7 +163,9 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
 			"usage.reported", "skill.activated", "notification.reported")
 	})
-	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.")
+	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.", func() {
+		Format(FormatDateTime)
+	})
 })
 
 var HookPromptData = Type("HookPromptData", func() {

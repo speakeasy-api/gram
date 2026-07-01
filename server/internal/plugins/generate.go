@@ -674,12 +674,20 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	authPreflightTimeout := 330
 	authPreflightFailClosed := true
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
-	hookEvents["sessionStart"] = []cursorHookCommand{{
-		Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh"`,
-		Matcher:    "",
-		Timeout:    &authPreflightTimeout,
-		FailClosed: &authPreflightFailClosed,
-	}}
+	hookEvents["sessionStart"] = []cursorHookCommand{
+		{
+			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh"`,
+			Matcher:    "",
+			Timeout:    &authPreflightTimeout,
+			FailClosed: &authPreflightFailClosed,
+		},
+		{
+			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
+			Matcher:    "",
+			Timeout:    nil,
+			FailClosed: nil,
+		},
+	}
 	for _, event := range CursorObservabilityHookEvents {
 		hookEvents[event] = []cursorHookCommand{{
 			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
@@ -933,7 +941,10 @@ project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
-. "$script_dir/auth.sh"
+if ! . "$script_dir/auth.sh"; then
+  echo "Speakeasy hooks could not load auth helper." >&2
+  exit 2
+fi
 
 gram_hooks_prepare_auth "$server_url" "$project_slug" 2
 exit 0
@@ -1026,6 +1037,9 @@ gram_hooks_login() {
 gram_hooks_write_curl_config() {
   local api_key="$1"
   local project="$2"
+  gram_hooks_cleanup_auth_config
+  auth_config=""
+  auth_config_arg=()
   auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || return 1
   chmod 600 "$auth_config" || true
   printf 'header = "Gram-Key: %s"\n' "$api_key" >"$auth_config"
@@ -1056,19 +1070,21 @@ gram_hooks_prepare_auth() {
   fi
 
   if [ -z "$api_key" ]; then
+    GRAM_HOOKS_CACHED_API_KEY=""
+    GRAM_HOOKS_CACHED_PROJECT=""
+    GRAM_HOOKS_CACHED_EMAIL=""
     if [ "$force" != "force" ]; then
       gram_hooks_read_auth "$server_url" 2>/dev/null || true
-    else
-      GRAM_HOOKS_CACHED_API_KEY=""
-      GRAM_HOOKS_CACHED_PROJECT=""
-      GRAM_HOOKS_CACHED_EMAIL=""
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         echo "Speakeasy hooks could not authenticate with Gram." >&2
         exit "$failure_exit"
       fi
-      gram_hooks_read_auth "$server_url" 2>/dev/null || true
+      if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
+        echo "Speakeasy hooks could not read Gram authentication after login." >&2
+        exit "$failure_exit"
+      fi
     fi
     api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
     project="${GRAM_HOOKS_CACHED_PROJECT:-}"
@@ -1297,7 +1313,7 @@ body="$GRAM_HTTP_BODY"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   decision="$(gram_hooks_json_string_value "$body" "decision")"
   reason="$(gram_hooks_decision_message "$body")"
   if [ "$decision" = "deny" ]; then
@@ -1351,7 +1367,7 @@ body="$GRAM_HTTP_BODY"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   gram_hooks_provider_response "%s" "$native_event" "$body"
   exit 0
 fi

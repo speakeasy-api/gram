@@ -40212,6 +40212,7 @@ components:
         occurred_at:
           type: string
           description: RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+          format: date-time
         type:
           type: string
           description: Canonical Gram hook event type.

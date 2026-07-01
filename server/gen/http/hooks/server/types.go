@@ -2791,6 +2791,9 @@ func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err e
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "usage.reported", "skill.activated", "notification.reported"}))
 		}
 	}
+	if body.OccurredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.occurred_at", *body.OccurredAt, goa.FormatDateTime))
+	}
 	return
 }
 

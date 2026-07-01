@@ -1,7 +1,9 @@
 package hooks
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -47,9 +49,10 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
 	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "canonical-shadow-mcp")
+	toolCallID := "call-1"
 	payload.Data = &gen.HookIngestData{
 		ToolCall: &gen.HookToolCallData{
-			ID:    new("call-1"),
+			ID:    &toolCallID,
 			Name:  &toolName,
 			Input: map[string]any{"query": "secret"},
 		},
@@ -64,6 +67,38 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	require.Equal(t, "deny", result.Decision)
 	require.NotNil(t, result.Message)
 	require.Contains(t, *result.Message, shadowMCPApprovalRequestPrompt)
+}
+
+func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
+	t.Parallel()
+
+	toolName := "mcp__mutable_alias__search"
+	serverName := "mutable-alias"
+	command := "npx -y @modelcontextprotocol/server-linear"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "canonical-shadow-mcp-command")
+	payload.Data = &gen.HookIngestData{
+		Mcp: &gen.HookMCPData{
+			ServerName: &serverName,
+			Command:    &command,
+		},
+	}
+
+	evidence := canonicalShadowMCPEvidence(payload, toolName)
+	require.Equal(t, command, evidence.ServerIdentity)
+}
+
+func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
+	t.Parallel()
+
+	text := strings.Repeat("界", 100)
+	payload := canonicalIngestPayload("custom-adapter", "prompt.submitted", "unicode-title")
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &text},
+	}
+
+	title := canonicalChatTitle(payload, "")
+	require.True(t, utf8.ValidString(title))
+	require.Len(t, []rune(title), 80)
 }
 
 func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {

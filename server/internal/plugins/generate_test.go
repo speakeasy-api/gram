@@ -726,6 +726,8 @@ func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, `project_slug="${GRAM_HOOKS_PROJECT_SLUG:-acme-prod}"`)
 	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
+	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
+	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
@@ -752,9 +754,48 @@ func TestRenderHookScriptCursorUsesLocalHookAuth(t *testing.T) {
 	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, `project_slug="${GRAM_HOOKS_PROJECT_SLUG:-acme-prod}"`)
 	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
+	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
+	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
+}
+
+func TestRenderHookPayloadNormalizationDoesNotRequireJQForToolInput(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	binDir := t.TempDir()
+	for _, name := range []string{"awk", "sed", "tr"} {
+		path, err := exec.LookPath(name)
+		require.NoError(t, err, "%s is required to run generated hook snippets", name)
+		require.NoError(t, os.Symlink(path, filepath.Join(binDir, name)))
+	}
+
+	scriptPath := filepath.Join(t.TempDir(), "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("cursor") + `
+payload='{"event":"preToolUse","tool_name":"Search","tool_input":{"query":"a,b","nested":{"ok":true}}}'
+gram_hooks_build_canonical_payload "$payload" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+binDir)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.NotContains(t, string(output), "awk:", "normalization fallback must not emit awk errors")
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(output, &parsed))
+	data, ok := parsed["data"].(map[string]any)
+	require.True(t, ok)
+	toolCall, ok := data["tool_call"].(map[string]any)
+	require.True(t, ok)
+	input, ok := toolCall["input"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "a,b", input["query"])
 }
 
 func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
@@ -1074,12 +1115,13 @@ func TestGenerateCursorObservabilityPluginRegistersBlockingSessionStartAuth(t *t
 
 	sessionStart, ok := parsed.Hooks["sessionStart"]
 	require.True(t, ok, "Cursor sessionStart must be registered")
-	require.Len(t, sessionStart, 1)
+	require.Len(t, sessionStart, 2)
 	require.Contains(t, sessionStart[0].Command, "hooks/auth_preflight.sh")
 	require.NotNil(t, sessionStart[0].Timeout)
 	require.Equal(t, 330, *sessionStart[0].Timeout)
 	require.NotNil(t, sessionStart[0].FailClosed)
 	require.True(t, *sessionStart[0].FailClosed, "Cursor auth preflight must fail closed")
+	require.Contains(t, sessionStart[1].Command, "hooks/hook.sh", "Cursor sessionStart must send unified telemetry after auth preflight")
 
 	for _, event := range CursorObservabilityHookEvents {
 		require.Contains(t, parsed.Hooks, event, "event %q must be registered", event)
@@ -1165,6 +1207,8 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, script, `gram_hooks_build_canonical_payload`)
 	require.Contains(t, script, `"adapter" "codex"`)
 	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
+	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
+	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.NotContains(t, script, cfg.HooksAPIKey, "hook.sh must not embed the publish-time hooks key")
 	require.NotContains(t, script, "auth.json", "hook.sh must not inspect Codex auth claims for attribution")
 	require.NotContains(t, script, `"user_email"`, "hook.sh must not enrich attribution fields; /rpc/hooks.ingest attributes from the Gram auth token")

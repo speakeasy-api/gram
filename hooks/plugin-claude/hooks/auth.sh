@@ -79,6 +79,9 @@ gram_hooks_login() {
 gram_hooks_write_curl_config() {
   local api_key="$1"
   local project="$2"
+  gram_hooks_cleanup_auth_config
+  auth_config=""
+  auth_config_arg=()
   auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || return 1
   chmod 600 "$auth_config" || true
   printf 'header = "Gram-Key: %s"\n' "$api_key" >"$auth_config"
@@ -109,19 +112,21 @@ gram_hooks_prepare_auth() {
   fi
 
   if [ -z "$api_key" ]; then
+    GRAM_HOOKS_CACHED_API_KEY=""
+    GRAM_HOOKS_CACHED_PROJECT=""
+    GRAM_HOOKS_CACHED_EMAIL=""
     if [ "$force" != "force" ]; then
       gram_hooks_read_auth "$server_url" 2>/dev/null || true
-    else
-      GRAM_HOOKS_CACHED_API_KEY=""
-      GRAM_HOOKS_CACHED_PROJECT=""
-      GRAM_HOOKS_CACHED_EMAIL=""
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         echo "Speakeasy hooks could not authenticate with Gram." >&2
         exit "$failure_exit"
       fi
-      gram_hooks_read_auth "$server_url" 2>/dev/null || true
+      if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
+        echo "Speakeasy hooks could not read Gram authentication after login." >&2
+        exit "$failure_exit"
+      fi
     fi
     api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
     project="${GRAM_HOOKS_CACHED_PROJECT:-}"

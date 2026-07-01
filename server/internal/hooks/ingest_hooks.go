@@ -226,6 +226,9 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 	}
 	identity := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, ""))
 	if identity == "" {
+		identity = strings.TrimSpace(conv.PtrValOr(mcp.Command, ""))
+	}
+	if identity == "" {
 		identity = strings.TrimSpace(conv.PtrValOr(mcp.ServerName, ""))
 	}
 	if identity == "" {
@@ -581,10 +584,11 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
 		title = fallback
 	}
 	title = strings.TrimSpace(title)
-	if len(title) <= 80 {
+	runes := []rune(title)
+	if len(runes) <= 80 {
 		return title
 	}
-	return title[:80]
+	return string(runes[:80])
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {

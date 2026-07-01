@@ -4156,5 +4156,8 @@ func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err e
 	if !(body.Type == "session.started" || body.Type == "session.updated" || body.Type == "session.ended" || body.Type == "prompt.submitted" || body.Type == "tool.requested" || body.Type == "tool.completed" || body.Type == "tool.failed" || body.Type == "assistant.responded" || body.Type == "usage.reported" || body.Type == "skill.activated" || body.Type == "notification.reported") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", body.Type, []any{"session.started", "session.updated", "session.ended", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "usage.reported", "skill.activated", "notification.reported"}))
 	}
+	if body.OccurredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.occurred_at", *body.OccurredAt, goa.FormatDateTime))
+	}
 	return
 }

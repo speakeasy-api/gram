@@ -34,7 +34,7 @@ export type HookIngestEvent = {
   /**
    * RFC3339 timestamp from the local agent. Defaults to receive time when absent.
    */
-  occurredAt?: string | undefined;
+  occurredAt?: Date | undefined;
   /**
    * Canonical Gram hook event type.
    */
@@ -58,7 +58,7 @@ export const HookIngestEvent$outboundSchema: z.ZodMiniType<
   HookIngestEvent
 > = z.pipe(
   z.object({
-    occurredAt: z.optional(z.string()),
+    occurredAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     type: HookIngestEventType$outboundSchema,
   }),
   z.transform((v) => {

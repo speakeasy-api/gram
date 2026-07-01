@@ -88,6 +88,14 @@ func renderHookPayloadNormalizationSnippet(platform string) string {
 gram_hooks_json_string_value() {
   local input="$1"
   local key="$2"
+  local value
+  if command -v jq >/dev/null 2>&1; then
+    value="$(printf '%%s' "$input" | jq -r --arg key "$key" 'if type == "object" and has($key) and (.[$key] | type == "string") then .[$key] else empty end' 2>/dev/null)" || true
+    if [ -n "$value" ]; then
+      printf '%%s' "$value"
+      return 0
+    fi
+  fi
   printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p'
 }
 
@@ -106,8 +114,118 @@ gram_hooks_json_bool_value() {
 gram_hooks_json_value() {
   local input="$1"
   local key="$2"
-  command -v jq >/dev/null 2>&1 || return 0
-  printf '%%s' "$input" | jq -c --arg key "$key" 'if type == "object" and has($key) then .[$key] else empty end' 2>/dev/null
+  local value
+  if command -v jq >/dev/null 2>&1; then
+    value="$(printf '%%s' "$input" | jq -c --arg key "$key" 'if type == "object" and has($key) then .[$key] else empty end' 2>/dev/null)" || true
+    if [ -n "$value" ]; then
+      printf '%%s' "$value"
+      return 0
+    fi
+  fi
+  gram_hooks_json_top_level_value "$input" "$key"
+}
+
+gram_hooks_json_top_level_value() {
+  local input="$1"
+  local key="$2"
+  printf '%%s' "$input" | awk -v target="$key" '
+function skip_ws(s, i, n, c) {
+  n = length(s)
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c != " " && c != "\t" && c != "\r" && c != "\n") break
+    i++
+  }
+  return i
+}
+function quoted_end(s, i, n, c, esc) {
+  n = length(s)
+  esc = 0
+  for (i = i + 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (esc) {
+      esc = 0
+    } else if (c == "\\") {
+      esc = 1
+    } else if (c == "\"") {
+      return i
+    }
+  }
+  return 0
+}
+function balanced_end(s, i, open_ch, close_ch, n, c, depth, esc, in_str) {
+  n = length(s)
+  depth = 0
+  esc = 0
+  in_str = 0
+  for (; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (in_str) {
+      if (esc) {
+        esc = 0
+      } else if (c == "\\") {
+        esc = 1
+      } else if (c == "\"") {
+        in_str = 0
+      }
+    } else if (c == "\"") {
+      in_str = 1
+    } else if (c == open_ch) {
+      depth++
+    } else if (c == close_ch) {
+      depth--
+      if (depth == 0) return i
+    }
+  }
+  return 0
+}
+function bare_end(s, i, n, c) {
+  n = length(s)
+  for (; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "," || c == "}" || c == "\n" || c == "\r") return i - 1
+  }
+  return n
+}
+function trim(s) {
+  sub(/^[[:space:]]+/, "", s)
+  sub(/[[:space:]]+$/, "", s)
+  return s
+}
+{
+  json = json $0 "\n"
+}
+END {
+  n = length(json)
+  for (i = 1; i <= n; i++) {
+    if (substr(json, i, 1) != "\"") continue
+    key_end = quoted_end(json, i)
+    if (key_end == 0) exit
+    raw_key = substr(json, i + 1, key_end - i - 1)
+    colon = skip_ws(json, key_end + 1)
+    if (substr(json, colon, 1) != ":") {
+      i = key_end
+      continue
+    }
+    if (raw_key != target) {
+      i = key_end
+      continue
+    }
+    start = skip_ws(json, colon + 1)
+    c = substr(json, start, 1)
+    if (c == "\"") {
+      stop = quoted_end(json, start)
+    } else if (c == "{") {
+      stop = balanced_end(json, start, "{", "}")
+    } else if (c == "[") {
+      stop = balanced_end(json, start, "[", "]")
+    } else {
+      stop = bare_end(json, start)
+    }
+    if (stop > 0) print trim(substr(json, start, stop - start + 1))
+    exit
+  }
+}'
 }
 
 gram_hooks_json_string_member() {
