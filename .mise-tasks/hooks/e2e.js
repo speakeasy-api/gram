@@ -207,11 +207,30 @@ async function runProcess(command, args, opts = {}) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
-    child.on("close", (exitCode, signal) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       if (timer) {
         clearTimeout(timer);
       }
-      resolve({
+      resolve(result);
+    };
+    child.on("error", (err) => {
+      finish({
+        provider: "claude",
+        command: [command, ...args].join(" "),
+        exitCode: null,
+        signal: null,
+        stdout,
+        stderr: stderr || String(err),
+        timedOut,
+      });
+    });
+    child.on("close", (exitCode, signal) => {
+      finish({
         provider: "claude",
         command: [command, ...args].join(" "),
         exitCode,
@@ -221,6 +240,7 @@ async function runProcess(command, args, opts = {}) {
         timedOut,
       });
     });
+    child.stdin.on("error", () => {});
     if (opts.input) {
       child.stdin.write(opts.input);
     }
@@ -612,8 +632,13 @@ async function startHostedMCPHTTPFixture(runId) {
       return;
     }
     const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
+    try {
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+    } catch {
+      res.destroy();
+      return;
     }
     const body = Buffer.concat(chunks).toString("utf8");
     let message;
@@ -900,26 +925,6 @@ async function prepareShadowMCPProviderConfig(args) {
     },
   );
   return {};
-}
-async function mergeMCPMetadataFile(filePath, servers) {
-  let current = { mcpServers: {} };
-  try {
-    current = JSON.parse(await fs.readFile(filePath, "utf8"));
-  } catch (err) {
-    if (
-      !(
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "ENOENT"
-      )
-    ) {
-      throw err;
-    }
-  }
-  current.mcpServers = { ...(current.mcpServers ?? {}), ...servers };
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(current, null, 2));
 }
 function providerPrompt(runId, provider, scenario, workdir) {
   if (scenario === "success") {
@@ -2119,6 +2124,17 @@ async function runShadowMCPSuite(args) {
       );
     }
   } finally {
+    try {
+      await deleteRiskPolicy({
+        serverURL: args.serverURL,
+        session: args.session,
+        projectSlug: args.projectSlug,
+        policyId: policy.id,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      log.warn(`Failed to clean up Shadow MCP policy ${policy.id}: ${detail}`);
+    }
     if (hostedMCP) {
       await deleteHostedMCPFixture({
         serverURL: args.serverURL,
@@ -2129,7 +2145,7 @@ async function runShadowMCPSuite(args) {
     }
     await hostedHTTP.close();
   }
-  return { checks, commandResults, policyId: policy.id };
+  return { checks, commandResults };
 }
 function printMatrix(checks) {
   const useColor =
@@ -2183,7 +2199,6 @@ async function main() {
   const artifactsDir = path.join(rootDir, "artifacts");
   const workdir = path.join(rootDir, "workspace");
   let codexEnv = null;
-  const cleanupPolicyIds = [];
   await fs.mkdir(artifactsDir, { recursive: true });
   await fs.mkdir(workdir, { recursive: true });
   await fs.writeFile(
@@ -2254,9 +2269,6 @@ async function main() {
       const result = await runShadowMCPSuite(suiteArgs);
       allChecks.push(...result.checks);
       commandResults.push(...result.commandResults);
-      if (result.policyId) {
-        cleanupPolicyIds.push(result.policyId);
-      }
     }
     printMatrix(allChecks);
     const failed = allChecks.filter((c) => c.status === "FAIL");
@@ -2272,20 +2284,6 @@ async function main() {
     }
     success = true;
   } finally {
-    for (const policyId of cleanupPolicyIds) {
-      try {
-        const session = await getSessionInfo(serverURL, args.project);
-        await deleteRiskPolicy({
-          serverURL,
-          session,
-          projectSlug: args.project,
-          policyId,
-        });
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        log.warn(`Failed to clean up Shadow MCP policy ${policyId}: ${detail}`);
-      }
-    }
     if (args.keepArtifacts || !success) {
       log.info(`Artifacts kept at ${rootDir}`);
     } else {

@@ -358,12 +358,22 @@ gram_hooks_codex_mcp_metadata() {
   command -v jq >/dev/null 2>&1 || return 0
   codex mcp list --json 2>/dev/null | jq -r --arg server "$server" '
     def sanitize: gsub("[^A-Za-z0-9_]"; "_");
+    def clean: map(select(. != null and . != "") | tostring);
+    def redact_args: reduce .[] as $arg ({out: [], next: false};
+      if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
+        {out: (.out + [$arg]), next: true}
+      elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
+        {out: (.out + ["***"]), next: false}
+      else {out: (.out + [$arg]), next: false} end) | .out;
     map(select(.name == $server or (.name | sanitize) == $server)) | .[0] as $m |
     if $m == null then
       empty
     else
       "url=\($m.transport.url // "")",
-      "command=\(if $m.transport.type == "stdio" then ([$m.transport.command, (($m.transport.args // [])[]?)] | map(select(. != null and . != "")) | join(" ")) else "" end)"
+      "command=\(if $m.transport.type == "stdio" then ((([$m.transport.command] | clean) + (($m.transport.args // []) | clean | redact_args)) | join(" ")) else "" end)"
     end
   ' | head -n 2
 }
@@ -375,12 +385,22 @@ gram_hooks_mcp_metadata_from_file() {
   [ -n "$server" ] || return 0
   command -v jq >/dev/null 2>&1 || return 0
   jq -r --arg server "$server" '
+    def clean: map(select(. != null and . != "") | tostring);
+    def redact_args: reduce .[] as $arg ({out: [], next: false};
+      if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
+        {out: (.out + [$arg]), next: true}
+      elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
+        {out: (.out + ["***"]), next: false}
+      else {out: (.out + [$arg]), next: false} end) | .out;
     (.mcpServers[$server] // empty) as $m |
     if $m == null then
       empty
     else
       "url=\($m.url // "")",
-      "command=\(if ($m.command // "") != "" then ([$m.command, (($m.args // [])[]?)] | map(select(. != null and . != "")) | join(" ")) else "" end)"
+      "command=\(if ($m.command // "") != "" then ((([$m.command] | clean) + (($m.args // []) | clean | redact_args)) | join(" ")) else "" end)"
     end
   ' "$file" 2>/dev/null | head -n 2
 }
@@ -399,21 +419,26 @@ gram_hooks_local_mcp_metadata() {
 
 gram_hooks_cursor_prompt_state_path() {
   local session_id="$1"
-  local state_home state_dir safe_id
+  local server_url_arg="$2"
+  local project_slug_arg="$3"
+  local state_home state_dir safe_id safe_install
   [ -n "$session_id" ] || return 1
   state_home="${XDG_STATE_HOME:-${HOME}/.local/state}"
   state_dir="${state_home}/gram/hooks/cursor-prompts"
   mkdir -p "$state_dir" 2>/dev/null || return 1
   chmod 700 "${state_home}/gram" "${state_home}/gram/hooks" "$state_dir" 2>/dev/null || true
+  safe_install="$(printf '%%s|%%s' "$server_url_arg" "$project_slug_arg" | tr -c 'A-Za-z0-9_.-' '_')"
   safe_id="$(printf '%%s' "$session_id" | tr -c 'A-Za-z0-9_.-' '_')"
-  printf '%%s/%%s.seen' "$state_dir" "$safe_id"
+  printf '%%s/%%s__%%s.seen' "$state_dir" "$safe_install" "$safe_id"
 }
 
 gram_hooks_cursor_mark_prompt_submitted() {
   local payload="$1"
+  local server_url_arg="$2"
+  local project_slug_arg="$3"
   local session_id state_path
   session_id="$(gram_hooks_session_id "$payload")"
-  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id")" || return 0
+  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 0
   printf 'seen\n' >"$state_path" 2>/dev/null || true
 }
 
@@ -460,7 +485,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   local session_id state_path prompt prompt_payload prompt_members canonical_prompt http_code
 
   session_id="$(gram_hooks_session_id "$payload")"
-  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id")" || return 0
+  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 0
   [ ! -f "$state_path" ] || return 0
 
   prompt="$(gram_hooks_cursor_transcript_prompt "$payload")"

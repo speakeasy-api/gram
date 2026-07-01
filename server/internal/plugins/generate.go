@@ -1381,7 +1381,7 @@ body="$GRAM_HTTP_BODY"
 # Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   if [ "%s" = "cursor" ] && [ "$native_event" = "beforeSubmitPrompt" ]; then
-    gram_hooks_cursor_mark_prompt_submitted "$provider_payload"
+    gram_hooks_cursor_mark_prompt_submitted "$provider_payload" "$server_url" "$project_slug"
   fi
   gram_hooks_provider_response "%s" "$native_event" "$body"
   exit 0
