@@ -119,8 +119,14 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   // is acceptable.
   const assistantId = draft.assistantId ?? undefined;
 
+  // Scope the onboarding history to this assistant's setup threads only
+  // (source_kind=setup), so runtime threads (Slack/cron/etc.) for the same
+  // assistant never leak into the onboarding list.
   const threadListFilters = useMemo(
-    () => (assistantId ? { assistant_id: assistantId } : undefined),
+    () =>
+      assistantId
+        ? { assistant_id: assistantId, source_kind: "setup" }
+        : undefined,
     [assistantId],
   );
 

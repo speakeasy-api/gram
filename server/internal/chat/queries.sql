@@ -6,6 +6,19 @@ WHERE t.chat_id = @chat_id
   AND t.deleted IS FALSE
 LIMIT 1;
 
+-- name: AssistantExistsInProject :one
+-- Reports whether an undeleted assistant with this id exists in the given
+-- project. Gates setup-thread linking so a client-supplied assistant id that
+-- belongs to another project can never create a cross-project
+-- assistant_threads row (the FK alone only proves the assistant exists
+-- *somewhere*, not that it belongs to the caller's project).
+SELECT EXISTS (
+  SELECT 1 FROM assistants
+  WHERE id = @assistant_id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+) AS assistant_exists;
+
 -- name: UpsertSetupAssistantThread :one
 -- Links a client-side setup/onboarding chat to its assistant so the chat is
 -- listable (chat.list?assistant_id=) and URL-addressable like runtime threads.
@@ -14,9 +27,12 @@ LIMIT 1;
 -- row as a client-driven onboarding thread: it enqueues no runtime events, so
 -- the active-thread accounting excludes 'setup' and it never consumes
 -- max_concurrency or a warm-pool slot. Unlike the runtime upsert this does NOT
--- refresh last_event_at on conflict — a setup thread has no runtime events, so
--- its last_event_at stays at first-link time and it can never be counted as a
--- warm/active runtime thread even if that exclusion regressed.
+-- refresh last_event_at on conflict, but that is NOT a second safety net: a
+-- setup row's last_event_at defaults to clock_timestamp() at insert, so it is
+-- recent and falls inside the warm window like any live thread. The
+-- source_kind <> 'setup' predicate in CountActiveAssistantThreads is therefore
+-- the SOLE guard keeping setup threads out of concurrency/warm accounting — if
+-- that filter regressed, setup threads would be counted.
 INSERT INTO assistant_threads (
   assistant_id,
   project_id,
@@ -288,6 +304,13 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND (@source_kind::text = '' OR at.source_kind = @source_kind::text)
+          AND (@exclude_source_kind::text = '' OR at.source_kind <> @exclude_source_kind::text)
       )
     )
     AND (
@@ -376,6 +399,13 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND (@source_kind::text = '' OR at.source_kind = @source_kind::text)
+          AND (@exclude_source_kind::text = '' OR at.source_kind <> @exclude_source_kind::text)
       )
     )
     AND (
