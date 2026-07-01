@@ -5706,6 +5706,7 @@ func unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary(
 		HTTPStatusCode:    v.HTTPStatusCode,
 		HookStatus:        v.HookStatus,
 		BlockReason:       v.BlockReason,
+		AccountType:       v.AccountType,
 	}
 	res.LogGroup = unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGroup(v.LogGroup)
 

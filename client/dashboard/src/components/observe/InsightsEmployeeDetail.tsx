@@ -443,8 +443,15 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
-    (resolvedUserId != null && summaryQuery.isLoading);
-  const error = summaryQuery.error ?? fallbackUserQuery.error ?? membersError;
+    (resolvedUserId != null && summaryQuery.isLoading) ||
+    // When an account is scoped, the metric cards read the scoped summary — wait
+    // on it too, else they briefly render zeros before it resolves.
+    (selectedOrgId !== "" && scopedSummaryQuery.isLoading);
+  const error =
+    summaryQuery.error ??
+    (selectedOrgId !== "" ? scopedSummaryQuery.error : null) ??
+    fallbackUserQuery.error ??
+    membersError;
 
   return (
     <>

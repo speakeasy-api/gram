@@ -22,7 +22,8 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function providerLabel(provider: string): string {
-  if (PROVIDER_LABELS[provider]) return PROVIDER_LABELS[provider];
   if (!provider) return "Unknown";
+  const known = PROVIDER_LABELS[provider.toLowerCase()];
+  if (known) return known;
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }

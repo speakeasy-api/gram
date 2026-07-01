@@ -237,7 +237,7 @@ candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
-  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -339,7 +339,7 @@ candidate_chats AS (
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
-  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -481,7 +481,13 @@ WHERE source IS NOT NULL
 ORDER BY source;
 
 -- name: GetChat :one
-SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
+-- Loads a chat plus the team/personal classification of the AI account that
+-- produced it (chats.user_account_id has no FK), scoped by organization. Returns
+-- '' for account_type when the chat has no linked account or it is unclassified.
+SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+WHERE c.id = @id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
 SELECT id, title FROM chats

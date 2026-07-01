@@ -1,3 +1,4 @@
+import { AccountTypeBadge } from "@/components/account-type-badge";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -357,33 +358,10 @@ export function LogsTools(): JSX.Element {
     },
     [setSearchParams],
   );
-  const accountTypeSdkFilters = useMemo<LogFilter[]>(() => {
-    if (accountType === "personal") {
-      return [
-        {
-          path: "gram.account_type",
-          operator: Operator.Eq,
-          values: ["personal"],
-        },
-      ];
-    }
-    if (accountType === "team") {
-      return [
-        {
-          path: "gram.account_type",
-          operator: Operator.NotEq,
-          values: ["personal"],
-        },
-      ];
-    }
-    return [];
-  }, [accountType]);
-  // Combined attribute filters sent to the query. Both the manual attribute
-  // filters and the account-type scope force the raw-logs path.
-  const queryFilters = useMemo(
-    () => [...attributeSdkFilters, ...accountTypeSdkFilters],
-    [attributeSdkFilters, accountTypeSdkFilters],
-  );
+  // account_type is sent as a first-class payload filter (below), not an
+  // attribute filter, so it stays on the fast trace_summaries path rather than
+  // forcing the raw-logs scan.
+  const queryFilters = attributeSdkFilters;
 
   const {
     data: tracesData,
@@ -407,6 +385,7 @@ export function LogsTools(): JSX.Element {
         hookSources,
         attributeSearchQuery,
         queryFilters,
+        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -421,6 +400,7 @@ export function LogsTools(): JSX.Element {
               targetTypes,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
+              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
               filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
@@ -733,8 +713,7 @@ function LogsToolsContent({
             }
           />
 
-          {(isCustomSearchActive(attributeSearchQuery, attributeFilters) ||
-            accountType !== "") && (
+          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
             <div className="flex shrink-0">
               <SlowSearchNotice />
             </div>
@@ -1026,8 +1005,11 @@ function LogsToolsTraceRow({
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
-          {userLabel || "—"}
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <span className="text-muted-foreground min-w-0 truncate">
+            {userLabel || "—"}
+          </span>
+          <AccountTypeBadge accountType={trace.accountType} noTooltip />
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

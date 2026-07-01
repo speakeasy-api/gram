@@ -345,6 +345,9 @@ export function ObserveFilterBar({
   // untouched here to avoid desyncing that control.
   const [, setSearchParams] = useSearchParams();
   const handleClearAll = useCallback(() => {
+    // Clear every filter param in a single update. react-router's setSearchParams
+    // reads a memoized snapshot, so a second call (e.g. onAccountTypeChange) would
+    // clobber this one — account_type is deleted here instead.
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -354,6 +357,7 @@ export function ObserveFilterBar({
           "source",
           "role",
           "hookTypes",
+          "account_type",
           "range",
           "from",
           "to",
@@ -365,8 +369,7 @@ export function ObserveFilterBar({
       },
       { replace: true },
     );
-    onAccountTypeChange?.("");
-  }, [setSearchParams, onAccountTypeChange]);
+  }, [setSearchParams]);
 
   // The arbitrary-attribute search/builder lives inside the sheet's "Custom
   // attributes" section (via FilterBar's customBuilder) rather than as a second

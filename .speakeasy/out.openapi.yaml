@@ -41398,6 +41398,9 @@ components:
     ListToolUsageTracesPayload:
       type: object
       properties:
+        account_type:
+          type: string
+          description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
         cursor:
           type: string
           description: Cursor for pagination
@@ -47799,6 +47802,9 @@ components:
     ToolUsageTraceSummary:
       type: object
       properties:
+        account_type:
+          type: string
+          description: AI account classification ('team' or 'personal'); empty/absent when unclassified
         block_reason:
           type: string
           description: Hook block reason when hook_status is blocked

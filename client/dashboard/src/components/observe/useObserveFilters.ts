@@ -377,9 +377,22 @@ function useObserveFiltersImpl<
       : "";
   const handleAccountTypeChange = useCallback(
     (value: string) => {
-      updateSearchParams({ account_type: value || null });
+      // Match the other filter handlers: replace (don't push) so toggling the
+      // filter doesn't stack history entries.
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
     },
-    [updateSearchParams],
+    [setSearchParams],
   );
 
   return {

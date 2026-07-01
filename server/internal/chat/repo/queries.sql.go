@@ -67,7 +67,7 @@ candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
-  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -530,12 +530,36 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, external_chat_id, title, title_manually_set, pinned_at, user_account_id, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
-func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
+type GetChatRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+	AccountType      string
+}
+
+// Loads a chat plus the team/personal classification of the AI account that
+// produced it (chats.user_account_id has no FK), scoped by organization. Returns
+// ” for account_type when the chat has no linked account or it is unclassified.
+func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error) {
 	row := q.db.QueryRow(ctx, getChat, id)
-	var i Chat
+	var i GetChatRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -551,6 +575,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.AccountType,
 	)
 	return i, err
 }
@@ -1552,7 +1577,7 @@ candidate_chats AS (
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
-  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted_at IS NULL
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)

@@ -398,7 +398,7 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	var chat chatRepo.Chat
+	var chat chatRepo.GetChatRow
 	require.Eventually(t, func() bool {
 		var err error
 		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatID)

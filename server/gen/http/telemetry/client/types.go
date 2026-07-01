@@ -294,6 +294,9 @@ type ListToolUsageTracesRequestBody struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// Optional account type filter ('team' or 'personal'). 'team' includes
+	// unclassified traces.
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -5008,6 +5011,9 @@ type ToolUsageTraceSummaryResponseBody struct {
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
 	// Hook block reason when hook_status is blocked
 	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	// AI account classification ('team' or 'personal'); empty/absent when
+	// unclassified
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 }
 
 // ToolUsageTraceLogGroupResponseBody is used to define fields on response body
@@ -5470,12 +5476,13 @@ func NewGetToolUsageSummaryRequestBody(p *telemetry.GetToolUsageSummaryPayload) 
 // payload of the "listToolUsageTraces" endpoint of the "telemetry" service.
 func NewListToolUsageTracesRequestBody(p *telemetry.ListToolUsageTracesPayload) *ListToolUsageTracesRequestBody {
 	body := &ListToolUsageTracesRequestBody{
-		From:   p.From,
-		To:     p.To,
-		Query:  p.Query,
-		Cursor: p.Cursor,
-		Sort:   p.Sort,
-		Limit:  p.Limit,
+		From:        p.From,
+		To:          p.To,
+		AccountType: p.AccountType,
+		Query:       p.Query,
+		Cursor:      p.Cursor,
+		Sort:        p.Sort,
+		Limit:       p.Limit,
 	}
 	if p.TargetTypes != nil {
 		body.TargetTypes = make([]string, len(p.TargetTypes))

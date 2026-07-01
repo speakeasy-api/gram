@@ -323,7 +323,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 // logChatAccess records an audit entry that a dashboard user opened a chat
 // session transcript. It is written with the pool directly (no surrounding
 // transaction) because it describes a read, not a mutation.
-func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.Chat) error {
+func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
 	if err := s.audit.LogChatSessionAccess(ctx, s.db, audit.LogChatSessionAccessEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        chat.ProjectID,
@@ -774,7 +774,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
-		AccountType:          nil,
+		AccountType:          conv.PtrEmpty(chat.AccountType),
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),

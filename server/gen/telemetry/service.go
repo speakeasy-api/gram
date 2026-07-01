@@ -678,6 +678,9 @@ type ListToolUsageTracesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// Optional account type filter ('team' or 'personal'). 'team' includes
+	// unclassified traces.
+	AccountType *string
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -1502,6 +1505,9 @@ type ToolUsageTraceSummary struct {
 	HookStatus *string
 	// Hook block reason when hook_status is blocked
 	BlockReason *string
+	// AI account classification ('team' or 'personal'); empty/absent when
+	// unclassified
+	AccountType *string
 }
 
 // Typed user identity filter

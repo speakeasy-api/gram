@@ -5458,6 +5458,7 @@ func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v 
 		HTTPStatusCode:    v.HTTPStatusCode,
 		HookStatus:        v.HookStatus,
 		BlockReason:       v.BlockReason,
+		AccountType:       v.AccountType,
 	}
 	if v.LogGroup != nil {
 		res.LogGroup = marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(v.LogGroup)

@@ -2051,6 +2051,7 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2091,6 +2092,7 @@ type ToolUsageTraceSummary struct {
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
+	AccountType       *string `ch:"account_type"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -2323,6 +2325,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"http_status_code",
 		"hook_status",
 		"block_reason",
+		"account_type",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -2348,6 +2351,19 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 	if len(arg.HookSources) > 0 {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
+	// account_type is carried on trace_summaries (fast path) and materialized on
+	// telemetry_logs (raw path), so this filters on the projected column either
+	// way. "team" includes unclassified traces (matches the /logs behavior);
+	// "personal" is an exact match.
+	switch arg.AccountType {
+	case "personal":
+		sb = sb.Where(squirrel.Eq{"account_type": "personal"})
+	case "team":
+		// ifNull so unclassified (NULL) traces count as team — `!= 'personal'`
+		// alone would drop NULLs.
+		sb = sb.Where("ifNull(account_type, '') != ?", "personal")
 	}
 
 	if len(arg.UserFilters) > 0 {
@@ -2962,6 +2978,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		// than max()-ing each boolean independently.
 		"max(hook_status_rank) AS g_hook_status_rank",
 		"max(block_reason) AS g_block_reason",
+		"max(account_type) AS g_account_type",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3078,7 +3095,8 @@ SELECT
 	g_event_source AS event_source,
 	g_http_status_code AS http_status_code,
 	%s AS hook_status,
-	nullIf(g_block_reason, '') AS block_reason
+	nullIf(g_block_reason, '') AS block_reason,
+	nullIf(g_account_type, '') AS account_type
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -3132,6 +3150,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		"account_type",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -3297,7 +3316,8 @@ SELECT
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
-	nullIf(block_reason, '') AS block_reason
+	nullIf(block_reason, '') AS block_reason,
+	account_type
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
@@ -3335,7 +3355,8 @@ normalized_traces AS (
 			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
-		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason
+		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
+		nullIf(any(account_type), '') AS account_type
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`

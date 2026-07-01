@@ -51,10 +51,10 @@ export class Exclusions extends ClientSDK {
   }
 
   /**
-   * listAssistantMemories assistantMemories
+   * listRiskExclusions risk
    *
    * @remarks
-   * List assistant memories for an assistant.
+   * List risk exclusions for the current project. Optionally filter to a single policy.
    */
   async list(
     request?: operations.ListRiskExclusionsRequest | undefined,

@@ -2510,6 +2510,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
 		SortOrder:          params.sortOrder,
@@ -2640,6 +2641,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			HTTPStatusCode:    row.HTTPStatusCode,
 			HookStatus:        row.HookStatus,
 			BlockReason:       row.BlockReason,
+			AccountType:       row.AccountType,
 		}
 		traces = append(traces, trace)
 	}
