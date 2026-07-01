@@ -721,8 +721,6 @@ gram_hooks_provider_response() {
         else
           printf '{"decision":"block","reason":"%%s"}' "$escaped"
         fi
-      elif [ "$native" = "PreToolUse" ]; then
-        printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'
       elif [ "$native" = "SessionStart" ]; then
         printf '{"continue":true}'
       else
@@ -732,8 +730,6 @@ gram_hooks_provider_response() {
     cursor)
       if [ "$decision" = "deny" ]; then
         printf '{"permission":"deny","user_message":"%%s","agent_message":"%%s"}' "$escaped" "$escaped"
-      elif [ "$native" = "preToolUse" ] || [ "$native" = "beforeMCPExecution" ]; then
-        printf '{"permission":"allow"}'
       else
         printf '{}'
       fi
