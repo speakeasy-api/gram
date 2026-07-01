@@ -27,6 +27,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	serviceName := "gram-server"
 	usageURN := provider + ":usage:metrics"
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          chatID,
@@ -38,6 +39,25 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		"gram.resource.urn":               usageURN,
 		"user.email":                      email,
 		"user.attributes.department_name": department,
+	}
+	if provider == "claude-code" {
+		serviceName = "claude-code"
+		usageURN = "claude-code:api_request"
+		attributes = map[string]any{
+			"event.name":                      "api_request",
+			"prompt.id":                       uuid.NewString(),
+			"gen_ai.conversation.id":          chatID,
+			"input_tokens":                    totalTokens,
+			"output_tokens":                   0,
+			"cache_read_tokens":               0,
+			"cache_creation_tokens":           0,
+			"cost_usd":                        cost,
+			"model":                           model,
+			"gram.hook.source":                provider,
+			"gram.resource.urn":               usageURN,
+			"user.email":                      email,
+			"user.attributes.department_name": department,
+		}
 	}
 	if roles != nil {
 		attributes["user.roles"] = roles
@@ -54,7 +74,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, usageURN, "gram-server")
+		projectID, usageURN, serviceName)
 	require.NoError(t, err)
 }
 
