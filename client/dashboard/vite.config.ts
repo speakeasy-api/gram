@@ -60,28 +60,53 @@ export default defineConfig(({ command }) => {
     build: {
       target: "es2022",
       sourcemap: true,
-      rollupOptions: {
+      // Vite 8 defaults CSS minification to Lightning CSS, whose 1.32.0
+      // build (pulled transitively by @tailwindcss/vite) panics on our CSS
+      // (src/values/color.rs:441 SIGABRT). Pin CSS minification to esbuild —
+      // the Vite 7 default — until the upstream Lightning CSS bug is fixed.
+      cssMinify: "esbuild",
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
+          // Vite 8/Rolldown replaces Rollup's `manualChunks` with
+          // `codeSplitting`. Rolldown's default chunker folds these vendors
+          // into the entry chunk, so we still split them by hand to keep ~2.7MB
+          // of rarely-changing dependency code out of `main` (stable long-term
+          // browser caching). `test` is a regex matched against the module id.
+          //
+          // NOTE: trailing slashes (e.g. "node_modules/react/") are load-bearing
+          // — they stop `react` from also matching react-dom/react-router/etc.
+          // Don't drop them. `minSize: 0` preserves manualChunks' behaviour of
+          // grouping unconditionally, regardless of chunk size. `priority`
+          // (descending) preserves the original top-down first-match order.
+          codeSplitting: {
+            minSize: 0,
+            groups: [
+              {
+                name: "lucide-react",
+                test: /node_modules\/lucide-react/,
+                priority: 40,
+              },
+              {
+                name: "moonshine",
+                test: /node_modules\/@speakeasy-api\/moonshine/,
+                priority: 30,
+              },
+              // Keep the whole three.js ecosystem together (three plus the
+              // packages reached only through @react-three/*: three-mesh-bvh,
+              // three-stdlib, troika-*) so it stays out of the main chunk.
+              {
+                name: "three",
+                test: /node_modules\/(?:@react-three\/|three\/|three-|troika-)/,
+                priority: 20,
+              },
+              {
+                name: "externals",
+                test: /node_modules\/(?:posthog-js|react\/|react-dom\/|react-error-boundary|react-router|sonner|zod)/,
+                priority: 10,
+              },
             ],
           },
         },
@@ -90,13 +115,15 @@ export default defineConfig(({ command }) => {
     worker: {
       format: "es",
     },
-    esbuild: {
+    oxc: {
       target: "es2022",
     },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
+      rolldownOptions: {
+        transform: {
+          target: "es2022",
+        },
       },
     },
     server: {
