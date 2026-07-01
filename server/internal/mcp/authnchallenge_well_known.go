@@ -398,6 +398,5 @@ func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "marshal metadata").LogError(ctx, logger)
 	}
-	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }

@@ -424,7 +424,6 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
-	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
@@ -438,7 +437,6 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
-	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 

@@ -141,6 +141,5 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 		return oops.E(oops.CodeUnexpected, err, "marshal client metadata document").LogError(ctx, m.logger)
 	}
 
-	//nolint:wrapcheck // helper writes the response; its error is already a contextual oops error.
 	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/json; charset=utf-8", clientMetadataDocumentMaxAgeSeconds, body)
 }
