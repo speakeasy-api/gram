@@ -135,7 +135,13 @@ function AppContent() {
   const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
-    return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+    return (
+      <CliCallback
+        keyScope={cliFlow.keyScope}
+        localCallbackUrl={cliFlow.cliCallbackUrl}
+        projectSlug={cliFlow.projectSlug}
+      />
+    );
   }
 
   return (
@@ -418,15 +424,27 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
     ));
 };
 
-function useCliAuthFlow() {
+type LocalAuthFlow = {
+  cliCallbackUrl: string;
+  keyScope: "producer" | "hooks";
+  projectSlug: string | null;
+};
+
+function useCliAuthFlow(): LocalAuthFlow | null {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
+  const keyScope = searchParams.get("key_scope");
+  const projectSlug = searchParams.get("project");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl };
+    return {
+      cliCallbackUrl,
+      keyScope: keyScope === "hooks" ? "hooks" : "producer",
+      projectSlug,
+    };
   }
 
   return null;

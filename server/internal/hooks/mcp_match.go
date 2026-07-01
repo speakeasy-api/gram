@@ -251,8 +251,13 @@ func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 // the given organization. It checks against the canonical host first (no DB
 // hit), then falls back to checking the org's custom domain if needed.
 func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
-	// Fast path: check canonical host first to avoid DB lookup for app.getgram.ai URLs
-	if isGramHostedMCPURL(rawURL) {
+	trustedHosts := make([]string, 0, 1)
+	if s.serverURL != nil && s.serverURL.Hostname() != "" {
+		trustedHosts = append(trustedHosts, s.serverURL.Hostname())
+	}
+
+	// Fast path: check canonical/configured hosts first to avoid DB lookup for app.getgram.ai URLs.
+	if isGramHostedMCPURL(rawURL, trustedHosts...) {
 		return true
 	}
 	if rawURL == "" || orgID == "" {
