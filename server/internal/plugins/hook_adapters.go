@@ -365,6 +365,10 @@ gram_hooks_codex_mcp_metadata() {
         {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
         {out: (.out + [$arg]), next: true}
+      elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
+        {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("bearer +[^ ]"; "i")) then
+        {out: (.out + ["***"]), next: false}
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
         {out: (.out + ["***"]), next: false}
       else {out: (.out + [$arg]), next: false} end) | .out;
@@ -392,6 +396,10 @@ gram_hooks_mcp_metadata_from_file() {
         {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
         {out: (.out + [$arg]), next: true}
+      elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
+        {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("bearer +[^ ]"; "i")) then
+        {out: (.out + ["***"]), next: false}
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
         {out: (.out + ["***"]), next: false}
       else {out: (.out + [$arg]), next: false} end) | .out;
@@ -427,7 +435,7 @@ gram_hooks_cursor_prompt_state_path() {
   state_dir="${state_home}/gram/hooks/cursor-prompts"
   mkdir -p "$state_dir" 2>/dev/null || return 1
   chmod 700 "${state_home}/gram" "${state_home}/gram/hooks" "$state_dir" 2>/dev/null || true
-  safe_install="$(printf '%%s|%%s' "$server_url_arg" "$project_slug_arg" | tr -c 'A-Za-z0-9_.-' '_')"
+  safe_install="$(printf '%%s' "$server_url_arg" | tr -c 'A-Za-z0-9_.-' '_')__$(printf '%%s' "$project_slug_arg" | tr -c 'A-Za-z0-9_.-' '_')"
   safe_id="$(printf '%%s' "$session_id" | tr -c 'A-Za-z0-9_.-' '_')"
   printf '%%s/%%s__%%s.seen' "$state_dir" "$safe_install" "$safe_id"
 }
