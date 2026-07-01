@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
     provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
-    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).'
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token; cost is real spend) | flat_rate (subscription seat; cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -98,6 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -399,26 +401,30 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     total_tool_calls AggregateFunction(countIf, UInt8),
 
     -- AI account classification (gram.account_type): 'team' | 'personal' | ''
-    -- (unclassified) and AI provider (gram.provider): 'anthropic' | 'openai' |
-    -- 'cursor' | ''. Both are sort-key DIMENSIONS (appended to ORDER BY below),
-    -- NOT carried values: account_type is not distinguished by any other key
-    -- column (the same employee's team and personal usage shares user_email +
-    -- WorkOS attrs), so as a carried value team/personal would merge under the
+    -- (unclassified); AI provider (gram.provider): 'anthropic' | 'openai' |
+    -- 'cursor' | ''; and billing mode (gram.billing_mode): 'metered' | 'flat_rate'
+    -- | 'unknown' | ''. All three are sort-key DIMENSIONS (appended to ORDER BY
+    -- below), NOT carried values: account_type/billing_mode are not distinguished
+    -- by any other key column (the same employee's team and personal usage shares
+    -- user_email + WorkOS attrs), so as carried values they would merge under the
     -- existing grain. As key columns they stay separate and remain group-/
-    -- filterable. Added via a non-destructive ALTER ADD COLUMN + MODIFY ORDER BY
-    -- (atlas only emits DROP+recreate for a sort-key change, so the migration is
-    -- hand-written). Empty values are treated as team by the query layer.
+    -- filterable — billing_mode lets the cost rollup tell metered (real) spend
+    -- from an estimate. Added via a non-destructive ALTER ADD COLUMN + MODIFY
+    -- ORDER BY (atlas only emits DROP+recreate for a sort-key change, so the
+    -- migration is hand-written). Empty account_type is treated as team by the
+    -- query layer.
     account_type String,
-    provider String
+    provider String,
+    billing_mode String
 ) ENGINE = AggregatingMergeTree
--- Primary key stays the original 12 dimensions; account_type + provider are
--- appended to ORDER BY only (the sorting key). ALTER MODIFY ORDER BY extends the
--- sorting key but leaves the primary key as a prefix, so this must be declared
--- explicitly here to match the migrated table (otherwise a bare ORDER BY would
--- imply the primary key includes account_type/provider, and atlas would see
--- drift it can't reconcile — "modifying primary key is not supported").
+-- Primary key stays the original 12 dimensions; account_type + provider +
+-- billing_mode are appended to ORDER BY only (the sorting key). ALTER MODIFY
+-- ORDER BY extends the sorting key but leaves the primary key as a prefix, so
+-- this must be declared explicitly here to match the migrated table (otherwise a
+-- bare ORDER BY would imply the primary key includes the appended dims, and atlas
+-- would see drift it can't reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode)
 TTL time_bucket + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
@@ -472,11 +478,12 @@ SELECT
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS total_tool_calls,
 
-    -- Account-type + provider dimensions (grouped; appended to the sort key so
-    -- team/personal and provider usage stay separate). Kept last to match the
-    -- table column order.
+    -- Account-type + provider + billing-mode dimensions (grouped; appended to the
+    -- sort key so team/personal, provider, and metered/flat-rate usage stay
+    -- separate). Kept last to match the table column order.
     account_type,
-    provider
+    provider,
+    billing_mode
 FROM telemetry_logs
 -- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
 -- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
@@ -508,7 +515,8 @@ GROUP BY
     roles,
     groups,
     account_type,
-    provider;
+    provider,
+    billing_mode;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns

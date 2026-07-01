@@ -1,4 +1,4 @@
-h1:/irwthhOeFW/8R7GdVJjt363T+azZ6yZTD5C+fjnp30=
+h1:ghekSC8nDoP1ALcFzl6ZRyHljy97KM38LQkLvmFMiz8=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -47,3 +47,4 @@ h1:/irwthhOeFW/8R7GdVJjt363T+azZ6yZTD5C+fjnp30=
 20260626094434_include-chat-completion-usage-cost.up.sql h1:Tqn1gL/ffrZ7ubhcddFKtbTpd165TpPwpaFbYW+r/iM=
 20260629200140_add-personal-account-telemetry-cols.up.sql h1:kRwK9Foo9RtIM+V7sYD+v/B2tEO34JKIZ4ieb3cKlBI=
 20260630211520_pat-account-type-and-provider-summaries.up.sql h1:jZcSnDdLvYZZEIl8/M35gAIckJNFbWQ4tGV3tKbrDRw=
+20260701215636_billing-mode-summaries.up.sql h1:QBQWDP1N8QGVVfa3oVOIvfVn6DZXBSuBJ12Pcs+3a70=

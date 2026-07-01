@@ -42,6 +42,8 @@ type UserAccount struct {
 	ExternalAccountID   pgtype.Text
 	Email               pgtype.Text
 	AccountType         pgtype.Text
+	BillingMode         pgtype.Text
+	PlanType            pgtype.Text
 	FirstSeenAt         pgtype.Timestamptz
 	LastSeenAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
