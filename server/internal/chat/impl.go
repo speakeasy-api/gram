@@ -903,6 +903,47 @@ func (s *Service) classifyCompletionError(ctx context.Context, label string, err
 	}
 }
 
+// linkSetupAssistantThread links a client-driven setup/onboarding chat to its
+// assistant by upserting an assistant_threads row, so the chat becomes listable
+// via chat.list?assistant_id= and URL-addressable like runtime assistant
+// threads. It only fires for the assistant source once an assistant id is
+// present (the assistant may not exist yet on the first onboarding turns, in
+// which case the header is empty and this is a no-op). The row uses
+// source_kind="setup" and correlation_id=chat id; the assistant_threads FK on
+// assistant_id means this only succeeds once the assistant exists.
+//
+// Best-effort: linking is idempotent and independent of the completion, so any
+// failure is logged and swallowed rather than failing the user's turn. The
+// chats row itself is owner-stamped (user_id) by the capture strategy's
+// UpsertChat, so the linked thread surfaces under the owning user's scope in
+// chat.list.
+func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.UUID, chatID uuid.UUID, source, assistantIDHeader string) {
+	if source != "assistant" || assistantIDHeader == "" || chatID == uuid.Nil || projectID == nil {
+		return
+	}
+
+	assistantID, err := uuid.Parse(assistantIDHeader)
+	if err != nil {
+		s.logger.WarnContext(ctx, "invalid assistant id header on setup completion; skipping thread link",
+			attr.SlogError(err))
+		return
+	}
+
+	if _, err := s.repo.UpsertSetupAssistantThread(ctx, repo.UpsertSetupAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     *projectID,
+		CorrelationID: chatID.String(),
+		ChatID:        chatID,
+	}); err != nil {
+		// A missing assistant (FK violation) is expected until the assistant is
+		// provisioned; log at debug so it doesn't spam. Everything else is a
+		// warning. Either way the completion proceeds.
+		s.logger.DebugContext(ctx, "failed to link setup assistant thread",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogError(err))
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
@@ -1010,6 +1051,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// Setup/onboarding chats come from the dashboard with X-Gram-Source:
+	// assistant + Gram-Chat-ID and, once the assistant exists, a
+	// Gram-Assistant-ID. We link the chat to the assistant AFTER the completion
+	// runs (see linkSetupAssistantThread calls below), because the capture
+	// strategy's UpsertChat — which creates the chats row that
+	// assistant_threads.chat_id FK-references — runs inside the completion. The
+	// linking is idempotent (safe to fire on every completion for the chat) and
+	// best-effort (a failure must not fail the user's turn).
+	assistantIDHeader := r.Header.Get(constants.HeaderAssistantID)
+
 	// Non-streaming: Use UnifiedClient
 	temp := float64(chatRequest.Temperature)
 
@@ -1105,6 +1156,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 
+		// The chats row now exists (capture strategy upserted it), so linking is
+		// safe. Runs on the request context after the response is fully streamed.
+		s.linkSetupAssistantThread(ctx, authCtx.ProjectID, chatID, metadata.Source, assistantIDHeader)
+
 		eventProperties["success"] = true
 		return nil
 	}
@@ -1146,6 +1201,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if err := json.NewEncoder(w).Encode(openAIResp); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode response").LogError(ctx, s.logger)
 	}
+
+	// The chats row now exists (capture strategy upserted it during the
+	// completion), so the assistant_threads.chat_id FK is satisfied.
+	s.linkSetupAssistantThread(ctx, authCtx.ProjectID, chatID, metadata.Source, assistantIDHeader)
 
 	eventProperties["success"] = true
 	return nil

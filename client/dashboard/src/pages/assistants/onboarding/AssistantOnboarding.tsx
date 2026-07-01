@@ -7,13 +7,14 @@ import { getServerURL } from "@/lib/utils";
 import {
   Chat,
   GramElementsProvider,
+  useThreadId,
   type MCPServerEntry,
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -108,6 +109,28 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const [searchParams] = useSearchParams();
 
   const initialThreadId = searchParams.get("threadId") ?? undefined;
+
+  // Once the assistant exists (create → after first save, or edit mode), link
+  // setup threads to it: filter the thread list to this assistant's chats and
+  // send the assistant id on completions so the server records a listable
+  // assistant_threads row (source_kind=setup). Before the assistant exists the
+  // draft has no id, so both stay undefined and the setup chat is an ordinary
+  // unlinked chat until creation — reopening then starts a fresh thread, which
+  // is acceptable.
+  const assistantId = draft.assistantId ?? undefined;
+
+  const threadListFilters = useMemo(
+    () => (assistantId ? { assistant_id: assistantId } : undefined),
+    [assistantId],
+  );
+
+  const apiHeaders = useMemo<Record<string, string>>(
+    () => ({
+      "X-Gram-Source": "assistant",
+      ...(assistantId ? { "Gram-Assistant-ID": assistantId } : {}),
+    }),
+    [assistantId],
+  );
 
   const onboarding = useOnboardingTools();
 
@@ -215,11 +238,16 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           api: {
             url: getServerURL(),
             session: getSession,
-            headers: { "X-Gram-Source": "assistant" },
+            headers: apiHeaders,
           },
           history: {
             enabled: true,
-            showThreadList: false,
+            // Surface prior setup/onboarding threads for this assistant so
+            // reopening the page can resurface and revisit them. The list is
+            // scoped to this assistant's chats; before the assistant exists the
+            // filter is omitted and the list stays empty.
+            showThreadList: true,
+            ...(threadListFilters ? { threadListFilters } : {}),
             initialThreadId,
           },
           thread: {
@@ -253,10 +281,35 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
         }}
       >
+        <SetupThreadSync />
         <div className="h-full overflow-hidden">
           <Chat />
         </div>
       </GramElementsProvider>
     </div>
   );
+}
+
+// SetupThreadSync mirrors the active thread id into the `?threadId=` query
+// param (replace-nav, so it doesn't spam history) so a setup/onboarding thread
+// is URL-addressable and can be reopened via the shareable URL. Must render
+// inside GramElementsProvider so useThreadId can read the active thread.
+function SetupThreadSync() {
+  const { threadId } = useThreadId();
+  const [, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (!threadId) return;
+    setSearchParams(
+      (prev) => {
+        if (prev.get("threadId") === threadId) return prev;
+        const next = new URLSearchParams(prev);
+        next.set("threadId", threadId);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [threadId, setSearchParams]);
+
+  return null;
 }
