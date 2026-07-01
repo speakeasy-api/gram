@@ -62,6 +62,10 @@ func (m *tunnelManager) serverView(ctx context.Context, server repo.TunneledMcpS
 	return mv.BuildTunneledMcpServerView(server, m.connectionsForServer(ctx, server.ID))
 }
 
+func (m *tunnelManager) serverConnectionsView(ctx context.Context, serverID uuid.UUID) *types.TunneledMcpServerConnections {
+	return mv.BuildTunneledMcpServerConnectionsView(m.connectionsForServer(ctx, serverID))
+}
+
 func (m *tunnelManager) serverViewWithoutRuntime(server repo.TunneledMcpServer) *types.TunneledMcpServer {
 	return mv.BuildTunneledMcpServerView(server, nil)
 }

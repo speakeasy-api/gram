@@ -32552,6 +32552,113 @@ paths:
             x-speakeasy-name-override: getServer
             x-speakeasy-react-hook:
                 name: GetTunneledMcpServer
+    /rpc/tunneledMcp.getServerConnections:
+        get:
+            description: Get live tunnel connections for a tunneled MCP server
+            operationId: getTunneledMcpServerConnections
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the tunneled MCP server
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the tunneled MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunneledMcpServerConnections'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerConnections tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: getServerConnections
+            x-speakeasy-react-hook:
+                name: GetTunneledMcpServerConnections
     /rpc/tunneledMcp.listServers:
         get:
             description: List all tunneled MCP server sources for a project
@@ -49780,6 +49887,9 @@ components:
                     type: string
                     description: When this tunnel session connected
                     format: date-time
+                gateway_session_id:
+                    type: string
+                    description: Gateway session ID for a live tunnel connection
                 last_heartbeat_at:
                     type: string
                     description: Most recent heartbeat observed for this tunnel session
@@ -49801,11 +49911,8 @@ components:
                 service_version:
                     type: string
                     description: Customer-declared version of the MCP service behind this tunnel connection
-                session_id:
-                    type: string
-                    description: Gateway session ID for a live tunnel connection
             required:
-                - session_id
+                - gateway_session_id
                 - service_id
                 - service_slug
                 - service_version
@@ -49835,11 +49942,6 @@ components:
                         - connected
                         - inactive
                         - never_connected
-                connections:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/TunneledMcpConnection'
-                    description: Live tunnel connections currently visible in Redis
                 created_at:
                     type: string
                     description: When the tunneled MCP server source was created
@@ -49881,11 +49983,31 @@ components:
                 - key_prefix
                 - status
                 - connection_status
-                - connections
                 - active_connection_count
                 - active_consumer_session_count
                 - created_at
                 - updated_at
+        TunneledMcpServerConnections:
+            type: object
+            properties:
+                active_connection_count:
+                    type: integer
+                    description: Number of active tunnel connections currently visible in Redis
+                    format: int64
+                active_consumer_session_count:
+                    type: integer
+                    description: Total MCP consumer sessions currently pinned across active tunnel connections
+                    format: int64
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunneledMcpConnection'
+                    description: Live tunnel connections currently visible in Redis
+            description: Live connection details for a tunneled MCP server
+            required:
+                - connections
+                - active_connection_count
+                - active_consumer_session_count
         UpdateAssistantForm:
             type: object
             properties:

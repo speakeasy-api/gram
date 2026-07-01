@@ -30,11 +30,13 @@ import type {
   McpServer,
   TunneledMcpConnection,
   TunneledMcpServer,
+  TunneledMcpServerConnections,
 } from "@gram/client/models/components";
 import {
   invalidateAllGetTunneledMcpServer,
   invalidateAllTunneledMcpServers,
   useGetTunneledMcpServer,
+  useGetTunneledMcpServerConnections,
   useMcpEndpoints,
   useMcpServers,
   useUpdateTunneledMcpServerMutation,
@@ -113,6 +115,16 @@ function TunneledMCPDetailsContent(): JSX.Element {
   });
 
   const tunneledMcpServerId = tunneledMcpServer?.id ?? "";
+  const {
+    data: tunneledMcpServerConnections,
+    isLoading: isLoadingConnections,
+  } = useGetTunneledMcpServerConnections(
+    getTunneledMcpServerArgs(tunneledMcpServerId),
+    undefined,
+    {
+      enabled: tunneledMcpServerId !== "",
+    },
+  );
 
   const { data: mcpServersResult, isLoading: isLoadingMcpServers } =
     useMcpServers({ tunneledMcpServerId }, undefined, {
@@ -189,8 +201,10 @@ function TunneledMCPDetailsContent(): JSX.Element {
           >
             <OverviewTab
               tunneledMcpServer={tunneledMcpServer}
+              tunneledMcpServerConnections={tunneledMcpServerConnections}
               linkedMcpServersCount={linkedMcpServers.length}
               isLoadingMcpServers={isLoadingMcpServers}
+              isLoadingConnections={isLoadingConnections}
               onShowLinkedMcpServers={() => handleTabChange("mcp-servers")}
             />
           </TabsContent>
@@ -289,13 +303,17 @@ function ConnectionStatusBadge({ server }: { server: TunneledMcpServer }) {
 
 function OverviewTab({
   tunneledMcpServer,
+  tunneledMcpServerConnections,
   linkedMcpServersCount,
   isLoadingMcpServers,
+  isLoadingConnections,
   onShowLinkedMcpServers,
 }: {
   tunneledMcpServer: TunneledMcpServer | undefined;
+  tunneledMcpServerConnections: TunneledMcpServerConnections | undefined;
   linkedMcpServersCount: number;
   isLoadingMcpServers: boolean;
+  isLoadingConnections: boolean;
   onShowLinkedMcpServers: () => void;
 }) {
   const createdAt = tunneledMcpServer?.createdAt
@@ -379,7 +397,10 @@ function OverviewTab({
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <ConnectionsPanel server={tunneledMcpServer} />
+          <ConnectionsPanel
+            connections={tunneledMcpServerConnections}
+            isLoading={isLoadingConnections}
+          />
         </div>
       </div>
     </div>
@@ -387,19 +408,16 @@ function OverviewTab({
 }
 
 function ConnectionsPanel({
-  server,
+  connections: connectionResult,
+  isLoading,
 }: {
-  server: TunneledMcpServer | undefined;
+  connections: TunneledMcpServerConnections | undefined;
+  isLoading: boolean;
 }) {
-  const connections = server?.connections ?? [];
-  const activeConnectionCount =
-    server?.activeConnectionCount ?? connections.length;
+  const connections = connectionResult?.connections ?? [];
+  const activeConnectionCount = connectionResult?.activeConnectionCount ?? 0;
   const activeConsumerSessionCount =
-    server?.activeConsumerSessionCount ??
-    connections.reduce(
-      (total, connection) => total + connection.activeConsumerSessions,
-      0,
-    );
+    connectionResult?.activeConsumerSessionCount ?? 0;
 
   return (
     <section className="rounded-lg border p-6">
@@ -422,7 +440,12 @@ function ConnectionsPanel({
         </div>
       </div>
 
-      {connections.length === 0 ? (
+      {isLoading ? (
+        <div className="rounded-md border border-dashed p-6 text-center">
+          <Loader2 className="text-muted-foreground mx-auto mb-2 size-4 animate-spin" />
+          <Type muted>Loading live tunnel connections.</Type>
+        </div>
+      ) : connections.length === 0 ? (
         <div className="rounded-md border border-dashed p-6 text-center">
           <Type muted>No live tunnel connections.</Type>
         </div>
@@ -430,7 +453,7 @@ function ConnectionsPanel({
         <div className="grid gap-3">
           {connections.map((connection) => (
             <ConnectionCard
-              key={connection.sessionId}
+              key={connection.gatewaySessionId}
               connection={connection}
             />
           ))}
@@ -457,7 +480,7 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
             {connection.serviceSlug}
           </Type>
           <Type muted small mono className="mt-1 truncate">
-            {connection.sessionId}
+            {connection.gatewaySessionId}
           </Type>
         </div>
         <Badge variant="neutral">

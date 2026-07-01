@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	GetServerDoer goahttp.Doer
 
+	// GetServerConnections Doer is the HTTP client used to make requests to the
+	// getServerConnections endpoint.
+	GetServerConnectionsDoer goahttp.Doer
+
 	// UpdateServer Doer is the HTTP client used to make requests to the
 	// updateServer endpoint.
 	UpdateServerDoer goahttp.Doer
@@ -61,17 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateServerDoer:    doer,
-		ListServersDoer:     doer,
-		GetServerDoer:       doer,
-		UpdateServerDoer:    doer,
-		RotateServerKeyDoer: doer,
-		DeleteServerDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateServerDoer:         doer,
+		ListServersDoer:          doer,
+		GetServerDoer:            doer,
+		GetServerConnectionsDoer: doer,
+		UpdateServerDoer:         doer,
+		RotateServerKeyDoer:      doer,
+		DeleteServerDoer:         doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -142,6 +147,30 @@ func (c *Client) GetServer() goa.Endpoint {
 		resp, err := c.GetServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("tunneledMcp", "getServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerConnections returns an endpoint that makes HTTP requests to the
+// tunneledMcp service getServerConnections server.
+func (c *Client) GetServerConnections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerConnectionsRequest(c.encoder)
+		decodeResponse = DecodeGetServerConnectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerConnectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerConnectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("tunneledMcp", "getServerConnections", err)
 		}
 		return decodeResponse(resp)
 	}

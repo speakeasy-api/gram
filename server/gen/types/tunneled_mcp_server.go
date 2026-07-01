@@ -26,8 +26,6 @@ type TunneledMcpServer struct {
 	AgentVersion *string
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string
-	// Live tunnel connections currently visible in Redis
-	Connections []*TunneledMcpConnection
 	// Number of active tunnel connections currently visible in Redis
 	ActiveConnectionCount int
 	// Total MCP consumer sessions currently pinned across active tunnel connections

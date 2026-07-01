@@ -129,6 +129,7 @@ export * from "./getToolsetEnvironment.js";
 export * from "./getToolUsageFilterOptions.js";
 export * from "./getToolUsageSummary.js";
 export * from "./getTunneledMcpServer.js";
+export * from "./getTunneledMcpServerConnections.js";
 export * from "./getUsageTiers.js";
 export * from "./getUserMetricsSummary.js";
 export * from "./globalVariations.js";

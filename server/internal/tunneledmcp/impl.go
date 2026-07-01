@@ -217,6 +217,35 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	return s.tunnelManager.serverView(ctx, server), nil
 }
 
+func (s *Service) GetServerConnections(ctx context.Context, payload *gen.GetServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, s.logger)
+	}
+
+	server, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
+	}
+
+	return s.tunnelManager.serverConnectionsView(ctx, server.ID), nil
+}
+
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.TunneledMcpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

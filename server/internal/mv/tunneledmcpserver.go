@@ -11,7 +11,7 @@ import (
 )
 
 type TunneledMcpConnectionCache struct {
-	SessionID              string            `json:"session_id"`
+	GatewaySessionID       string            `json:"gateway_session_id"`
 	ServiceID              string            `json:"service_id"`
 	ServiceSlug            string            `json:"service_slug"`
 	ServiceVersion         string            `json:"service_version"`
@@ -24,7 +24,7 @@ type TunneledMcpConnectionCache struct {
 	Metadata               map[string]string `json:"metadata"`
 }
 
-// BuildTunneledMcpServerView adds live Redis connection fields to the tunnel row.
+// BuildTunneledMcpServerView adds live Redis connection summary fields to the tunnel row.
 func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []TunneledMcpConnectionCache) *types.TunneledMcpServer {
 	agentVersion := conv.FromPGText[string](server.AgentVersion)
 	if agentVersion == nil {
@@ -44,7 +44,6 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		ConnectionStatus:           tunneledMcpConnectionStatus(server, connections),
 		AgentVersion:               agentVersion,
 		LastSeenAt:                 lastSeenAt,
-		Connections:                buildTunneledMcpConnectionViews(connections),
 		ActiveConnectionCount:      len(connections),
 		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
 		CreatedAt:                  server.CreatedAt.Time.Format(time.RFC3339),
@@ -58,6 +57,14 @@ func BuildTunneledMcpServerListView(servers []repo.TunneledMcpServer, connection
 		result[i] = BuildTunneledMcpServerView(server, connectionsByServerID[server.ID.String()])
 	}
 	return result
+}
+
+func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCache) *types.TunneledMcpServerConnections {
+	return &types.TunneledMcpServerConnections{
+		Connections:                buildTunneledMcpConnectionViews(connections),
+		ActiveConnectionCount:      len(connections),
+		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
+	}
 }
 
 func tunneledMcpConnectionStatus(server repo.TunneledMcpServer, connections []TunneledMcpConnectionCache) types.TunneledMcpConnectionStatus {
@@ -74,7 +81,7 @@ func buildTunneledMcpConnectionViews(connections []TunneledMcpConnectionCache) [
 	result := make([]*types.TunneledMcpConnection, 0, len(connections))
 	for _, connection := range connections {
 		result = append(result, &types.TunneledMcpConnection{
-			SessionID:              connection.SessionID,
+			GatewaySessionID:       connection.GatewaySessionID,
 			ServiceID:              connection.ServiceID,
 			ServiceSlug:            connection.ServiceSlug,
 			ServiceVersion:         connection.ServiceVersion,

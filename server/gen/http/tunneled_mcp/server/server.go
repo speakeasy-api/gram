@@ -18,13 +18,14 @@ import (
 
 // Server lists the tunneledMcp service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	CreateServer    http.Handler
-	ListServers     http.Handler
-	GetServer       http.Handler
-	UpdateServer    http.Handler
-	RotateServerKey http.Handler
-	DeleteServer    http.Handler
+	Mounts               []*MountPoint
+	CreateServer         http.Handler
+	ListServers          http.Handler
+	GetServer            http.Handler
+	GetServerConnections http.Handler
+	UpdateServer         http.Handler
+	RotateServerKey      http.Handler
+	DeleteServer         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,16 +58,18 @@ func New(
 			{"CreateServer", "POST", "/rpc/tunneledMcp.createServer"},
 			{"ListServers", "GET", "/rpc/tunneledMcp.listServers"},
 			{"GetServer", "GET", "/rpc/tunneledMcp.getServer"},
+			{"GetServerConnections", "GET", "/rpc/tunneledMcp.getServerConnections"},
 			{"UpdateServer", "POST", "/rpc/tunneledMcp.updateServer"},
 			{"RotateServerKey", "POST", "/rpc/tunneledMcp.rotateServerKey"},
 			{"DeleteServer", "DELETE", "/rpc/tunneledMcp.deleteServer"},
 		},
-		CreateServer:    NewCreateServerHandler(e.CreateServer, mux, decoder, encoder, errhandler, formatter),
-		ListServers:     NewListServersHandler(e.ListServers, mux, decoder, encoder, errhandler, formatter),
-		GetServer:       NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
-		UpdateServer:    NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
-		RotateServerKey: NewRotateServerKeyHandler(e.RotateServerKey, mux, decoder, encoder, errhandler, formatter),
-		DeleteServer:    NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
+		CreateServer:         NewCreateServerHandler(e.CreateServer, mux, decoder, encoder, errhandler, formatter),
+		ListServers:          NewListServersHandler(e.ListServers, mux, decoder, encoder, errhandler, formatter),
+		GetServer:            NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
+		GetServerConnections: NewGetServerConnectionsHandler(e.GetServerConnections, mux, decoder, encoder, errhandler, formatter),
+		UpdateServer:         NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
+		RotateServerKey:      NewRotateServerKeyHandler(e.RotateServerKey, mux, decoder, encoder, errhandler, formatter),
+		DeleteServer:         NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -78,6 +81,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateServer = m(s.CreateServer)
 	s.ListServers = m(s.ListServers)
 	s.GetServer = m(s.GetServer)
+	s.GetServerConnections = m(s.GetServerConnections)
 	s.UpdateServer = m(s.UpdateServer)
 	s.RotateServerKey = m(s.RotateServerKey)
 	s.DeleteServer = m(s.DeleteServer)
@@ -91,6 +95,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateServerHandler(mux, h.CreateServer)
 	MountListServersHandler(mux, h.ListServers)
 	MountGetServerHandler(mux, h.GetServer)
+	MountGetServerConnectionsHandler(mux, h.GetServerConnections)
 	MountUpdateServerHandler(mux, h.UpdateServer)
 	MountRotateServerKeyHandler(mux, h.RotateServerKey)
 	MountDeleteServerHandler(mux, h.DeleteServer)
@@ -237,6 +242,59 @@ func NewGetServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "tunneledMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetServerConnectionsHandler configures the mux to serve the
+// "tunneledMcp" service "getServerConnections" endpoint.
+func MountGetServerConnectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/tunneledMcp.getServerConnections", f)
+}
+
+// NewGetServerConnectionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "tunneledMcp" service "getServerConnections" endpoint.
+func NewGetServerConnectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetServerConnectionsRequest(mux, decoder)
+		encodeResponse = EncodeGetServerConnectionsResponse(encoder)
+		encodeError    = EncodeGetServerConnectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getServerConnections")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "tunneledMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

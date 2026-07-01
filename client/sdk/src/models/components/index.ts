@@ -475,6 +475,7 @@ export * from "./tumperiod.js";
 export * from "./tumperiodday.js";
 export * from "./tunneledmcpconnection.js";
 export * from "./tunneledmcpserver.js";
+export * from "./tunneledmcpserverconnections.js";
 export * from "./updateassistantform.js";
 export * from "./updatecustomdetectionrulerequestbody.js";
 export * from "./updatedomainrequestbody.js";

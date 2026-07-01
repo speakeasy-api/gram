@@ -42,11 +42,13 @@ func TestTunnelEndToEnd(t *testing.T) {
 	defer mcp.Close()
 
 	const tunnelID = "tunnel-1"
+	const forwardToken = "forward-token"
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := newSnapshotStore()
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
-	gw := gateway.New(gateway.Config{}, keys, routes, logger)
+	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	require.NoError(t, err)
 
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()
@@ -74,6 +76,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
 	require.NoError(t, err)
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
+	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -91,6 +94,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 			return
 		}
 		req.Header.Set(wire.HeaderTunnelID, tunnelID)
+		req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 		req.Header.Set(wire.HeaderTunnelConsumerSession, "consumer-1")
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
@@ -125,6 +129,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	req2, err := http.NewRequest(http.MethodGet, forwardServer.URL+"/mcp/x", nil)
 	require.NoError(t, err)
 	req2.Header.Set(wire.HeaderTunnelID, "does-not-exist")
+	req2.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
 	defer resp2.Body.Close()
@@ -145,7 +150,8 @@ func TestTunnelRevoke(t *testing.T) {
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := route.NewRouteTable()
-	gw := gateway.New(gateway.Config{}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
+	gw, err := gateway.New(gateway.Config{ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
+	require.NoError(t, err)
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()
 	forwardServer := httptest.NewServer(gw.ForwardHandler())

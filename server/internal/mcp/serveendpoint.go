@@ -2,14 +2,10 @@ package mcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // ServeMCPEndpoint resolves a public MCP route; mcpRouteBase preserves the called surface in auth URLs.
@@ -376,8 +371,7 @@ func (s *Service) serveTunneledBackend(
 	upstreamAuth string,
 ) error {
 	ctx := r.Context()
-	tunnelID := mcpServer.TunneledMcpServerID.UUID.String()
-	logger = logger.With(attr.SlogResourceID(tunnelID))
+	logger = logger.With(attr.SlogResourceID(mcpServer.TunneledMcpServerID.UUID.String()))
 
 	var err error
 	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
@@ -385,102 +379,12 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	if s.remoteProxyManager == nil {
-		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
-	}
-	if s.tunnelRoutes == nil {
-		w.Header().Set("X-Gram-Tunnel-Error", "route-store-unavailable")
-		return oops.E(oops.CodeGatewayError, nil, "tunnel route store unavailable").LogError(ctx, logger)
-	}
-
-	addr, ok, err := s.tunnelRoutes.Lookup(ctx, tunnelID)
+	p, err := s.tunnelManager.buildProxy(ctx, w, r, logger, endpoint, mcpServer, upstreamAuth)
 	if err != nil {
-		w.Header().Set("X-Gram-Tunnel-Error", "route-lookup-failed")
-		return oops.E(oops.CodeGatewayError, err, "lookup tunnel route").LogError(ctx, logger)
+		return err
 	}
-	if !ok {
-		w.Header().Set("X-Gram-Tunnel-Error", "no-route")
-		return oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogWarn(ctx, logger)
-	}
-
-	gatewayURL, err := tunnelGatewayURL(addr)
-	if err != nil {
-		w.Header().Set("X-Gram-Tunnel-Error", "invalid-route")
-		return oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
-	}
-	headers := []proxy.ConfiguredHeader{
-		{
-			IsRequired:             true,
-			Name:                   wire.HeaderTunnelID,
-			StaticValue:            tunnelID,
-			ValueFromRequestHeader: "",
-		},
-	}
-	if s.tunnelForwardToken != "" {
-		headers = append(headers, proxy.ConfiguredHeader{
-			IsRequired:             true,
-			Name:                   wire.HeaderTunnelForwardToken,
-			StaticValue:            s.tunnelForwardToken,
-			ValueFromRequestHeader: "",
-		})
-	}
-	if consumerSession := tunnelConsumerSessionKey(r); consumerSession != "" {
-		headers = append(headers, proxy.ConfiguredHeader{
-			IsRequired:             false,
-			Name:                   wire.HeaderTunnelConsumerSession,
-			StaticValue:            consumerSession,
-			ValueFromRequestHeader: "",
-		})
-	}
-	p := s.remoteProxyManager.BuildTarget(logger, tunnelID, gatewayURL, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
-}
-
-func tunnelGatewayURL(addr string) (string, error) {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return "", fmt.Errorf("empty tunnel route address")
-	}
-	u, err := url.Parse(addr)
-	if err == nil && u.Scheme != "" {
-		switch u.Scheme {
-		case "http", "https":
-			if u.Hostname() == "" {
-				return "", fmt.Errorf("tunnel route URL %q is missing a host", addr)
-			}
-			return u.String(), nil
-		default:
-			if strings.Contains(addr, "://") {
-				return "", fmt.Errorf("unsupported tunnel route URL scheme %q", u.Scheme)
-			}
-		}
-	}
-	if strings.Contains(addr, "://") {
-		return "", fmt.Errorf("invalid tunnel route URL %q", addr)
-	}
-	return (&url.URL{Scheme: "http", Host: addr}).String(), nil
-}
-
-func tunnelConsumerSessionKey(r *http.Request) string {
-	if value := strings.TrimSpace(r.Header.Get(proxy.McpSessionIDHeader)); value != "" {
-		return hashedTunnelConsumerSession("mcp", value)
-	}
-	if value := AuthorizationOrChatSessionToken(r); value != "" {
-		return hashedTunnelConsumerSession("auth", value)
-	}
-	if value := strings.TrimSpace(r.Header.Get("User-Agent")); value != "" && r.RemoteAddr != "" {
-		return hashedTunnelConsumerSession("anon", r.RemoteAddr+"|"+value)
-	}
-	if r.RemoteAddr != "" {
-		return hashedTunnelConsumerSession("anon", r.RemoteAddr)
-	}
-	return ""
-}
-
-func hashedTunnelConsumerSession(prefix, value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return prefix + ":" + hex.EncodeToString(sum[:])
 }
 
 func (s *Service) prepareProxyBackendContext(

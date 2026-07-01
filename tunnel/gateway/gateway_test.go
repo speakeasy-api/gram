@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -17,7 +18,7 @@ import (
 func TestPublicHandlerDoesNotForward(t *testing.T) {
 	t.Parallel()
 
-	gw := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -30,7 +31,17 @@ func TestPublicHandlerDoesNotForward(t *testing.T) {
 
 func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
 	t.Helper()
-	return New(cfg, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw, err := New(cfg, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+	return gw
+}
+
+func TestNewRejectsMissingForwardToken(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	require.ErrorIs(t, err, errMissingForwardToken)
 }
 
 func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
@@ -70,10 +81,17 @@ func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
 }
 
-func TestForwardHandlerAllowsAllWhenTokenUnset(t *testing.T) {
+func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{})
+	gw := &Gateway{
+		cfg:      Config{},
+		keys:     NewStaticKeyStore(map[string]string{}),
+		routes:   route.NewRouteTable(),
+		reg:      newRegistry(),
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		upgrader: websocket.Upgrader{},
+	}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -81,8 +99,7 @@ func TestForwardHandlerAllowsAllWhenTokenUnset(t *testing.T) {
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadGateway, rec.Code)
-	require.Equal(t, "no-live-session", rec.Header().Get("X-Gram-Tunnel-Error"))
+	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
 func TestParseServiceMetadata(t *testing.T) {

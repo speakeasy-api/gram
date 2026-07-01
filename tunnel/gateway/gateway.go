@@ -22,6 +22,8 @@ import (
 
 const routeTTL = 30 * time.Second
 
+var errMissingForwardToken = errors.New("tunnel gateway forward token is required")
+
 type Config struct {
 	// AdvertiseAddr is the internal gram-server -> gateway address published in Redis.
 	AdvertiseAddr       string
@@ -39,7 +41,11 @@ type Gateway struct {
 	upgrader websocket.Upgrader
 }
 
-func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) *Gateway {
+func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
+	cfg.ForwardToken = strings.TrimSpace(cfg.ForwardToken)
+	if cfg.ForwardToken == "" {
+		return nil, errMissingForwardToken
+	}
 	if cfg.MaxStreamsPerTunnel <= 0 {
 		cfg.MaxStreamsPerTunnel = 256
 	}
@@ -55,7 +61,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 			// Agents are non-browser clients; origin checks are not meaningful.
 			CheckOrigin: func(*http.Request) bool { return true },
 		},
-	}
+	}, nil
 }
 
 // PublicHandler excludes forwarding; only the internal listener can enter a tunnel.
@@ -149,7 +155,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
 	remove := g.reg.add(tunnelID, sessionID, session, route.Connection{
-		SessionID:              sessionID,
+		GatewaySessionID:       sessionID,
 		ServiceID:              serviceID,
 		ServiceSlug:            serviceSlug,
 		ServiceVersion:         serviceVersion,
@@ -292,13 +298,16 @@ func (g *Gateway) sayHello(session *yamux.Session, tunnelID, sessionID string) {
 }
 
 func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
-	if g.cfg.ForwardToken != "" {
-		presented := r.Header.Get(wire.HeaderTunnelForwardToken)
-		if !wire.ConstantTimeEqual(presented, g.cfg.ForwardToken) {
-			g.logger.WarnContext(r.Context(), "tunnel forward rejected", slog.String("reason", "forward-token"))
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
+	presented := r.Header.Get(wire.HeaderTunnelForwardToken)
+	if g.cfg.ForwardToken == "" {
+		g.logger.ErrorContext(r.Context(), "tunnel forward rejected", slog.String("reason", "missing-forward-token-config"))
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if !wire.ConstantTimeEqual(presented, g.cfg.ForwardToken) {
+		g.logger.WarnContext(r.Context(), "tunnel forward rejected", slog.String("reason", "forward-token"))
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
 	}
 	r.Header.Del(wire.HeaderTunnelForwardToken)
 

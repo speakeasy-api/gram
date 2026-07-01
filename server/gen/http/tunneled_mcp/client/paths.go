@@ -22,6 +22,11 @@ func GetServerTunneledMcpPath() string {
 	return "/rpc/tunneledMcp.getServer"
 }
 
+// GetServerConnectionsTunneledMcpPath returns the URL path to the tunneledMcp service getServerConnections HTTP endpoint.
+func GetServerConnectionsTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.getServerConnections"
+}
+
 // UpdateServerTunneledMcpPath returns the URL path to the tunneledMcp service updateServer HTTP endpoint.
 func UpdateServerTunneledMcpPath() string {
 	return "/rpc/tunneledMcp.updateServer"
