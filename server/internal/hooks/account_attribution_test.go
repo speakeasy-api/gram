@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -358,4 +359,112 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 		ExternalAccountUuid: "",
 	})
 	require.Error(t, err)
+}
+
+// TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:
+// an employee uses their personal account BEFORE any team session exists on the
+// device, so it is first attributed with no owner; later a team session teaches
+// the device bridge, and a subsequent personal session backfills the personal
+// account's user_id to the employee. This is distinct from the team-first
+// ordering in TestLogs_AttributesTeamAndPersonalAccountsViaDeviceBridge.
+func TestLogs_LateBridgeBackfillsPersonalAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "late-employee", "late@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const (
+		deviceID = "device-late-1"
+		persAcct = "acct-late-personal"
+		persOrg  = "late-max-org"
+		teamAcct = "acct-late-team"
+		teamOrg  = "late-enterprise-org"
+	)
+
+	// 1) Personal session first — gmail doesn't resolve and no bridge owner
+	//    exists yet, so the personal account is created unattributed.
+	claudeAccountSession(t, ctx, ti, "late-pers-1", "late-person@gmail.com", persOrg, persAcct, deviceID, now)
+
+	pers1, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: persAcct,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, pers1.AccountType.String)
+	require.Empty(t, pers1.UserID.String, "personal account starts unattributed (no bridge yet)")
+
+	// 2) Team session on the SAME device — work email resolves, teaching the
+	//    device -> employee bridge.
+	claudeAccountSession(t, ctx, ti, "late-team-1", workEmail, teamOrg, teamAcct, deviceID, now.Add(time.Minute))
+
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID, Provider: providerAnthropic, DeviceID: deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String, "team session teaches the bridge")
+
+	// 3) A later personal session (new session id, same account + device) adopts
+	//    the learned owner and backfills the personal account's user_id.
+	claudeAccountSession(t, ctx, ti, "late-pers-2", "late-person@gmail.com", persOrg, persAcct, deviceID, now.Add(2*time.Minute))
+
+	pers2, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: persAcct,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, pers2.AccountType.String, "stays personal")
+	require.Equal(t, userID, pers2.UserID.String, "personal account backfilled to the employee via the bridge")
+
+	// The personal session (empty email resolution) must not clobber the learned
+	// device owner — COALESCE preserves it.
+	ownerAfter, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID, Provider: providerAnthropic, DeviceID: deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, ownerAfter.LinkedUserID.String, "personal session does not clobber the device owner")
+}
+
+// TestStampAccountAttribution_StampsAllNonEmptyFields verifies the telemetry
+// stamp writes every account attribute when the session metadata carries them.
+func TestStampAccountAttribution_StampsAllNonEmptyFields(t *testing.T) {
+	t.Parallel()
+
+	attrs := map[attr.Key]any{}
+	stampAccountAttribution(attrs, SessionMetadata{
+		Provider:      providerAnthropic,
+		ExternalOrgID: "ext-org-1",
+		AccountType:   accountTypePersonal,
+		DeviceID:      "device-1",
+	})
+
+	require.Equal(t, providerAnthropic, attrs[attr.ProviderKey])
+	require.Equal(t, "ext-org-1", attrs[attr.ExternalOrgIDKey])
+	require.Equal(t, accountTypePersonal, attrs[attr.AccountTypeKey])
+	require.Equal(t, "device-1", attrs[attr.DeviceIDKey])
+}
+
+// TestStampAccountAttribution_SkipsEmptyFields verifies an unclassified or
+// identity-less session stamps nothing (zero value) and that only the non-empty
+// fields are written for a partial one — so the columns stay empty rather than
+// getting blanks.
+func TestStampAccountAttribution_SkipsEmptyFields(t *testing.T) {
+	t.Parallel()
+
+	// Zero-value metadata (a map miss for a session with no attribution).
+	empty := map[attr.Key]any{}
+	stampAccountAttribution(empty, SessionMetadata{})
+	require.Empty(t, empty, "zero-value metadata stamps nothing")
+
+	// Only the provider is set (e.g. Codex/Cursor, which tag provider but do not
+	// classify) — nothing else should be written.
+	partial := map[attr.Key]any{}
+	stampAccountAttribution(partial, SessionMetadata{Provider: providerOpenAI})
+	require.Equal(t, providerOpenAI, partial[attr.ProviderKey])
+	require.NotContains(t, partial, attr.AccountTypeKey)
+	require.NotContains(t, partial, attr.ExternalOrgIDKey)
+	require.NotContains(t, partial, attr.DeviceIDKey)
 }
