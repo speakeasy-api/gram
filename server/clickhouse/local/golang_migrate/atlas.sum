@@ -1,4 +1,4 @@
-h1:UrL19nLgQaMfkni/nI4p76Q/08fCoQ5ohc0pFEraKow=
+h1:nyL8xkXrLqS6lvWZD+hPKLye3yJTIEmLO8XC0ayu0hs=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -49,3 +49,4 @@ h1:UrL19nLgQaMfkni/nI4p76Q/08fCoQ5ohc0pFEraKow=
 20260629200140_add-personal-account-telemetry-cols.up.sql h1:IFbPcqfNn2aYdJRoDnlO5pqTJdPXLRJftR0xQeUG3Zs=
 20260630211520_pat-account-type-and-provider-summaries.up.sql h1:yVUYRpe4YlkqZW1W5klqw+5N9GAWVuHoEcZ8GcSTfKw=
 20260701141848_set-cutoff-date-for-chat-turn-summaries-mv.up.sql h1:++EibecDuuhXEXDvKMOyTSDoBI6Kh6hIztItBGbOeHk=
+20260701142345_set-chat-turn-summaries-ttl-90-days.up.sql h1:xf61I4j1DBt7vTl14vxtsWVv8UIzqe/FUVB26Y+2Low=

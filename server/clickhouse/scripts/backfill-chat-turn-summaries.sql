@@ -44,7 +44,7 @@ SELECT
     sum(toFloat64OrZero(toString(attributes.cost_usd))) AS cost_usd,
     sum(toInt64OrZero(toString(attributes.cost_usd_micros))) AS cost_usd_micros
 FROM telemetry_logs
-WHERE time_unix_nano >= chat_turn_cutoff_unix_nano - (30 * 24 * 60 * 60 * 1000000000)
+WHERE time_unix_nano >= chat_turn_cutoff_unix_nano - (90 * 24 * 60 * 60 * 1000000000)
   AND time_unix_nano < chat_turn_cutoff_unix_nano
   AND chat_id != ''
   AND toString(attributes.prompt.id) != ''

@@ -576,7 +576,7 @@ ORDER BY (
     roles,
     groups
 )
-TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
+TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Claude Code per-turn request attribution by chat, turn, MCP server/tool, skill, agent, and user attributes. cache_creation_tokens is the primary context-added measure.';
 

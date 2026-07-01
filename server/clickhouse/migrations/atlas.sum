@@ -1,4 +1,4 @@
-h1:6ao8/JxVXFFDrg6PJqMA7eEhWoy/RWGr4XVqR0o4fL8=
+h1:EwgFXEo7yLI9QLwOAJiYk2IbA4c1bt/KuIn2Yhmnej0=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -54,3 +54,4 @@ h1:6ao8/JxVXFFDrg6PJqMA7eEhWoy/RWGr4XVqR0o4fL8=
 20260629200135_add-personal-account-telemetry-cols.sql h1:pqv9rcw7pTMw0L6+b/cDX0kh0ZKKnUpJEYKDDZjZG0Y=
 20260630211517_pat-account-type-and-provider-summaries.sql h1:9pLTBWUIu2x7QFgYb3Bay7wCre4Y7HjvCvaDoXOTNWE=
 20260701141844_set-cutoff-date-for-chat-turn-summaries-mv.sql h1:Sf4ETQqXPkIlwz8G38+swbyoAR2g00xYVFFawK/G4H8=
+20260701142341_set-chat-turn-summaries-ttl-90-days.sql h1:m4bSzgIbxc7wAdh6dix84HQ+14KDGSCqKk7nhmPilBc=
