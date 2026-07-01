@@ -32,6 +32,21 @@ import (
 
 const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
 
+func TestServerIdentity_DistinguishesTunnelledBackend(t *testing.T) {
+	t.Parallel()
+
+	identity := proxy.ServerIdentity{
+		RemoteMCPServerID:    "",
+		TunnelledMCPServerID: "tun-abc",
+		McpServerID:          "mcp-abc",
+	}
+
+	require.Equal(t, "tun-abc", identity.SourceID())
+	require.Equal(t, "tunneledmcp", identity.ToolURNKind())
+	require.Contains(t, identity.AppendAttributes(nil), attr.TunnelledMCPServerID("tun-abc"))
+	require.NotContains(t, identity.AppendAttributes(nil), attr.RemoteMCPServerID("tun-abc"))
+}
+
 func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	t.Helper()
 
@@ -39,14 +54,18 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	require.NoError(t, err)
 
 	return &proxy.Proxy{
-		GuardianPolicy:                    policy,
-		Logger:                            testenv.NewLogger(t),
-		Tracer:                            testenv.NewTracerProvider(t).Tracer("test"),
-		NonStreamingTimeout:               5 * time.Second,
-		StreamingTimeout:                  5 * time.Second,
-		Metrics:                           nil,
-		MaxBufferedBodyBytes:              proxy.DefaultMaxBufferedBodyBytes,
-		Identity:                          proxy.ServerIdentity{},
+		GuardianPolicy:       policy,
+		Logger:               testenv.NewLogger(t),
+		Tracer:               testenv.NewTracerProvider(t).Tracer("test"),
+		NonStreamingTimeout:  5 * time.Second,
+		StreamingTimeout:     5 * time.Second,
+		Metrics:              nil,
+		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
+		Identity: proxy.ServerIdentity{
+			RemoteMCPServerID:    "",
+			TunnelledMCPServerID: "",
+			McpServerID:          "",
+		},
 		RemoteURL:                         upstreamURL,
 		Headers:                           nil,
 		AuthorizationOverride:             "",
@@ -1046,7 +1065,11 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
-	p.Identity = proxy.ServerIdentity{RemoteMCPServerID: "srv-abc", McpServerID: "mcp-abc"}
+	p.Identity = proxy.ServerIdentity{
+		RemoteMCPServerID:    "srv-abc",
+		TunnelledMCPServerID: "",
+		McpServerID:          "mcp-abc",
+	}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")

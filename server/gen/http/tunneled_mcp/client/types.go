@@ -1454,10 +1454,6 @@ type TunneledMcpServerResponseBody struct {
 type TunneledMcpConnectionResponseBody struct {
 	// Gateway session ID for a live tunnel connection
 	GatewaySessionID *string `form:"gateway_session_id,omitempty" json:"gateway_session_id,omitempty" xml:"gateway_session_id,omitempty"`
-	// Customer-declared stable ID for the MCP service behind this tunnel connection
-	ServiceID *string `form:"service_id,omitempty" json:"service_id,omitempty" xml:"service_id,omitempty"`
-	// Customer-declared slug for the MCP service behind this tunnel connection
-	ServiceSlug *string `form:"service_slug,omitempty" json:"service_slug,omitempty" xml:"service_slug,omitempty"`
 	// Customer-declared version of the MCP service behind this tunnel connection
 	ServiceVersion *string `form:"service_version,omitempty" json:"service_version,omitempty" xml:"service_version,omitempty"`
 	// Tunnel agent version reported by the connection
@@ -4593,12 +4589,6 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 func ValidateTunneledMcpConnectionResponseBody(body *TunneledMcpConnectionResponseBody) (err error) {
 	if body.GatewaySessionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_session_id", "body"))
-	}
-	if body.ServiceID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("service_id", "body"))
-	}
-	if body.ServiceSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("service_slug", "body"))
 	}
 	if body.ServiceVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("service_version", "body"))

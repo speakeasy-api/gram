@@ -129,18 +129,23 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 
 	// Synthetic URN: the dashboard's tool-call queries filter on
 	// startsWith(gram_urn, 'tools:'), so the prefix is required. Use the
-	// remote MCP server's UUID (stable) rather than its slug (mutable) in
-	// the source segment so historical URNs remain queryable across renames.
+	// backend UUID (stable) rather than a slug (mutable) in the source
+	// segment so historical URNs remain queryable across renames.
 	// urn.ParseTool will reject names with characters outside SlugPatternRE
 	// (uppercase, dots, etc.), which means the materialized tool_source
 	// column may be empty for those tool names — acceptable; gram_urn
 	// (used for grouping) and tool_name (separate materialized column from
 	// gram.tool.name attribute) are still populated correctly.
-	toolURN := "tools:externalmcp:" + i.identity.RemoteMCPServerID + ":" + toolName
+	toolURN := "tools:" + i.identity.ToolURNKind() + ":" + i.identity.SourceID() + ":" + toolName
 
 	logAttrs := tm.HTTPLogAttributes{
-		attr.EventSourceKey:       string(tm.EventSourceToolCall),
-		attr.RemoteMCPServerIDKey: i.identity.RemoteMCPServerID,
+		attr.EventSourceKey: string(tm.EventSourceToolCall),
+	}
+	if i.identity.RemoteMCPServerID != "" {
+		logAttrs[attr.RemoteMCPServerIDKey] = i.identity.RemoteMCPServerID
+	}
+	if i.identity.TunnelledMCPServerID != "" {
+		logAttrs[attr.TunnelledMCPServerIDKey] = i.identity.TunnelledMCPServerID
 	}
 	if i.identity.McpServerID != "" {
 		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID

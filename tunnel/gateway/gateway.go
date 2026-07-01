@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"github.com/hashicorp/yamux"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -36,12 +36,11 @@ type Config struct {
 
 // Gateway owns live agent yamux sessions and maps internal forwards to substreams.
 type Gateway struct {
-	cfg      Config
-	keys     KeyResolver
-	routes   route.Store
-	reg      *registry
-	logger   *slog.Logger
-	upgrader websocket.Upgrader
+	cfg    Config
+	keys   KeyResolver
+	routes route.Store
+	reg    *registry
+	logger *slog.Logger
 }
 
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
@@ -58,12 +57,6 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 		routes: routes,
 		reg:    newRegistry(),
 		logger: logger,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  32 * 1024,
-			WriteBufferSize: 32 * 1024,
-			// Agents are non-browser clients; origin checks are not meaningful.
-			CheckOrigin: func(*http.Request) bool { return true },
-		},
 	}, nil
 }
 
@@ -107,13 +100,11 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agentVersion := r.Header.Get(wire.HeaderAgentVersion)
-	serviceID := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelServiceID))
-	serviceSlug := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelServiceSlug))
 	serviceVersion := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelServiceVersion))
-	if serviceID == "" || serviceSlug == "" || serviceVersion == "" {
+	if serviceVersion == "" {
 		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
-			slog.String("reason", "missing-service-identity"), slog.String("tunnel_id", tunnelID))
-		http.Error(w, "missing tunnel service identity", http.StatusBadRequest)
+			slog.String("reason", "missing-service-version"), slog.String("tunnel_id", tunnelID))
+		http.Error(w, "missing tunnel service version", http.StatusBadRequest)
 		return
 	}
 	metadata, err := parseServiceMetadata(r.Header.Get(wire.HeaderTunnelServiceMetadata))
@@ -136,13 +127,14 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ws, err := g.upgrader.Upgrade(w, r, nil)
+	// Agents are non-browser clients; origin checks are not meaningful.
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		g.logger.WarnContext(r.Context(), "tunnel websocket upgrade failed", slog.Any("error", err))
 		return // Upgrade already wrote a response.
 	}
 
-	conn := wire.NewWSConn(ws)
+	conn := websocket.NetConn(r.Context(), ws, websocket.MessageBinary)
 	ycfg := yamux.DefaultConfig()
 	ycfg.EnableKeepAlive = true
 	ycfg.KeepAliveInterval = 15 * time.Second
@@ -151,16 +143,15 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	session, err := yamux.Client(conn, ycfg)
 	if err != nil {
 		g.logger.ErrorContext(r.Context(), "tunnel yamux client failed", slog.Any("error", err))
-		_ = ws.Close()
+		_ = conn.Close()
 		return
 	}
+	defer conn.Close()
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
 	remove := g.reg.add(tunnelID, sessionID, session, route.Connection{
 		GatewaySessionID:       sessionID,
-		ServiceID:              serviceID,
-		ServiceSlug:            serviceSlug,
 		ServiceVersion:         serviceVersion,
 		AgentVersion:           agentVersion,
 		ConnectedAt:            now,

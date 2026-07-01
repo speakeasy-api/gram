@@ -10,10 +10,6 @@ package types
 type TunneledMcpConnection struct {
 	// Gateway session ID for a live tunnel connection
 	GatewaySessionID string
-	// Customer-declared stable ID for the MCP service behind this tunnel connection
-	ServiceID string
-	// Customer-declared slug for the MCP service behind this tunnel connection
-	ServiceSlug string
 	// Customer-declared version of the MCP service behind this tunnel connection
 	ServiceVersion string
 	// Tunnel agent version reported by the connection

@@ -71,9 +71,12 @@ func (m *tunnelManager) buildProxy(
 
 	p := m.proxyManager.BuildTarget(
 		logger,
-		tunnelID,
+		proxy.ServerIdentity{
+			RemoteMCPServerID:    "",
+			TunnelledMCPServerID: tunnelID,
+			McpServerID:          mcpServer.ID.String(),
+		},
 		gatewayURL,
-		mcpServer.ID.String(),
 		m.tunnelHeaders(tunnelID, clientAffinityKey),
 		mcpServer.Visibility,
 		endpoint.ProjectID.String(),

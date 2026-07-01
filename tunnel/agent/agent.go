@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
 
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -27,8 +27,6 @@ type Config struct {
 	APIKey     string
 	// LocalMCPURL is pinned at startup; the gateway cannot redirect agent traffic.
 	LocalMCPURL    string
-	ServiceID      string
-	ServiceSlug    string
 	ServiceVersion string
 	Metadata       map[string]string
 	MinBackoff     time.Duration
@@ -43,8 +41,8 @@ type Agent struct {
 }
 
 func New(cfg Config, logger *slog.Logger) (*Agent, error) {
-	if strings.TrimSpace(cfg.ServiceID) == "" || strings.TrimSpace(cfg.ServiceSlug) == "" || strings.TrimSpace(cfg.ServiceVersion) == "" {
-		return nil, errors.New("tunnel service identity is required")
+	if strings.TrimSpace(cfg.ServiceVersion) == "" {
+		return nil, errors.New("tunnel service version is required")
 	}
 	gatewayURL, err := normalizeGatewayURL(cfg.GatewayURL)
 	if err != nil {
@@ -96,8 +94,6 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+a.cfg.APIKey)
 	header.Set(wire.HeaderAgentVersion, wire.AgentVersion)
-	header.Set(wire.HeaderTunnelServiceID, strings.TrimSpace(a.cfg.ServiceID))
-	header.Set(wire.HeaderTunnelServiceSlug, strings.TrimSpace(a.cfg.ServiceSlug))
 	header.Set(wire.HeaderTunnelServiceVersion, strings.TrimSpace(a.cfg.ServiceVersion))
 	if len(a.cfg.Metadata) > 0 {
 		metadata, err := json.Marshal(a.cfg.Metadata)
@@ -110,9 +106,11 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		header.Set(wire.HeaderTunnelServiceMetadata, string(metadata))
 	}
 
-	dialer := *websocket.DefaultDialer
-	dialer.HandshakeTimeout = 15 * time.Second
-	ws, resp, err := dialer.DialContext(ctx, a.cfg.GatewayURL, header)
+	dialCtx, cancelDial := context.WithTimeout(ctx, 15*time.Second)
+	ws, resp, err := websocket.Dial(dialCtx, a.cfg.GatewayURL, &websocket.DialOptions{
+		HTTPHeader: header,
+	})
+	cancelDial()
 	if err != nil {
 		if resp != nil {
 			return &dialError{status: resp.StatusCode, err: err}
@@ -121,7 +119,7 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	}
 	a.logger.InfoContext(ctx, "tunnel agent connected", slog.String("gateway", a.cfg.GatewayURL))
 
-	conn := wire.NewWSConn(ws)
+	conn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
 	ycfg := yamux.DefaultConfig()
 	ycfg.EnableKeepAlive = true
 	ycfg.KeepAliveInterval = 15 * time.Second
@@ -130,9 +128,10 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	// Agent is the yamux server because the gateway opens per-request substreams.
 	session, err := yamux.Server(conn, ycfg)
 	if err != nil {
-		_ = ws.Close()
+		_ = conn.Close()
 		return err
 	}
+	defer conn.Close()
 	defer session.Close()
 
 	// Each yamux substream carries one HTTP exchange.

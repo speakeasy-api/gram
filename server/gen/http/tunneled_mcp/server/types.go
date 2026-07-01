@@ -1454,10 +1454,6 @@ type TunneledMcpServerResponseBody struct {
 type TunneledMcpConnectionResponseBody struct {
 	// Gateway session ID for a live tunnel connection
 	GatewaySessionID string `form:"gateway_session_id" json:"gateway_session_id" xml:"gateway_session_id"`
-	// Customer-declared stable ID for the MCP service behind this tunnel connection
-	ServiceID string `form:"service_id" json:"service_id" xml:"service_id"`
-	// Customer-declared slug for the MCP service behind this tunnel connection
-	ServiceSlug string `form:"service_slug" json:"service_slug" xml:"service_slug"`
 	// Customer-declared version of the MCP service behind this tunnel connection
 	ServiceVersion string `form:"service_version" json:"service_version" xml:"service_version"`
 	// Tunnel agent version reported by the connection

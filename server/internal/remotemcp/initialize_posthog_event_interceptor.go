@@ -80,14 +80,15 @@ func (i *InitializePostHogEventInterceptor) InterceptInitializeRequest(ctx conte
 	}
 
 	if err := i.posthog.CaptureEvent(ctx, eventMCPInitialized, sessionID, map[string]any{
-		"project_id":           projectID,
-		"authenticated":        authenticated,
-		"remote_mcp_server_id": i.identity.RemoteMCPServerID,
-		"mcp_server_id":        i.identity.McpServerID,
-		"mcp_domain":           requestContext.Host,
-		"mcp_url":              requestContext.Host + requestContext.ReqURL,
-		"disable_notification": true,
-		"mcp_session_id":       sessionID,
+		"project_id":              projectID,
+		"authenticated":           authenticated,
+		"remote_mcp_server_id":    i.identity.RemoteMCPServerID,
+		"tunnelled_mcp_server_id": i.identity.TunnelledMCPServerID,
+		"mcp_server_id":           i.identity.McpServerID,
+		"mcp_domain":              requestContext.Host,
+		"mcp_url":                 requestContext.Host + requestContext.ReqURL,
+		"disable_notification":    true,
+		"mcp_session_id":          sessionID,
 	}); err != nil {
 		i.logger.ErrorContext(ctx, "failed to capture "+eventMCPInitialized+" event", attr.SlogError(err))
 	}

@@ -3,8 +3,6 @@ package mv
 import (
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -19,7 +17,7 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 	if agentVersion == nil {
 		agentVersion = latestConnectionAgentVersion(connections)
 	}
-	lastSeenAt := conv.PtrEmpty(formatTimestamptz(server.LastSeenAt))
+	lastSeenAt := conv.PtrEmpty(conv.FromPGTimestamptz(server.LastSeenAt))
 	if lastSeenAt == nil {
 		lastSeenAt = latestConnectionHeartbeat(connections)
 	}
@@ -71,8 +69,6 @@ func buildTunneledMcpConnectionViews(connections []TunneledMcpConnectionCache) [
 	for _, connection := range connections {
 		result = append(result, &types.TunneledMcpConnection{
 			GatewaySessionID:       connection.GatewaySessionID,
-			ServiceID:              connection.ServiceID,
-			ServiceSlug:            connection.ServiceSlug,
 			ServiceVersion:         connection.ServiceVersion,
 			AgentVersion:           conv.PtrEmpty(connection.AgentVersion),
 			ConnectedAt:            connection.ConnectedAt.Format(time.RFC3339),
@@ -142,11 +138,4 @@ func connectionMetadata(metadata map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
-}
-
-func formatTimestamptz(value pgtype.Timestamptz) string {
-	if !value.Valid {
-		return ""
-	}
-	return value.Time.Format(time.RFC3339)
 }

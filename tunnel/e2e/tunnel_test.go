@@ -61,8 +61,6 @@ func TestTunnelEndToEnd(t *testing.T) {
 		GatewayURL:     wsURL,
 		APIKey:         plaintext,
 		LocalMCPURL:    mcp.URL,
-		ServiceID:      "stub-mcp",
-		ServiceSlug:    "stub-mcp",
 		ServiceVersion: "0.1.0",
 	}, logger)
 	require.NoError(t, err)
@@ -176,8 +174,6 @@ func TestTunnelRouteSurvivesCurrentGatewayDisconnect(t *testing.T) {
 			GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
 			APIKey:         plaintext,
 			LocalMCPURL:    mcp.URL,
-			ServiceID:      label,
-			ServiceSlug:    label,
 			ServiceVersion: "0.1.0",
 			MaxBackoff:     200 * time.Millisecond,
 		}, logger)
@@ -248,8 +244,6 @@ func TestTunnelConsumerSessionSticksToAgent(t *testing.T) {
 			GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
 			APIKey:         plaintext,
 			LocalMCPURL:    mcp.URL,
-			ServiceID:      label,
-			ServiceSlug:    label,
 			ServiceVersion: "0.1.0",
 			MaxBackoff:     200 * time.Millisecond,
 		}, logger)
@@ -295,8 +289,6 @@ func TestTunnelRevoke(t *testing.T) {
 		GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
 		APIKey:         plaintext,
 		LocalMCPURL:    mcp.URL,
-		ServiceID:      "stub-mcp",
-		ServiceSlug:    "stub-mcp",
 		ServiceVersion: "0.1.0",
 		MaxBackoff:     200 * time.Millisecond,
 	}, logger)

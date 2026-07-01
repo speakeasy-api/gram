@@ -253,8 +253,6 @@ var TunneledMcpConnection = Type("TunneledMcpConnection", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("gateway_session_id", String, "Gateway session ID for a live tunnel connection")
-	Attribute("service_id", String, "Customer-declared stable ID for the MCP service behind this tunnel connection")
-	Attribute("service_slug", String, "Customer-declared slug for the MCP service behind this tunnel connection")
 	Attribute("service_version", String, "Customer-declared version of the MCP service behind this tunnel connection")
 	Attribute("agent_version", String, "Tunnel agent version reported by the connection")
 	Attribute("connected_at", String, func() {
@@ -270,7 +268,7 @@ var TunneledMcpConnection = Type("TunneledMcpConnection", func() {
 	Attribute("active_consumer_sessions", Int, "Number of MCP consumer sessions currently pinned to this tunnel connection")
 	Attribute("metadata", MapOf(String, String), "User-provided tunnel metadata reported by the agent")
 
-	Required("gateway_session_id", "service_id", "service_slug", "service_version", "connected_at", "last_heartbeat_at", "active_substreams", "active_consumer_sessions", "metadata")
+	Required("gateway_session_id", "service_version", "connected_at", "last_heartbeat_at", "active_substreams", "active_consumer_sessions", "metadata")
 })
 
 var TunneledMcpServer = Type("TunneledMcpServer", func() {

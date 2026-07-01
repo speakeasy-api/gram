@@ -1722,8 +1722,6 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 func unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(v *TunneledMcpConnectionResponseBody) *types.TunneledMcpConnection {
 	res := &types.TunneledMcpConnection{
 		GatewaySessionID:       *v.GatewaySessionID,
-		ServiceID:              *v.ServiceID,
-		ServiceSlug:            *v.ServiceSlug,
 		ServiceVersion:         *v.ServiceVersion,
 		AgentVersion:           v.AgentVersion,
 		ConnectedAt:            *v.ConnectedAt,
