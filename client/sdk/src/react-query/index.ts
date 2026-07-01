@@ -262,6 +262,7 @@ export * from "./riskRuleBreakdown.js";
 export * from "./riskSubmitBlockFeedback.js";
 export * from "./riskSuggestCustomRule.js";
 export * from "./riskTestDetectionRule.js";
+export * from "./riskUnmaskResult.js";
 export * from "./riskUpdateCustomDetectionRule.js";
 export * from "./riskUpdateExclusion.js";
 export * from "./riskUserBreakdown.js";

@@ -626,6 +626,49 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	return v, nil
 }
 
+// BuildUnmaskRiskResultPayload builds the payload for the risk
+// unmaskRiskResult endpoint from CLI flags.
+func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultBody string, riskUnmaskRiskResultApikeyToken string, riskUnmaskRiskResultSessionToken string, riskUnmaskRiskResultProjectSlugInput string) (*risk.UnmaskRiskResultPayload, error) {
+	var err error
+	var body UnmaskRiskResultRequestBody
+	{
+		err = json.Unmarshal([]byte(riskUnmaskRiskResultBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUnmaskRiskResultApikeyToken != "" {
+			apikeyToken = &riskUnmaskRiskResultApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUnmaskRiskResultSessionToken != "" {
+			sessionToken = &riskUnmaskRiskResultSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUnmaskRiskResultProjectSlugInput != "" {
+			projectSlugInput = &riskUnmaskRiskResultProjectSlugInput
+		}
+	}
+	v := &risk.UnmaskRiskResultPayload{
+		ID: body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRiskResultsByChatPayload builds the payload for the risk
 // listRiskResultsByChat endpoint from CLI flags.
 func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {

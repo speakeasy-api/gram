@@ -84,6 +84,13 @@ export function HighlightedMessageText({
   );
 }
 
+// Unlike security/risk-ui.tsx's MaskedMatch, this toggle is intentionally
+// NOT backed by risk.unmaskResult. Its data comes from the chat detail panel's
+// useRiskListResults({ chatId }) call, which server-side already returns raw
+// match/spans here — the caller already holds chat:read for this exact chat
+// (required to load the transcript at all), so the same secret is already
+// present in the message content on this page. See the chat:read bypass
+// comment on risk.ListRiskResults in server/internal/risk/impl.go.
 function MaskedMatchInline({ value }: { value: string }): ReactNode {
   const { revealed, setRevealed } = useRowReveal(true);
   if (!revealed) {

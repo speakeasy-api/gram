@@ -525,6 +525,7 @@ run();
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 * [listForAgent](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
+* [unmask](docs/sdks/results/README.md#unmask) - unmaskRiskResult risk
 
 ### [Risk.Rules](docs/sdks/rules/README.md)
 
@@ -917,6 +918,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
+- [`riskResultsUnmask`](docs/sdks/results/README.md#unmask) - unmaskRiskResult risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
@@ -1278,6 +1280,7 @@ To learn about this feature and how to get started, check
 - [`useRiskSubmitBlockFeedbackMutation`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
+- [`useRiskUnmaskResultMutation`](docs/sdks/results/README.md#unmask) - unmaskRiskResult risk
 - [`useRiskUpdateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 - [`useRiskUpdateExclusionMutation`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk

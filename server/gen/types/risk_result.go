@@ -31,7 +31,8 @@ type RiskResult struct {
 	RuleID *string
 	// Human-readable description of the finding.
 	Description *string
-	// The matched secret or sensitive data.
+	// The matched secret or sensitive data. Null when the caller isn't authorized
+	// to see raw match content for this result's chat (see match_redacted).
 	Match *string
 	// Start byte position within the message content.
 	StartPos *int
@@ -44,8 +45,14 @@ type RiskResult struct {
 	// All matched spans attributed to this finding. A finding may carry several
 	// correlated spans (e.g. a custom rule matching a tool's function name and its
 	// arguments on the same call). The top-level match/start_pos/end_pos mirror
-	// the primary (first) span.
+	// the primary (first) span. Null alongside match when the result is redacted.
 	Spans []*RiskSpan
+	// Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>`
+	// form as RiskResultRedacted.match_redacted. Populated whenever match is null
+	// so callers without raw access still get a stable, non-reversible correlation
+	// token. For shadow_mcp findings this is the original match value passed
+	// through verbatim (a non-sensitive server URL or command identifier).
+	MatchRedacted *string
 	// When this result was created.
 	CreatedAt string
 }

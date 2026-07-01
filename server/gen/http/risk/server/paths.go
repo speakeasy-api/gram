@@ -42,6 +42,11 @@ func ListRiskResultsForAgentRiskPath() string {
 	return "/rpc/risk.results.listForAgent"
 }
 
+// UnmaskRiskResultRiskPath returns the URL path to the risk service unmaskRiskResult HTTP endpoint.
+func UnmaskRiskResultRiskPath() string {
+	return "/rpc/risk.results.unmask"
+}
+
 // ListRiskResultsByChatRiskPath returns the URL path to the risk service listRiskResultsByChat HTTP endpoint.
 func ListRiskResultsByChatRiskPath() string {
 	return "/rpc/risk.results.byChat"

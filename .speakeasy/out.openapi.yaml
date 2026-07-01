@@ -25991,6 +25991,113 @@ paths:
       x-speakeasy-name-override: listForAgent
       x-speakeasy-react-hook:
         name: RiskListResultsForAgent
+  /rpc/risk.results.unmask:
+    post:
+      description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+      operationId: unmaskRiskResult
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskUnmaskResultResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: unmaskRiskResult risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: unmask
+      x-speakeasy-react-hook:
+        name: RiskUnmaskResult
+        type: mutation
   /rpc/risk.revokePolicyBypassRequest:
     post:
       description: Revoke a previously approved risk policy bypass request.
@@ -45047,7 +45154,10 @@ components:
           format: uuid
         match:
           type: string
-          description: The matched secret or sensitive data.
+          description: The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).
+        match_redacted:
+          type: string
+          description: Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).
         policy_id:
           type: string
           description: The risk policy ID.
@@ -45066,7 +45176,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RiskSpan'
-          description: All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.
+          description: All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span. Null alongside match when the result is redacted.
         start_pos:
           type: integer
           description: Start byte position within the message content.
@@ -45266,6 +45376,19 @@ components:
       required:
         - match_redacted
         - position_known
+    RiskUnmaskResultResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The risk result ID.
+          format: uuid
+        match:
+          type: string
+          description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+      required:
+        - id
+        - match
     RiskUserBreakdownResult:
       type: object
       properties:

@@ -349,7 +349,10 @@ function ResultsTable({
                 {result.userId ?? "-"}
               </td>
               <td className="px-4 py-3">
-                <MaskedMatch value={result.match} />
+                <MaskedMatch
+                  resultId={result.id}
+                  matchRedacted={result.matchRedacted}
+                />
               </td>
               <td className="px-4 py-3 text-right">
                 {result.chatId && (
