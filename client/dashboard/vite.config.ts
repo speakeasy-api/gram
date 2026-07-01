@@ -70,36 +70,44 @@ export default defineConfig(({ command }) => {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
+          // Vite 8/Rolldown replaces Rollup's `manualChunks` with
+          // `codeSplitting`. Rolldown's default chunker folds these vendors
+          // into the entry chunk, so we still split them by hand to keep ~2.7MB
+          // of rarely-changing dependency code out of `main` (stable long-term
+          // browser caching). `test` is a regex matched against the module id.
+          //
           // NOTE: trailing slashes (e.g. "node_modules/react/") are load-bearing
           // — they stop `react` from also matching react-dom/react-router/etc.
-          // Don't drop them.
-          manualChunks(id) {
-            if (id.includes("node_modules/lucide-react")) return "lucide-react";
-            if (id.includes("node_modules/@speakeasy-api/moonshine")) {
-              return "moonshine";
-            }
-            // Keep the whole three.js ecosystem together (three plus the
-            // packages reached only through @react-three/*: three-mesh-bvh,
-            // three-stdlib, troika-*) so it stays out of the main chunk.
-            if (
-              id.includes("node_modules/@react-three/") ||
-              id.includes("node_modules/three/") ||
-              id.includes("node_modules/three-") ||
-              id.includes("node_modules/troika-")
-            ) {
-              return "three";
-            }
-            if (
-              id.includes("node_modules/posthog-js") ||
-              id.includes("node_modules/react/") ||
-              id.includes("node_modules/react-dom/") ||
-              id.includes("node_modules/react-error-boundary") ||
-              id.includes("node_modules/react-router") ||
-              id.includes("node_modules/sonner") ||
-              id.includes("node_modules/zod")
-            ) {
-              return "externals";
-            }
+          // Don't drop them. `minSize: 0` preserves manualChunks' behaviour of
+          // grouping unconditionally, regardless of chunk size. `priority`
+          // (descending) preserves the original top-down first-match order.
+          codeSplitting: {
+            minSize: 0,
+            groups: [
+              {
+                name: "lucide-react",
+                test: /node_modules\/lucide-react/,
+                priority: 40,
+              },
+              {
+                name: "moonshine",
+                test: /node_modules\/@speakeasy-api\/moonshine/,
+                priority: 30,
+              },
+              // Keep the whole three.js ecosystem together (three plus the
+              // packages reached only through @react-three/*: three-mesh-bvh,
+              // three-stdlib, troika-*) so it stays out of the main chunk.
+              {
+                name: "three",
+                test: /node_modules\/(?:@react-three\/|three\/|three-|troika-)/,
+                priority: 20,
+              },
+              {
+                name: "externals",
+                test: /node_modules\/(?:posthog-js|react\/|react-dom\/|react-error-boundary|react-router|sonner|zod)/,
+                priority: 10,
+              },
+            ],
           },
         },
       },
