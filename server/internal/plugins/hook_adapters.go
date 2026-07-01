@@ -557,7 +557,7 @@ gram_hooks_build_canonical_payload() {
 gram_hooks_canonical_data_members() {
   local payload="$1"
   local event_type="$2"
-  local prompt text message_duration_ms tool_name tool_id tool_input tool_output tool_error is_interrupt permission_type duration_ms status mcp_members usage_members message_members skill_name notification_members data_members
+  local prompt text message_duration_ms tool_name tool_id tool_input tool_output tool_error is_interrupt permission_type duration_ms status mcp_members usage_members message_members="" skill_name notification_members data_members
 
   prompt="$(gram_hooks_json_string_value "$payload" "prompt")"
   if [ -n "$prompt" ]; then
@@ -587,7 +587,7 @@ gram_hooks_canonical_data_members() {
   [ -n "$duration_ms" ] || duration_ms="$(gram_hooks_json_number_value "$payload" "duration")"
   status="$(gram_hooks_json_string_value "$payload" "status")"
   if [ -n "$tool_name" ] || [ "$event_type" = "tool.requested" ] || [ "$event_type" = "tool.completed" ] || [ "$event_type" = "tool.failed" ]; then
-    local tool_members tool_input_member tool_output_member tool_error_member
+    local tool_members tool_input_member="" tool_output_member="" tool_error_member=""
     if [ -n "$tool_input" ]; then
       tool_input_member="\"input\":$tool_input"
     fi
