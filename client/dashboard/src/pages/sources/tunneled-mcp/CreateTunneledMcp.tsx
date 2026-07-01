@@ -5,7 +5,9 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import type {
@@ -14,6 +16,7 @@ import type {
 } from "@gram/client/models/components";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
+import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMCPDetails";
@@ -29,7 +32,21 @@ type CreatedState = {
   mcpServer: McpServer;
 };
 
-export default function CreateTunneledMcp(): JSX.Element {
+export default function CreateTunneledMcp(): JSX.Element | null {
+  const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isTunneledMcpEnabled = telemetry.isFeatureEnabled(
+    TUNNELED_MCP_FEATURE_FLAG,
+  );
+
+  if (isTunneledMcpEnabled === undefined) {
+    return null;
+  }
+
+  if (!isTunneledMcpEnabled) {
+    return <Navigate to={routes.sources.href()} replace />;
+  }
+
   return (
     <Page>
       <Page.Header>

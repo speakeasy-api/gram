@@ -20,7 +20,45 @@ import {
   Server,
 } from "lucide-react";
 
-export function SourcesEmptyState(): JSX.Element {
+type SourcesEmptyStateProps = {
+  isTunneledMcpEnabled: boolean;
+};
+
+function sourcesEmptyStateDescription(
+  isFunctionsEnabled: boolean,
+  isTunneledMcpEnabled: boolean,
+): string {
+  if (isFunctionsEnabled && isTunneledMcpEnabled) {
+    return "OpenAPI documents, functions, remote MCP servers, tunneled MCP servers, and third-party MCP servers providing tools for your project";
+  }
+  if (isFunctionsEnabled) {
+    return "OpenAPI documents, functions, remote MCP servers, and third-party MCP servers providing tools for your project";
+  }
+  if (isTunneledMcpEnabled) {
+    return "OpenAPI documents, remote MCP servers, tunneled MCP servers, and third-party MCP servers providing tools for your project";
+  }
+  return "OpenAPI documents, remote MCP servers, and third-party MCP servers providing tools for your project";
+}
+
+function sourcesEmptyStateBody(
+  isFunctionsEnabled: boolean,
+  isTunneledMcpEnabled: boolean,
+): string {
+  if (isFunctionsEnabled && isTunneledMcpEnabled) {
+    return "Add an OpenAPI spec, custom function, third-party server, remote server, or private server tunnel to generate tools for your MCP server.";
+  }
+  if (isFunctionsEnabled) {
+    return "Add an OpenAPI spec, custom function, third-party server, or remote server to generate tools for your MCP server.";
+  }
+  if (isTunneledMcpEnabled) {
+    return "Add an OpenAPI spec, third-party server, remote server, or private server tunnel to generate tools for your MCP server.";
+  }
+  return "Add an OpenAPI spec, third-party server, or remote server to generate tools for your MCP server.";
+}
+
+export function SourcesEmptyState({
+  isTunneledMcpEnabled,
+}: SourcesEmptyStateProps): JSX.Element {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
@@ -30,9 +68,7 @@ export function SourcesEmptyState(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Sources</Page.Section.Title>
       <Page.Section.Description className="max-w-2xl">
-        {isFunctionsEnabled
-          ? "OpenAPI documents, functions, remote MCP servers, and third-party MCP servers providing tools for your project"
-          : "OpenAPI documents, remote MCP servers, and third-party MCP servers providing tools for your project"}
+        {sourcesEmptyStateDescription(isFunctionsEnabled, isTunneledMcpEnabled)}
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
@@ -43,8 +79,7 @@ export function SourcesEmptyState(): JSX.Element {
             No sources yet
           </Type>
           <Type small muted className="mb-4 max-w-md text-center">
-            Add an OpenAPI spec, custom function, or third-party server to
-            generate tools for your MCP server.
+            {sourcesEmptyStateBody(isFunctionsEnabled, isTunneledMcpEnabled)}
           </Type>
           <RequireScope scope="project:write" level="component">
             {({ disabled }) => (
@@ -120,20 +155,24 @@ export function SourcesEmptyState(): JSX.Element {
                         </span>
                       </div>
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => routes.sources.addTunneledMcp.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-                        <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">Tunneled MCP Server</span>
-                        <span className="text-muted-foreground text-xs">
-                          Connect private MCP servers through a tunnel
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
+                    {isTunneledMcpEnabled && (
+                      <DropdownMenuItem
+                        onSelect={() => routes.sources.addTunneledMcp.goTo()}
+                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
+                          <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">
+                            Tunneled MCP Server
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            Connect private MCP servers through a tunnel
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>

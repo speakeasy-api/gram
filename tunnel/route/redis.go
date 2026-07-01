@@ -10,10 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const keyPrefix = "tunnel_routes:"
-
-const connectionKeyPrefix = "tunnel_connections:"
-
 // Redis stores live routes and snapshots; Postgres owns durable tunnel sources.
 type Redis struct {
 	client redis.UniversalClient
@@ -30,14 +26,14 @@ func NewRedis(client redis.UniversalClient) *Redis {
 }
 
 func (r *Redis) Publish(ctx context.Context, tunnelID, addr string, ttl time.Duration) error {
-	if err := r.client.Set(ctx, keyPrefix+tunnelID, addr, ttl).Err(); err != nil {
+	if err := r.client.Set(ctx, RouteKey(tunnelID), addr, ttl).Err(); err != nil {
 		return fmt.Errorf("publish route: %w", err)
 	}
 	return nil
 }
 
 func (r *Redis) Lookup(ctx context.Context, tunnelID string) (string, bool, error) {
-	addr, err := r.client.Get(ctx, keyPrefix+tunnelID).Result()
+	addr, err := r.client.Get(ctx, RouteKey(tunnelID)).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", false, nil
 	}
@@ -48,7 +44,7 @@ func (r *Redis) Lookup(ctx context.Context, tunnelID string) (string, bool, erro
 }
 
 func (r *Redis) Delete(ctx context.Context, tunnelID string) error {
-	if err := r.client.Del(ctx, keyPrefix+tunnelID).Err(); err != nil {
+	if err := r.client.Del(ctx, RouteKey(tunnelID)).Err(); err != nil {
 		return fmt.Errorf("delete route: %w", err)
 	}
 	return nil
@@ -57,7 +53,7 @@ func (r *Redis) Delete(ctx context.Context, tunnelID string) error {
 func (r *Redis) PublishConnections(ctx context.Context, tunnelID string, connections []Connection, ttl time.Duration) error {
 	if err := r.cache.Set(&redisCache.Item{
 		Ctx: ctx,
-		Key: connectionKeyPrefix + tunnelID,
+		Key: ConnectionKey(tunnelID),
 		Value: struct {
 			Connections []Connection `json:"connections"`
 		}{
@@ -71,7 +67,7 @@ func (r *Redis) PublishConnections(ctx context.Context, tunnelID string, connect
 }
 
 func (r *Redis) DeleteConnections(ctx context.Context, tunnelID string) error {
-	if err := r.cache.Delete(ctx, connectionKeyPrefix+tunnelID); err != nil {
+	if err := r.cache.Delete(ctx, ConnectionKey(tunnelID)); err != nil {
 		return fmt.Errorf("delete tunnel connections: %w", err)
 	}
 	return nil

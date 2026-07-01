@@ -59,10 +59,10 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	tunneledMcpServerLimit := pgtype.Int4{Int32: 0, Valid: false}
 	if payload.TunneledMcpServerLimit != nil {
 		if *payload.TunneledMcpServerLimit < 0 {
-			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at least 0").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at least 0").LogWarn(ctx, s.logger)
 		}
 		if *payload.TunneledMcpServerLimit > maxTunneledMcpServerLimit {
-			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at most %d", maxTunneledMcpServerLimit).LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at most %d", maxTunneledMcpServerLimit).LogWarn(ctx, s.logger)
 		}
 		tunneledMcpServerLimit = pgtype.Int4{Int32: int32(*payload.TunneledMcpServerLimit), Valid: true}
 	}

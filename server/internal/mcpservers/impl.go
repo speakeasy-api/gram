@@ -344,14 +344,14 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	}
 	tunneledMcpServerID, err := conv.PtrToNullUUID(payload.TunneledMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogWarn(ctx, logger)
 	}
 	toolsetID, err := conv.PtrToNullUUID(payload.ToolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, logger)
 	}
 	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id may be provided").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id may be provided").LogWarn(ctx, logger)
 	}
 
 	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{

@@ -18,11 +18,13 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatTunneledMcpDisplay,
   getTunneledMcpServerArgs,
 } from "@/lib/sources";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import type {
   McpServer,
@@ -66,7 +68,25 @@ function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
 }
 
-export default function TunneledMCPDetails(): JSX.Element {
+export default function TunneledMCPDetails(): JSX.Element | null {
+  const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isTunneledMcpEnabled = telemetry.isFeatureEnabled(
+    TUNNELED_MCP_FEATURE_FLAG,
+  );
+
+  if (isTunneledMcpEnabled === undefined) {
+    return null;
+  }
+
+  if (!isTunneledMcpEnabled) {
+    return <Navigate to={routes.sources.href()} replace />;
+  }
+
+  return <TunneledMCPDetailsContent />;
+}
+
+function TunneledMCPDetailsContent(): JSX.Element {
   const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const routes = useRoutes();
   const id = sourceSlug ?? "";

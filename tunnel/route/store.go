@@ -7,6 +7,21 @@ import (
 	"time"
 )
 
+const (
+	tunnelRoutesKeyPrefix      = "tunnel_routes:"
+	tunnelConnectionsKeyPrefix = "tunnel_connections:"
+)
+
+// RouteKey returns the Redis key for a tunnel's live gateway route.
+func RouteKey(tunnelID string) string {
+	return tunnelRoutesKeyPrefix + tunnelID
+}
+
+// ConnectionKey returns the Redis key for a tunnel's live connection snapshot.
+func ConnectionKey(tunnelID string) string {
+	return tunnelConnectionsKeyPrefix + tunnelID
+}
+
 // Store maps tunnel IDs to the gateway pod currently holding each session.
 type Store interface {
 	Publish(ctx context.Context, tunnelID, addr string, ttl time.Duration) error
@@ -34,7 +49,8 @@ type ConnectionSnapshotStore interface {
 	DeleteConnections(ctx context.Context, tunnelID string) error
 }
 
-type Memory struct {
+// RouteTable is an in-memory Store implementation for local development and tests.
+type RouteTable struct {
 	mu     sync.RWMutex
 	routes map[string]memEntry
 }
@@ -44,16 +60,17 @@ type memEntry struct {
 	expiresAt time.Time
 }
 
-func NewMemory() *Memory { return &Memory{routes: make(map[string]memEntry)} }
+// NewRouteTable creates an empty in-memory route table.
+func NewRouteTable() *RouteTable { return &RouteTable{routes: make(map[string]memEntry)} }
 
-func (m *Memory) Publish(_ context.Context, tunnelID, addr string, ttl time.Duration) error {
+func (m *RouteTable) Publish(_ context.Context, tunnelID, addr string, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.routes[tunnelID] = memEntry{addr: addr, expiresAt: time.Now().Add(ttl)}
 	return nil
 }
 
-func (m *Memory) Lookup(_ context.Context, tunnelID string) (string, bool, error) {
+func (m *RouteTable) Lookup(_ context.Context, tunnelID string) (string, bool, error) {
 	m.mu.RLock()
 	e, ok := m.routes[tunnelID]
 	m.mu.RUnlock()
@@ -63,11 +80,11 @@ func (m *Memory) Lookup(_ context.Context, tunnelID string) (string, bool, error
 	return e.addr, true, nil
 }
 
-func (m *Memory) Delete(_ context.Context, tunnelID string) error {
+func (m *RouteTable) Delete(_ context.Context, tunnelID string) error {
 	m.mu.Lock()
 	delete(m.routes, tunnelID)
 	m.mu.Unlock()
 	return nil
 }
 
-var _ Store = (*Memory)(nil)
+var _ Store = (*RouteTable)(nil)

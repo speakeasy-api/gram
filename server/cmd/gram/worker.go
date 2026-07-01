@@ -691,7 +691,7 @@ func newWorkerCommand() *cli.Command {
 				// runtime request through mcp.Service, so the factory is
 				// intentionally nil here.
 				nil,
-				route.NewMemory(),
+				route.NewRouteTable(),
 				"",
 			)
 
