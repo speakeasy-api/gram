@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { ChatTransport, LanguageModel, UIMessage } from "ai";
 import {
+  type ComponentPropsWithoutRef,
   ComponentType,
   Dispatch,
   PropsWithChildren,
@@ -93,11 +94,70 @@ export type ElementsTransportFactory = (
  *   systemPrompt: 'You are a helpful assistant.',
  * }
  */
+/**
+ * The outcome of resolving a markdown link `href`. Returned by a
+ * {@link LinkResolver} so the host app can rewrite where (and how) an
+ * assistant-authored link points.
+ */
+export interface ResolvedLink {
+  /**
+   * The href to render. `null` signals "this is an internal reference the host
+   * recognises but cannot resolve right now" — the anchor is dropped and its
+   * text rendered inline, rather than producing a dead link (e.g. a partial
+   * `href` mid-stream, or an unknown entity id).
+   */
+  href: string | null;
+  /** Anchor `target`, e.g. `"_blank"` to open in a new tab. */
+  target?: string;
+  /** Anchor `rel`. Defaults to `"noopener noreferrer"` when target is `_blank`. */
+  rel?: string;
+}
+
+/**
+ * Maps a markdown link `href` to a {@link ResolvedLink}, or returns `null` to
+ * leave the link untouched (rendered as a normal anchor).
+ *
+ * Elements stays agnostic to any URL scheme: the host supplies this resolver
+ * (via {@link ElementsConfig.resolveLink} for live chat, or the `resolveLink`
+ * prop on `<Markdown>` / `<MessageContent>` for static viewers) and decides
+ * which hrefs are internal entity references and what real route they map to.
+ */
+export type LinkResolver = (href: string) => ResolvedLink | null;
+
+/**
+ * An `<a>`-shaped component the host supplies to render links inside assistant
+ * markdown with its own design system (e.g. a Moonshine `Link`). Receives the
+ * already-resolved `href`/`target`/`rel`; Elements falls back to a plain `<a>`
+ * when this is not provided.
+ */
+export type MarkdownLinkComponent = ComponentType<
+  ComponentPropsWithoutRef<"a">
+>;
+
 export interface ElementsConfig {
   /**
    * The system prompt to use for the Elements library.
    */
   systemPrompt?: string;
+
+  /**
+   * Resolves a markdown link `href` authored by the assistant to a real
+   * destination — used to turn inline entity references (e.g. an MCP server or
+   * risk policy a reply mentions) into clickable links into the host app.
+   *
+   * Elements is agnostic to the link scheme: return a {@link ResolvedLink} to
+   * rewrite the link (optionally opening a new tab), `{ href: null }` to drop a
+   * recognised-but-unresolvable reference, or `null` to leave it as-is.
+   */
+  resolveLink?: LinkResolver;
+
+  /**
+   * Optional `<a>`-shaped component used to render links inside assistant
+   * markdown — supply the host's design-system link (e.g. a Moonshine `Link`)
+   * so assistant replies match the rest of the app. Elements falls back to a
+   * plain `<a>` when omitted.
+   */
+  linkComponent?: MarkdownLinkComponent;
 
   /**
    * Optional chat transport override. When provided, Elements uses this

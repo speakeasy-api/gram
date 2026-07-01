@@ -60,6 +60,7 @@ import {
 } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { ChatIdContext } from "./ChatIdContext";
+import { MarkdownLinkProvider } from "./MarkdownLinkContext";
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
@@ -890,7 +891,14 @@ export const ElementsProvider = (
     <QueryClientProvider client={queryClient}>
       <ConnectionStatusProvider>
         <ToolApprovalProvider>
-          <ElementsProviderInner {...props} />
+          <MarkdownLinkProvider
+            value={{
+              resolveLink: props.config.resolveLink,
+              LinkComponent: props.config.linkComponent,
+            }}
+          >
+            <ElementsProviderInner {...props} />
+          </MarkdownLinkProvider>
         </ToolApprovalProvider>
       </ConnectionStatusProvider>
     </QueryClientProvider>

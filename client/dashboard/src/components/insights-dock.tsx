@@ -17,6 +17,8 @@ import {
   useThreadId,
 } from "@gram-ai/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
+import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
+import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -183,6 +185,18 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
   :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
     padding-bottom: 1.25rem;
   }
+`;
+
+// Assistant replies render links with Moonshine's <Link> (class
+// `text-link-primary`), but Moonshine's stylesheet — which carries the rule
+// `.text-link-primary { color: var(--text-link-primary) }` — isn't loaded in
+// the Elements shadow root, so the class has no effect and the link inherits
+// the body text color. Color the link directly with the Moonshine brand blue
+// (light/dark); the inner text span inherits it.
+const CHAT_LINK_CSS = `
+  .gram-elements a.text-link-primary { color: #1e5aae; }
+  .gram-elements.dark a.text-link-primary,
+  .dark .gram-elements a.text-link-primary { color: #619aea; }
 `;
 
 function DockSubmitButton() {
@@ -643,6 +657,9 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
+  // Turns the assistant's `gram:<entity>` references into clickable links into
+  // the dashboard, opened in a new tab. Rendered via Moonshine's <Link>.
+  const resolveAssistantLink = useAssistantLinkResolver();
   // React `key` on the shared GramElementsProvider — bumped to start a
   // brand-new conversation ("New", "Explore with AI", a fresh docked send).
   // switchToNewThread on the long-lived shared runtime trips an assistant-ui
@@ -818,6 +835,11 @@ export function InsightsProvider({
       // chart identity) into outgoing user messages — see `wrappedTransport`
       // above.
       transport: wrappedTransport,
+      // Link entity references in assistant replies to their dashboard pages
+      // (new tab). `resolveLink` maps the `gram:` scheme to routes;
+      // `linkComponent` renders every link with Moonshine's <Link>.
+      resolveLink: resolveAssistantLink,
+      linkComponent: AssistantMarkdownLink,
       // Edit relies on assistant-ui's local branch rewriting, which the
       // server-side assistant transport can't honour — hide the affordance
       // rather than ship a control that silently no-ops.
@@ -859,7 +881,8 @@ export function InsightsProvider({
         customCss:
           DOCK_PANEL_COMPOSER_CSS +
           CHAT_MARKDOWN_CSS +
-          CHAT_FULLPAGE_COMPOSER_CSS,
+          CHAT_FULLPAGE_COMPOSER_CSS +
+          CHAT_LINK_CSS,
       },
     }),
     [
@@ -870,6 +893,7 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      resolveAssistantLink,
     ],
   );
 
