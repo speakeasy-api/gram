@@ -24,8 +24,6 @@ func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
 		GatewayURL:     "wss://example.test/connect",
 		APIKey:         "gram_tunnel_test",
 		LocalMCPURL:    upstream.URL + "/mcp",
-		ServiceID:      "postgres-mcp",
-		ServiceSlug:    "postgres-mcp",
 		ServiceVersion: "1.0.0",
 		Metadata:       map[string]string{},
 		MinBackoff:     0,

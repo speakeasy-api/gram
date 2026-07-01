@@ -16,6 +16,7 @@ const (
 	ToolKindPrompt      ToolKind = "prompt"
 	ToolKindPlatform    ToolKind = "platform"
 	ToolKindExternalMCP ToolKind = "externalmcp"
+	ToolKindTunneledMCP ToolKind = "tunneledmcp"
 )
 
 var toolKinds = map[ToolKind]struct{}{
@@ -24,6 +25,7 @@ var toolKinds = map[ToolKind]struct{}{
 	ToolKindPrompt:      {},
 	ToolKindPlatform:    {},
 	ToolKindExternalMCP: {},
+	ToolKindTunneledMCP: {},
 }
 
 type ResourceKind string

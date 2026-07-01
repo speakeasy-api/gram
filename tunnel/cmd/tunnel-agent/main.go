@@ -19,8 +19,6 @@ func main() {
 		GatewayURL:     os.Getenv("TUNNEL_GATEWAY_URL"),
 		APIKey:         os.Getenv("TUNNEL_KEY"),
 		LocalMCPURL:    os.Getenv("TUNNEL_LOCAL_MCP_URL"),
-		ServiceID:      os.Getenv("TUNNEL_SERVICE_ID"),
-		ServiceSlug:    os.Getenv("TUNNEL_SERVICE_SLUG"),
 		ServiceVersion: os.Getenv("TUNNEL_SERVICE_VERSION"),
 		Metadata:       map[string]string{},
 	}
@@ -30,8 +28,8 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	if cfg.GatewayURL == "" || cfg.APIKey == "" || cfg.LocalMCPURL == "" || cfg.ServiceID == "" || cfg.ServiceSlug == "" || cfg.ServiceVersion == "" {
-		logger.Error("tunnel-agent missing config; require TUNNEL_GATEWAY_URL, TUNNEL_KEY, TUNNEL_LOCAL_MCP_URL, TUNNEL_SERVICE_ID, TUNNEL_SERVICE_SLUG, TUNNEL_SERVICE_VERSION")
+	if cfg.GatewayURL == "" || cfg.APIKey == "" || cfg.LocalMCPURL == "" || cfg.ServiceVersion == "" {
+		logger.Error("tunnel-agent missing config; require TUNNEL_GATEWAY_URL, TUNNEL_KEY, TUNNEL_LOCAL_MCP_URL, TUNNEL_SERVICE_VERSION")
 		os.Exit(2)
 	}
 

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/hashicorp/yamux"
 	"github.com/stretchr/testify/require"
 
@@ -88,12 +87,11 @@ func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 
 	gw := &Gateway{
-		cfg:      Config{},
-		keys:     NewStaticKeyStore(map[string]string{}),
-		routes:   route.NewRouteTable(),
-		reg:      newRegistry(),
-		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		upgrader: websocket.Upgrader{},
+		cfg:    Config{},
+		keys:   NewStaticKeyStore(map[string]string{}),
+		routes: route.NewRouteTable(),
+		reg:    newRegistry(),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
 	rec := httptest.NewRecorder()

@@ -72,16 +72,58 @@ const (
 	DefaultMaxBufferedBodyBytes int64 = 50 * 1024 * 1024
 )
 
-// ServerIdentity bundles the two correlation ids the proxy stamps onto its
-// telemetry: RemoteMCPServerID is the remote_mcp_servers row id (the upstream
-// the proxy forwards to) and McpServerID is the fronting mcp_servers row id
-// (the server users manage). Bundling them keeps the pair from being
-// transposed across the constructors and record calls that thread them, and
-// both are omitted from emitted telemetry when empty rather than recorded as
-// empty-string labels.
+// ServerIdentity bundles the correlation ids the proxy stamps onto its
+// telemetry. RemoteMCPServerID is populated for remote_mcp_servers-backed
+// proxies, TunnelledMCPServerID is populated for tunneled_mcp_servers-backed
+// proxies, and McpServerID is the fronting mcp_servers row id users manage.
+// Keeping these distinct prevents tunneled IDs from being recorded as remote
+// MCP server IDs, while still threading the fronting server id alongside either
+// backend id.
 type ServerIdentity struct {
-	RemoteMCPServerID string
-	McpServerID       string
+	RemoteMCPServerID    string
+	TunnelledMCPServerID string
+	McpServerID          string
+}
+
+func (i ServerIdentity) SourceID() string {
+	if i.RemoteMCPServerID != "" {
+		return i.RemoteMCPServerID
+	}
+	return i.TunnelledMCPServerID
+}
+
+func (i ServerIdentity) ToolURNKind() string {
+	if i.TunnelledMCPServerID != "" && i.RemoteMCPServerID == "" {
+		return "tunneledmcp"
+	}
+	return "externalmcp"
+}
+
+func (i ServerIdentity) SlogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, 3)
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunnelledMCPServerID != "" {
+		attrs = append(attrs, attr.SlogTunnelledMCPServerID(i.TunnelledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
+	}
+	return attrs
+}
+
+func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunnelledMCPServerID != "" {
+		attrs = append(attrs, attr.TunnelledMCPServerID(i.TunnelledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.McpServerID(i.McpServerID))
+	}
+	return attrs
 }
 
 type UpstreamResponseRetry struct {
@@ -464,10 +506,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if mutated, err := userReq.refreshBody(); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
 	} else if mutated {
-		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
-			attr.SlogComponent("remotemcp.proxy"),
-			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-			attr.SlogMcpServerID(p.Identity.McpServerID))
+		p.infoContextWithIdentity(ctx, "forwarding mutated request body upstream",
+			attr.SlogComponent("remotemcp.proxy"))
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -570,10 +610,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
 		} else if ok {
 			bodyBytes = mutated
-			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
-				attr.SlogComponent("remotemcp.proxy"),
-				attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-				attr.SlogMcpServerID(p.Identity.McpServerID))
+			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
+				attr.SlogComponent("remotemcp.proxy"))
 		}
 	}
 
@@ -869,10 +907,8 @@ func (p *Proxy) relaySSEStream(
 				return fmt.Errorf("encode mutated sse event: %w", err)
 			} else if ok {
 				emit = formatSSEEventWithData(nonData, mutated)
-				p.Logger.InfoContext(ctx, "relaying mutated SSE event to client",
-					attr.SlogComponent("remotemcp.proxy"),
-					attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-					attr.SlogMcpServerID(p.Identity.McpServerID))
+				p.infoContextWithIdentity(ctx, "relaying mutated SSE event to client",
+					attr.SlogComponent("remotemcp.proxy"))
 			}
 		}
 		if _, writeErr := w.Write(emit); writeErr != nil {
@@ -900,13 +936,12 @@ func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
-	if p.Identity.RemoteMCPServerID != "" {
-		attrs = append(attrs, attr.RemoteMCPServerID(p.Identity.RemoteMCPServerID))
-	}
-	if p.Identity.McpServerID != "" {
-		attrs = append(attrs, attr.McpServerID(p.Identity.McpServerID))
-	}
-	return attrs
+	return p.Identity.AppendAttributes(attrs)
+}
+
+func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
+	attrs = append(attrs, p.Identity.SlogAttrs()...)
+	p.Logger.LogAttrs(ctx, slog.LevelInfo, msg, attrs...)
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an

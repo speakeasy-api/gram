@@ -19,8 +19,6 @@ const (
 	HeaderTunnelConsumerSession = "X-Gram-Tunnel-Consumer-Session"
 	// HeaderTunnelForwardToken authenticates gram-server -> gateway hops and is stripped before agent forwarding.
 	HeaderTunnelForwardToken    = "X-Gram-Tunnel-Forward-Token"
-	HeaderTunnelServiceID       = "X-Gram-Tunnel-Service-Id"
-	HeaderTunnelServiceSlug     = "X-Gram-Tunnel-Service-Slug"
 	HeaderTunnelServiceVersion  = "X-Gram-Tunnel-Service-Version"
 	HeaderTunnelServiceMetadata = "X-Gram-Tunnel-Service-Metadata"
 )

@@ -34,8 +34,6 @@ type Store interface {
 // Connection mirrors the management cache shape without importing server packages.
 type Connection struct {
 	GatewaySessionID       string            `json:"gateway_session_id"`
-	ServiceID              string            `json:"service_id"`
-	ServiceSlug            string            `json:"service_slug"`
 	ServiceVersion         string            `json:"service_version"`
 	AgentVersion           string            `json:"agent_version"`
 	ConnectedAt            time.Time         `json:"connected_at"`

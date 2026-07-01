@@ -476,9 +476,7 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
     <div className="rounded-md border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <Type className="truncate font-mono text-sm">
-            {connection.serviceSlug}
-          </Type>
+          <Type className="truncate text-sm font-medium">Tunnel agent</Type>
           <Type muted small mono className="mt-1 truncate">
             {connection.gatewaySessionId}
           </Type>
@@ -490,7 +488,6 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
         </Badge>
       </div>
       <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2">
-        <InfoPair label="Service ID" value={connection.serviceId} mono />
         <InfoPair
           label="Service version"
           value={connection.serviceVersion}
@@ -956,7 +953,6 @@ export function TunneledMcpSetupTabs({
 }): JSX.Element {
   const renderedKey = tunnelKey ?? "<YOUR_TUNNEL_KEY>";
   const slug = slugForSnippet(serverName);
-  const serviceId = `${slug}-service`;
   const serviceVersion = "2026.06.1";
   const upstream = "http://localhost:3000/mcp";
   const clusterUpstream = "http://127.0.0.1:3000/mcp";
@@ -1039,10 +1035,6 @@ spec:
               value: ${yamlQuote(clusterUpstream)}
             - name: TUNNEL_GATEWAY_URL
               value: ${yamlQuote(gateway)}
-            - name: TUNNEL_SERVICE_ID
-              value: ${yamlQuote(serviceId)}
-            - name: TUNNEL_SERVICE_SLUG
-              value: ${yamlQuote(slug)}
             - name: TUNNEL_SERVICE_VERSION
               value: ${yamlQuote(serviceVersion)}
       volumes:
@@ -1079,15 +1071,11 @@ docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
   -e TUNNEL_LOCAL_MCP_URL=${shellQuote(dockerUpstream)} \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-  -e TUNNEL_SERVICE_ID=${shellQuote(serviceId)} \\
-  -e TUNNEL_SERVICE_SLUG=${shellQuote(slug)} \\
   -e TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
   ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
   const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
 TUNNEL_KEY=${shellQuote(renderedKey)} \\
 TUNNEL_LOCAL_MCP_URL=${shellQuote(upstream)} \\
-TUNNEL_SERVICE_ID=${shellQuote(serviceId)} \\
-TUNNEL_SERVICE_SLUG=${shellQuote(slug)} \\
 TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
 gram tunnel run`;
 
@@ -1107,9 +1095,7 @@ gram tunnel run`;
         )}
       </div>
 
-      <RequiredTunnelIdentity
-        serviceId={serviceId}
-        serviceSlug={slug}
+      <RequiredTunnelConfig
         serviceVersion={serviceVersion}
         upstream={upstream}
       />
@@ -1147,28 +1133,14 @@ gram tunnel run`;
   );
 }
 
-function RequiredTunnelIdentity({
-  serviceId,
-  serviceSlug,
+function RequiredTunnelConfig({
   serviceVersion,
   upstream,
 }: {
-  serviceId: string;
-  serviceSlug: string;
   serviceVersion: string;
   upstream: string;
 }) {
   const fields = [
-    {
-      key: "TUNNEL_SERVICE_ID",
-      value: serviceId,
-      description: "Stable ID for the MCP service behind this tunnel.",
-    },
-    {
-      key: "TUNNEL_SERVICE_SLUG",
-      value: serviceSlug,
-      description: "Readable slug reported by each tunnel connection.",
-    },
     {
       key: "TUNNEL_SERVICE_VERSION",
       value: serviceVersion,
@@ -1184,12 +1156,11 @@ function RequiredTunnelIdentity({
   return (
     <div className="bg-muted/30 mb-5 rounded-md border p-4">
       <Type variant="subheading" className="mb-1">
-        Required tunnel identity
+        Required tunnel config
       </Type>
       <Type muted small className="mb-3 max-w-3xl">
-        Each tunnel connection declares the same MCP service identity before it
-        connects. Gram uses this to compare connected agents, surface service
-        versions, and preserve session affinity for MCP consumers.
+        Each tunnel agent connects with the local Streamable HTTP endpoint and a
+        version string so live connections can be inspected.
       </Type>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {fields.map((field) => (

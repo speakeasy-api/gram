@@ -26,6 +26,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0
+	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/docker/go-connections v0.6.0
 	github.com/ettle/strcase v0.2.0
@@ -41,7 +42,6 @@ require (
 	github.com/google/cel-go v0.28.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d
@@ -205,6 +205,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/googleapis/gax-go/v2 v2.21.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/h2non/filetype v1.1.3 // indirect

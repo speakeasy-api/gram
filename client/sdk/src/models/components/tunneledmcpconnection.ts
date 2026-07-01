@@ -42,14 +42,6 @@ export type TunneledMcpConnection = {
    */
   remoteAddr?: string | undefined;
   /**
-   * Customer-declared stable ID for the MCP service behind this tunnel connection
-   */
-  serviceId: string;
-  /**
-   * Customer-declared slug for the MCP service behind this tunnel connection
-   */
-  serviceSlug: string;
-  /**
    * Customer-declared version of the MCP service behind this tunnel connection
    */
   serviceVersion: string;
@@ -75,8 +67,6 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
     ),
     metadata: z.record(z.string(), z.string()),
     remote_addr: z.optional(z.string()),
-    service_id: z.string(),
-    service_slug: z.string(),
     service_version: z.string(),
   }),
   z.transform((v) => {
@@ -88,8 +78,6 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
       "gateway_session_id": "gatewaySessionId",
       "last_heartbeat_at": "lastHeartbeatAt",
       "remote_addr": "remoteAddr",
-      "service_id": "serviceId",
-      "service_slug": "serviceSlug",
       "service_version": "serviceVersion",
     });
   }),

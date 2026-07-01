@@ -396,6 +396,7 @@ const (
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
+	TunnelledMCPServerIDKey            = attribute.Key("gram.tunnelled_mcp_server.id")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -1200,6 +1201,11 @@ func SlogRemoteMCPServerID(v string) slog.Attr {
 func RemoteMCPServerURL(v string) attribute.KeyValue { return RemoteMCPServerURLKey.String(v) }
 func SlogRemoteMCPServerURL(v string) slog.Attr {
 	return slog.String(string(RemoteMCPServerURLKey), v)
+}
+
+func TunnelledMCPServerID(v string) attribute.KeyValue { return TunnelledMCPServerIDKey.String(v) }
+func SlogTunnelledMCPServerID(v string) slog.Attr {
+	return slog.String(string(TunnelledMCPServerIDKey), v)
 }
 
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {

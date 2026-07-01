@@ -49484,19 +49484,11 @@ components:
         remote_addr:
           type: string
           description: Remote address reported by the gateway
-        service_id:
-          type: string
-          description: Customer-declared stable ID for the MCP service behind this tunnel connection
-        service_slug:
-          type: string
-          description: Customer-declared slug for the MCP service behind this tunnel connection
         service_version:
           type: string
           description: Customer-declared version of the MCP service behind this tunnel connection
       required:
         - gateway_session_id
-        - service_id
-        - service_slug
         - service_version
         - connected_at
         - last_heartbeat_at
