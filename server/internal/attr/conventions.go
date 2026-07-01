@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 )
 
 type Key = attribute.Key
@@ -106,6 +106,7 @@ const (
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
+	SubscriberBatchSizeKey   = attribute.Key("gram.subscriber.batch_size")
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
@@ -685,6 +686,9 @@ func SubscriptionProtoName[S ~string](v S) attribute.KeyValue {
 func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
 	return slog.String(string(SubscriptionProtoNameKey), string(v))
 }
+
+func SubscriberBatchSize(v int) attribute.KeyValue { return SubscriberBatchSizeKey.Int(v) }
+func SlogSubscriberBatchSize(v int) slog.Attr      { return slog.Int(string(SubscriberBatchSizeKey), v) }
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }

@@ -43,6 +43,7 @@ function makeSummary(
     totalOutputTokens: 50,
     totalTokens: 150,
     totalToolCalls: 0,
+    userEmail: "",
     ...overrides,
   };
 }
@@ -82,6 +83,53 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(isUnattributedEmployee(employees[0]!)).toBe(false);
   });
 
+  it("matches usage to members by user email when the user id is opaque", () => {
+    const member = makeMember({
+      id: "member-1",
+      email: "Ada@Example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "01924a0eb409b0ecf44e06d0ec03cbc4",
+        userEmail: "ada@example.com",
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    expect(employees[0]!.id).toBe("member-1");
+    expect(employees[0]!.status).toBe("enrolled");
+    expect(isUnattributedEmployee(employees[0]!)).toBe(false);
+  });
+
+  it("does not attribute one usage summary to multiple member emails", () => {
+    const primaryMember = makeMember({
+      id: "member-1",
+      email: "primary@example.com",
+      name: "Primary User",
+    });
+    const aliasMember = makeMember({
+      id: "member-2",
+      email: "alias@example.com",
+      name: "Alias User",
+    });
+
+    const employees = buildEmployees([primaryMember, aliasMember], noRoles, [
+      makeSummary({
+        userId: "alias@example.com",
+        userEmail: "primary@example.com",
+      }),
+    ]);
+
+    const primary = employees.find((employee) => employee.id === "member-1")!;
+    const alias = employees.find((employee) => employee.id === "member-2")!;
+
+    expect(primary.status).toBe("enrolled");
+    expect(primary.tokenCount).toBe(150);
+    expect(alias.status).toBe("not_enrolled");
+    expect(alias.tokenCount).toBe(0);
+  });
+
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
     const employees = buildEmployees([], noRoles, [
       makeSummary({ userId: "ghost@example.com" }),
@@ -89,6 +137,21 @@ describe("buildEmployees attributed/unattributed split", () => {
 
     expect(employees).toHaveLength(1);
     expect(employees[0]!.id).toBe("usage:ghost@example.com");
+    expect(isUnattributedEmployee(employees[0]!)).toBe(true);
+  });
+
+  it("displays user email for unattributed summaries with opaque ids", () => {
+    const employees = buildEmployees([], noRoles, [
+      makeSummary({
+        userId: "01924a0eb409b0ecf44e06d0ec03cbc4",
+        userEmail: "ghost@example.com",
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    expect(employees[0]!.id).toBe("usage:01924a0eb409b0ecf44e06d0ec03cbc4");
+    expect(employees[0]!.name).toBe("ghost@example.com");
+    expect(employees[0]!.email).toBe("ghost@example.com");
     expect(isUnattributedEmployee(employees[0]!)).toBe(true);
   });
 

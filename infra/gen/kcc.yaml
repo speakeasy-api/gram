@@ -3,6 +3,88 @@ pubsub:
   apis:
   - pubsub.googleapis.com
   enabled: true
+  schemas:
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v2-message
+    name: gram-ping-v2-message
+    spec:
+      definition: |
+        edition = "2024";
+        message Message {
+          string id = 1;
+          string type = 2;
+          string created_at = 3;
+          bytes payload = 4;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding
+    spec:
+      definition: |
+        edition = "2024";
+        message Finding {
+          string id = 1;
+          string request_id = 2;
+          string chat_message_id = 3;
+          string project_id = 4;
+          string organization_id = 5;
+          string risk_policy_id = 6;
+          int64 risk_policy_version = 7;
+          string created_at = 8;
+          string rule_id = 9;
+          string description = 10;
+          string match = 11;
+          int32 start_pos = 12;
+          int32 end_pos = 13;
+          repeated string tags = 14;
+          string source = 15;
+          double confidence = 16;
+          string dead_letter_reason = 17;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-analysis
+    name: gram-risk-v1-gitleaks-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message GitleaksAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string reply_urn = 8;
+          string content = 9;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-analysis
+    name: gram-risk-v1-presidio-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message PresidioAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string reply_urn = 8;
+          string content = 9;
+          repeated string entities = 10;
+          double score_threshold = 11;
+        }
+      type: PROTOCOL_BUFFER
   subscriptions:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -42,12 +124,26 @@ pubsub:
         name: gram-ping-v2-message
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-bq-writer
+      topic_proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding-bq-writer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-finding
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analyzer
       topic_proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -61,7 +157,7 @@ pubsub:
     name: gram-risk-v1-presidio-analyzer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -75,6 +171,10 @@ pubsub:
     name: gram-ping-v2-message
     spec:
       messageRetentionDuration: 86400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-ping-v2-message
   - labels:
       dlq_for: gram-ping-v2-processor
       managed_by: proto-pubsub-orchestrator
@@ -93,15 +193,27 @@ pubsub:
     name: gram-risk-v1-finding
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-finding
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analysis
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-presidio-analysis

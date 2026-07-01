@@ -8,8 +8,11 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/google/uuid"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -294,14 +297,23 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		items = items[:limit]
 	}
 
+	// Chat titles live in Postgres, not the ClickHouse telemetry the session
+	// metrics come from, so resolve them in a single batch and stitch them on.
+	titlesByChatID := s.chatTitlesForSessions(ctx, items, projectIDs)
+
 	sessions := make([]*telem_gen.SessionSummary, len(items))
 	for i, item := range items {
+		var title *string
+		if t, ok := titlesByChatID[item.GramChatID]; ok {
+			title = &t
+		}
 		sessions[i] = &telem_gen.SessionSummary{
 			GramChatID:        item.GramChatID,
 			ProjectID:         item.ProjectID,
 			UserEmail:         item.UserEmail,
 			HookSource:        item.HookSource,
 			Model:             item.Model,
+			Title:             title,
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
 			DurationSeconds:   sanitizeFloat64(item.DurationSeconds),
@@ -319,6 +331,55 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		Sessions:   sessions,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// chatTitlesForSessions resolves the Postgres chat title for each session,
+// keyed by gram_chat_id. Best-effort: a session whose chat row is missing,
+// untitled, or whose id doesn't parse simply gets no title, and a query error
+// is logged rather than failing the whole list (titles are cosmetic). Scoped to
+// the org's projects so it can never surface a title from another tenant.
+func (s *Service) chatTitlesForSessions(ctx context.Context, items []repo.SessionSummary, projectIDs []string) map[string]string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		id, err := uuid.Parse(item.GramChatID)
+		if err != nil {
+			continue
+		}
+		chatIDs = append(chatIDs, id)
+	}
+	if len(chatIDs) == 0 {
+		return nil
+	}
+
+	projectUUIDs := make([]uuid.UUID, 0, len(projectIDs))
+	for _, p := range projectIDs {
+		id, err := uuid.Parse(p)
+		if err != nil {
+			continue
+		}
+		projectUUIDs = append(projectUUIDs, id)
+	}
+
+	rows, err := s.chatRepo.GetChatTitlesByIDs(ctx, chatRepo.GetChatTitlesByIDsParams{
+		Ids:        chatIDs,
+		ProjectIds: projectUUIDs,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve chat titles for sessions", attr.SlogError(err))
+		return nil
+	}
+
+	titles := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Title.Valid && row.Title.String != "" {
+			titles[row.ID.String()] = row.Title.String
+		}
+	}
+	return titles
 }
 
 func encodeListSessionsCursor(sortValue float64, gramChatID string) string {

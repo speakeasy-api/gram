@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.37.1**](README.md)
+[**@gram-ai/elements v1.39.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.37.1
+# @gram-ai/elements v1.39.0
 
 ## Interfaces
 
@@ -78,6 +78,7 @@
 
 ## Functions
 
+- [ActiveChatTitle](functions/ActiveChatTitle.md)
 - [Chat](functions/Chat.md)
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)

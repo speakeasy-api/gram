@@ -1,9 +1,12 @@
+import type { Model } from "@gram-ai/elements";
+
 export type AvailableModel = {
   value: string;
   label: string;
 };
 
 export const AVAILABLE_MODELS: AvailableModel[] = [
+  { value: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
   { value: "anthropic/claude-opus-4.8", label: "Claude Opus 4.8 (Expensive)" },
   { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (Expensive)" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
@@ -44,3 +47,13 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
   { value: "mistralai/devstral-2512", label: "Devstral 2512" },
   { value: "mistralai/mistral-medium-3.1", label: "Mistral Medium 3.1" },
 ];
+
+// Default model used across in-app chat surfaces (playground, MCP test chat,
+// chat window) when the user has not picked one explicitly. Kept next to
+// AVAILABLE_MODELS so the default is easy to discover and adjust.
+export const DEFAULT_MODEL: Model = "anthropic/claude-sonnet-5";
+
+// Default model assigned to newly created assistants (onboarding flow). Tracked
+// separately from DEFAULT_MODEL so the assistant default can move independently
+// of the general in-app chat default.
+export const DEFAULT_ASSISTANT_MODEL: Model = "anthropic/claude-sonnet-5";

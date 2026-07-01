@@ -34,6 +34,10 @@ export type ChatMessage = {
    */
   id: string;
   /**
+   * Present only in `risk_only` mode: true when this message has an active risk finding, false for the surrounding-context messages padded around it.
+   */
+  isRisk?: boolean | undefined;
+  /**
    * The model that generated the message
    */
   model: string;
@@ -76,6 +80,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
       finish_reason: z.optional(z.string()),
       generation: z.int(),
       id: z.string(),
+      is_risk: z.optional(z.boolean()),
       model: z.string(),
       prompt_id: z.optional(z.string()),
       role: z.string(),
@@ -89,6 +94,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "finish_reason": "finishReason",
+        "is_risk": "isRisk",
         "prompt_id": "promptId",
         "tool_call_id": "toolCallId",
         "tool_calls": "toolCalls",

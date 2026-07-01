@@ -9,7 +9,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type GenerateTitleResponseBody = {
   /**
-   * The generated title
+   * The current title after the operation (empty when reset to auto-generated)
    */
   title: string;
 };

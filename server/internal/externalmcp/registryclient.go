@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -33,38 +34,29 @@ type RegistryClient struct {
 	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
 	backend      RegistryBackend
-	listCache    *cache.TypedCacheObject[CachedListServersResponse]
-	detailsCache *cache.TypedCacheObject[CachedServerDetailsResponse]
+	listCache    cache.TypedCacheObject[CachedListServers]
+	detailsCache cache.TypedCacheObject[CachedServerDetailsResponse]
+	listFlight   singleflight.Group
 }
 
-// NewRegistryClient creates a new registry client. The cacheImpl parameter is
-// optional — pass nil to disable caching.
+// NewRegistryClient creates a new registry client.
 func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
-	rc := &RegistryClient{
-		httpClient:   guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
-		logger:       logger.With(attr.SlogComponent("mcp_registry_client")),
-		backend:      backend,
-		listCache:    nil,
-		detailsCache: nil,
-	}
-
-	if cacheImpl != nil {
-		listCache := cache.NewTypedObjectCache[CachedListServersResponse](
+	return &RegistryClient{
+		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		logger:     logger.With(attr.SlogComponent("mcp_registry_client")),
+		backend:    backend,
+		listCache: cache.NewTypedObjectCache[CachedListServers](
 			logger.With(attr.SlogCacheNamespace("registry-list")),
 			cacheImpl,
 			cache.SuffixNone,
-		)
-		rc.listCache = &listCache
-
-		detailsCache := cache.NewTypedObjectCache[CachedServerDetailsResponse](
+		),
+		detailsCache: cache.NewTypedObjectCache[CachedServerDetailsResponse](
 			logger.With(attr.SlogCacheNamespace("registry-details")),
 			cacheImpl,
 			cache.SuffixNone,
-		)
-		rc.detailsCache = &detailsCache
+		),
+		listFlight: singleflight.Group{},
 	}
-
-	return rc
 }
 
 // Registry represents an MCP registry endpoint.
@@ -76,13 +68,21 @@ type Registry struct {
 // ListServersParams contains optional parameters for listing servers.
 type ListServersParams struct {
 	Search *string
-	Cursor *string
 }
+
+const (
+	registryListPageSize = 50
+	// registryListMaxPages bounds the catalog crawl to the expected catalog size
+	// (~100 servers = two pages), matching the multi-registry cap in the
+	// ListCatalog handler. If a registry returns more, fetchAllServers serves the
+	// first registryListMaxPages*registryListPageSize and logs a warning, so
+	// growth past the assumption surfaces loudly instead of truncating silently.
+	registryListMaxPages = 2
+)
 
 // ListServersResult is the result of a ListServers call.
 type ListServersResult struct {
-	Servers    []*types.ExternalMCPServerEntry
-	NextCursor *string
+	Servers []*types.ExternalMCPServerEntry
 }
 
 // listResponse represents the response from the MCP registry API.
@@ -166,7 +166,20 @@ type serverRemoteMeta struct {
 }
 
 type serverRemoteMetaAuthOptions struct {
-	Type string `json:"type"`
+	Type   string                     `json:"type"`
+	Detail serverRemoteMetaAuthDetail `json:"detail"`
+}
+
+type serverRemoteMetaAuthDetail struct {
+	// AuthorizationServerMetadata is PulseMCP's embedded RFC 8414 discovery
+	// result for OAuth remotes. A non-empty registration_endpoint means the
+	// upstream authorization server supports dynamic client registration (DCR).
+	// Note: we deliberately read registration_endpoint here rather than
+	// clientRegistration.dynamic.supported, which PulseMCP reports
+	// optimistically (true even when the AS exposes no registration endpoint).
+	AuthorizationServerMetadata struct {
+		RegistrationEndpoint string `json:"registration_endpoint"`
+	} `json:"authorizationServerMetadata"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
@@ -208,67 +221,225 @@ func toCacheSafeAny(v any) (any, error) {
 	return out, nil
 }
 
-// ListServers fetches servers from the given registry.
+// ListServers fetches every server from the given registry and applies an
+// optional in-memory search filter. The catalog is small and stable, so the
+// full list is fetched, deduplicated, and cached under a single key per
+// registry; callers receive the whole result set and paginate client-side.
 func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error) {
-	reqURL := fmt.Sprintf("%s/v0.1/servers?version=latest&limit=50", registry.URL)
-	if params.Search != nil && *params.Search != "" {
-		reqURL += fmt.Sprintf("&search=%s", *params.Search)
-	}
-	if params.Cursor != nil && *params.Cursor != "" {
-		reqURL += fmt.Sprintf("&cursor=%s", *params.Cursor)
+	search := ""
+	if params.Search != nil {
+		search = *params.Search
 	}
 
-	c.logger.InfoContext(ctx, "fetching servers from registry", attr.SlogMCPRegistryURL(reqURL))
+	cacheKey := listCacheKey(registry.URL, registry.ID)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if cached, err := c.listCache.Get(ctx, cacheKey); err == nil {
+		c.logger.DebugContext(ctx, "registry list cache hit", attr.SlogCacheKey(cacheKey))
+		return ListServersResult{Servers: filterServers(cached.Servers, search)}, nil
+	}
+
+	// Collapse concurrent misses for the same registry into a single crawl so a
+	// cold or unavailable cache cannot fan out into repeated upstream traffic.
+	value, err, _ := c.listFlight.Do(cacheKey, func() (any, error) {
+		if cached, err := c.listCache.Get(ctx, cacheKey); err == nil {
+			return cached, nil
+		}
+
+		list, truncated, err := c.fetchAllServers(ctx, registry, cacheKey)
+		if err != nil {
+			return CachedListServers{}, err
+		}
+
+		// A truncated list is a partial catalog: the registry outgrew the page
+		// bound. Serve it so the page still renders, but do not freeze a partial
+		// catalog in the cache for the full TTL — let the next request re-crawl.
+		if truncated {
+			return list, nil
+		}
+
+		if storeErr := c.listCache.Store(ctx, list); storeErr != nil {
+			c.logger.WarnContext(ctx, "failed to store registry list in cache", attr.SlogError(storeErr))
+		}
+		return list, nil
+	})
 	if err != nil {
-		return ListServersResult{}, fmt.Errorf("create list servers request: %w", err)
+		return ListServersResult{}, fmt.Errorf("list registry servers: %w", err)
 	}
 
-	if c.backend.Match(req) {
-		if err := c.backend.Authorize(req); err != nil {
-			return ListServersResult{}, fmt.Errorf("authorize list servers request: %w", err)
+	list, ok := value.(CachedListServers)
+	if !ok {
+		return ListServersResult{}, fmt.Errorf("registry list singleflight returned unexpected type %T", value)
+	}
+
+	return ListServersResult{Servers: filterServers(list.Servers, search)}, nil
+}
+
+// listCacheKeyPrefix is the cache-key prefix for a registry URL. ClearCache
+// deletes by this prefix so it evicts every per-registry entry under the URL,
+// including a stale one left behind by a deleted-and-recreated registry.
+func listCacheKeyPrefix(registryURL string) string {
+	return fmt.Sprintf("registry:list:%s:%s", registryCacheSchemaVersion, strings.TrimRight(registryURL, "/"))
+}
+
+// listCacheKey keys the cached list by both URL and registry ID. The cached
+// servers embed the Gram registry ID (stamped during conversion), so a URL-only
+// key could serve servers carrying a different registry's ID if a registry is
+// recreated under the same URL. Storage and ClearCache both derive from
+// listCacheKeyPrefix so the two cannot drift apart.
+func listCacheKey(registryURL string, registryID uuid.UUID) string {
+	return fmt.Sprintf("%s:%s", listCacheKeyPrefix(registryURL), registryID)
+}
+
+// fetchAllServers pages through the registry, deduplicating servers by registry
+// specifier. Some registries return overlapping pages under a continuing
+// cursor, so the crawl also stops once a page contributes no new servers. The
+// returned bool reports whether the crawl hit the page bound with more pages
+// still remaining (a partial, truncated catalog).
+func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry, cacheKey string) (CachedListServers, bool, error) {
+	seen := make(map[string]struct{})
+	servers := make([]*types.ExternalMCPServerEntry, 0, registryListPageSize)
+	cursor := ""
+
+	for range registryListMaxPages {
+		req, err := c.newListServersRequest(ctx, registry.URL, cursor)
+		if err != nil {
+			return CachedListServers{}, false, err
 		}
-	}
-
-	// Check cache after authorization so headers are populated.
-	if c.listCache != nil {
-		cacheKey := registryCacheKey("list", req)
-		cached, err := c.listCache.Get(ctx, cacheKey)
-		if err == nil {
-			c.logger.DebugContext(ctx, "registry list cache hit", attr.SlogCacheKey(cacheKey))
-			return ListServersResult{
-				Servers:    cached.Servers,
-				NextCursor: cached.NextCursor,
-			}, nil
+		if c.backend.Match(req) {
+			if err := c.backend.Authorize(req); err != nil {
+				return CachedListServers{}, false, fmt.Errorf("authorize list servers request: %w", err)
+			}
 		}
+
+		page, err := c.fetchListServersPage(ctx, req)
+		if err != nil {
+			return CachedListServers{}, false, err
+		}
+
+		converted, err := convertListServers(registry.ID, page.Servers)
+		if err != nil {
+			return CachedListServers{}, false, err
+		}
+
+		added := 0
+		for _, server := range converted {
+			if _, ok := seen[server.RegistrySpecifier]; ok {
+				continue
+			}
+			seen[server.RegistrySpecifier] = struct{}{}
+			servers = append(servers, server)
+			added++
+		}
+
+		next := ""
+		if page.Metadata.NextCursor != nil {
+			next = *page.Metadata.NextCursor
+		}
+
+		// Stop at the end of the registry's pages, or once a page is entirely
+		// duplicates (some registries return overlapping pages under a stable
+		// cursor; this assumes new servers never appear after an all-duplicate
+		// page).
+		if added == 0 || next == "" {
+			cursor = ""
+			break
+		}
+		cursor = next
 	}
 
+	// A non-empty cursor here means the registry still had more pages than the
+	// bound allows, so the catalog outgrew the ~100-server assumption. Serve what
+	// we have, but warn loudly and report truncation so the caller skips caching
+	// the partial list rather than freezing it for the full TTL.
+	truncated := cursor != ""
+	if truncated {
+		c.logger.WarnContext(ctx, "registry catalog exceeded page bound; returning partial list",
+			attr.SlogMCPRegistryID(registry.ID.String()),
+			attr.SlogMCPRegistryURL(registry.URL),
+			attr.SlogStatsMCPServerCount(len(servers)),
+			attr.SlogPaginationLimit(registryListMaxPages*registryListPageSize),
+		)
+	}
+
+	return CachedListServers{Key: cacheKey, Servers: servers}, truncated, nil
+}
+
+func (c *RegistryClient) newListServersRequest(ctx context.Context, registryURL string, cursor string) (*http.Request, error) {
+	parsed, err := url.Parse(fmt.Sprintf("%s/v0.1/servers", strings.TrimRight(registryURL, "/")))
+	if err != nil {
+		return nil, fmt.Errorf("parse list servers url: %w", err)
+	}
+
+	q := parsed.Query()
+	q.Set("version", "latest")
+	q.Set("limit", fmt.Sprintf("%d", registryListPageSize))
+	if cursor != "" {
+		q.Set("cursor", cursor)
+	}
+	parsed.RawQuery = q.Encode()
+
+	c.logger.InfoContext(ctx, "fetching servers from registry", attr.SlogMCPRegistryURL(parsed.String()))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("create list servers request: %w", err)
+	}
+	return req, nil
+}
+
+func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Request) (listResponse, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return ListServersResult{}, fmt.Errorf("failed to fetch from registry: %w", err)
+		return listResponse{}, fmt.Errorf("fetch from registry: %w", err)
 	}
 	defer o11y.LogDefer(ctx, c.logger, func() error {
 		return resp.Body.Close()
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return ListServersResult{}, fmt.Errorf("registry returned status %d", resp.StatusCode)
+		return listResponse{}, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ListServersResult{}, fmt.Errorf("failed to read response body: %w", err)
+		return listResponse{}, fmt.Errorf("read response body: %w", err)
 	}
 
 	var listResp listResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
-		return ListServersResult{}, fmt.Errorf("failed to decode registry response: %w", err)
+		return listResponse{}, fmt.Errorf("decode registry response: %w", err)
+	}
+	return listResp, nil
+}
+
+// filterServers applies a case-insensitive substring match over the server
+// specifier, title, and description. Search runs in memory because the catalog
+// is small enough to hold in full.
+func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*types.ExternalMCPServerEntry {
+	if search == "" {
+		return servers
 	}
 
-	registryID := registry.ID.String()
-	servers := make([]*types.ExternalMCPServerEntry, 0, len(listResp.Servers))
-	for _, s := range listResp.Servers {
+	needle := strings.ToLower(search)
+	filtered := make([]*types.ExternalMCPServerEntry, 0, len(servers))
+	for _, server := range servers {
+		title := ""
+		if server.Title != nil {
+			title = *server.Title
+		}
+		if strings.Contains(strings.ToLower(server.RegistrySpecifier), needle) ||
+			strings.Contains(strings.ToLower(title), needle) ||
+			strings.Contains(strings.ToLower(server.Description), needle) {
+			filtered = append(filtered, server)
+		}
+	}
+	return filtered
+}
+
+func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
+	registryID := registryUUID.String()
+	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
+	for _, s := range entries {
 
 		if s.Meta.Version.Status == "deleted" {
 			continue
@@ -296,6 +467,10 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			}
 		}
 
+		// A server supports DCR when any remote's OAuth auth option carries a
+		// non-empty registration endpoint in PulseMCP's embedded discovery
+		// result. Computed in the same pass that strips per-remote tools.
+		supportsDCR := false
 		for _, remote := range []*serverRemoteMeta{
 			&s.Meta.Version.FirstRemote,
 			&s.Meta.Version.SecondRemote,
@@ -303,6 +478,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			&s.Meta.Version.FourthRemote,
 			&s.Meta.Version.FifthRemote,
 		} {
+			for _, auth := range remote.AuthOptions {
+				if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
+					supportsDCR = true
+					break
+				}
+			}
 			remote.Tools = nil
 		}
 
@@ -318,7 +499,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 
 		meta, err := toCacheSafeAny(&s.Meta)
 		if err != nil {
-			return ListServersResult{}, fmt.Errorf("convert meta: %w", err)
+			return []*types.ExternalMCPServerEntry{}, fmt.Errorf("convert meta: %w", err)
 		}
 
 		servers = append(servers, &types.ExternalMCPServerEntry{
@@ -334,28 +515,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Meta:                                meta,
 			ToolCount:                           toolCount,
 			IsReadOnly:                          isReadOnly,
+			SupportsDcr:                         supportsDCR,
 			Remotes:                             remotes,
 		})
 	}
 
-	nextCursor := listResp.Metadata.NextCursor
-
-	// Store in cache on success.
-	if c.listCache != nil {
-		cacheKey := registryCacheKey("list", req)
-		if storeErr := c.listCache.Store(ctx, CachedListServersResponse{
-			Key:        cacheKey,
-			Servers:    servers,
-			NextCursor: nextCursor,
-		}); storeErr != nil {
-			c.logger.WarnContext(ctx, "failed to store registry list in cache", attr.SlogError(storeErr))
-		}
-	}
-
-	return ListServersResult{
-		Servers:    servers,
-		NextCursor: nextCursor,
-	}, nil
+	return servers, nil
 }
 
 func toExternalMCPRemoteHeaders(headers []RemoteHeader) []*types.ExternalMCPRemoteHeader {
@@ -396,18 +561,15 @@ func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[strin
 
 // ClearCache removes all cached entries for the given registry URL.
 func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) error {
-	if c.listCache != nil {
-		prefix := fmt.Sprintf("registry:list:%s", registryURL)
-		if err := c.listCache.DeleteByPrefix(ctx, prefix); err != nil {
-			return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
-		}
+	if err := c.listCache.DeleteByPrefix(ctx, listCacheKeyPrefix(registryURL)); err != nil {
+		return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
 	}
-	if c.detailsCache != nil {
-		prefix := fmt.Sprintf("registry:details:%s", registryURL)
-		if err := c.detailsCache.DeleteByPrefix(ctx, prefix); err != nil {
-			return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
-		}
+
+	detailsPrefix := fmt.Sprintf("registry:details:%s:%s", registryCacheSchemaVersion, registryURL)
+	if err := c.detailsCache.DeleteByPrefix(ctx, detailsPrefix); err != nil {
+		return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
 	}
+
 	return nil
 }
 
@@ -433,7 +595,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	c.logger.InfoContext(ctx, "fetching server details from registry", attr.SlogURL(u.String()))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, oops.Permanent(fmt.Errorf("create external mcp server details request: %w", err))
 	}
@@ -458,13 +620,11 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	// Check cache after authorization so headers are populated.
-	if c.detailsCache != nil {
-		cacheKey := buildCacheKey()
-		cached, err := c.detailsCache.Get(ctx, cacheKey)
-		if err == nil {
-			c.logger.DebugContext(ctx, "registry details cache hit", attr.SlogCacheKey(cacheKey))
-			return cached.Details, nil
-		}
+	cacheKey := buildCacheKey()
+	cached, err := c.detailsCache.Get(ctx, cacheKey)
+	if err == nil {
+		c.logger.DebugContext(ctx, "registry details cache hit", attr.SlogCacheKey(cacheKey))
+		return cached.Details, nil
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -555,14 +715,11 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	// Store in cache on success.
-	if c.detailsCache != nil {
-		cacheKey := buildCacheKey()
-		if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
-			Key:     cacheKey,
-			Details: details,
-		}); storeErr != nil {
-			c.logger.WarnContext(ctx, "failed to store registry details in cache", attr.SlogError(storeErr))
-		}
+	if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
+		Key:     cacheKey,
+		Details: details,
+	}); storeErr != nil {
+		c.logger.WarnContext(ctx, "failed to store registry details in cache", attr.SlogError(storeErr))
 	}
 
 	return details, nil

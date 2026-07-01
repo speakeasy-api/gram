@@ -288,11 +288,11 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	sysRole := isSystemRole(currentRole.Slug)
-	if sysRole && (payload.Name != nil || payload.Description != nil || payload.AddGrants != nil || payload.RemoveGrants != nil) {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").LogError(ctx, r.logger)
-	}
-	if sysRole && payload.MemberIds == nil {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role update requires member_ids").LogError(ctx, r.logger)
+	// System role names/descriptions are platform-managed and shared globally
+	// (global_roles), so they stay immutable. Grants are stored per-org and may
+	// be customized, so grant and member changes are allowed below.
+	if sysRole && (payload.Name != nil || payload.Description != nil) {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role name and description cannot be changed").LogError(ctx, r.logger)
 	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
@@ -306,6 +306,32 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
 		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	}
+
+	// Lockout guardrail: removing org:admin from the Admin role would lock the
+	// org out of administration. Validate against the payload up front so a
+	// rejected request never performs grant writes that have to be rolled back.
+	if currentRole.Slug == authz.SystemRoleAdmin {
+		removingOrgAdmin, addingOrgAdmin := false, false
+		for _, g := range removeGrants {
+			if g.Scope == string(authz.ScopeOrgAdmin) {
+				removingOrgAdmin = true
+			}
+		}
+		for _, g := range addGrants {
+			// An org:admin add only counts if it actually writes a grant row:
+			// nil selectors flatten to a wildcard row, a non-empty slice writes
+			// the listed rows. An empty (non-nil) selector slice flattens to
+			// zero rows (see grants.go), so pairing such a no-op add with an
+			// org:admin removal must not satisfy the guardrail — that would
+			// strip org:admin from the Admin role and lock the org out.
+			if g.Scope == string(authz.ScopeOrgAdmin) {
+				addingOrgAdmin = addingOrgAdmin || g.Selectors == nil || len(g.Selectors) > 0
+			}
+		}
+		if removingOrgAdmin && !addingOrgAdmin {
+			return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
+		}
 	}
 
 	tx, err := r.db.Begin(ctx)
@@ -350,17 +376,6 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			MemberCount:  int(updatedRow.MemberCount),
 		}
 
-		if payload.AddGrants != nil || payload.RemoveGrants != nil {
-			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
-			if err != nil {
-				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
-			}
-			updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
-			for _, grant := range syncedGrants {
-				updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
-			}
-		}
-
 		workosSyncs = append(workosSyncs, func(ctx context.Context) {
 			r.syncWorkOS(ctx, "update role in workos", func() error {
 				_, err := r.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
@@ -373,6 +388,20 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 				return fmt.Errorf("update role in workos: %w", err)
 			})
 		})
+	}
+
+	// Grants live in the per-org grant store and are patched the same way for
+	// custom and system roles. WorkOS only tracks role identity/membership, not
+	// gram scopes, so no grant sync to WorkOS is needed.
+	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
+		if err != nil {
+			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+		}
+		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
+		for _, grant := range syncedGrants {
+			updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
+		}
 	}
 
 	if payload.MemberIds != nil {

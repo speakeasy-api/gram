@@ -334,6 +334,9 @@ type GetObservabilityOverviewPayload struct {
 	ToolsetSlug *string
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -1250,6 +1253,8 @@ type SessionSummary struct {
 	HookSource *string
 	// LLM model used in this chat session
 	Model *string
+	// Chat title, when the session resolves to a named chat
+	Title *string
 	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
 	StartTimeUnixNano string
 	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
@@ -1418,6 +1423,8 @@ type ToolUsageFilterOptionType string
 type ToolUsageHostedServerFilterOption struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug string
+	// Hosted MCP toolset display name
+	ToolsetName string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }
@@ -1675,6 +1682,8 @@ type TopUser struct {
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string
+	// User email associated with this usage, when present
+	UserEmail string
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds

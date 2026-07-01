@@ -157,6 +157,12 @@ const POLICY_WIZARD_STEPS: Step[] = [
     badge: "Required",
   },
   {
+    id: "sensitivity",
+    title: "Sensitivity",
+    description: "Detection confidence",
+    badge: "Optional",
+  },
+  {
     id: "scope",
     title: "Scope",
     description: "Where it applies",
@@ -180,9 +186,9 @@ const PROMPT_WIZARD_STEPS: Step[] = [
     description: "What to catch, in plain language",
     badge: "Required",
   },
-  POLICY_WIZARD_STEPS[1]!,
-  POLICY_WIZARD_STEPS[2]!,
-  POLICY_WIZARD_STEPS[3]!,
+  POLICY_WIZARD_STEPS[2]!, // scope
+  POLICY_WIZARD_STEPS[3]!, // action
+  POLICY_WIZARD_STEPS[4]!, // review
 ];
 
 /** Shared wizard chrome: the left step rail + the paged content column. The
@@ -251,6 +257,16 @@ function SummaryRow({ label, chips }: { label: string; chips: string[] }) {
 const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
   "shadow_mcp",
   "destructive_tool",
+]);
+
+/** Built-in detectors that run at the category level and have no individual
+ *  sub-rules in DETECTION_RULES (their rule list is intentionally empty).
+ *  Selecting one of these is enough to enable the policy on its own. */
+const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
+  "prompt_injection",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
 ]);
 
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
@@ -949,6 +965,11 @@ function PolicyCenterContent() {
   const [formTemperature, setFormTemperature] = useState(
     DEFAULT_JUDGE_TEMPERATURE,
   );
+  // Per-policy Presidio detection-sensitivity threshold for standard policies.
+  // Only persisted when at least one Presidio category is active.
+  const [formPresidioThreshold, setFormPresidioThreshold] = useState<number>(
+    DEFAULT_PRESIDIO_THRESHOLD,
+  );
   // Fail-open (true) is the server default: allow the message when the judge errors.
   const [formFailOpen, setFormFailOpen] = useState(true);
   const [formAudienceType, setFormAudienceType] =
@@ -1050,6 +1071,7 @@ function PolicyCenterContent() {
     setFormUserMessage("");
     setFormModel("");
     setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
+    setFormPresidioThreshold(DEFAULT_PRESIDIO_THRESHOLD);
     setFormFailOpen(true);
     setFormAudienceType("everyone");
     setSelectedAudiencePrincipalUrns(new Set<string>());
@@ -1104,6 +1126,9 @@ function PolicyCenterContent() {
       categories.add("custom");
     }
     setSelectedCategories(categories);
+    setFormPresidioThreshold(
+      policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
+    );
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1173,8 +1198,13 @@ function PolicyCenterContent() {
       const userMessagePayload = formUserMessage.trim()
         ? { userMessage: formUserMessage }
         : {};
+      // In CEL scope mode the include predicate is the sole scope: send no
+      // message-type filter so a stale subset can't intersect it (the two are a
+      // mutex). The selection is preserved in form state for a mode switch-back.
       const promptMessageTypes =
-        policyMessageTypesForPayload(selectedMessageTypes);
+        scopeMode === "cel"
+          ? []
+          : policyMessageTypesForPayload(selectedMessageTypes);
       if (editingPolicy) {
         updateMutation.mutate({
           request: {
@@ -1213,7 +1243,12 @@ function PolicyCenterContent() {
       return;
     }
 
-    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
+    // CEL scope mode replaces the message-type selection; send no message-type
+    // filter so a stale subset can't intersect the include predicate.
+    const messageTypes =
+      scopeMode === "cel"
+        ? []
+        : policyMessageTypesForPayload(selectedMessageTypes);
     const {
       sources,
       presidioEntities,
@@ -1232,6 +1267,11 @@ function PolicyCenterContent() {
         : formAction;
     const audiencePrincipalUrns =
       formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
+    // Only persist the Presidio threshold when a Presidio category is active, so
+    // non-Presidio policies don't carry a stray threshold value.
+    const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+      selectedCategories.has(c),
+    );
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -1251,6 +1291,9 @@ function PolicyCenterContent() {
             audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
+            ...(presidioActive
+              ? { presidioScoreThreshold: formPresidioThreshold }
+              : {}),
           },
         },
       });
@@ -1272,6 +1315,9 @@ function PolicyCenterContent() {
             audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
+            ...(presidioActive
+              ? { presidioScoreThreshold: formPresidioThreshold }
+              : {}),
           },
         },
       });
@@ -1588,18 +1634,23 @@ function PolicyCenterContent() {
       ? selectedMessageTypes.size === 0
       : scopeInclude.trim() === "";
   // A standard policy needs at least one detector that will actually run: a
-  // custom rule, or a selected category with at least one of its rules enabled.
+  // custom rule, a category-level detector (no sub-rules to enable), or a
+  // selected category with at least one of its rules enabled.
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
-    [...selectedCategories].some((c) =>
-      DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
+    [...selectedCategories].some(
+      (c) =>
+        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
+  // Step validation is keyed by step id so it works for both the standard
+  // layout (scope at index 2) and the prompt layout (scope at index 1). The
+  // "sensitivity" step is Optional and never blocks.
+  const currentStepId = wizardSteps[wizardStep]?.id;
   const continueDisabled =
-    (wizardStep === 0 &&
-      (formPolicyKind === "prompt"
-        ? !formPromptInstruction.trim()
-        : !hasEnabledDetector)) ||
-    (wizardStep === 1 && scopeMissing);
+    (currentStepId === "detect" && !hasEnabledDetector) ||
+    (currentStepId === "guardrail" && !formPromptInstruction.trim()) ||
+    (currentStepId === "scope" && scopeMissing);
   // Block save while a scope expression that will be sent fails to compile.
   const applicationInvalid =
     (scopeMode === "cel" && includeCelStatus.kind === "error") ||
@@ -1783,6 +1834,8 @@ function PolicyCenterContent() {
                       setFormEnabled={setFormEnabled}
                       selectedCategories={selectedCategories}
                       setSelectedCategories={setSelectedCategories}
+                      formPresidioThreshold={formPresidioThreshold}
+                      setFormPresidioThreshold={setFormPresidioThreshold}
                       disabledRules={disabledRules}
                       setDisabledRules={setDisabledRules}
                       customRules={customRules}
@@ -1833,6 +1886,12 @@ function PolicyCenterContent() {
                       setFormTemperature={setFormTemperature}
                       formFailOpen={formFailOpen}
                       setFormFailOpen={setFormFailOpen}
+                      scopeInclude={scopeInclude}
+                      setScopeInclude={setScopeInclude}
+                      scopeExempt={scopeExempt}
+                      setScopeExempt={setScopeExempt}
+                      scopeMode={scopeMode}
+                      setScopeMode={setScopeMode}
                       selectedMessageTypes={selectedMessageTypes}
                       setSelectedMessageTypes={setSelectedMessageTypes}
                     />
@@ -1984,6 +2043,12 @@ function PromptPolicySheetBody({
   setFormTemperature,
   formFailOpen,
   setFormFailOpen,
+  scopeInclude,
+  setScopeInclude,
+  scopeExempt,
+  setScopeExempt,
+  scopeMode,
+  setScopeMode,
   selectedMessageTypes,
   setSelectedMessageTypes,
 }: {
@@ -2006,6 +2071,12 @@ function PromptPolicySheetBody({
   setFormTemperature: (v: number) => void;
   formFailOpen: boolean;
   setFormFailOpen: (v: boolean) => void;
+  scopeInclude: string;
+  setScopeInclude: (v: string) => void;
+  scopeExempt: string;
+  setScopeExempt: (v: string) => void;
+  scopeMode: "messageTypes" | "cel";
+  setScopeMode: (v: "messageTypes" | "cel") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
 }) {
@@ -2020,12 +2091,14 @@ function PromptPolicySheetBody({
   };
 
   const prompt = formPromptInstruction.trim();
-  const summaryScopes =
+  const messageTypeScopeLabels =
     selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
       ? ["All session parts"]
       : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
           selectedMessageTypes.has(t as PolicyMessageType),
         ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+  const summaryScopes =
+    scopeMode === "cel" ? ["CEL expression"] : messageTypeScopeLabels;
 
   // One-line view of the judge config shown on the collapsed Advanced card, so
   // authors can see the (sensible) defaults at a glance without expanding it.
@@ -2118,29 +2191,98 @@ function PromptPolicySheetBody({
             title="Where should it evaluate?"
             description="Narrow the scope to control cost — a prompt policy runs the LLM judge on each in-scope message."
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-              <ScopeCard
-                key={type}
-                type={type as PolicyMessageType}
-                checked={selectedMessageTypes.has(type as PolicyMessageType)}
-                onToggle={(checked) => {
-                  const updated = new Set(selectedMessageTypes);
-                  if (checked) {
-                    updated.add(type as PolicyMessageType);
-                  } else {
-                    updated.delete(type as PolicyMessageType);
-                  }
-                  setSelectedMessageTypes(updated);
-                }}
-              />
-            ))}
-          </div>
-          {selectedMessageTypes.size === 0 && (
-            <p className="text-destructive text-xs">
-              Select at least one session part.
+          {/* Scope is a mutex: message-type cards (coarse) XOR a CEL include
+              predicate (fine). The segmented control conveys that. */}
+          <div className="space-y-3">
+            <div className="border-border inline-flex rounded-md border p-0.5">
+              {(
+                [
+                  { key: "messageTypes", label: "Message types" },
+                  { key: "cel", label: "CEL expression" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setScopeMode(opt.key)}
+                  className={cn(
+                    "rounded px-3 py-1 text-xs font-medium transition-colors",
+                    scopeMode === opt.key
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {scopeMode === "messageTypes"
+                ? "Run the judge on whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
+                : "Run the judge only on messages matching the expression below — this replaces the message-type selection."}
             </p>
+          </div>
+
+          {scopeMode === "messageTypes" ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                  <ScopeCard
+                    key={type}
+                    type={type as PolicyMessageType}
+                    checked={selectedMessageTypes.has(
+                      type as PolicyMessageType,
+                    )}
+                    onToggle={(checked) => {
+                      const updated = new Set(selectedMessageTypes);
+                      if (checked) {
+                        updated.add(type as PolicyMessageType);
+                      } else {
+                        updated.delete(type as PolicyMessageType);
+                      }
+                      setSelectedMessageTypes(updated);
+                    }}
+                  />
+                ))}
+              </div>
+              {selectedMessageTypes.size === 0 && (
+                <p className="text-destructive text-xs">
+                  Select at least one session part.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Evaluate messages matching
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                The judge runs on a message only when this expression is true.
+              </p>
+              <CelExpressionField
+                value={scopeInclude}
+                onChange={setScopeInclude}
+                examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+              />
+            </div>
           )}
+
+          {/* Exemptions — always available and additive (not part of the
+              scope mutex). A match here skips the whole policy. */}
+          <div className="border-border space-y-4 border-t pt-6">
+            <div>
+              <Label className="text-sm font-medium">Exemptions</Label>
+              <p className="text-muted-foreground text-xs">
+                Skip the whole policy for any message matching this expression —
+                an allowlist, regardless of the scope above.
+              </p>
+            </div>
+            <CelExpressionField
+              value={scopeExempt}
+              onChange={setScopeExempt}
+              examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+            />
+          </div>
         </div>
       )}
 
@@ -2231,6 +2373,15 @@ const TEMPERATURE_TICKS = Array.from(
   { length: 11 },
   (_, i) => Math.round(i * TEMPERATURE_STEP * 10) / 10,
 );
+
+// Presidio detection-sensitivity threshold: the minimum confidence score a
+// Presidio PII match must clear to be flagged. Applies to all Presidio rules in
+// a standard risk policy.
+const PRESIDIO_THRESHOLD_MIN = 0;
+const PRESIDIO_THRESHOLD_MAX = 1;
+const PRESIDIO_THRESHOLD_STEP = 0.05;
+const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
+const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
 
 // JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
 // The recommended option uses the empty value, which follows the server's
@@ -2479,6 +2630,8 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  formPresidioThreshold,
+  setFormPresidioThreshold,
   disabledRules,
   setDisabledRules,
   customRules,
@@ -2511,6 +2664,8 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  formPresidioThreshold: number;
+  setFormPresidioThreshold: (v: number) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
@@ -2565,6 +2720,10 @@ function PolicySheetBody({
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
+  // The detection-sensitivity slider only applies when a Presidio detector is on.
+  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+    selectedCategories.has(c),
+  );
 
   // Custom rules attach as detectors only; a match records a finding. Message
   // exemptions are expressed via the policy's scope_exempt, not by rule id.
@@ -2591,6 +2750,10 @@ function PolicySheetBody({
   const summaryScopes =
     scopeMode === "cel" ? ["CEL expression"] : messageTypeScopeLabels;
 
+  // Render by step id so the standard layout stays correct after the
+  // "sensitivity" step was inserted between Detect and Scope.
+  const currentStepId = POLICY_WIZARD_STEPS[wizardStep]?.id;
+
   return (
     <>
       <WizardShell
@@ -2598,7 +2761,7 @@ function PolicySheetBody({
         currentStep={wizardStep}
         setCurrentStep={setWizardStep}
       >
-        {wizardStep === 0 && (
+        {currentStepId === "detect" && (
           <div className="space-y-6">
             <WizardStepHeading
               title="What should this policy detect?"
@@ -2650,7 +2813,63 @@ function PolicySheetBody({
           </div>
         )}
 
-        {wizardStep === 1 && (
+        {currentStepId === "sensitivity" && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="How sensitive should detection be?"
+              description="Tune the confidence threshold a match must clear before it's flagged."
+            />
+            {presidioActive ? (
+              <div className="border-border space-y-4 rounded-lg border p-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">
+                      Detection sensitivity
+                    </Label>
+                    <span className="text-muted-foreground text-xs tabular-nums">
+                      {formPresidioThreshold.toFixed(2)}
+                      {formPresidioThreshold === DEFAULT_PRESIDIO_THRESHOLD
+                        ? " · default"
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-foreground text-xs tabular-nums">
+                      0
+                    </span>
+                    <div className="flex-1">
+                      <Slider
+                        value={formPresidioThreshold}
+                        onChange={(v) =>
+                          setFormPresidioThreshold(Math.round(v * 20) / 20)
+                        }
+                        min={PRESIDIO_THRESHOLD_MIN}
+                        max={PRESIDIO_THRESHOLD_MAX}
+                        step={PRESIDIO_THRESHOLD_STEP}
+                        ticks={PRESIDIO_THRESHOLD_TICKS}
+                      />
+                    </div>
+                    <span className="text-foreground text-xs tabular-nums">
+                      1
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Minimum confidence a match must clear to be flagged. Higher
+                    = fewer false positives but may miss borderline matches.
+                    Applies to all detection rules in this policy.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Sensitivity applies to confidence-scored detectors. Select a PII
+                detector to adjust it.
+              </p>
+            )}
+          </div>
+        )}
+
+        {currentStepId === "scope" && (
           <div className="space-y-6">
             <WizardStepHeading
               title="Where should it evaluate?"
@@ -2752,7 +2971,7 @@ function PolicySheetBody({
           </div>
         )}
 
-        {wizardStep === 2 && (
+        {currentStepId === "action" && (
           <div className="space-y-6">
             <WizardStepHeading
               title="What happens on a match?"
@@ -2795,7 +3014,7 @@ function PolicySheetBody({
           </div>
         )}
 
-        {wizardStep === 3 && (
+        {currentStepId === "review" && (
           <div className="space-y-6">
             <WizardStepHeading
               title="Name & enable"

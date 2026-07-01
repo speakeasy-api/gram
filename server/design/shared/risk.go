@@ -71,6 +71,11 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
+	Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+		Minimum(0)
+		Maximum(1)
+		Example(0.75)
+	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
@@ -173,6 +178,9 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
 		Format(FormatUUID)
 	})
@@ -184,12 +192,13 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("source", String, "Detection source (e.g. gitleaks).")
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")
-	Attribute("match", String, "The matched secret or sensitive data.")
+	Attribute("match", String, "The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).")
 	Attribute("start_pos", Int, "Start byte position within the message content.")
 	Attribute("end_pos", Int, "End byte position within the message content.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
-	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.")
+	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span. Null alongside match when the result is redacted.")
+	Attribute("match_redacted", String, "Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})

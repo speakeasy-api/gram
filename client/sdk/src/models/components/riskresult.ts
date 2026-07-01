@@ -11,6 +11,10 @@ import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
 
 export type RiskResult = {
   /**
+   * ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
+   */
+  blockId?: string | undefined;
+  /**
    * The chat session containing the message.
    */
   chatId?: string | undefined;
@@ -43,9 +47,13 @@ export type RiskResult = {
    */
   id: string;
   /**
-   * The matched secret or sensitive data.
+   * The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).
    */
   match?: string | undefined;
+  /**
+   * Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).
+   */
+  matchRedacted?: string | undefined;
   /**
    * The risk policy ID.
    */
@@ -63,7 +71,7 @@ export type RiskResult = {
    */
   source: string;
   /**
-   * All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.
+   * All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span. Null alongside match when the result is redacted.
    */
   spans?: Array<RiskSpan> | undefined;
   /**
@@ -84,6 +92,7 @@ export type RiskResult = {
 export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
   .pipe(
     z.object({
+      block_id: z.optional(z.string()),
       chat_id: z.optional(z.string()),
       chat_message_id: z.string(),
       chat_title: z.optional(z.string()),
@@ -96,6 +105,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       end_pos: z.optional(z.int()),
       id: z.string(),
       match: z.optional(z.string()),
+      match_redacted: z.optional(z.string()),
       policy_id: z.string(),
       policy_version: z.int(),
       rule_id: z.optional(z.string()),
@@ -107,11 +117,13 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "block_id": "blockId",
         "chat_id": "chatId",
         "chat_message_id": "chatMessageId",
         "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_pos": "endPos",
+        "match_redacted": "matchRedacted",
         "policy_id": "policyId",
         "policy_version": "policyVersion",
         "rule_id": "ruleId",

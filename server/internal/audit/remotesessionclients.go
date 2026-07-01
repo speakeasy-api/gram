@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	ActionRemoteSessionClientCreate          Action = "remote-session-client:create"
-	ActionRemoteSessionClientUpdate          Action = "remote-session-client:update"
-	ActionRemoteSessionClientDelete          Action = "remote-session-client:delete"
-	ActionRemoteSessionClientDetachMcpServer Action = "remote-session-client:detach-mcp-server"
-	ActionRemoteSessionClientRevokeSessions  Action = "remote-session-client:revoke-sessions"
+	ActionRemoteSessionClientCreate                  Action = "remote-session-client:create"
+	ActionRemoteSessionClientUpdate                  Action = "remote-session-client:update"
+	ActionRemoteSessionClientDelete                  Action = "remote-session-client:delete"
+	ActionRemoteSessionClientDetachMcpServer         Action = "remote-session-client:detach-mcp-server"
+	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
+	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
+	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -173,6 +175,68 @@ func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx
 	metadata, err := marshalAuditPayload(map[string]any{
 		"mcp_server_id":   event.McpServerURN.ID.String(),
 		"mcp_server_name": event.McpServerName,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionClientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// LogRemoteSessionClientUserSessionIssuerAttachmentEvent describes an attach or
+// detach of a user_session_issuer to/from a remote_session_client through the
+// join table. The affected user_session_issuer is captured in metadata; there
+// is no before/after snapshot since the action and subject fully describe the
+// change.
+type LogRemoteSessionClientUserSessionIssuerAttachmentEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionClientURN urn.RemoteSessionClient
+	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	UserSessionIssuerURN   urn.UserSessionIssuer
+}
+
+// LogRemoteSessionClientAttachUserSessionIssuer records that a user_session_issuer
+// was attached to a remote_session_client via the join table.
+func (l *Logger) LogRemoteSessionClientAttachUserSessionIssuer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientUserSessionIssuerAttachmentEvent) error {
+	return l.logRemoteSessionClientUserSessionIssuerAttachment(ctx, dbtx, ActionRemoteSessionClientAttachUserSessionIssuer, event)
+}
+
+// LogRemoteSessionClientDetachUserSessionIssuer records that a user_session_issuer
+// was detached from a remote_session_client via the join table.
+func (l *Logger) LogRemoteSessionClientDetachUserSessionIssuer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientUserSessionIssuerAttachmentEvent) error {
+	return l.logRemoteSessionClientUserSessionIssuerAttachment(ctx, dbtx, ActionRemoteSessionClientDetachUserSessionIssuer, event)
+}
+
+func (l *Logger) logRemoteSessionClientUserSessionIssuerAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientUserSessionIssuerAttachmentEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
+		"user_session_issuer_id": event.UserSessionIssuerURN.ID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

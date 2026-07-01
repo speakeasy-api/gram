@@ -18,7 +18,7 @@ type ModelUsageSource string
 
 const (
 	ModelUsageSourcePlayground ModelUsageSource = "playground"
-	ModelUsageSourceAgents     ModelUsageSource = "agents"
+	ModelUsageSourceAssistants ModelUsageSource = "assistants"
 	ModelUsageSourceElements   ModelUsageSource = "elements"
 	ModelUsageSourceGram       ModelUsageSource = "gram"
 	ModelUsageSourceSlack      ModelUsageSource = "slack"

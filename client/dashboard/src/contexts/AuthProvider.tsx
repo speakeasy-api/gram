@@ -12,7 +12,7 @@ import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useIsAdminRef } from "@/contexts/Sdk";
+import { useIsPlatformAdminRef } from "@/contexts/Sdk";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
@@ -50,12 +50,14 @@ const UNAUTHENTICATED_PATHS = [
   "/book-demo",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/blocks",
 ];
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/blocks",
 ];
 
 export const AuthProvider = ({
@@ -75,7 +77,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
-  const isAdminRef = useIsAdminRef();
+  const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
 
@@ -84,7 +86,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
-  isAdminRef.current = session?.user.isAdmin ?? false;
+  isPlatformAdminRef.current = session?.user.isAdmin ?? false;
 
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading

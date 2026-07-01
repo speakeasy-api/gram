@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -183,30 +184,6 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "posthog-endpoint",
-			Usage:    "The endpoint to proxy product metrics too",
-			EnvVars:  []string{"POSTHOG_ENDPOINT"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-api-key",
-			Usage:    "The posthog public API key",
-			EnvVars:  []string{"POSTHOG_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-personal-api-key",
-			Usage:    "The posthog personal API key for local feature flag evaluation",
-			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the worker working directory.",
-			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -326,6 +303,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, pluginsFlags...)
+	flags = append(flags, posthogFlags...)
 	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
@@ -391,11 +369,6 @@ func newWorkerCommand() *cli.Command {
 			})
 			if err != nil {
 				return err
-			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
 
@@ -585,7 +558,9 @@ func newWorkerCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
+			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
+			// temporalClient.Close() over the same gRPC connection.
 			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -639,6 +614,7 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -732,7 +708,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
@@ -745,7 +721,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
@@ -786,7 +762,22 @@ func newWorkerCommand() *cli.Command {
 				Publishers:                     publishers,
 			})
 
-			return temporalWorker.Run(worker.InterruptCh())
+			// Flush the throttle's queued trailing risk signals before this Action
+			// returns, while the Temporal client is still open. The cli After hook runs
+			// runShutdown, which closes the client concurrently across shutdownFuncs and
+			// would otherwise race the flush ("grpc: the client connection is closing").
+			// riskSignaler.Shutdown is deliberately not registered as a shutdownFunc.
+			defer func() {
+				if ferr := riskSignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(ferr))
+				}
+			}()
+
+			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+				return fmt.Errorf("run temporal worker: %w", err)
+			}
+
+			return nil
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)

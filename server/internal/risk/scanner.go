@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -64,7 +66,7 @@ type ScanResult struct {
 	Action      string // "block"
 	PolicyID    string
 	PolicyName  string
-	Source      string // "gitleaks" or "presidio"
+	Source      string
 	MessageType message.Type
 	RuleID      string
 	Description string
@@ -154,7 +156,15 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error) {
+func (s *Scanner) ScanForEnforcement(
+	ctx context.Context,
+	organizationID string,
+	projectID uuid.UUID,
+	userID string,
+	text string,
+	messageType message.Type,
+	toolName string,
+) (*ScanResult, error) {
 	// An empty body is only a no-op when there is also no tool attribution: a
 	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
 	// a tool-scoped prompt policy can match, so let those events through.
@@ -195,7 +205,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 
 	promptPoliciesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == "prompt_based" && inMessageScope(p)
+		return p.PolicyType == ra.PolicyTypePromptBased && inMessageScope(p)
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
@@ -206,7 +216,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	// so the slug/flag lookup is skipped for scans that can never run L1.
 	piEngineOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType != "prompt_based" &&
+		return p.PolicyType != ra.PolicyTypePromptBased &&
 			slices.Contains(p.Sources, ra.SourcePromptInjection) &&
 			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
 	}) {
@@ -347,7 +357,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
-	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
 	if messageType == message.ToolRequest && toolName != "" {
 		// In realtime a tool-request's text carries the call arguments (the same
 		// body the judge sees), so it doubles as the tool_args source.
@@ -365,7 +375,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		return nil, nil
 	}
 
-	if policy.PolicyType == "prompt_based" {
+	if policy.PolicyType == ra.PolicyTypePromptBased {
 		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
@@ -401,25 +411,31 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 
 	for _, source := range policy.Sources {
 		switch source {
-		case "gitleaks":
+		case ra.SourceGitleaks:
 			findings := filter(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
-					Source:      "gitleaks",
+					Source:      ra.SourceGitleaks,
 					MessageType: messageType,
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
 					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
-		case "presidio":
+		case ra.SourcePresidio:
 			if s.piiScanner == nil {
 				continue
 			}
-			batchResults, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, policy.PresidioEntities, func() {})
+			batchResults, err := s.piiScanner.AnalyzeBatch(
+				ctx,
+				[]string{text},
+				policy.PresidioEntities,
+				ra.PresidioScoreThresholdFromConfig(policy.AnalyzerConfig),
+				func() {},
+			)
 			if err != nil {
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
@@ -431,7 +447,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 						Action:      policy.Action,
 						PolicyID:    policy.ID.String(),
 						PolicyName:  policy.Name,
-						Source:      "presidio",
+						Source:      ra.SourcePresidio,
 						MessageType: messageType,
 						RuleID:      f.RuleID,
 						Description: f.Description,
@@ -515,26 +531,8 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}
 }
 
-// projectFlagEnabled resolves a per-project PostHog feature flag, evaluating it
-// against the same org/project groups the dashboard registers so a
-// group-targeted release matches identically. A nil flag provider, or a failed
-// slug or flag lookup, degrades to disabled. Shared by the prompt-policies and
-// prompt-injection-engine gates.
 func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
-	if s.flags == nil {
-		return false
-	}
-	groups, err := s.repo.GetProjectFlagGroups(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
-		return false
-	}
-	on, err := s.flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
-	if err != nil {
-		s.logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		return false
-	}
-	return on
+	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
 func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg ra.JudgeConfig) *ScanResult {
@@ -555,39 +553,18 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
 	if len(policy.CustomRuleIds) == 0 {
-		return nil, nil
+		return []ra.Finding{}, nil
 	}
 
-	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
+	rules, err := customrules.LoadSelected(ctx, s.repo, policy.ProjectID, policy.CustomRuleIds)
 	if err != nil {
-		return nil, fmt.Errorf("list custom detection rules: %w", err)
+		return nil, fmt.Errorf("load custom detection rules: %w", err)
 	}
-
-	detectors := make(map[string]struct{}, len(policy.CustomRuleIds))
-	for _, id := range policy.CustomRuleIds {
-		detectors[id] = struct{}{}
-	}
-
-	customRules := make([]ra.CustomDetectionRule, 0, len(detectors))
-	for _, rule := range rules {
-		if _, ok := detectors[rule.RuleID]; !ok {
-			continue
-		}
-		customRules = append(customRules, ra.CustomDetectionRule{
-			RuleID:        rule.RuleID,
-			Title:         rule.Title,
-			Description:   rule.Description,
-			DetectionExpr: rule.DetectionExpr.String,
-			Regex:         rule.Regex.String,
-		})
-	}
-
-	eng := s.celEng
-	compiled, err := ra.CompileCELRules(eng, customRules)
+	compiled, err := ra.CompileCELRules(s.celEng, rules)
 	if err != nil {
 		return nil, fmt.Errorf("compile custom detection rules: %w", err)
 	}
-	findings, err := ra.ScanCELRules(eng, view, compiled)
+	findings, err := ra.ScanCELRules(s.celEng, view, compiled)
 	if err != nil {
 		return nil, fmt.Errorf("scan custom detection rules: %w", err)
 	}

@@ -897,6 +897,7 @@ var SessionSummaryType = Type("SessionSummary", func() {
 	Attribute("user_email", String, "User email associated with this chat session")
 	Attribute("hook_source", String, "Client or agent surface associated with this chat session")
 	Attribute("model", String, "LLM model used in this chat session")
+	Attribute("title", String, "Chat title, when the session resolves to a named chat")
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("duration_seconds", Float64, "Chat session duration in seconds")
@@ -1012,6 +1013,7 @@ var UserSummaryType = Type("UserSummary", func() {
 	Description("Aggregated usage summary for a single user")
 
 	Attribute("user_id", String, "User identifier (user_id or external_user_id depending on group_by)")
+	Attribute("user_email", String, "User email associated with this usage, when present")
 
 	// Activity timestamps (string for JS int64 precision)
 	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
@@ -1043,6 +1045,7 @@ var UserSummaryType = Type("UserSummary", func() {
 
 	Required(
 		"user_id",
+		"user_email",
 		"first_seen_unix_nano",
 		"last_seen_unix_nano",
 		"total_chats",
@@ -1598,6 +1601,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("remote_mcp_server_id", String, "Optional Remote MCP server ID filter", func() {
 		Format(FormatUUID)
 	})
+	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
@@ -2091,9 +2097,10 @@ var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption"
 	Description("Hosted MCP server filter option with usage in the selected time window")
 
 	Attribute("toolset_slug", String, "Hosted MCP toolset slug")
+	Attribute("toolset_name", String, "Hosted MCP toolset display name")
 	Attribute("event_count", Int64, "Number of tool usage events observed for the hosted MCP server")
 
-	Required("toolset_slug", "event_count")
+	Required("toolset_slug", "toolset_name", "event_count")
 })
 
 var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {

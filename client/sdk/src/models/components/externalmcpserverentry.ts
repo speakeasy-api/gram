@@ -53,6 +53,10 @@ export type ExternalMCPServerEntry = {
    */
   remotes?: Array<ExternalMCPRemote> | undefined;
   /**
+   * Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
+   */
+  supportsDcr: boolean;
+  /**
    * Display name for the server
    */
   title?: string | undefined;
@@ -85,6 +89,7 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
+    supports_dcr: z.boolean(),
     title: z.optional(z.string()),
     tool_count: z.int(),
     toolset_id: z.optional(z.string()),
@@ -99,6 +104,7 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
         "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
+      "supports_dcr": "supportsDcr",
       "tool_count": "toolCount",
       "toolset_id": "toolsetId",
     });

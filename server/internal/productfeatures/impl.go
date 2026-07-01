@@ -86,7 +86,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	var err error
 
 	if payload.Enabled {
-		_, err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
+		err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FeatureName:    payload.FeatureName,
 		})

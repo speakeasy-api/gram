@@ -252,22 +252,27 @@ type BillingMetadatum struct {
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
+	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
+	TunnelledMcpServerLimit pgtype.Int4
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
 }
 
 type Chat struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type ChatMessage struct {
@@ -431,6 +436,20 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
+}
+
+type DeviceOwner struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+	LinkedUserID   pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type DirectoryGroup struct {
@@ -785,13 +804,15 @@ type McpRegistry struct {
 }
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
+	TunnelledMcpServerID  uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -1238,8 +1259,8 @@ type RemoteSession struct {
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
 	ProjectID               uuid.NullUUID
+	OrganizationID          pgtype.Text
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz
@@ -1247,6 +1268,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	ClientIDMetadataUri     pgtype.Text
 	LegacyCallbackUrl       bool
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
@@ -1274,6 +1296,7 @@ type RemoteSessionIssuer struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
 	Name                              pgtype.Text
@@ -1326,6 +1349,7 @@ type RiskPolicy struct {
 	PolicyType           string
 	Sources              []string
 	PresidioEntities     []string
+	AnalyzerConfig       []byte
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
@@ -1441,6 +1465,30 @@ type SourceEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+// Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
+type ToolCallBlock struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Provider       string
+	// The exact agent-facing reason captured at block time, independent of any later risk_results mutation.
+	Reason       string
+	ToolName     pgtype.Text
+	RiskPolicyID uuid.NullUUID
+	// Optional link to the risk_results finding for this block, backfilled when one is recorded.
+	RiskResultID   uuid.NullUUID
+	ChatID         uuid.NullUUID
+	ChatMessageID  uuid.NullUUID
+	UserID         string
+	Feedback       pgtype.Text
+	FeedbackUserID pgtype.Text
+	FeedbackAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type ToolVariation struct {
@@ -1576,6 +1624,34 @@ type TriggerInstance struct {
 	Deleted        bool
 }
 
+// Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
+type TunnelledMcpServer struct {
+	// Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+	ID uuid.UUID
+	// Project that owns this tunnelled MCP source. All management queries are scoped by project_id.
+	ProjectID uuid.UUID
+	// User-facing display name for the tunnelled MCP source.
+	Name string
+	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
+	KeyHash string
+	// Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
+	KeyPrefix string
+	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
+	Status string
+	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
+	AgentVersion pgtype.Text
+	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
+	LastSeenAt pgtype.Timestamptz
+	// Time when the tunnelled MCP source was created.
+	CreatedAt pgtype.Timestamptz
+	// Time when the durable tunnelled MCP source record was last updated.
+	UpdatedAt pgtype.Timestamptz
+	// Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.
+	DeletedAt pgtype.Timestamptz
+	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
+	Deleted bool
+}
+
 type User struct {
 	ID              string
 	Email           string
@@ -1590,6 +1666,24 @@ type User struct {
 	DeletedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type UserAccount struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	UserID              pgtype.Text
+	Provider            string
+	ExternalOrgID       pgtype.Text
+	ExternalAccountUuid string
+	ExternalAccountID   pgtype.Text
+	Email               pgtype.Text
+	AccountType         pgtype.Text
+	FirstSeenAt         pgtype.Timestamptz
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type UserOauthToken struct {

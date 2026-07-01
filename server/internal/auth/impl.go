@@ -112,6 +112,7 @@ type Service struct {
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
+	rbac                identity.RBACEnabler
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -128,6 +129,7 @@ func NewService(
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
+	rbac identity.RBACEnabler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -146,6 +148,7 @@ func NewService(
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
+		rbac:                rbac,
 	}
 }
 
@@ -751,6 +754,15 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
 	}
 
+	// Enable RBAC for the new org so access control is on from the start. Fail
+	// closed: a newly created org must not come up without RBAC seeded. The
+	// nil guard is only for tests that do not wire an enabler. Idempotent.
+	if s.rbac != nil {
+		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enable RBAC for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
+		}
+	}
+
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").LogError(ctx, s.logger)
 	}
@@ -797,6 +809,14 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		UserID:         conv.ToPGText(userInfo.UserID),
 	}); err != nil {
 		return "", fmt.Errorf("create org-user relationship: %w", err)
+	}
+
+	// Enable RBAC for the new org so access control is on from the start. Fail
+	// closed, mirroring Register. The nil guard is only for tests. Idempotent.
+	if s.rbac != nil {
+		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
+			return "", fmt.Errorf("enable RBAC for new organization: %w", err)
+		}
 	}
 
 	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {

@@ -4895,6 +4895,7 @@ func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *Search
 func marshalTelemetryUserSummaryToUserSummaryResponseBody(v *telemetry.UserSummary) *UserSummaryResponseBody {
 	res := &UserSummaryResponseBody{
 		UserID:                   v.UserID,
+		UserEmail:                v.UserEmail,
 		FirstSeenUnixNano:        v.FirstSeenUnixNano,
 		LastSeenUnixNano:         v.LastSeenUnixNano,
 		TotalChats:               v.TotalChats,
@@ -5437,6 +5438,7 @@ func marshalTelemetrySessionSummaryToSessionSummaryResponseBody(v *telemetry.Ses
 		UserEmail:         v.UserEmail,
 		HookSource:        v.HookSource,
 		Model:             v.Model,
+		Title:             v.Title,
 		StartTimeUnixNano: v.StartTimeUnixNano,
 		EndTimeUnixNano:   v.EndTimeUnixNano,
 		DurationSeconds:   v.DurationSeconds,
@@ -5754,6 +5756,7 @@ func marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(
 func marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody(v *telemetry.ToolUsageHostedServerFilterOption) *ToolUsageHostedServerFilterOptionResponseBody {
 	res := &ToolUsageHostedServerFilterOptionResponseBody{
 		ToolsetSlug: v.ToolsetSlug,
+		ToolsetName: v.ToolsetName,
 		EventCount:  v.EventCount,
 	}
 

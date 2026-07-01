@@ -1,5 +1,6 @@
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { defineFrontendTool, type FrontendTool } from "@gram-ai/elements";
 import { Gram } from "@gram/client";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
@@ -226,7 +227,7 @@ async function ensureAssistant(
     createAssistantForm: {
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
-      model: payload.model ?? "anthropic/claude-opus-4.7",
+      model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined

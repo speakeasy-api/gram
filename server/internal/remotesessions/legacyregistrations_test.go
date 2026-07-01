@@ -63,7 +63,7 @@ func TestCloneClientFromOAuthProxyProvider_MigratesLegacyRegistrations(t *testin
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID.String(),
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -113,7 +113,7 @@ func TestCloneClientFromOAuthProxyProvider_MigratesCustomDomainRegistrations(t *
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID.String(),
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -166,7 +166,7 @@ func TestCloneClientFromOAuthProxyProvider_RegistrationMigrationIdempotent(t *te
 	_, err = ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID.String(),
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -216,7 +216,7 @@ func TestCloneClientFromOAuthProxyProvider_RegistrationMigrationFailureAbortsClo
 	payload := &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID.String(),
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,

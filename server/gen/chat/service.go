@@ -25,16 +25,28 @@ type Service interface {
 	// Set `from_start` to receive the oldest page (the start of the thread)
 	// instead of the newest. Omit `generation` to receive the latest generation.
 	// Set `risk_only` to return only messages with risk findings plus a few
-	// messages of surrounding context per finding.
+	// messages of surrounding context per finding. Set `query` to instead return
+	// only messages whose text matches a search query plus surrounding context
+	// (mutually exclusive with `risk_only`).
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
-	// Generate a title for a chat based on its messages
+	// Read or set a chat's title. Omit `title` to return the
+	// current/auto-generated title (titles are generated asynchronously after a
+	// completion). Provide `title` to set a manual title that auto-generation will
+	// never overwrite; provide an empty `title` to clear the manual title and
+	// re-enable auto-generation.
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Get the total number of chat credits and usage for the current billing period
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// Soft-delete a chat by its ID
 	DeleteChat(context.Context, *DeleteChatPayload) (err error)
+	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
+	// recents on the chat page.
+	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
+	// List the distinct agent sources present in this project's chats, for
+	// populating the agent-type filter on the Agent Sessions page.
+	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,7 +71,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "submitFeedback"}
+var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -91,6 +103,10 @@ type Chat struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegment
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegment
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -138,6 +154,9 @@ type ChatMessage struct {
 	// contiguous (the sequence is shared across chats), so do not infer gaps from
 	// arithmetic differences.
 	Seq int64
+	// Present only in `risk_only` mode: true when this message has an active risk
+	// finding, false for the surrounding-context messages padded around it.
+	IsRisk *bool
 	// The role of the message
 	Role string
 	// The content of the message — string for plain text, array for
@@ -297,12 +316,15 @@ type GenerateTitlePayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string
 }
 
 // GenerateTitleResult is the result type of the chat service generateTitle
 // method.
 type GenerateTitleResult struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title string
 }
 
@@ -315,11 +337,22 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by agent source. Comma-separated list of exact source values (e.g.
+	// 'claude-code,Codex,playground') matched against each session's inferred
+	// source; empty for no filter. Use chat.listSources to discover the available
+	// values.
+	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
+	// Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or
+	// empty for no filter.
+	Pinned *string
+	// Filter to chats with at least this many active risk findings (inclusive).
+	// Omit or pass 0 for no threshold.
+	MinRiskScore *int
 	// Filter chats last active after this timestamp (ISO 8601)
 	From *string
 	// Filter chats last active before this timestamp (ISO 8601)
@@ -340,6 +373,21 @@ type ListChatsResult struct {
 	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
+}
+
+// ListSourcesPayload is the payload type of the chat service listSources
+// method.
+type ListSourcesPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+}
+
+// ListSourcesResult is the result type of the chat service listSources method.
+type ListSourcesResult struct {
+	// The distinct agent sources present in this project's chats (raw source
+	// strings such as 'claude-code', 'Codex', 'playground').
+	Sources []string
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.
@@ -379,13 +427,24 @@ type LoadChatPayload struct {
 	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
-	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
-	// segment with a follow-up `before_seq`/`after_seq` request.
+	// segments (see `risk_segments`). The flagged messages themselves are marked
+	// with `is_risk` on each `ChatMessage` (surrounding context is `is_risk:
+	// false`). Cursors are ignored in this mode; expand a segment with a follow-up
+	// `before_seq`/`after_seq` request. Mutually exclusive with `query`.
 	RiskOnly bool
+	// When set (and `risk_only` is false), return only messages whose text matches
+	// this query (case-insensitive substring over message text, tool
+	// names/arguments, and structured content), each padded with a fixed window of
+	// surrounding messages, grouped into contiguous segments (see
+	// `match_segments`). Cursors are ignored on the initial request; expand a
+	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
+	// exclusive with `risk_only`.
+	Query *string
 }
 
-// A contiguous run of messages in the risk-only view, covering one or more
-// risk findings plus their surrounding context. Messages for a segment are the
+// A contiguous run of messages in a windowed view (`risk_only` via
+// `risk_segments`, or `query` via `match_segments`), covering one or more
+// matches plus their surrounding context. Messages for a segment are the
 // entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
 type RiskSegment struct {
 	// The `seq` of the first (oldest) message in this segment.
@@ -398,6 +457,16 @@ type RiskSegment struct {
 	// Whether messages exist after this segment within the generation. Expand with
 	// an `after_seq` request using `last_seq`.
 	HasMoreAfter bool
+}
+
+// SetPinnedPayload is the payload type of the chat service setPinned method.
+type SetPinnedPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to pin or unpin
+	ID string
+	// True to pin the chat, false to unpin it
+	Pinned bool
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

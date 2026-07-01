@@ -18,6 +18,9 @@ message PresidioAnalysis {
   string reply_urn = 8;
   string content = 9;
   repeated string entities = 10;
+  // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
+  // emitted. Zero/unset means the consumer applies its default threshold.
+  double score_threshold = 11;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

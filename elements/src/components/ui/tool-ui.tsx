@@ -10,6 +10,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   LoaderIcon,
+  SearchIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
@@ -90,6 +91,15 @@ interface SectionHighlight {
   /** Optional host-supplied badge rendered in the section header (e.g. a risk
    * pill). Replaces the default warning icon when present. */
   headerBadge?: React.ReactNode;
+  /** Mark colour: "risk" (red, default) for findings, "search" (yellow) for a
+   * text-search hit. */
+  tone?: "risk" | "search";
+  /** Search tone only: index of the active query occurrence within THIS section
+   * (the unified thread navigator's current target). The host owns occurrence
+   * stepping, so this is controlled: the occurrence at this index renders bright
+   * and scrolls into view; null/undefined means this section holds no active
+   * occurrence, so all its hits render pale. */
+  activeOccurrence?: number | null;
 }
 
 interface ToolUIProps {
@@ -111,6 +121,13 @@ interface ToolUIProps {
   requestHighlight?: SectionHighlight;
   /** Flag matches inside the output (risk review). */
   resultHighlight?: SectionHighlight;
+  /** When set, highlight occurrences of this query (case-insensitive) in the
+   * tool name — e.g. a thread search for "customer" lights up `get_customer`. */
+  nameQuery?: string;
+  /** Index of the active query occurrence within the tool name (the unified
+   * navigator's current target), or null when the active occurrence isn't in the
+   * name. Per-section args/output active occurrences ride their `*Highlight`. */
+  nameActiveOccurrence?: number | null;
   /** Additional class names */
   className?: string;
   /** MCP tool annotations */
@@ -343,16 +360,25 @@ interface MatchHit {
   matchIndex: number;
 }
 
-function findMatchHits(text: string, values: string[]): MatchHit[] {
+function findMatchHits(
+  text: string,
+  values: string[],
+  caseInsensitive = false,
+): MatchHit[] {
+  // Risk findings match an exact value; a text-search hit matches case-
+  // insensitively (the server search is ILIKE). Tool content is monospace
+  // code/JSON, so lowercasing doesn't shift offsets in practice.
+  const haystack = caseInsensitive ? text.toLowerCase() : text;
   const hits: MatchHit[] = [];
   values.forEach((value, matchIndex) => {
     if (!value) return;
+    const needle = caseInsensitive ? value.toLowerCase() : value;
     let from = 0;
-    let idx = text.indexOf(value, from);
+    let idx = haystack.indexOf(needle, from);
     while (idx !== -1) {
       hits.push({ start: idx, end: idx + value.length, matchIndex });
       from = idx + value.length;
-      idx = text.indexOf(value, from);
+      idx = haystack.indexOf(needle, from);
     }
   });
   hits.sort((a, b) => a.start - b.start);
@@ -378,21 +404,33 @@ function HighlightedCode({
   text,
   matches,
   masked,
+  tone = "risk",
+  activeOccurrence = null,
 }: {
   text: string;
   matches: SectionMatch[];
   masked?: boolean;
+  tone?: "risk" | "search";
+  /** Search tone only: controlled active occurrence index, owned by the host's
+   * unified navigator. Null when this section holds no active occurrence. */
+  activeOccurrence?: number | null;
 }): React.JSX.Element {
   const hits = React.useMemo(
     () =>
       findMatchHits(
         text,
         matches.map((m) => m.value),
+        tone === "search",
       ),
-    [text, matches],
+    [text, matches, tone],
   );
   const count = hits.length;
+  const isSearch = tone === "search";
+  // Risk tone steps occurrences per-section with its own ▲▼; search tone is
+  // controlled by the host (the thread-wide navigator), so its active index comes
+  // in via `activeOccurrence` (-1 = this section isn't the active one).
   const [active, setActive] = useState(0);
+  const effectiveActive = isSearch ? (activeOccurrence ?? -1) : active;
   const [revealed, setRevealed] = useState(!masked);
   const markRefs = React.useRef<Array<HTMLElement | null>>([]);
   const preRef = React.useRef<HTMLPreElement>(null);
@@ -402,24 +440,24 @@ function HighlightedCode({
   }, [count, active]);
   // Center the active match within the code block *only* — adjust the <pre>'s
   // own scrollTop rather than scrollIntoView(), which would also yank the
-  // surrounding sheet. Runs on mount (focus the first match) and on each step.
+  // surrounding sheet. Runs on mount + each step (risk) or each host nav (search).
   useEffect(() => {
     const pre = preRef.current;
-    const mark = markRefs.current[active];
+    const mark = markRefs.current[effectiveActive];
     if (!pre || !mark) return;
     const markRect = mark.getBoundingClientRect();
     const preRect = pre.getBoundingClientRect();
     pre.scrollTop +=
       markRect.top - preRect.top - pre.clientHeight / 2 + markRect.height / 2;
-  }, [active, count]);
+  }, [effectiveActive, count]);
 
   const go = (delta: number) => {
     if (count === 0) return;
     setActive((a) => (a + delta + count) % count);
   };
 
-  const activeMatch = hits[active]
-    ? matches[hits[active]!.matchIndex]
+  const activeMatch = hits[effectiveActive]
+    ? matches[hits[effectiveActive]!.matchIndex]
     : undefined;
 
   const segments: React.ReactNode[] = [];
@@ -435,13 +473,21 @@ function HighlightedCode({
           markRefs.current[i] = el;
         }}
         className={cn(
-          // Red chip, fixed-width mono, lightened for the dark code surface. The
-          // active (currently navigated) match pops so prev/next navigation +
-          // auto-scroll have a visible target; the rest stay a darker red.
+          // Fixed-width mono chip, lightened for the dark code surface. The active
+          // (currently navigated) match pops so prev/next navigation + auto-scroll
+          // have a visible target; the rest stay a darker shade. Risk findings are
+          // red; a plain text-search hit is yellow.
           "rounded-sm px-0.5 font-mono ring-1",
-          i === active
-            ? "bg-red-700 text-red-50 ring-red-400"
-            : "bg-red-900 text-red-300 ring-red-800",
+          isSearch
+            ? // The single active occurrence (the navigator's current target)
+              // is bright; every other hit is pale. When this section isn't the
+              // active one, effectiveActive is -1 so all hits render pale.
+              i === effectiveActive
+              ? "bg-yellow-400 text-yellow-950 ring-yellow-300"
+              : "bg-yellow-800/40 text-yellow-200/70 ring-yellow-700/40"
+            : i === active
+              ? "bg-red-700 text-red-50 ring-red-400"
+              : "bg-red-900 text-red-300 ring-red-800",
         )}
       >
         {masked && !revealed ? maskMatch(value) : value}
@@ -457,16 +503,23 @@ function HighlightedCode({
       {count > 0 && (
         <div className="flex items-center justify-between gap-3 bg-slate-900 px-4 py-2 text-xs text-slate-300">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
-              <TriangleAlertIcon className="size-3.5" />
-              {count} flagged {count === 1 ? "match" : "matches"}
-            </span>
-            {activeMatch?.label && (
+            {tone === "search" ? (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-yellow-300">
+                <SearchIcon className="size-3.5" />
+                {count} {count === 1 ? "match" : "matches"}
+              </span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
+                <TriangleAlertIcon className="size-3.5" />
+                {count} flagged {count === 1 ? "match" : "matches"}
+              </span>
+            )}
+            {!isSearch && activeMatch?.label && (
               <span className="truncate rounded bg-slate-700/60 px-1.5 py-0.5 font-mono text-slate-300">
                 {activeMatch.label}
               </span>
             )}
-            {activeMatch?.onExclude && (
+            {!isSearch && activeMatch?.onExclude && (
               <button
                 type="button"
                 onClick={activeMatch.onExclude}
@@ -492,7 +545,9 @@ function HighlightedCode({
                 {revealed ? "Hide" : "Reveal"}
               </button>
             )}
-            {count >= 1 && (
+            {/* Risk tone steps occurrences per-section; search tone is driven by
+                the thread-wide navigator, so no per-section prev/next. */}
+            {!isSearch && count >= 1 && (
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
@@ -624,7 +679,12 @@ function ToolUISection({
   let headerIndicator: React.ReactNode = null;
   if (highlight?.headerBadge) headerIndicator = highlight.headerBadge;
   else if (matchCount > 0)
-    headerIndicator = <TriangleAlertIcon className="size-3.5 text-amber-500" />;
+    headerIndicator =
+      highlight?.tone === "search" ? (
+        <SearchIcon className="size-3.5 text-yellow-500" />
+      ) : (
+        <TriangleAlertIcon className="size-3.5 text-amber-500" />
+      );
 
   return (
     <div data-slot="tool-ui-section" className="border-t border-border">
@@ -655,6 +715,8 @@ function ToolUISection({
               text={contentString}
               matches={highlight!.matches}
               masked={highlight?.masked}
+              tone={highlight?.tone}
+              activeOccurrence={highlight?.activeOccurrence ?? null}
             />
           ) : isStructured ? (
             <StructuredResultContent content={content} />
@@ -677,6 +739,44 @@ type ApprovalMode = "one-time" | "for-session";
  * ToolUI - Main component
  * -------------------------------------------------------------------------- */
 
+// Highlight every case-insensitive occurrence of `query` in a short label (the
+// tool name), preserving original casing. Matches over the original string so
+// offsets stay aligned; escapes regex metacharacters in the user query. The
+// occurrence at `activeIndex` (the navigator's current target) is bright; the
+// rest are pale. null when the active occurrence isn't in the name.
+function highlightLabel(
+  text: string,
+  query: string | undefined,
+  activeIndex: number | null,
+): React.ReactNode {
+  const q = query?.trim();
+  if (!q) return text;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  const ACTIVE = "rounded-sm bg-yellow-300/80 px-0.5 text-foreground";
+  const INACTIVE = "rounded-sm bg-yellow-200/30 px-0.5 text-foreground";
+  const nodes: React.ReactNode[] = [];
+  let pos = 0;
+  let k = 0;
+  let occ = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    if (m.index > pos) nodes.push(text.slice(pos, m.index));
+    nodes.push(
+      <mark key={k++} className={occ === activeIndex ? ACTIVE : INACTIVE}>
+        {m[0]}
+      </mark>,
+    );
+    pos = m.index + m[0].length;
+    occ++;
+  }
+  if (pos === 0) return text;
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
 function ToolUI({
   name,
   icon,
@@ -687,6 +787,8 @@ function ToolUI({
   defaultExpanded = false,
   requestHighlight,
   resultHighlight,
+  nameQuery,
+  nameActiveOccurrence = null,
   className,
   annotations,
   onApproveOnce,
@@ -772,7 +874,7 @@ function ToolUI({
             !provider && isApprovalPending && "shimmer",
           )}
         >
-          {displayName}
+          {highlightLabel(displayName, nameQuery, nameActiveOccurrence)}
         </span>
         {hasContent && (
           <ChevronDownIcon

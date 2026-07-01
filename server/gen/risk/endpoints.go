@@ -23,6 +23,7 @@ type Endpoints struct {
 	DeleteRiskPolicy               goa.Endpoint
 	ListRiskResults                goa.Endpoint
 	ListRiskResultsForAgent        goa.Endpoint
+	UnmaskRiskResult               goa.Endpoint
 	ListRiskResultsByChat          goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
@@ -31,6 +32,8 @@ type Endpoints struct {
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
+	GetRiskBlock                   goa.Endpoint
+	SubmitRiskBlockFeedback        goa.Endpoint
 	ListRiskPolicyBypassRequests   goa.Endpoint
 	ApproveRiskPolicyBypassRequest goa.Endpoint
 	DenyRiskPolicyBypassRequest    goa.Endpoint
@@ -61,6 +64,7 @@ func NewEndpoints(s Service) *Endpoints {
 		DeleteRiskPolicy:               NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
+		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
@@ -69,6 +73,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
+		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
 		ApproveRiskPolicyBypassRequest: NewApproveRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
 		DenyRiskPolicyBypassRequest:    NewDenyRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
@@ -97,6 +103,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DeleteRiskPolicy = m(e.DeleteRiskPolicy)
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
+	e.UnmaskRiskResult = m(e.UnmaskRiskResult)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
@@ -105,6 +112,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
+	e.GetRiskBlock = m(e.GetRiskBlock)
+	e.SubmitRiskBlockFeedback = m(e.SubmitRiskBlockFeedback)
 	e.ListRiskPolicyBypassRequests = m(e.ListRiskPolicyBypassRequests)
 	e.ApproveRiskPolicyBypassRequest = m(e.ApproveRiskPolicyBypassRequest)
 	e.DenyRiskPolicyBypassRequest = m(e.DenyRiskPolicyBypassRequest)
@@ -533,6 +542,65 @@ func NewListRiskResultsForAgentEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		return s.ListRiskResultsForAgent(ctx, p)
+	}
+}
+
+// NewUnmaskRiskResultEndpoint returns an endpoint function that calls the
+// method "unmaskRiskResult" of service "risk".
+func NewUnmaskRiskResultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnmaskRiskResultPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UnmaskRiskResult(ctx, p)
 	}
 }
 
@@ -969,6 +1037,52 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.CreateRiskPolicyBypassRequest(ctx, p)
+	}
+}
+
+// NewGetRiskBlockEndpoint returns an endpoint function that calls the method
+// "getRiskBlock" of service "risk".
+func NewGetRiskBlockEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskBlockPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskBlock(ctx, p)
+	}
+}
+
+// NewSubmitRiskBlockFeedbackEndpoint returns an endpoint function that calls
+// the method "submitRiskBlockFeedback" of service "risk".
+func NewSubmitRiskBlockFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SubmitRiskBlockFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SubmitRiskBlockFeedback(ctx, p)
 	}
 }
 

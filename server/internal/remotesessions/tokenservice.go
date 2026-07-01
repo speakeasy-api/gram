@@ -46,6 +46,16 @@ import (
 
 // newTokenEndpointRequest assembles a request and handles encoding
 // credentials based on the configuration set by the client.
+//
+// CIMD invariant: a Client ID Metadata Document client is public — its row
+// carries no client_secret (enforced by the remote_session_clients
+// client_id_metadata_uri CHECK constraint) and its token_endpoint_auth_method
+// is "none". Both credential branches below are gated on a non-empty
+// clientSecret, so a CIMD client never puts a secret in the body and never
+// reaches HTTP Basic auth. The guard that matters is the empty secret, not the
+// method: ResolveTokenEndpointAuthMethod maps unknown values to Basic, so it is
+// the absent secret — not method=none — that keeps the public CIMD path off
+// Basic auth.
 func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
 	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
 		form.Set("client_secret", clientSecret)
@@ -56,6 +66,8 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	// clientSecret is always empty for CIMD/public clients, so this never runs
+	// for them regardless of the resolved method.
 	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
@@ -141,10 +153,12 @@ func (m *ChallengeManager) ResolveAccessToken(
 // attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
 func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
-	projectID, userSessionIssuerID uuid.UUID,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]string, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}

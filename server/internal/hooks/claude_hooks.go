@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
@@ -216,7 +217,9 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 }
 
 // Claude is the unified endpoint for all Claude Code hook events.
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
+	start := time.Now()
+
 	// project_slug header may be set even when the API key isn't validated
 	// yet on this optional-auth endpoint — log it as a hint up front.
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
@@ -245,6 +248,18 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	logger.InfoContext(ctx, "claude hook received",
 		attr.SlogEvent("claude_hook"),
 	)
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, orgSlug, time.Since(start))
+	}()
 
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
@@ -255,6 +270,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
 		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
+			outcome = hookMetricOutcomeUnauthorized
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
@@ -266,6 +282,9 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 				attr.SlogEvent("claude_hook_auth_ok"),
 			)
 		}
+	}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		orgSlug = authCtx.OrganizationSlug
 	}
 
 	// Claim the per-invocation idempotency token once, before persistence and
@@ -419,24 +438,45 @@ func (s *Service) handleConfigChange(ctx context.Context, ev *hookevents.ConfigC
 //     .mcp.json files inside cowork (no `claude` CLI available). Parsed
 //     by ParseCoworkMCPInventory.
 func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
-	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+	if payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+	if !ok {
+		return
+	}
+	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+}
 
-	var entries []MCPServerEntry
-	var variant string
+// parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
+// payload's additional_data, returning the parsed entries, the detected agent
+// variant, and whether an inventory was present at all. It does not touch the
+// cache, so it is safe to call from both the SessionStart/ConfigChange capture
+// path and the PreToolUse enforcement path (which ships the same fields,
+// replayed from the session inventory file written at SessionStart — see
+// renderHookScript / renderClaudeMCPInventoryScript).
+//
+// Two payload shapes are supported, set by the hook script depending on the
+// execution environment it detected:
+//   - additional_data.mcp_inventory_claude_code: raw text from
+//     `claude mcp list`. Parsed by ParseClaudeMCPList.
+//   - additional_data.mcp_inventory_cowork: structured array scraped from
+//     .mcp.json files inside cowork (no `claude` CLI available). Parsed
+//     by ParseCoworkMCPInventory.
+func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen.ClaudePayload) ([]MCPServerEntry, string, bool) {
+	if payload.AdditionalData == nil {
+		return nil, "", false
+	}
 	switch {
 	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
 		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
 		if !ok || raw == "" {
-			return
+			return nil, "", false
 		}
-		entries = ParseClaudeMCPList(raw)
-		variant = agentVariantClaudeCode
+		return ParseClaudeMCPList(raw), agentVariantClaudeCode, true
 	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
 		raw := payload.AdditionalData["mcp_inventory_cowork"]
-		entries = ParseCoworkMCPInventory(raw)
-		variant = agentVariantCowork
+		entries := ParseCoworkMCPInventory(raw)
 		// Diagnostic: cmux's per-run config has evolved its field names
 		// across versions, so when the inventory ships but every entry
 		// comes out without a ConnectorUUID we'd silently fall back to
@@ -451,17 +491,28 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 			}
 		}
 		if len(entries) > 0 && !anyConnectorUUID {
+			sessionID := ""
+			if payload.SessionID != nil {
+				sessionID = *payload.SessionID
+			}
 			s.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
 				attr.SlogEvent("claude_hook_cowork_inventory_missing_uuid"),
-				attr.SlogGenAIConversationID(*payload.SessionID),
+				attr.SlogGenAIConversationID(sessionID),
 				attr.SlogValueAny(raw),
 			)
 		}
+		return entries, agentVariantCowork, true
 	default:
-		return
+		return nil, "", false
 	}
+}
 
-	key := sessionMCPListCacheKey(*payload.SessionID)
+// cacheMCPListSnapshot stores the parsed inventory and agent variant under the
+// session's cache keys. Shared by the SessionStart/ConfigChange capture path
+// and the PreToolUse enforcement resolver, so a payload-carried inventory
+// self-heals the cache that the best-effort telemetry path later reads.
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
+	key := sessionMCPListCacheKey(sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
@@ -470,13 +521,80 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 
-	variantKey := sessionAgentVariantCacheKey(*payload.SessionID)
+	variantKey := sessionAgentVariantCacheKey(sessionID)
 	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache session agent variant",
 			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
 			attr.SlogError(err),
 		)
 	}
+}
+
+// payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
+// gathered live during this PreToolUse call (additional_data.mcp_inventory_fresh)
+// rather than replayed from the per-session inventory file. hook.sh sets the
+// flag only when it shells out to gather the inventory inline because the file
+// did not exist yet; a replay from the file leaves it unset. A live gather
+// reflects the agent's current MCP configuration and supersedes the cache; a
+// replayed snapshot may lag a ConfigChange the server already cached, so it is
+// only used to fill cache misses (see resolveMCPListForEnforcement).
+func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
+	if payload.AdditionalData == nil {
+		return false
+	}
+	switch v := payload.AdditionalData["mcp_inventory_fresh"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "1"
+	default:
+		return false
+	}
+}
+
+// resolveMCPListForEnforcement returns the MCP inventory the PreToolUse
+// shadow-MCP guard should enforce against. The resolution order is:
+//
+//  1. A payload inventory gathered live this call (fresh) is authoritative —
+//     it reflects the agent's current MCP configuration — so it supersedes any
+//     cached snapshot and is written back to heal the cache.
+//  2. Otherwise the cached SessionStart/ConfigChange snapshot when present.
+//     ConfigChange refreshes the cache synchronously server-side, whereas the
+//     per-session file the payload replays is written asynchronously and can
+//     lag, so a replayed (non-fresh) inventory must not clobber a cache the
+//     server just updated.
+//  3. On a genuine cache miss (the DNO-286 window, before the async
+//     SessionStart snapshot has landed) a replayed payload inventory fills the
+//     gap and is written back so the best-effort telemetry path heals on later
+//     events. A cache transport error is NOT a miss: it fails closed rather
+//     than enforcing against a possibly-stale replay.
+//
+// Callers treat a returned error as fail-closed.
+func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+
+	if ok && payloadInventoryIsFresh(payload) {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+
+	cached, err := s.getCachedMCPList(ctx, sessionID)
+	if err == nil {
+		return cached, nil
+	}
+
+	// Only a genuine cache miss lets a non-fresh replayed inventory stand in: it
+	// means the cache is legitimately empty (the DNO-286 window before the async
+	// SessionStart snapshot lands), not that we failed to read it. On a Redis
+	// transport error we cannot establish the cache-authoritative ordering, so
+	// we fail closed exactly as the no-payload path does rather than enforce
+	// against a possibly-stale replay.
+	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+
+	return nil, err
 }
 
 // refreshMCPListTTL extends the MCP list cache TTL for the session if the
@@ -698,8 +816,36 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+			if blockID, err := uuid.NewV7(); err == nil {
+				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				// Prefer the email from the session metadata fetched above,
+				// falling back to the raw payload when it wasn't cached.
+				userEmail := conv.PtrValOr(payload.UserEmail, "")
+				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
+					userEmail = metadata.UserEmail
+				}
+				asyncCtx := context.WithoutCancel(ctx)
+				// Resolve the owning user inside the goroutine so the DB lookup
+				// stays off the deny hot path (a plain `go s.insert(...)` would
+				// evaluate the resolveUserByEmail argument synchronously).
+				go func() {
+					s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+						Provider:       "claude",
+						OrganizationID: ev.Context.OrganizationID,
+						ProjectID:      ev.Context.ProjectID,
+						Reason:         auditReason,
+						ToolName:       ev.ToolName,
+						UserID:         s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID),
+						RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+						RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+						ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					})
+				}()
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -790,11 +936,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return result, nil
 	}
 
-	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
-	// If it's missing we can't enforce the policy — deny with a retry-or-
-	// restart message so the user knows the guard is fail-closed rather
-	// than silently allowing.
-	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
+	// Resolve the `claude mcp list` inventory to enforce against. The hook
+	// script replays the SessionStart inventory file on every PreToolUse, so
+	// this normally comes straight from the request payload and is immune to
+	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
+	// snapshot only when the payload carried none. If neither is available we
+	// can't enforce the policy — deny with a retry-or-restart message so the
+	// user knows the guard is fail-closed rather than silently allowing.
+	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
@@ -920,8 +1069,41 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// Surface the block in the Recent Findings table (risk_results)
 	// alongside batch-scanner findings, with the URL in the match
 	// column so the dashboard can filter and offer "Exclude from
-	// policy" actions against the URL itself.
-	s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
+	// policy" actions against the URL itself. The persisted row also
+	// backs the durable block page: when it is written we append a
+	// signed link to that page so the agent (and user) can open the
+	// block, read the reason, and leave feedback.
+	// Pre-mint the durable block id so its URL goes in the deny response
+	// immediately, then persist the Recent Findings row and the block row off
+	// the hot path. The page becomes valid within moments — well before a human
+	// opens the link.
+	// Only mint the durable block URL when the project id parses: an invalid id
+	// would make insertToolCallBlock (and recordShadowMCPBlockFinding) skip the
+	// write, leaving the appended /blocks/<id> link pointing at a page with no
+	// backing row.
+	if projectUUID, parseErr := uuid.Parse(metadata.ProjectID); parseErr != nil {
+		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
+			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
+	} else if blockID, err := uuid.NewV7(); err == nil {
+		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		asyncCtx := context.WithoutCancel(ctx)
+		metaCopy := metadata
+		go func() {
+			resultID, msgID, _ := s.recordShadowMCPBlockFinding(asyncCtx, payload, &metaCopy, policy, matched, serverPrefix, detail)
+			s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+				Provider:       "claude",
+				OrganizationID: metaCopy.GramOrgID,
+				ProjectID:      projectUUID,
+				Reason:         auditReason,
+				ToolName:       mcpToolName,
+				UserID:         metaCopy.UserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   conv.NilableToNullUUID(resultID),
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+				ChatMessageID:  conv.NilableToNullUUID(msgID),
+			})
+		}()
+	}
 
 	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
@@ -957,22 +1139,22 @@ func (s *Service) recordShadowMCPBlockFinding(
 	matched *MCPServerEntry,
 	serverPrefix string,
 	detail string,
-) {
+) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	policyID, err := uuid.Parse(policy.ID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -990,7 +1172,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	// match identifies the server in the dashboard's Recent Findings row and
@@ -1027,7 +1209,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
@@ -1045,7 +1227,9 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
+		return uuid.Nil, uuid.Nil, false
 	}
+	return resultID, msgID, true
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
@@ -1080,7 +1264,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByID(metadata.UserID),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})
 }

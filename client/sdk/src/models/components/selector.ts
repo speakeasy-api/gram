@@ -32,6 +32,7 @@ export const ResourceKind = {
   Org: "org",
   Environment: "environment",
   RiskPolicy: "risk_policy",
+  Chat: "chat",
   Wildcard: "*",
 } as const;
 /**

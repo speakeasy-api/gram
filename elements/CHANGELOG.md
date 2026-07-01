@@ -1,5 +1,29 @@
 # @gram-ai/elements
 
+## 1.39.0
+
+### Minor Changes
+
+- f193c77: Project Assistant: fold the app-injected `<…context>` block in a user turn into a collapsed "Additional context" disclosure (chevron, expand to inspect) instead of rendering the raw tags. The expanded block wraps to the message-bubble width, so opening it no longer widens the bubble.
+
+## 1.38.2
+
+### Patch Changes
+
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+
+## 1.38.1
+
+### Patch Changes
+
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+
+## 1.38.0
+
+### Minor Changes
+
+- 1ba5adb: feat(dashboard): search within a chat thread. The chat detail sheet gains a find-in-conversation bar backed by full-thread server-side text search (`chat.load` `query` param returns the messages matching the query plus surrounding context, mirroring the risk-windowed view). Jump between matches with the prev/next controls or Enter/Shift+Enter (wrapping at the ends), Escape clears. The active match is highlighted bright yellow and the rest pale — across message text, tool names, and tool argument/output sections — and the tool holding the active match expands, collapsing again as you navigate away.
+
 ## 1.37.1
 
 ### Patch Changes

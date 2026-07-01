@@ -87,6 +87,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
@@ -295,24 +296,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "posthog-endpoint",
-			Usage:    "The endpoint to proxy product metrics too",
-			EnvVars:  []string{"POSTHOG_ENDPOINT"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-api-key",
-			Usage:    "The posthog public API key",
-			EnvVars:  []string{"POSTHOG_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-personal-api-key",
-			Usage:    "The posthog personal API key for local feature flag evaluation",
-			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -379,12 +362,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the server working directory.",
-			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
@@ -438,6 +415,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, posthogFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, gcpFlags...)
 
@@ -489,11 +467,6 @@ func newStartCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
-			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
 
@@ -560,6 +533,8 @@ func newStartCommand() *cli.Command {
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -572,6 +547,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -619,7 +595,6 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
 
@@ -857,12 +832,12 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
@@ -962,8 +937,21 @@ func newStartCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			// Drop client-supplied baggage on public routes before otelhttp
+			// extracts inbound trace context, so untrusted baggage never enters
+			// the request context.
+			mux.Use(middleware.DropInboundOTelBaggage)
 			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+				return otelhttp.NewHandler(h, "http",
+					otelhttp.WithServerName("gram"),
+					// Public MCP/OAuth routes are reachable by any third party, so
+					// their inbound trace context is potentially untrusted input.
+					// Treat them as OTel public endpoints: start a fresh root span
+					// and record the inbound context as a span link rather than
+					// adopting it as the parent. Trusted first-party routes (/rpc,
+					// /admin) keep parent-child continuity.
+					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
+				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -984,9 +972,10 @@ func newStartCommand() *cli.Command {
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1015,6 +1004,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				tracerProvider,
+				meterProvider,
 				telemLogger,
 				sessionManager,
 				hooksCache,
@@ -1050,6 +1040,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
@@ -1111,7 +1102,11 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
+			// runShutdown runs every func concurrently, which races temporalClient.Close()
+			// against the signaler's trailing-edge flush over the same gRPC connection
+			// ("grpc: the client connection is closing"). Instead it is flushed
+			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
@@ -1126,6 +1121,7 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,
+				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
 				hookPIIScanner,
 				hookPIScanner,
@@ -1182,7 +1178,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
@@ -1245,6 +1241,13 @@ func newStartCommand() *cli.Command {
 						err = errors.Join(err, gerr)
 					}
 					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
+				}
+
+				// The HTTP server is now fully drained, so no new risk signals are
+				// produced. Flush the throttle's queued trailing signals here while the
+				// Temporal client is still open — runShutdown closes it concurrently.
+				if err := riskSignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}
 			})
 

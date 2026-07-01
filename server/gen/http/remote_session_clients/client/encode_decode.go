@@ -264,6 +264,248 @@ func DecodeCreateRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildCreateCimdRequest instantiates a HTTP request object with method and
+// path set to call the "remoteSessionClients" service "createCimd" endpoint
+func (c *Client) BuildCreateCimdRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateCimdRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "createCimd", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateCimdRequest returns an encoder for requests sent to the
+// remoteSessionClients createCimd server.
+func EncodeCreateCimdRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.CreateCimdPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "createCimd", "*remotesessionclients.CreateCimdPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateCimdRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "createCimd", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateCimdResponse returns a decoder for responses returned by the
+// remoteSessionClients createCimd endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateCimdResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateCimdResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateCimdResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			res := NewCreateCimdRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateCimdUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateCimdForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateCimdBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateCimdNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateCimdConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateCimdUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateCimdInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateCimdInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+				}
+				err = ValidateCreateCimdInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+				}
+				return nil, NewCreateCimdInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateCimdUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+				}
+				err = ValidateCreateCimdUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+				}
+				return nil, NewCreateCimdUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "createCimd", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateCimdGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "createCimd", err)
+			}
+			err = ValidateCreateCimdGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "createCimd", err)
+			}
+			return nil, NewCreateCimdGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "createCimd", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCloneClientFromOAuthProxyProviderRequest instantiates a HTTP request
 // object with method and path set to call the "remoteSessionClients" service
 // "cloneClientFromOAuthProxyProvider" endpoint
@@ -750,6 +992,494 @@ func DecodeUpdateRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "updateRemoteSessionClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildAttachUserSessionIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessionClients" service
+// "attachUserSessionIssuer" endpoint
+func (c *Client) BuildAttachUserSessionIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AttachUserSessionIssuerRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "attachUserSessionIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAttachUserSessionIssuerRequest returns an encoder for requests sent to
+// the remoteSessionClients attachUserSessionIssuer server.
+func EncodeAttachUserSessionIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.AttachUserSessionIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "attachUserSessionIssuer", "*remotesessionclients.AttachUserSessionIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewAttachUserSessionIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAttachUserSessionIssuerResponse returns a decoder for responses
+// returned by the remoteSessionClients attachUserSessionIssuer endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeAttachUserSessionIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAttachUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AttachUserSessionIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			res := NewAttachUserSessionIssuerRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AttachUserSessionIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AttachUserSessionIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AttachUserSessionIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AttachUserSessionIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AttachUserSessionIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AttachUserSessionIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AttachUserSessionIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AttachUserSessionIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+				}
+				err = ValidateAttachUserSessionIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+				}
+				return nil, NewAttachUserSessionIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AttachUserSessionIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+				}
+				err = ValidateAttachUserSessionIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+				}
+				return nil, NewAttachUserSessionIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "attachUserSessionIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AttachUserSessionIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			err = ValidateAttachUserSessionIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachUserSessionIssuer", err)
+			}
+			return nil, NewAttachUserSessionIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "attachUserSessionIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDetachUserSessionIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessionClients" service
+// "detachUserSessionIssuer" endpoint
+func (c *Client) BuildDetachUserSessionIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DetachUserSessionIssuerRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "detachUserSessionIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDetachUserSessionIssuerRequest returns an encoder for requests sent to
+// the remoteSessionClients detachUserSessionIssuer server.
+func EncodeDetachUserSessionIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.DetachUserSessionIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "detachUserSessionIssuer", "*remotesessionclients.DetachUserSessionIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDetachUserSessionIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDetachUserSessionIssuerResponse returns a decoder for responses
+// returned by the remoteSessionClients detachUserSessionIssuer endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDetachUserSessionIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDetachUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DetachUserSessionIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			res := NewDetachUserSessionIssuerRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DetachUserSessionIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DetachUserSessionIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DetachUserSessionIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DetachUserSessionIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DetachUserSessionIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DetachUserSessionIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DetachUserSessionIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DetachUserSessionIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+				}
+				err = ValidateDetachUserSessionIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+				}
+				return nil, NewDetachUserSessionIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DetachUserSessionIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+				}
+				err = ValidateDetachUserSessionIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+				}
+				return nil, NewDetachUserSessionIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "detachUserSessionIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DetachUserSessionIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			err = ValidateDetachUserSessionIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachUserSessionIssuer", err)
+			}
+			return nil, NewDetachUserSessionIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "detachUserSessionIssuer", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1488,15 +2218,20 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 	res := &types.RemoteSessionClient{
 		ID:                      *v.ID,
 		ProjectID:               *v.ProjectID,
+		OrganizationID:          *v.OrganizationID,
 		RemoteSessionIssuerID:   *v.RemoteSessionIssuerID,
-		UserSessionIssuerID:     *v.UserSessionIssuerID,
 		ClientID:                *v.ClientID,
+		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,
+	}
+	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
+	for i, val := range v.UserSessionIssuerIds {
+		res.UserSessionIssuerIds[i] = val
 	}
 	if v.Scope != nil {
 		res.Scope = make([]string, len(v.Scope))

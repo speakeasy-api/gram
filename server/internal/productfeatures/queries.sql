@@ -7,7 +7,7 @@ SELECT EXISTS (
             AND deleted IS FALSE
 ) AS enabled;
 
--- name: EnableFeature :one
+-- name: EnableFeature :exec
 INSERT INTO organization_features (
     organization_id,
     feature_name
@@ -15,7 +15,8 @@ INSERT INTO organization_features (
     @organization_id,
     @feature_name
 )
-RETURNING *;
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO NOTHING;
 
 -- name: DeleteFeature :one
 UPDATE organization_features

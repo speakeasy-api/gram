@@ -45,9 +45,13 @@ export type LoadChatRequest = {
    */
   fromStart?: boolean | undefined;
   /**
-   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
    */
   riskOnly?: boolean | undefined;
+  /**
+   * When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+   */
+  query?: string | undefined;
   /**
    * Session header
    */
@@ -162,6 +166,7 @@ export type LoadChatRequest$Outbound = {
   after_seq?: number | undefined;
   from_start: boolean;
   risk_only: boolean;
+  query?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -180,6 +185,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
     afterSeq: z.optional(z.int()),
     fromStart: z._default(z.boolean(), false),
     riskOnly: z._default(z.boolean(), false),
+    query: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),

@@ -25,7 +25,7 @@ func BuildCreateIssuerPayload(organizationRemoteSessionIssuersCreateIssuerBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.ProjectID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
@@ -50,17 +50,18 @@ func BuildCreateIssuerPayload(organizationRemoteSessionIssuersCreateIssuerBody s
 		}
 	}
 	v := &organizationremotesessionissuers.CreateIssuerPayload{
-		ProjectID:             body.ProjectID,
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		ProjectID:                         body.ProjectID,
+		Slug:                              body.Slug,
+		Issuer:                            body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -208,7 +209,7 @@ func BuildUpdateIssuerPayload(organizationRemoteSessionIssuersUpdateIssuerBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.LogoAssetID != nil {
@@ -231,17 +232,18 @@ func BuildUpdateIssuerPayload(organizationRemoteSessionIssuersUpdateIssuerBody s
 		}
 	}
 	v := &organizationremotesessionissuers.UpdateIssuerPayload{
-		ID:                    body.ID,
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		ID:                                body.ID,
+		Slug:                              body.Slug,
+		Issuer:                            body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -547,6 +549,136 @@ func BuildListClientSessionsPayload(organizationRemoteSessionIssuersListClientSe
 	return v, nil
 }
 
+// BuildCreateClientPayload builds the payload for the
+// organizationRemoteSessionIssuers createClient endpoint from CLI flags.
+func BuildCreateClientPayload(organizationRemoteSessionIssuersCreateClientBody string, organizationRemoteSessionIssuersCreateClientSessionToken string, organizationRemoteSessionIssuersCreateClientApikeyToken string) (*organizationremotesessionissuers.CreateClientPayload, error) {
+	var err error
+	var body CreateClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			}
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersCreateClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersCreateClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersCreateClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersCreateClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.CreateClientPayload{
+		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
+		ProjectID:               body.ProjectID,
+		ClientID:                body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildCreateCimdClientPayload builds the payload for the
+// organizationRemoteSessionIssuers createCimdClient endpoint from CLI flags.
+func BuildCreateCimdClientPayload(organizationRemoteSessionIssuersCreateCimdClientBody string, organizationRemoteSessionIssuersCreateCimdClientSessionToken string, organizationRemoteSessionIssuersCreateCimdClientApikeyToken string) (*organizationremotesessionissuers.CreateCimdClientPayload, error) {
+	var err error
+	var body CreateCimdClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateCimdClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersCreateCimdClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersCreateCimdClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersCreateCimdClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersCreateCimdClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.CreateCimdClientPayload{
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		ProjectID:             body.ProjectID,
+		Audience:              body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildUpdateClientPayload builds the payload for the
 // organizationRemoteSessionIssuers updateClient endpoint from CLI flags.
 func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody string, organizationRemoteSessionIssuersUpdateClientSessionToken string, organizationRemoteSessionIssuersUpdateClientApikeyToken string) (*organizationremotesessionissuers.UpdateClientPayload, error) {
@@ -555,12 +687,9 @@ func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -599,7 +728,6 @@ func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody s
 	v := &organizationremotesessionissuers.UpdateClientPayload{
 		ID:                      body.ID,
 		ClientSecret:            body.ClientSecret,
-		UserSessionIssuerID:     body.UserSessionIssuerID,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
 	}

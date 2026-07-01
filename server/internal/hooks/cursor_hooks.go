@@ -26,12 +26,21 @@ import (
 )
 
 // Cursor is the endpoint for Cursor hook events
-func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *gen.CursorHookResult, err error) {
+	start := time.Now()
 	parsedEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
 	logHookEventName := payload.HookEventName
 	if parsedHookEvent {
 		logHookEventName = string(parsedEvent)
 	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, orgSlug, time.Since(start))
+	}()
 
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
@@ -43,6 +52,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
+		outcome = hookMetricOutcomeUnauthorized
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
@@ -55,6 +65,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	}
 
 	orgID := authCtx.ActiveOrganizationID
+	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	if userEmail == "" {
@@ -118,8 +129,26 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       strings.TrimPrefix(ev.ToolName, "MCP:"),
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			// Surface the reason to the agent (not just the user) so it can
+			// self-correct instead of treating the deny as an opaque sandbox
+			// rejection.
+			result.AgentMessage = &userReason
 			break
 		}
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, actorUserID)
@@ -129,7 +158,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		}
 		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, ev.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -149,6 +178,20 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				RiskPolicyID:    policy.ID,
 			})
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
 			result.AgentMessage = &userReason
@@ -171,8 +214,23 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				UserID:         actorUserID,
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		} else {
 			result.Permission = new("allow")
 		}
@@ -183,6 +241,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		}
 	default:
 		// nothing to do
@@ -265,7 +324,7 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
 func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string, hookEvent HookEvent) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, metadata.UserEmail, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch hookEvent {
@@ -291,7 +350,7 @@ func isCursorConversationEvent(hookEvent HookEvent) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, userEmail string, blockReason string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
@@ -318,7 +377,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByID(userID),
+			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 			Attributes: attrs,
 		})
 

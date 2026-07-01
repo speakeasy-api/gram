@@ -71,6 +71,7 @@ import (
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
@@ -82,9 +83,13 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
-	ID                    string              `json:"id"`
-	ParentChallengeID     string              `json:"parent_challenge_id"`
-	ProjectID             uuid.UUID           `json:"project_id"`
+	ID                string    `json:"id"`
+	ParentChallengeID string    `json:"parent_challenge_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	// OrganizationID scopes the callback's client lookup so an organization-level
+	// client (project_id NULL) bound to this project's user_session_issuer
+	// resolves on the way back. Empty for in-flight states minted before it.
+	OrganizationID        string              `json:"organization_id,omitempty"`
 	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
 	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
 	TokenEndpoint         string              `json:"token_endpoint"`
@@ -188,9 +193,10 @@ func (c Client) resolveScopes() []string {
 func (m *ChallengeManager) ListClients(
 	ctx context.Context,
 	projectID uuid.UUID,
+	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -283,7 +289,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL(parent.RouteBase)
+	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
@@ -316,6 +322,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
+		OrganizationID:        parent.OrganizationID,
 		UserSessionIssuerID:   parent.UserSessionIssuerID,
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
@@ -417,25 +424,27 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
-		ID:        state.RemoteSessionClientID,
-		ProjectID: conv.ToNullUUID(state.ProjectID),
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: conv.ToPGText(state.OrganizationID),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
+	client := clientRow.RemoteSessionClient
 
 	var clientSecret string
-	if clientRow.ClientSecretEncrypted.Valid {
-		decoded, derr := m.enc.Decrypt(clientRow.ClientSecretEncrypted.String)
+	if client.ClientSecretEncrypted.Valid {
+		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
 			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
+	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	audience := conv.FromPGTextOrEmpty[string](client.Audience)
+	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
@@ -498,13 +507,22 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	return nil
 }
 
+// canonicalCallbackRouteBase is the route base the outbound remote-login
+// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
+// and /x/mcp and recovers the originating slug from the cached login state, so
+// one canonical base serves either surface. A single stable redirect_uri also
+// matches the lone redirect_uri a CIMD client publishes in its metadata
+// document; the originating surface lives in the login state's RouteBase for
+// the post-callback bounce.
+const canonicalCallbackRouteBase = "mcp"
+
 // callbackURL is the route-base-scoped path the upstream provider redirects
 // back to after the user authenticates. Empty routeBase falls back to "mcp"
 // for back-compat with callers that haven't been threaded with a RouteBase
 // yet (and for in-flight states minted before this parameter landed).
 func (m *ChallengeManager) callbackURL(routeBase string) string {
 	if routeBase == "" {
-		routeBase = "mcp"
+		routeBase = canonicalCallbackRouteBase
 	}
 	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }

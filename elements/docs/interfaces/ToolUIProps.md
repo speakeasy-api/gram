@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.1**](../README.md)
+[**@gram-ai/elements v1.39.0**](../README.md)
 
 ***
 
@@ -77,6 +77,25 @@ Flag matches inside the arguments (risk review).
 > `optional` **resultHighlight**: [`SectionHighlight`](SectionHighlight.md)
 
 Flag matches inside the output (risk review).
+
+***
+
+### nameQuery?
+
+> `optional` **nameQuery**: `string`
+
+When set, highlight occurrences of this query (case-insensitive) in the
+tool name — e.g. a thread search for "customer" lights up `get_customer`.
+
+***
+
+### nameActiveOccurrence?
+
+> `optional` **nameActiveOccurrence**: `number` \| `null`
+
+Index of the active query occurrence within the tool name (the unified
+navigator's current target), or null when the active occurrence isn't in the
+name. Per-section args/output active occurrences ride their `*Highlight`.
 
 ***
 

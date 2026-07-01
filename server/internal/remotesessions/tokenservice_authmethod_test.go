@@ -121,13 +121,19 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
-		UserSessionIssuerID:     conv.ToNullUUID(userIssuer),
 		ClientID:                externalCID,
 		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText(authMethod),
+	})
+	require.NoError(t, err)
+
+	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuer,
 	})
 	require.NoError(t, err)
 

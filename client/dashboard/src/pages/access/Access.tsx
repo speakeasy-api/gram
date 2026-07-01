@@ -8,10 +8,13 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgRoutes } from "@/routes";
+import { Alert } from "@speakeasy-api/moonshine";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Navigate, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
@@ -65,6 +68,8 @@ export default function Access(): JSX.Element {
 function AccessInner() {
   const location = useLocation();
   const navigate = useNavigate();
+  const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
   const { data: membersData } = useMembers();
   const roleCount = rolesData?.roles?.length;
@@ -93,6 +98,19 @@ function AccessInner() {
           permissions. View past authorization challenges.
         </Type>
       </div>
+
+      {organization.scimEnabled && (
+        <Alert variant="info" dismissible={false} className="mb-6 text-sm">
+          Directory Sync (SCIM) is enabled. Roles are assigned from your
+          identity provider, not here.{" "}
+          <Link
+            to={orgRoutes.identity.href()}
+            className="underline underline-offset-2"
+          >
+            Manage identity settings
+          </Link>
+        </Alert>
+      )}
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <div className="border-border -mx-8 border-b px-8">

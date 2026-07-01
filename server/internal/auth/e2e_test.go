@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -149,7 +150,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		wf = fetcher
 	}
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cache.SuffixNone)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, nil, cache.SuffixNone)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
 		idpClient, billingClient, resolver,
@@ -167,7 +168,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, nil)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
@@ -303,6 +304,76 @@ func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
 	orgMeta, err := orgQueries.GetOrganizationMetadata(ctx, workosOrgID)
 	require.NoError(t, err)
 	assert.True(t, orgMeta.Whitelisted, "existing org's whitelisted flag must be preserved")
+}
+
+func TestE2E_Callback_ClaimsWorkOSMembershipPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID     = "user_01WORKOS_PLACEHOLDER"
+		workosOrgID      = "org_01PLACEHOLDER"
+		workosMembership = "om_01PLACEHOLDER"
+		gramOrgID        = "placeholder-org"
+		orgName          = "Placeholder Corp"
+	)
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: workosMembership, UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "placeholder@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	orgQueries := orgRepo.New(inst.conn)
+	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       gramOrgID,
+		Name:     orgName,
+		Slug:     "placeholder-corp",
+		WorkosID: pgtype.Text{String: workosOrgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	err = orgQueries.UpsertWorkOSMembership(ctx, orgRepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     gramOrgID,
+		UserID:             pgtype.Text{},
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(workosMembership),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now()),
+		WorkosLastEventID:  conv.ToPGText("evt_placeholder"),
+	})
+	require.NoError(t, err)
+
+	before, err := orgQueries.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembership))
+	require.NoError(t, err)
+	require.False(t, before.UserID.Valid)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	after, err := orgQueries.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembership))
+	require.NoError(t, err)
+	require.Equal(t, before.ID, after.ID)
+	require.Equal(t, gramUserID, after.UserID.String)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, gramOrgID, authCtx.ActiveOrganizationID)
 }
 
 // TestE2E_Callback_NewUserNoWorkOSOrgs verifies that when a new user has no

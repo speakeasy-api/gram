@@ -37,6 +37,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		TokenEndpointAuthMethodsSupported: row.TokenEndpointAuthMethodsSupported,
 		Oidc:                              row.Oidc,
 		Passthrough:                       row.Passthrough,
+		ClientIDMetadataDocumentSupported: row.ClientIDMetadataDocumentSupported,
 		CreatedAt:                         row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                         row.UpdatedAt.Time.Format(time.RFC3339),
 	}

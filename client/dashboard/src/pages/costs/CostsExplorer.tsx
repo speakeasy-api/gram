@@ -32,7 +32,7 @@ import { useRoutes } from "@/routes";
 import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
-import { SessionTable } from "./SessionTable";
+import { SessionTable, type SessionColumnId } from "./SessionTable";
 import {
   type Axis,
   availableDimensions,
@@ -62,7 +62,6 @@ const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
 const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
   [Dimension.DivisionName]: [Dimension.DepartmentName, Dimension.Email],
   [Dimension.DepartmentName]: [Dimension.Email, Dimension.Model],
-  [Dimension.Group]: [Dimension.Email, Dimension.HookSource],
   [Dimension.Email]: [Dimension.HookSource],
   [Dimension.HookSource]: [Dimension.Model],
   [Dimension.JobTitle]: [Dimension.Email, Dimension.DepartmentName],
@@ -143,7 +142,7 @@ export function CostsExplorer(): JSX.Element {
   // The sessions sentinel swaps the table for the per-session list; the rest of
   // the page (filters, widgets, header stats) is unchanged.
   const sessionsMode = isSessionsAxis(byParam) || atSessionLeaf;
-  // The "Most costly sessions" widget shows on org/division/department/team/user
+  // The "Most costly sessions" widget shows on org/division/department/user
   // (not Agent/Model, which already render the full session table).
   const showSessionsWidget = showsTopSessionsWidget(deepestCrumb);
 
@@ -180,6 +179,20 @@ export function CostsExplorer(): JSX.Element {
     if (!project.id) return drill;
     return [{ dimension: Dimension.ProjectId, values: [project.id] }, ...drill];
   }, [path, project.id]);
+
+  // Drop session columns whose dimension the drill path already pins to a single
+  // value — that column would just repeat the same value down every row. Mapped
+  // from drill dimension to the session-table column id it makes redundant.
+  const hiddenSessionColumns = useMemo<SessionColumnId[]>(() => {
+    const byDimension: Partial<Record<Dimension, SessionColumnId>> = {
+      [Dimension.Email]: "user",
+      [Dimension.HookSource]: "agent",
+      [Dimension.Model]: "model",
+    };
+    return path
+      .map((c) => byDimension[c.dim])
+      .filter((id): id is SessionColumnId => id !== undefined);
+  }, [path]);
 
   // The generated useTelemetryQuery hook keys its cache on gramSession only — it
   // ignores the request body — so every drill would return the first cached
@@ -500,12 +513,12 @@ export function CostsExplorer(): JSX.Element {
         ? "Top spenders"
         : `Spend by ${(LABELS[dim] ?? "").toLowerCase()}`;
     // A mix card's rows are drillable when its dimension has a *populated* level
-    // below it (e.g. Department → Team); leaf dims (Agent) or levels with no data
+    // below it (e.g. Department → User); leaf dims (Agent) or levels with no data
     // beneath them are shown but not clickable.
     const drillableDim = (dim: Dimension) =>
       isSessionLeaf(dim) || nextAvailableDimension(dim, availableDims) !== null;
-    // Team view groups by user, so its table already ranks people — surface the
-    // top spenders as a compact card too (reuses the main rows, no extra query).
+    // A user breakdown already ranks people in its table — surface the top
+    // spenders as a compact card too (reuses the main rows, no extra query).
     if (groupBy === Dimension.Email) {
       const userRows = (data?.table ?? [])
         .filter((r) => r.groupValue !== "Other")
@@ -822,6 +835,7 @@ export function CostsExplorer(): JSX.Element {
               isLoading={sessionsFetching && !sessionsData}
               isError={sessionsError}
               onOpen={setOpenChatId}
+              hiddenColumns={hiddenSessionColumns}
             />
           ) : undefined
         }

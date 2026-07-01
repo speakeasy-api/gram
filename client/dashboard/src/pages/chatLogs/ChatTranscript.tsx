@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type JSX,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -49,9 +50,13 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import {
+  argsToString,
   type DisplayItem,
+  messageText,
   type MessageRow,
+  type SearchFieldKey,
   type ToolRow,
+  type TranscriptRow,
   type TurnAuthor,
 } from "./transcript";
 import {
@@ -64,7 +69,8 @@ import {
   distinctRiskCount,
   resultsAreSensitive,
   useRowReveal,
-} from "./chatRiskHelpers";
+} from "./chatHelpers";
+import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
@@ -75,6 +81,9 @@ interface RowContext {
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
+  /** Active search query — highlights its occurrences in non-flagged rows and
+   * expands tool rows so a match inside a collapsed tool is visible. */
+  searchQuery?: string;
   /** Chat-level user label, used as the turn-header name when an individual
    * message carries no user id of its own. */
   userLabel?: string;
@@ -83,45 +92,6 @@ interface RowContext {
 // Fade non-risky rows so the findings stand out.
 function dimClass(dim: boolean): string {
   return dim ? "opacity-40" : "";
-}
-
-// Strip the injected `<message-context>…</message-context>` envelope (event id,
-// timestamp, user id) and trailing whitespace the harness prepends to prompts —
-// it's machine plumbing, not part of the conversation.
-function cleanMessageText(raw: string): string {
-  return (
-    raw
-      // Only the leading injected envelope, not literal tags mid-message.
-      .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
-      .replace(/[ \t]+$/gm, "")
-      .trim()
-  );
-}
-
-function messageText(content: unknown): string {
-  if (typeof content === "string") return cleanMessageText(content);
-  if (Array.isArray(content)) {
-    return cleanMessageText(
-      content
-        .map((part) =>
-          part &&
-          typeof part === "object" &&
-          "text" in part &&
-          typeof (part as { text: unknown }).text === "string"
-            ? (part as { text: string }).text
-            : "",
-        )
-        .filter(Boolean)
-        .join("\n"),
-    );
-  }
-  if (content == null) return "";
-  return JSON.stringify(content, null, 2);
-}
-
-function argsToString(args: string | object | undefined): string | undefined {
-  if (args === undefined) return undefined;
-  return typeof args === "string" ? args : JSON.stringify(args, null, 2);
 }
 
 function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
@@ -305,14 +275,14 @@ function TurnHeader({
   author,
   userId,
   userLabel,
+  createdAt,
   results,
-  first,
 }: {
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
+  createdAt?: Date;
   results?: RiskResult[];
-  first: boolean;
 }) {
   const isUser = author === "user";
   const userName = userId ?? userLabel;
@@ -320,29 +290,40 @@ function TurnHeader({
   // assistant turn's findings live on its tool rows, aggregated into `results`.
   const flagged = !!results && results.length > 0;
   const riskCount = flagged ? distinctRiskCount(results) : 0;
+  // The turn's timestamp sits in the divider (replacing the old "Turn" label).
+  const when = createdAt ? format(new Date(createdAt), "MMM d, h:mm a") : null;
   return (
     <div className="px-4">
-      {/* Turn separator: a zig-zag rule with a centered label. A flagged turn
-          turns red and counts its risks instead of reading "Turn"; the label
-          opens the findings popover. */}
-      {(!first || flagged) && (
-        <div
-          className={cn(
-            "flex items-center gap-3 pt-7 pb-5",
-            flagged ? "text-red-700" : "text-muted-foreground",
+      {/* Turn separator: a zig-zag rule with a centered label showing the turn's
+          date + time (shown for every turn, including the first). A flagged turn
+          turns red and appends "N risks" after a divider; that label opens the
+          findings popover. */}
+      <div
+        className={cn(
+          "flex items-center gap-3 pt-7 pb-5",
+          flagged ? "text-red-800" : "text-muted-foreground",
+        )}
+      >
+        <ZigZagRule
+          bold={flagged}
+          className={flagged ? "bg-red-800" : undefined}
+        />
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          {when && (
+            // No explicit colour: inherit the divider's (red when flagged, muted
+            // otherwise) so a risky turn's timestamp matches its "N risks" label.
+            <span className="font-mono text-[13px] font-medium uppercase">
+              {when}
+            </span>
           )}
-        >
-          <ZigZagRule
-            bold={flagged}
-            className={flagged ? "bg-red-700" : undefined}
-          />
-          {flagged ? (
+          {flagged && when && <span className="bg-border h-3.5 w-px" />}
+          {flagged && (
             <RiskBadge
               results={results}
               trigger={
                 <button
                   type="button"
-                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-sm font-semibold whitespace-nowrap text-red-700 uppercase"
+                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-[13px] font-medium whitespace-nowrap text-red-800 uppercase"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {riskCount} {riskCount === 1 ? "risk" : "risks"}
@@ -350,17 +331,13 @@ function TurnHeader({
                 </button>
               }
             />
-          ) : (
-            <span className="font-mono text-sm font-medium uppercase">
-              Turn
-            </span>
           )}
-          <ZigZagRule
-            bold={flagged}
-            className={flagged ? "bg-red-700" : undefined}
-          />
         </div>
-      )}
+        <ZigZagRule
+          bold={flagged}
+          className={flagged ? "bg-red-800" : undefined}
+        />
+      </div>
       <div className="flex items-center justify-between pt-1 pb-3">
         <div className="bg-background flex h-9 min-w-0 items-center gap-2 rounded-full border pr-3 pl-1">
           <Avatar className="size-7 shrink-0">
@@ -382,7 +359,17 @@ function TurnHeader({
 // bubble. The avatar/name + risk badge + Actions menu sit in the turn header
 // above; the meta strip below keeps the message time, cost, and reveal toggle
 // (create-exclusion moved to the header Actions menu).
-function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function UserMessageRow({
+  row,
+  ctx,
+  activeTextOccurrence,
+}: {
+  row: MessageRow;
+  ctx: RowContext;
+  /** Index of the active search occurrence within this message's text, or null
+   * when this row doesn't hold the active occurrence. */
+  activeTextOccurrence: number | null;
+}) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
   const usage = ctx.claudeUsageByMessage.get(message.id);
@@ -406,17 +393,23 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
             revealed={sensitive ? revealed : undefined}
           />
         ) : (
-          <div className="whitespace-pre-wrap">{text}</div>
+          <div className="whitespace-pre-wrap">
+            {ctx.searchQuery ? (
+              <QueryHighlight
+                text={text}
+                query={ctx.searchQuery}
+                activeIndex={activeTextOccurrence}
+              />
+            ) : (
+              text
+            )}
+          </div>
         )}
       </div>
-      {(flagged || usage) && (
+      {(usage || sensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
-          <span className="tabular-nums">
-            {format(new Date(message.createdAt), "h:mm a")}
-          </span>
-          {usage && <MetaSeparator />}
           {usage && <CostBadge usage={usage} />}
-          {sensitive && <MetaSeparator />}
+          {usage && sensitive && <MetaSeparator />}
           {sensitive && (
             <RevealSecretButton
               results={results}
@@ -435,9 +428,13 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
 function AssistantMessageRow({
   row,
   ctx,
+  activeTextOccurrence,
 }: {
   row: MessageRow;
   ctx: RowContext;
+  /** Index of the active search occurrence within this message's text, or null
+   * when this row doesn't hold the active occurrence. */
+  activeTextOccurrence: number | null;
 }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -455,6 +452,16 @@ function AssistantMessageRow({
             results={results}
             revealed={sensitive ? revealed : undefined}
           />
+        ) : ctx.searchQuery ? (
+          // While searching, render plain (non-markdown) text so query hits can
+          // be highlighted inline — markdown output can't carry <mark> spans.
+          <div className="whitespace-pre-wrap">
+            <QueryHighlight
+              text={text}
+              query={ctx.searchQuery}
+              activeIndex={activeTextOccurrence}
+            />
+          </div>
         ) : (
           <MessageContent markdown content={text} />
         )}
@@ -495,12 +502,32 @@ function SystemMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
   );
 }
 
-function MessageRowView({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function MessageRowView({
+  row,
+  ctx,
+  activeTextOccurrence,
+}: {
+  row: MessageRow;
+  ctx: RowContext;
+  activeTextOccurrence: number | null;
+}) {
   switch (row.entryType) {
     case "user":
-      return <UserMessageRow row={row} ctx={ctx} />;
+      return (
+        <UserMessageRow
+          row={row}
+          ctx={ctx}
+          activeTextOccurrence={activeTextOccurrence}
+        />
+      );
     case "assistant":
-      return <AssistantMessageRow row={row} ctx={ctx} />;
+      return (
+        <AssistantMessageRow
+          row={row}
+          ctx={ctx}
+          activeTextOccurrence={activeTextOccurrence}
+        />
+      );
     case "system":
       return <SystemMessageRow row={row} ctx={ctx} />;
   }
@@ -545,7 +572,26 @@ function toSectionMatches(
     }));
 }
 
-function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
+function ToolRowView({
+  row,
+  ctx,
+  active,
+  activeNameOccurrence,
+  activeArgsOccurrence,
+  activeOutputOccurrence,
+}: {
+  row: ToolRow;
+  ctx: RowContext;
+  /** This tool holds the active search occurrence → expand it (and remount on
+   * toggle so it collapses again when navigation moves to another match). */
+  active: boolean;
+  /** Active occurrence index within the tool name, or null. */
+  activeNameOccurrence: number | null;
+  /** Active occurrence index within the Arguments section, or null. */
+  activeArgsOccurrence: number | null;
+  /** Active occurrence index within the Output section, or null. */
+  activeOutputOccurrence: number | null;
+}) {
   const openExclusion = useContext(CreateExclusionContext);
   const name =
     row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
@@ -563,20 +609,48 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
   // and active-match exclusion action.
   const reqMatches = toSectionMatches(callResults, openExclusion);
   const resMatches = toSectionMatches(resultResults, openExclusion);
+  // Search: which of this tool's sections contain the query (case-insensitive,
+  // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
+  const queryLc = ctx.searchQuery?.trim().toLowerCase();
+  const requestMatches =
+    !!queryLc && (request?.toLowerCase().includes(queryLc) ?? false);
+  const resultMatches =
+    !!queryLc && (result?.toLowerCase().includes(queryLc) ?? false);
+  // Each tool row is a distinct display item, so the active occurrence's row
+  // index already identifies exactly this tool — no need to re-check which
+  // section matched (that's what the per-field active indices below carry).
+  const toolActive = active;
+  const searchSection: SectionMatch[] = ctx.searchQuery
+    ? [{ value: ctx.searchQuery, label: "match" }]
+    : [];
   const requestHighlight = callResults?.length
     ? {
         matches: reqMatches ?? [],
         masked: resultsAreSensitive(callResults),
         headerBadge: <RiskBadge results={callResults} />,
       }
-    : undefined;
+    : requestMatches
+      ? {
+          matches: searchSection,
+          masked: false,
+          tone: "search" as const,
+          activeOccurrence: activeArgsOccurrence,
+        }
+      : undefined;
   const resultHighlight = resultResults?.length
     ? {
         matches: resMatches ?? [],
         masked: resultsAreSensitive(resultResults),
         headerBadge: <RiskBadge results={resultResults} />,
       }
-    : undefined;
+    : resultMatches
+      ? {
+          matches: searchSection,
+          masked: false,
+          tone: "search" as const,
+          activeOccurrence: activeOutputOccurrence,
+        }
+      : undefined;
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
@@ -591,13 +665,20 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         </div>
       )}
       <ToolUI
+        // ToolUI expansion is uncontrolled, so key on `toolActive` to remount it:
+        // landing on this tool's match opens it; moving to the next match
+        // collapses it again. Non-active tools keep a stable key (and any manual
+        // expansion the user made).
+        key={toolActive ? "active" : "default"}
         name={name}
         request={request}
         result={result}
         status="complete"
-        defaultExpanded={flagged}
+        defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
+        nameQuery={ctx.searchQuery}
+        nameActiveOccurrence={activeNameOccurrence}
       />
     </div>
   );
@@ -635,6 +716,20 @@ export interface TranscriptPagination {
    * must stay off (otherwise it walks the window back to the chat start before
    * the finding index — sourced from a separate query — has resolved). */
   scrollToFinding: boolean;
+  /** Search match navigation: the display-item index to center, re-issued every
+   * time `scrollNonce` changes (so repeatedly hitting next/prev re-scrolls even
+   * to the same index). null when not navigating matches. */
+  scrollToItemIndex?: number | null;
+  scrollNonce?: number;
+  /** The currently-active search occurrence: which display item, which field of
+   * that row, and which occurrence within the field. The row holding it expands
+   * (a matched tool opens) and renders that single occurrence bright; everything
+   * else is pale. null when not searching / no matches. */
+  activeOccurrence?: {
+    itemIndex: number;
+    fieldKey: SearchFieldKey;
+    indexInField: number;
+  } | null;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -672,12 +767,69 @@ function LoadDivider({
   );
 }
 
+// Memoized row subtree. The transcript re-renders on every match-navigation
+// (scrollNonce/scrollToItemIndex churn in `pagination`), but a row's content
+// only depends on (row, ctx) — both stable across navigation — so this skips
+// re-rendering the expensive ToolUI on each next/prev.
+/** The query field + occurrence index the global navigator is currently on,
+ * within the row this is passed to (null for every non-active row). */
+interface ActiveField {
+  key: SearchFieldKey;
+  index: number;
+}
+
+const RowView = memo(function RowView({
+  row,
+  ctx,
+  active,
+  activeField,
+}: {
+  row: TranscriptRow;
+  ctx: RowContext;
+  /** This row holds the currently-active search occurrence (drives tool expand). */
+  active: boolean;
+  /** Which field + occurrence in this row is active, or null when none is. */
+  activeField: ActiveField | null;
+}) {
+  if (row.kind === "message") {
+    return (
+      <MessageRowView
+        row={row}
+        ctx={ctx}
+        activeTextOccurrence={
+          activeField?.key === "text" ? activeField.index : null
+        }
+      />
+    );
+  }
+  return (
+    <ToolRowView
+      row={row}
+      ctx={ctx}
+      active={active}
+      activeNameOccurrence={
+        activeField?.key === "name" ? activeField.index : null
+      }
+      activeArgsOccurrence={
+        activeField?.key === "args" ? activeField.index : null
+      }
+      activeOutputOccurrence={
+        activeField?.key === "output" ? activeField.index : null
+      }
+    />
+  );
+});
+
 function DisplayItemView({
   item,
+  index,
   ctx,
   pagination,
 }: {
   item: DisplayItem;
+  /** This item's position in the display list — matched against the active
+   * occurrence's itemIndex to decide if this row holds it. */
+  index: number;
   ctx: RowContext;
   pagination: TranscriptPagination;
 }) {
@@ -690,10 +842,10 @@ function DisplayItemView({
           author={item.author}
           userId={item.userId}
           userLabel={ctx.userLabel}
+          createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],
           )}
-          first={item.first}
         />
       );
     case "loadMore":
@@ -721,12 +873,25 @@ function DisplayItemView({
           onClick={() => pagination.onLoadGap?.(item.afterSeq)}
         />
       );
-    case "row":
-      return item.row.kind === "message" ? (
-        <MessageRowView row={item.row} ctx={ctx} />
-      ) : (
-        <ToolRowView row={item.row} ctx={ctx} />
+    case "row": {
+      // Only the row holding the active occurrence is "active"; computed here
+      // (not in ctx) so navigation re-renders just the toggling rows, not all of
+      // them. The active row gets the field + occurrence index to render bright;
+      // every other row gets null and stays pale (and skips re-render via memo).
+      const occ = pagination.activeOccurrence;
+      const active = occ != null && occ.itemIndex === index;
+      const activeField: ActiveField | null = active
+        ? { key: occ.fieldKey, index: occ.indexInField }
+        : null;
+      return (
+        <RowView
+          row={item.row}
+          ctx={ctx}
+          active={active}
+          activeField={activeField}
+        />
       );
+    }
   }
 }
 
@@ -757,6 +922,8 @@ export function ChatTranscript({
     onLoadNewer,
     initialScrollIndex,
     scrollToFinding,
+    scrollToItemIndex,
+    scrollNonce,
   } = pagination;
 
   // "Start of thread" affordance: shown once the reader has scrolled a screenful
@@ -837,6 +1004,24 @@ export function ChatTranscript({
     return () => cancelAnimationFrame(raf);
   }, [initialScrollIndex, items.length, virtualizer]);
 
+  // Search match navigation: center the target row each time the nonce changes
+  // (next/prev), re-issuing across a few frames so the estimate→measured height
+  // shift doesn't leave it off-screen. Matches are always loaded by construction
+  // (the windowed response includes every match), so the index resolves at once.
+  useEffect(() => {
+    if (scrollToItemIndex == null || scrollToItemIndex >= items.length) return;
+    if (!scrollRef.current) return;
+    let raf = 0;
+    let tries = 0;
+    const settle = () => {
+      virtualizer.scrollToIndex(scrollToItemIndex, { align: "center" });
+      tries += 1;
+      if (tries < 12) raf = requestAnimationFrame(settle);
+    };
+    raf = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(raf);
+  }, [scrollNonce, scrollToItemIndex, items.length, virtualizer]);
+
   if (items.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -853,7 +1038,7 @@ export function ChatTranscript({
         <button
           type="button"
           onClick={scrollToStart}
-          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
+          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
         >
           <ArrowUp className="size-3" />
           Start of thread
@@ -878,6 +1063,7 @@ export function ChatTranscript({
             >
               <DisplayItemView
                 item={items[virtualRow.index]!}
+                index={virtualRow.index}
                 ctx={ctx}
                 pagination={pagination}
               />
