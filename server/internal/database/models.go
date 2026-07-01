@@ -35,6 +35,7 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
 }
@@ -1678,6 +1679,8 @@ type UserAccount struct {
 	ExternalAccountID   pgtype.Text
 	Email               pgtype.Text
 	AccountType         pgtype.Text
+	BillingMode         pgtype.Text
+	PlanType            pgtype.Text
 	FirstSeenAt         pgtype.Timestamptz
 	LastSeenAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz

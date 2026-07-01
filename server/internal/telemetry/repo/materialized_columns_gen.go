@@ -27,4 +27,5 @@ var materializedColumns = map[string]string{
 	"gram.provider":                 "provider",
 	"gram.external_org_id":          "external_org_id",
 	"gram.account_type":             "account_type",
+	"gram.billing_mode":             "billing_mode",
 }

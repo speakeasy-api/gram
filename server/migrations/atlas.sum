@@ -1,4 +1,4 @@
-h1:desOlKDmtw1FP4GSsri1BdunValCUMKd6DDIwVneLro=
+h1:41CS8g3487U3+chCPcKlAP/LdcJQklM2cpZKLn5Ib1k=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -236,3 +236,4 @@ h1:desOlKDmtw1FP4GSsri1BdunValCUMKd6DDIwVneLro=
 20260629215311_add-personal-account-tracking.sql h1:h9gGKAfEoYa7g1cup/mf4ukQeNiKeZ6IQvxjfcNALKQ=
 20260630164757_device-owners-org-cascade-index.sql h1:xBf3zD9ROt6m/QG74HU1GnRSsM64e6zVSoeN3jQPTi8=
 20260630213745_remote-session-issuers-global-slug-key.sql h1:2fXBIcMhRXsLIGrvLEXmzJ0qncFXF7ZI3RbSglU5z5Q=
+20260701215608_billing-mode-declarations.sql h1:wEegAGkGu26TmLNS3jrwPTcPumpS89I7XatrDKoQtJ8=
