@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	ActionTunneledMcpServerCreate Action = "tunneled-mcp:create"
-	ActionTunneledMcpServerUpdate Action = "tunneled-mcp:update"
-	ActionTunneledMcpServerRotate Action = "tunneled-mcp:rotate_key"
-	ActionTunneledMcpServerDelete Action = "tunneled-mcp:delete"
+	ActionTunneledMcpServerCreate     Action = "tunneled-mcp:create"
+	ActionTunneledMcpServerUpdate     Action = "tunneled-mcp:update"
+	ActionTunnelledMcpServerRotateKey Action = "tunneled-mcp:rotate-key"
+	ActionTunneledMcpServerDelete     Action = "tunneled-mcp:delete"
 )
 
 type LogTunneledMcpServerCreateEvent struct {
@@ -123,12 +123,12 @@ type LogTunneledMcpServerRotateEvent struct {
 func (l *Logger) LogTunneledMcpServerRotate(ctx context.Context, dbtx repo.DBTX, event LogTunneledMcpServerRotateEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.TunneledMcpServerSnapshotBefore)
 	if err != nil {
-		return fmt.Errorf("marshal %s before snapshot: %w", ActionTunneledMcpServerRotate, err)
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionTunnelledMcpServerRotateKey, err)
 	}
 
 	afterSnapshot, err := marshalAuditPayload(event.TunneledMcpServerSnapshotAfter)
 	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", ActionTunneledMcpServerRotate, err)
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionTunnelledMcpServerRotateKey, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
@@ -140,7 +140,7 @@ func (l *Logger) LogTunneledMcpServerRotate(ctx context.Context, dbtx repo.DBTX,
 		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
-		Action: string(ActionTunneledMcpServerRotate),
+		Action: string(ActionTunnelledMcpServerRotateKey),
 
 		SubjectID:          event.TunneledMcpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeTunneledMcpServer),

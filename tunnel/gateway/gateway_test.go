@@ -17,7 +17,7 @@ import (
 func TestPublicHandlerDoesNotForward(t *testing.T) {
 	t.Parallel()
 
-	gw := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewMemory(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -30,7 +30,7 @@ func TestPublicHandlerDoesNotForward(t *testing.T) {
 
 func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
 	t.Helper()
-	return New(cfg, NewStaticKeyStore(map[string]string{}), route.NewMemory(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(cfg, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {

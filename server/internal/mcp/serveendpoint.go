@@ -325,7 +325,7 @@ func (s *Service) serveRemoteBackend(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
+		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogWarn(ctx, logger)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
 	}
@@ -400,7 +400,7 @@ func (s *Service) serveTunneledBackend(
 	}
 	if !ok {
 		w.Header().Set("X-Gram-Tunnel-Error", "no-route")
-		return oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogError(ctx, logger)
+		return oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogWarn(ctx, logger)
 	}
 
 	gatewayURL, err := tunnelGatewayURL(addr)

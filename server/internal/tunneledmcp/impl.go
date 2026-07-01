@@ -29,24 +29,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-const routeCacheKeyPrefix = "tunnel_routes:"
-
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	cache  cache.Cache
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	auth          *auth.Auth
+	authz         *authz.Engine
+	audit         *audit.Logger
+	tunnelManager *tunnelManager
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,13 +60,13 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("tunneledmcp"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tunneledmcp"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
-		cache:  cacheAdapter,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tunneledmcp"),
+		logger:        logger,
+		db:            db,
+		auth:          auth.New(logger, db, sessions, authzEngine),
+		authz:         authzEngine,
+		audit:         auditLogger,
+		tunnelManager: newTunnelManager(cacheAdapter),
 	}
 }
 
@@ -101,7 +97,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
 	}
 
 	serverID, err := uuid.NewV7()
@@ -109,7 +105,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
 	}
 
-	tunnelKey, keyHash, err := wire.NewKey()
+	issuedKey, err := s.tunnelManager.issueKey()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate tunnel key").LogError(ctx, logger)
 	}
@@ -134,20 +130,20 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "count tunneled mcp servers").LogError(ctx, logger)
 	}
 	if activeCount >= limit {
-		return nil, oops.E(oops.CodeForbidden, fmt.Errorf("tunneled mcp server limit reached: %d", limit), "tunneled mcp server limit reached").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeForbidden, fmt.Errorf("tunneled mcp server limit reached: %d", limit), "tunneled mcp server limit reached").LogWarn(ctx, logger)
 	}
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 		Name:      name,
-		KeyHash:   keyHash,
-		KeyPrefix: tunnelKey[:len(wire.KeyPrefix)+5],
+		KeyHash:   issuedKey.Hash,
+		KeyPrefix: issuedKey.Prefix,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server already exists").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server already exists").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create tunneled mcp server").LogError(ctx, logger)
 	}
@@ -169,8 +165,8 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	return &gen.CreateTunneledMcpServerResult{
-		Server:    mv.BuildTunneledMcpServerView(server, nil),
-		TunnelKey: tunnelKey,
+		Server:    s.tunnelManager.serverViewWithoutRuntime(server),
+		TunnelKey: issuedKey.Plaintext,
 	}, nil
 }
 
@@ -189,12 +185,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list tunneled mcp servers").LogError(ctx, s.logger)
 	}
 
-	connectionsByServerID := make(map[string][]mv.TunneledMcpConnectionCache, len(servers))
-	for _, server := range servers {
-		connectionsByServerID[server.ID.String()] = s.connectionsForServer(ctx, server.ID)
-	}
-
-	return &gen.ListTunneledMcpServersResult{TunneledMcpServers: mv.BuildTunneledMcpServerListView(servers, connectionsByServerID)}, nil
+	return &gen.ListTunneledMcpServersResult{TunneledMcpServers: s.tunnelManager.serverListView(ctx, servers)}, nil
 }
 
 func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) (*types.TunneledMcpServer, error) {
@@ -209,7 +200,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, s.logger)
 	}
 
 	server, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
@@ -218,12 +209,12 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildTunneledMcpServerView(server, s.connectionsForServer(ctx, server.ID)), nil
+	return s.tunnelManager.serverView(ctx, server), nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.TunneledMcpServer, error) {
@@ -239,12 +230,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -260,12 +251,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
 	}
 
-	beforeView := mv.BuildTunneledMcpServerView(existing, s.connectionsForServer(ctx, existing.ID))
+	beforeView := s.tunnelManager.serverView(ctx, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
 		ID:        serverID,
@@ -275,12 +266,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server name already in use").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server name already in use").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update tunneled mcp server").LogError(ctx, logger)
 	}
 
-	afterView := mv.BuildTunneledMcpServerView(updated, s.connectionsForServer(ctx, updated.ID))
+	afterView := s.tunnelManager.serverView(ctx, updated)
 	if err := s.audit.LogTunneledMcpServerUpdate(ctx, dbtx, audit.LogTunneledMcpServerUpdateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
 		ProjectID:                       *authCtx.ProjectID,
@@ -315,10 +306,10 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
 	}
 
-	tunnelKey, keyHash, err := wire.NewKey()
+	issuedKey, err := s.tunnelManager.issueKey()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate tunnel key").LogError(ctx, logger)
 	}
@@ -336,23 +327,23 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
 	}
 
-	beforeView := mv.BuildTunneledMcpServerView(existing, s.connectionsForServer(ctx, existing.ID))
+	beforeView := s.tunnelManager.serverView(ctx, existing)
 	rotated, err := txRepo.RotateServerKey(ctx, repo.RotateServerKeyParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
-		KeyHash:   keyHash,
-		KeyPrefix: tunnelKey[:len(wire.KeyPrefix)+5],
+		KeyHash:   issuedKey.Hash,
+		KeyPrefix: issuedKey.Prefix,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "rotate tunneled mcp server key").LogError(ctx, logger)
 	}
 
-	afterView := mv.BuildTunneledMcpServerView(rotated, nil)
+	afterView := s.tunnelManager.serverViewWithoutRuntime(rotated)
 	if err := s.audit.LogTunneledMcpServerRotate(ctx, dbtx, audit.LogTunneledMcpServerRotateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
 		ProjectID:                       *authCtx.ProjectID,
@@ -371,11 +362,11 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.deleteRouteState(ctx, logger, serverID)
+	s.tunnelManager.deleteRuntimeState(ctx, logger, serverID)
 
 	return &gen.RotateTunneledMcpServerKeyResult{
 		Server:    afterView,
-		TunnelKey: tunnelKey,
+		TunnelKey: issuedKey.Plaintext,
 	}, nil
 }
 
@@ -392,7 +383,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -428,46 +419,9 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.deleteRouteState(ctx, logger, serverID)
+	s.tunnelManager.deleteRuntimeState(ctx, logger, serverID)
 
 	return nil
-}
-
-type connectionCacheValue struct {
-	Connections []mv.TunneledMcpConnectionCache `json:"connections"`
-}
-
-func (s *Service) connectionsForServer(ctx context.Context, serverID uuid.UUID) []mv.TunneledMcpConnectionCache {
-	if s.cache == nil {
-		return nil
-	}
-
-	value := connectionCacheValue{Connections: []mv.TunneledMcpConnectionCache{}}
-	if err := s.cache.Get(ctx, connectionCacheKey(serverID), &value); err != nil {
-		return nil
-	}
-
-	return value.Connections
-}
-
-func connectionCacheKey(serverID uuid.UUID) string {
-	return "tunnel_connections:" + serverID.String()
-}
-
-func routeCacheKey(serverID uuid.UUID) string {
-	return routeCacheKeyPrefix + serverID.String()
-}
-
-func (s *Service) deleteRouteState(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
-	if s.cache == nil {
-		return
-	}
-	if err := s.cache.Delete(ctx, connectionCacheKey(serverID)); err != nil {
-		logger.WarnContext(ctx, "delete tunneled mcp connection cache", attr.SlogError(err))
-	}
-	if err := s.cache.Delete(ctx, routeCacheKey(serverID)); err != nil {
-		logger.WarnContext(ctx, "delete tunneled mcp route cache", attr.SlogError(err))
-	}
 }
 
 func effectiveTunneledMcpServerLimit(accountType string, configured pgtype.Int4) int64 {

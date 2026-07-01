@@ -7,6 +7,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
 import { remoteMcpRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -68,6 +69,22 @@ const useDialogStore = create<DialogStore>((set) => ({
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
+function sourcesDescription(
+  isFunctionsEnabled: boolean,
+  isTunneledMcpEnabled: boolean,
+): string {
+  if (isFunctionsEnabled && isTunneledMcpEnabled) {
+    return "Remote MCPs, tunneled MCP servers, third-party MCP servers on the catalog, OpenAPI documents, and functions deployed in your project to power tools.";
+  }
+  if (isFunctionsEnabled) {
+    return "Remote MCPs, third-party MCP servers on the catalog, OpenAPI documents, and functions deployed in your project to power tools.";
+  }
+  if (isTunneledMcpEnabled) {
+    return "Remote MCPs, tunneled MCP servers, third-party MCP servers on the catalog, and OpenAPI documents deployed in your project to power tools.";
+  }
+  return "Remote MCPs, third-party MCP servers on the catalog, and OpenAPI documents deployed in your project to power tools.";
+}
+
 export default function Sources(): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -75,7 +92,7 @@ export default function Sources(): JSX.Element {
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isTunneledMcpEnabled =
-    telemetry.isFeatureEnabled("gram-tunneled-mcp") ?? false;
+    telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
 
   const {
     data: deploymentResult,
@@ -86,12 +103,16 @@ export default function Sources(): JSX.Element {
   const { data: remoteMcpServersResult, isLoading: isLoadingRemoteMcp } =
     useRemoteMcpServers();
   const { data: tunneledMcpServersResult, isLoading: isLoadingTunneledMcp } =
-    useTunneledMcpServers();
+    useTunneledMcpServers(undefined, undefined, {
+      enabled: isTunneledMcpEnabled,
+    });
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
   // Remote/tunneled sources bypass deployments, so page loading waits on their own queries.
   const isLoading =
-    isLoadingDeployment || isLoadingRemoteMcp || isLoadingTunneledMcp;
+    isLoadingDeployment ||
+    isLoadingRemoteMcp ||
+    (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
   const toolCountsBySource = useToolCountsBySource();
@@ -179,17 +200,17 @@ export default function Sources(): JSX.Element {
       type: "remotemcp" as const,
     }));
 
-    const tunneledMcpSources: NamedAsset[] = (
-      tunneledMcpServersResult?.tunneledMcpServers ?? []
-    ).map((server) => ({
-      id: server.id,
-      deploymentAssetId: server.id,
-      slug: tunneledMcpRouteParam(server),
-      name: server.name,
-      type: "tunneledmcp" as const,
-      createdAt: server.createdAt,
-      updatedAt: server.updatedAt,
-    }));
+    const tunneledMcpSources: NamedAsset[] = isTunneledMcpEnabled
+      ? (tunneledMcpServersResult?.tunneledMcpServers ?? []).map((server) => ({
+          id: server.id,
+          deploymentAssetId: server.id,
+          slug: tunneledMcpRouteParam(server),
+          name: server.name,
+          type: "tunneledmcp" as const,
+          createdAt: server.createdAt,
+          updatedAt: server.updatedAt,
+        }))
+      : [];
 
     return [
       ...openApiSources,
@@ -204,6 +225,7 @@ export default function Sources(): JSX.Element {
     catalogIconMap,
     remoteMcpServersResult,
     tunneledMcpServersResult,
+    isTunneledMcpEnabled,
   ]);
 
   const removeSource = async (
@@ -250,7 +272,7 @@ export default function Sources(): JSX.Element {
   if (!isLoading && allSources.length === 0) {
     return (
       <>
-        <SourcesEmptyState />
+        <SourcesEmptyState isTunneledMcpEnabled={isTunneledMcpEnabled} />
         {/* Render remove dialog in empty state to allow graceful close animation when deleting last source */}
         <Dialog
           open={dialogState.type === "remove-source"}
@@ -285,9 +307,7 @@ export default function Sources(): JSX.Element {
       <Page.Section>
         <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
-          {isFunctionsEnabled
-            ? "Remote MCPs, tunneled MCP servers, third-party MCP servers on the catalog, OpenAPI documents, and functions deployed in your project to power tools."
-            : "Remote MCPs, tunneled MCP servers, third-party MCP servers on the catalog, and OpenAPI documents deployed in your project to power tools."}
+          {sourcesDescription(isFunctionsEnabled, isTunneledMcpEnabled)}
         </Page.Section.Description>
         <Page.Section.CTA>
           <ViewToggle value={viewMode} onChange={setViewMode} />

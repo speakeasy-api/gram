@@ -196,7 +196,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
-			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 		}
 	}
 
@@ -217,7 +217,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	executor, ok := s.executors[urnStr]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 	}
 
 	var out bytes.Buffer

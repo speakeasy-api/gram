@@ -144,7 +144,7 @@ func TestTunnelRevoke(t *testing.T) {
 	const tunnelID = "tunnel-revoke"
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
-	routes := route.NewMemory()
+	routes := route.NewRouteTable()
 	gw := gateway.New(gateway.Config{}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()
@@ -186,7 +186,7 @@ func requireEventually(t *testing.T, d time.Duration, cond func() bool) {
 }
 
 type snapshotStore struct {
-	*route.Memory
+	*route.RouteTable
 
 	mu        sync.Mutex
 	snapshots map[string][]route.Connection
@@ -194,9 +194,9 @@ type snapshotStore struct {
 
 func newSnapshotStore() *snapshotStore {
 	return &snapshotStore{
-		Memory:    route.NewMemory(),
-		mu:        sync.Mutex{},
-		snapshots: make(map[string][]route.Connection),
+		RouteTable: route.NewRouteTable(),
+		mu:         sync.Mutex{},
+		snapshots:  make(map[string][]route.Connection),
 	}
 }
 
