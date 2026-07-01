@@ -16,7 +16,7 @@ export class Agent extends ClientSDK {
    * Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.
    */
   async getPlugins(
-    request: operations.GetAgentPluginsRequest,
+    request?: operations.GetAgentPluginsRequest | undefined,
     security?: operations.GetAgentPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetPluginsResult> {

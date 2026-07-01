@@ -567,6 +567,10 @@ run();
 * [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
+### [TokenExchange](docs/sdks/tokenexchange/README.md)
+
+* [exchange](docs/sdks/tokenexchange/README.md#exchange) - exchange tokenExchange
+
 ### [Tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
@@ -953,6 +957,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesRender`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`templatesRenderByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
+- [`tokenExchangeExchange`](docs/sdks/tokenexchange/README.md#exchange) - exchange tokenExchange
 - [`toolsetsAddExternalOAuthServer`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`toolsetsAddOAuthProxyServer`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
@@ -1323,6 +1328,7 @@ To learn about this feature and how to get started, check
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
+- [`useTokenExchangeExchangeMutation`](docs/sdks/tokenexchange/README.md#exchange) - exchange tokenExchange
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useToolVariationGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers

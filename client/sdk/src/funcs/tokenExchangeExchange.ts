@@ -4,8 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
-import { matchStatusCode } from "../lib/http.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -29,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getPlugins agent
+ * exchange tokenExchange
  *
  * @remarks
- * Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.
+ * Exchange an org-scoped agent API key plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with the org-scoped API key carrying the 'agent' scope, same scheme as agent.getPlugins. The raw key is returned exactly once.
  */
-export function agentGetPlugins(
+export function tokenExchangeExchange(
   client: GramCore,
-  request?: operations.GetAgentPluginsRequest | undefined,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: operations.TokenExchangeRequest,
+  security?: operations.TokenExchangeSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetPluginsResult,
+    components.TokenResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -63,13 +62,13 @@ export function agentGetPlugins(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetAgentPluginsRequest | undefined,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: operations.TokenExchangeRequest,
+  security?: operations.TokenExchangeSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetPluginsResult,
+      components.TokenResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,28 +84,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(operations.GetAgentPluginsRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(operations.TokenExchangeRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/agent.getPlugins")();
-
-  const query = encodeFormQuery({
-    "email": payload?.email,
+  const body = encodeJSON("body", payload.ExchangeRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/token-exchange")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -125,7 +119,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getAgentPlugins",
+    operationID: "tokenExchange",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -139,11 +133,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -155,8 +148,19 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    isErrorStatusCode: (statusCode: number) =>
-      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
+    errorCodes: [
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "415",
+      "422",
+      "4XX",
+      "500",
+      "502",
+      "5XX",
+    ],
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });
@@ -170,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetPluginsResult,
+    components.TokenResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -181,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetPluginsResult$inboundSchema),
+    M.json(200, components.TokenResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

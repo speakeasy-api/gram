@@ -46,7 +46,9 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Key", head)
 		}
 		values := req.URL.Query()
-		values.Add("email", p.Email)
+		if p.Email != nil {
+			values.Add("email", *p.Email)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

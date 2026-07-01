@@ -20,6 +20,9 @@ var (
 	wantObservability = naming.ObservabilitySlug(mockidp.MockOrgName)         // local-dev-org-observability
 )
 
+//go:fix inline
+func strPtr(s string) *string { return new(s) }
+
 func pluginSlugs(res *gen.GetPluginsResult) []string {
 	out := make([]string, 0, len(res.Plugins))
 	for _, p := range res.Plugins {
@@ -34,7 +37,7 @@ func TestGetPlugins_ObservabilityWithoutAssignments(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -58,7 +61,7 @@ func TestGetPlugins_ReturnsAllPublishedProjectPlugins(t *testing.T) {
 	other := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "someone-elses-tool")
 	assignPlugin(t, ctx, ti.conn, other, ti.orgID, "email:someone-else@example.com")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -76,7 +79,7 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	// nothing is installable and the endpoint returns empty.
 	seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unpublished-tool")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Empty(t, res.Marketplaces)
@@ -98,7 +101,7 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false) // local-dev-org-adam-speakeasy
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct project-scoped names do not collapse")
@@ -132,7 +135,7 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 	seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "colliding names collapse to one")
@@ -161,7 +164,7 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	setMarketplaceOverride(t, ctx, ti.conn, adam, "team-adam")
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct names must not collapse")
@@ -185,7 +188,7 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	// A different org has a published marketplace + a wildcard-assigned plugin.
 	seedSecondOrg(t, ctx, ti.conn)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "only the caller's org marketplace")
@@ -196,10 +199,24 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	require.NotContains(t, pluginSlugs(res), "other-plugin", "another org's plugin must not leak")
 }
 
-func TestGetPlugins_InvalidEmail(t *testing.T) {
+// TestGetPlugins_VouchedEmailIgnored pins the DNO-383 contract change: the
+// enrolled user now derives from the authenticated key owner (authCtx.Email),
+// so the optional `email` param is no longer required and a bogus vouched value
+// is ignored rather than rejected. A published marketplace still resolves.
+func TestGetPlugins_VouchedEmailIgnored(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
-	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: ""})
-	require.Error(t, err, "empty email must be rejected")
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	// Nil (absent) email: the user comes from the key owner, so this succeeds.
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: nil})
+	require.NoError(t, err, "absent email is accepted; the enrolled user is the key owner")
+	require.Len(t, res.Marketplaces, 1)
+
+	// A malformed vouched email is ignored (not consulted) because the key owner
+	// email takes precedence, so the call still succeeds.
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("not-an-email")})
+	require.NoError(t, err, "vouched email is ignored when the key resolves an owner email")
+	require.Len(t, res.Marketplaces, 1)
 }

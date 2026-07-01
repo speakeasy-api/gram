@@ -14,9 +14,11 @@ import (
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
 func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string) (*agent.GetPluginsPayload, error) {
-	var email string
+	var email *string
 	{
-		email = agentGetPluginsEmail
+		if agentGetPluginsEmail != "" {
+			email = &agentGetPluginsEmail
+		}
 	}
 	var apikeyToken *string
 	{
