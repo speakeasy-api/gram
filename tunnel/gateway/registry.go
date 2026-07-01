@@ -10,6 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
+// consumerSessionTTL controls idle consumer-session accounting, not yamux session
+// lifetime. Expiry drops local affinity/counting state for consumers that have not
+// sent a request within this window; their next request re-pins via rendezvous.
 const consumerSessionTTL = 5 * time.Minute
 
 // Multiple agents may share a tunnel key. Stable consumer keys stick to one live session;
