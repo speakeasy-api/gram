@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -12,14 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,7 +35,7 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          &clientSecret,
 		SessionToken:          nil,
@@ -50,7 +46,7 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, clientID, result.ClientID)
 	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
-	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
+	require.Equal(t, []string{userIssuerID}, result.UserSessionIssuerIds)
 	require.NotEmpty(t, result.ID)
 
 	clientUUID, err := uuid.Parse(result.ID)
@@ -62,6 +58,38 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateRemoteSessionClient_PersistsOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-org", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-org").String()
+
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "org-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	clientUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+
+	// The dual-write sets organization_id to the caller's organization, which is
+	// the owning project's organization.
+	gotOrg := remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, clientUUID)
+	require.Equal(t, authCtx.ActiveOrganizationID, gotOrg)
 }
 
 func TestCreateRemoteSessionClient_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {
@@ -79,7 +107,7 @@ func TestCreateRemoteSessionClient_RejectsDuplicateRemoteIssuerBinding(t *testin
 	// guard with a conflict, not a raw constraint error.
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              "dup-client-2",
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -103,7 +131,7 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            &clientSecret,
 		TokenEndpointAuthMethod: &authMethod,
@@ -139,7 +167,7 @@ func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T
 	clientID := "nil-client-id"
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -173,7 +201,7 @@ func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
 
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -195,7 +223,7 @@ func TestCreateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
 
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   foreignUserIssuer,
+		UserSessionIssuerIds:  []string{foreignUserIssuer},
 		ClientID:              "xproj-usi-client",
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -217,7 +245,7 @@ func TestCreateRemoteSessionClient_RejectsCrossProjectRemoteIssuer(t *testing.T)
 
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: foreignRemoteIssuer,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              "xproj-rsi-client",
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -245,7 +273,7 @@ func TestCreateRemoteSessionClient_OrgLevelIssuer(t *testing.T) {
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
-		UserSessionIssuerID:   userIssuerID.String(),
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
 		ClientID:              "org-create-cid",
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -275,7 +303,7 @@ func TestCreateRemoteSessionClient_CrossOrgIssuerRejected(t *testing.T) {
 
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              "cross-org-cid",
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -286,18 +314,18 @@ func TestCreateRemoteSessionClient_CrossOrgIssuerRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestUpdateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
+func TestAttachUserSessionIssuer_RejectsCrossProjectUserIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-update-xproj", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-update-xproj").String()
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-attach-xproj", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-attach-xproj").String()
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              "update-xproj-client",
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "attach-xproj-client",
 		ClientSecret:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
@@ -306,26 +334,28 @@ func TestUpdateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
 	require.NoError(t, err)
 
 	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
-	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-update-foreign").String()
+	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-attach-foreign").String()
 
-	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
-		ID:                      created.ID,
-		ClientSecret:            nil,
-		UserSessionIssuerID:     &foreignUserIssuer,
-		TokenEndpointAuthMethod: nil,
-		SessionToken:            nil,
-		ApikeyToken:             nil,
-		ProjectSlugInput:        nil,
+	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: foreignUserIssuer,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	// The rejected update rolls back: the original binding is untouched.
+	// The rejected attach rolls back / never happened: the original binding is
+	// untouched and the foreign binding was never recorded.
 	clientUUID, err := uuid.Parse(created.ID)
 	require.NoError(t, err)
 	userIssuerUUID, err := uuid.Parse(userIssuerID)
 	require.NoError(t, err)
+	foreignUserIssuerUUID, err := uuid.Parse(foreignUserIssuer)
+	require.NoError(t, err)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, foreignUserIssuerUUID))
 }
 
 func TestGetRemoteSessionClient(t *testing.T) {
@@ -339,7 +369,7 @@ func TestGetRemoteSessionClient(t *testing.T) {
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -405,7 +435,7 @@ func TestListRemoteSessionClients(t *testing.T) {
 		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-"+clientID).String()
 		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 			RemoteSessionIssuerID: issuerID,
-			UserSessionIssuerID:   userIssuerID,
+			UserSessionIssuerIds:  []string{userIssuerID},
 			ClientID:              clientID,
 			ClientSecret:          nil,
 			SessionToken:          nil,
@@ -429,78 +459,6 @@ func TestListRemoteSessionClients(t *testing.T) {
 	for _, item := range result.Items {
 		require.Equal(t, issuerID, item.RemoteSessionIssuerID)
 	}
-}
-
-// TestListRemoteSessionClients_ColumnOnlyClientNotVisible asserts the join
-// table is the sole read path: a remote_session_client that carries only the
-// legacy user_session_issuer_id column, with no
-// remote_session_client_user_session_issuers binding, is invisible on both the
-// management list path and the runtime consent/token path, and neither path
-// opportunistically backfills the join row.
-func TestListRemoteSessionClients_ColumnOnlyClientNotVisible(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list-column-only", "")
-	issuerUUID, err := uuid.Parse(issuerID)
-	require.NoError(t, err)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-column-only")
-
-	// Create a client that sets only the legacy user_session_issuer_id column
-	// and deliberately skips AttachRemoteSessionClientToUserSessionIssuer, so it
-	// has no join-table binding.
-	columnOnlyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
-		RemoteSessionIssuerID:   issuerUUID,
-		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
-		ClientID:                "column-only-client",
-		ClientSecretEncrypted:   pgtype.Text{},
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{},
-		TokenEndpointAuthMethod: pgtype.Text{},
-		Scope:                   nil,
-		Audience:                pgtype.Text{},
-	})
-	require.NoError(t, err)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, columnOnlyClient.ID, userIssuerID))
-
-	// Management read path: filtering by user_session_issuer_id must not surface
-	// a client that lacks a join-table binding.
-	userIssuerIDString := userIssuerID.String()
-	result, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
-		RemoteSessionIssuerID: nil,
-		UserSessionIssuerID:   &userIssuerIDString,
-		Cursor:                nil,
-		Limit:                 nil,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-	})
-	require.NoError(t, err)
-	require.Empty(t, result.Items)
-
-	// Runtime consent/token path: the ChallengeManager reads the same join table
-	// and must not surface the column-only client either.
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(
-		testenv.NewLogger(t),
-		ti.conn,
-		testenv.NewEncryptionClient(t),
-		policy,
-		cache.NoopCache,
-		mustURL(t, "http://localhost"),
-	)
-	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuerID)
-	require.NoError(t, err)
-	require.Empty(t, clients)
-
-	// Neither path may opportunistically backfill the join table.
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, columnOnlyClient.ID, userIssuerID))
 }
 
 func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {
@@ -557,12 +515,11 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-update", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-update").String()
-	otherUserIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-update-2").String()
 	clientID := "update-client-id"
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -578,28 +535,17 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
 		ID:                      created.ID,
 		ClientSecret:            &newSecret,
-		UserSessionIssuerID:     &otherUserIssuerID,
 		TokenEndpointAuthMethod: nil,
 		SessionToken:            nil,
 		ApikeyToken:             nil,
 		ProjectSlugInput:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, otherUserIssuerID, updated.UserSessionIssuerID)
 	require.Equal(t, created.ClientID, updated.ClientID)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
-
-	clientUUID, err := uuid.Parse(created.ID)
-	require.NoError(t, err)
-	oldUserIssuerUUID, err := uuid.Parse(userIssuerID)
-	require.NoError(t, err)
-	newUserIssuerUUID, err := uuid.Parse(otherUserIssuerID)
-	require.NoError(t, err)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, oldUserIssuerUUID))
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, newUserIssuerUUID))
 }
 
 func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
@@ -614,7 +560,7 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	// Start with default (NULL) auth method.
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -629,7 +575,6 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
 		ID:                      created.ID,
 		ClientSecret:            nil,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: &post,
 		SessionToken:            nil,
 		ApikeyToken:             nil,
@@ -653,7 +598,7 @@ func TestCreateRemoteSessionClient_PersistsScopeOverride(t *testing.T) {
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -686,7 +631,7 @@ func TestCreateRemoteSessionClient_ScopeOmittedStaysNil(t *testing.T) {
 	clientID := "scope-omit-client-id"
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -712,7 +657,7 @@ func TestUpdateRemoteSessionClient_SetsScope(t *testing.T) {
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -728,7 +673,6 @@ func TestUpdateRemoteSessionClient_SetsScope(t *testing.T) {
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
 		ID:                      created.ID,
 		ClientSecret:            nil,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: nil,
 		Scope:                   scope,
 		SessionToken:            nil,
@@ -752,7 +696,7 @@ func TestCreateRemoteSessionClient_PersistsAudience(t *testing.T) {
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -788,7 +732,7 @@ func TestCreateRemoteSessionClient_AudienceOmittedStaysNil(t *testing.T) {
 	clientID := "aud-omit-client-id"
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -813,7 +757,7 @@ func TestUpdateRemoteSessionClient_SetsAudience(t *testing.T) {
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerIds:    []string{userIssuerID},
 		ClientID:                clientID,
 		ClientSecret:            nil,
 		TokenEndpointAuthMethod: nil,
@@ -830,7 +774,6 @@ func TestUpdateRemoteSessionClient_SetsAudience(t *testing.T) {
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
 		ID:                      created.ID,
 		ClientSecret:            nil,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: nil,
 		Scope:                   nil,
 		Audience:                &audience,
@@ -854,7 +797,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		ClientID:              clientID,
 		ClientSecret:          nil,
 		SessionToken:          nil,
@@ -925,7 +868,7 @@ func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
 	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -933,7 +876,14 @@ func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "upstream-cid", result.ClientID, "preserves upstream client_id so existing registrations keep working")
 	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
-	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
+	require.Equal(t, []string{userIssuerID}, result.UserSessionIssuerIds)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	clonedUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, remoteSessionClientOrganizationID(t, ctx, ti.conn, *authCtx.ProjectID, clonedUUID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
@@ -954,7 +904,7 @@ func TestCloneClientFromOAuthProxyProvider_NonAdminRejected(t *testing.T) {
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -978,7 +928,7 @@ func TestCloneClientFromOAuthProxyProvider_RejectsGramProvider(t *testing.T) {
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1010,7 +960,7 @@ func TestCloneClientFromOAuthProxyProvider_EnvBackedSecrets(t *testing.T) {
 	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1038,7 +988,7 @@ func TestCloneClientFromOAuthProxyProvider_EnvMissingCredential(t *testing.T) {
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1059,7 +1009,7 @@ func TestCloneClientFromOAuthProxyProvider_ProviderNotFound(t *testing.T) {
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  uuid.NewString(),
 		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1089,7 +1039,7 @@ func TestCloneClientFromOAuthProxyProvider_OrgLevelIssuer(t *testing.T) {
 	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID.String(),
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1118,7 +1068,7 @@ func TestCloneClientFromOAuthProxyProvider_CrossOrgIssuerRejected(t *testing.T) 
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
 		RemoteSessionIssuerID: issuerID.String(),
-		UserSessionIssuerID:   userIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -1146,4 +1096,311 @@ func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount, "no audit entry when there was nothing to delete")
+}
+
+func TestAttachUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-attach", "")
+
+	// Standalone client: no user_session_issuer attachments.
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  nil,
+		ClientID:              "attach-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.UserSessionIssuerIds)
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-attach")
+	userIssuerIDString := userIssuerID.String()
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
+	require.NoError(t, err)
+
+	attached, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerIDString,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{userIssuerIDString}, attached.UserSessionIssuerIds)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	// Re-attaching the same issuer is a no-op success: still exactly one binding.
+	reattached, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerIDString,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{userIssuerIDString}, reattached.UserSessionIssuerIds)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+}
+
+func TestDetachUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-detach", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-detach")
+	userIssuerIDString := userIssuerID.String()
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerIDString},
+		ClientID:              "detach-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{userIssuerIDString}, created.UserSessionIssuerIds)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	require.NoError(t, err)
+
+	detached, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerIDString,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, detached.UserSessionIssuerIds)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	// Detaching an absent binding is a no-op success.
+	redetached, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerIDString,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, redetached.UserSessionIssuerIds)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+}
+
+func TestAttachUserSessionIssuer_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-attach-dup", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-attach-dup").String()
+
+	// Client A binds (user_session_issuer U, remote_session_issuer R).
+	createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "attach-dup-client-a")
+
+	// Client B is standalone on the same remote issuer R.
+	clientB, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  nil,
+		ClientID:              "attach-dup-client-b",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	// Attaching U to B violates the single-client-per-(U, R) guard.
+	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  clientB.ID,
+		UserSessionIssuerID: userIssuerID,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+// TestCreateRemoteSessionClient_MultipleIssuers creates one client attached to
+// several user_session_issuers in a single call and asserts the returned array
+// is sorted (regardless of input order) and every binding landed.
+func TestCreateRemoteSessionClient_MultipleIssuers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-multi", "")
+	u1 := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-1")
+	u2 := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-2")
+	u3 := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-3")
+
+	want := []string{u1.String(), u2.String(), u3.String()}
+	sort.Strings(want)
+
+	// Pass the issuers out of sorted order; the result must come back sorted.
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{u3.String(), u1.String(), u2.String()},
+		ClientID:              "multi-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, want, created.UserSessionIssuerIds)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	for _, u := range []uuid.UUID{u1, u2, u3} {
+		require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, u))
+	}
+}
+
+// TestCreateRemoteSessionClient_MultiIssuerRollbackOnInvalid verifies the whole
+// create rolls back when any issuer in the array is unreachable: no client row
+// and no bindings survive.
+func TestCreateRemoteSessionClient_MultiIssuerRollbackOnInvalid(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-multi-rollback", "")
+	valid := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-valid")
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreign := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-multi-foreign")
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{valid.String(), foreign.String()},
+		ClientID:              "multi-rollback-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// No orphan client row was committed for the remote issuer.
+	list, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+		RemoteSessionIssuerID: &issuerID,
+		UserSessionIssuerID:   nil,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, list.Items)
+}
+
+// TestCreateRemoteSessionClient_MultiIssuerGuardConflictRollsBack verifies that
+// when one issuer in the array collides with an existing client on the same
+// remote issuer, the create is rejected and nothing is persisted.
+func TestCreateRemoteSessionClient_MultiIssuerGuardConflictRollsBack(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-multi-guard", "")
+	u1 := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-guard-1")
+	u2 := createUserSessionIssuer(t, ctx, ti.conn, "usi-multi-guard-2")
+
+	// Client A already binds (u1, R).
+	createRemoteClient(t, ctx, ti, issuerID, u1.String(), "multi-guard-client-a")
+
+	// Client B requests [u2, u1] on R: the u1 binding collides with A.
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{u2.String(), u1.String()},
+		ClientID:              "multi-guard-client-b",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// B was never created: only A remains on the remote issuer.
+	listR, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+		RemoteSessionIssuerID: &issuerID,
+		UserSessionIssuerID:   nil,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, listR.Items, 1)
+
+	// u2 picked up no binding from the rolled-back partial attempt.
+	u2str := u2.String()
+	listU2, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+		RemoteSessionIssuerID: nil,
+		UserSessionIssuerID:   &u2str,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, listU2.Items)
+}
+
+// TestCreateRemoteSessionClient_DeduplicatesIssuers confirms a repeated issuer in
+// the input collapses to a single binding and a single-element result array.
+func TestCreateRemoteSessionClient_DeduplicatesIssuers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-dedupe", "")
+	u1 := createUserSessionIssuer(t, ctx, ti.conn, "usi-dedupe")
+	u1str := u1.String()
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{u1str, u1str},
+		ClientID:              "dedupe-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{u1str}, created.UserSessionIssuerIds)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, u1))
 }

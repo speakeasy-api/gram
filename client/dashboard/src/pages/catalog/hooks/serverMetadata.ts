@@ -43,6 +43,8 @@ export interface ParsedServerMetadata {
   // Auth
   authType: string;
   authTypeDisplay: string;
+  /** True when the server needs manual auth setup (no DCR support). */
+  requiresManualSetup: boolean;
 
   // Tools
   toolCount: number;
@@ -57,6 +59,18 @@ export function isPulseMcpServer(
   server: ExternalMCPServer,
 ): server is PulseMCPServer {
   return !!server.meta;
+}
+
+/**
+ * Whether connecting to a server requires manual auth setup. A server is
+ * "automatic" only when its OAuth authorization server advertises a dynamic
+ * client registration endpoint (DCR, RFC 7591), which Gram registers a client
+ * against on the fly. Everything else — OAuth 2.0 without DCR, API-key servers,
+ * etc. — needs the user to supply credentials manually. Backed by the
+ * server-computed `supports_dcr` flag from the Pulse catalog payload.
+ */
+export function requiresManualSetup(server: PulseMCPServer): boolean {
+  return !server.supportsDcr;
 }
 
 export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
@@ -156,6 +170,7 @@ export function parseServerMetadata(
     status: versionMeta?.status,
     authType,
     authTypeDisplay: getAuthTypeDisplay(authType),
+    requiresManualSetup: requiresManualSetup(server),
     toolCount: server.toolCount,
     isReadOnly: server.isReadOnly,
     publishedAt: versionMeta?.publishedAt
@@ -238,6 +253,17 @@ export function filterAndSortServers(
         s.metadata.authType as "none" | "apikey" | "oauth" | "other",
       ),
     );
+  }
+
+  // Setup filter (manual vs automatic / DCR)
+  if (filters.setupTypes.length > 0) {
+    filtered = filtered.filter((s) => {
+      const manual = s.metadata.requiresManualSetup;
+      return (
+        (filters.setupTypes.includes("manual") && manual) ||
+        (filters.setupTypes.includes("auto") && !manual)
+      );
+    });
   }
 
   // Tool behavior filter

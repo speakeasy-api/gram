@@ -85,6 +85,9 @@ const (
 	// runs on a fresh deadline rather than the dead request context.
 	teardownCapCleanupTimeout = 30 * time.Second
 
+	assistantPipelineTelemetryURN = "assistants:pipeline"
+	assistantRuntimeTelemetryURN  = "assistants:runtime"
+
 	meterAssistantTurnClassified = "assistant.turn.classified"
 
 	runtimeStartupReapGrace = 2 * time.Minute
@@ -484,7 +487,7 @@ func (s *ServiceCore) emitAssistantTelemetry(
 		Timestamp: time.Now().UTC(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             assistant.ID.String(),
-			URN:            "urn:uuid:" + assistant.ID.String(),
+			URN:            assistantPipelineTelemetryURN,
 			Name:           "assistant:" + assistant.Name,
 			ProjectID:      assistant.ProjectID.String(),
 			DeploymentID:   "",
@@ -788,17 +791,18 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		toolsets = append(toolsets, ref)
 	}
 	return &types.Assistant{
-		ID:             record.ID.String(),
-		ProjectID:      record.ProjectID.String(),
-		Name:           record.Name,
-		Model:          record.Model,
-		Instructions:   record.Instructions,
-		Toolsets:       toolsets,
-		WarmTTLSeconds: record.WarmTTLSeconds,
-		MaxConcurrency: record.MaxConcurrency,
-		Status:         record.Status,
-		CreatedAt:      record.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:      record.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:              record.ID.String(),
+		ProjectID:       record.ProjectID.String(),
+		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
+		Name:            record.Name,
+		Model:           record.Model,
+		Instructions:    record.Instructions,
+		Toolsets:        toolsets,
+		WarmTTLSeconds:  record.WarmTTLSeconds,
+		MaxConcurrency:  record.MaxConcurrency,
+		Status:          record.Status,
+		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
 }
 

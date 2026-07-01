@@ -70,6 +70,12 @@ function parseValue(dim: FilterDimension, params: URLSearchParams): AnyValue {
       return params.get(dim.id) || null;
     case "text":
       return params.get(dim.id) ?? "";
+    case "number": {
+      const raw = params.get(dim.id);
+      if (raw === null || raw.trim() === "") return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
     case "boolean":
       return params.get(dim.id) === "1";
     case "daterange":
@@ -129,6 +135,15 @@ function writeValue(
         next.set(dim.id, v);
       } else {
         next.delete(dim.id);
+      }
+      return;
+    }
+    case "number": {
+      const v = value as number | null;
+      if (v === null) {
+        next.delete(dim.id);
+      } else {
+        next.set(dim.id, String(v));
       }
       return;
     }

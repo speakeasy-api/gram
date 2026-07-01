@@ -168,6 +168,7 @@ function createMigrationServicesImpl(
         grantTypesSupported?: string[];
         responseTypesSupported?: string[];
         tokenEndpointAuthMethodsSupported?: string[];
+        clientIdMetadataDocumentSupported?: boolean;
       } = {};
 
       try {
@@ -211,6 +212,8 @@ function createMigrationServicesImpl(
               draft.tokenEndpointAuthMethodsSupported ??
               input.proxyProvider.tokenEndpointAuthMethodsSupported ??
               [],
+            clientIdMetadataDocumentSupported:
+              draft.clientIdMetadataDocumentSupported ?? false,
           },
         },
         ...fetchOptions({ signal }),
@@ -240,7 +243,7 @@ function createMigrationServicesImpl(
               cloneClientFromOAuthProxyProviderForm: {
                 oauthProxyProviderId: input.proxyProviderId,
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
               },
             },
             ...fetchOptions({ signal }),
@@ -268,7 +271,7 @@ function createMigrationServicesImpl(
             request: {
               createRemoteSessionClientForm: {
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
                 clientId: proxyRegistered.clientId,
                 clientSecret: proxyRegistered.clientSecret || undefined,
                 tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
@@ -290,7 +293,7 @@ function createMigrationServicesImpl(
             request: {
               createRemoteSessionClientForm: {
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
-                userSessionIssuerId: input.userSessionIssuerId,
+                userSessionIssuerIds: [input.userSessionIssuerId],
                 clientId: input.manualClientId.trim(),
                 clientSecret: input.manualClientSecret || undefined,
               },

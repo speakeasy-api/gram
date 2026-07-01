@@ -219,6 +219,8 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend(t *testing.T) {
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "public, max-age=60", w.Header().Get("Cache-Control"))
+	require.NotEmpty(t, w.Header().Get("ETag"))
 
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))

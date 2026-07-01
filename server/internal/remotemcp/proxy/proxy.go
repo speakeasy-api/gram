@@ -485,7 +485,17 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrUndecodableJSONRPCBody):
+		// The remote returned a non-SSE body that isn't a single JSON-RPC
+		// message (observed in prod as a bare heartbeat scalar from a
+		// non-spec-compliant upstream). Mirror the SSE relay path, which skips
+		// interception for undecodable events and forwards them verbatim:
+		// relay the upstream bytes and status to the client unchanged rather
+		// than manufacturing a 5xx. msg is nil, so interceptors are skipped and
+		// bodyBytes is written through below.
+		p.Logger.WarnContext(ctx, "relaying undecodable remote mcp response to client verbatim", attr.SlogError(err))
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
 	}
 

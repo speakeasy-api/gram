@@ -14,6 +14,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { subjectHref } from "@/components/auditlogs/subject-href";
 import type { AuditLog } from "@gram/client/models/components";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import {
@@ -125,66 +126,46 @@ function truncateMiddle(value: string, start = 18, end = 16) {
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
+const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+
+// A subject rendered as a link to its detail page. Centralizes the mono styling
+// and hover affordance so every linked subject looks identical.
+function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
+      {children}
+    </Link>
+  );
+}
+
+// The text shown for a linked subject. Mirrors the identifier each subject type
+// is keyed on — slug where one exists, otherwise id or display name.
+function subjectLinkText(log: AuditLog): string {
+  switch (log.subjectType) {
+    case "deployment":
+      return log.subjectId;
+    case "toolset":
+    case "mcp_server":
+    case "environment":
+    case "project":
+    case "plugin":
+    case "mcp_collection":
+      return log.subjectSlug || log.subjectId;
+    default:
+      return getSubjectLabel(log);
+  }
+}
+
 function renderSubject(log: AuditLog, orgSlug: string) {
-  const monoClass = "font-mono text-xs text-muted-foreground";
+  const monoClass = SUBJECT_MONO_CLASS;
 
   if (log.subjectType === "organization_invitation") {
     return renderInviteSubject(log, monoClass);
   }
 
-  if (log.subjectType === "deployment" && log.projectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/deployments/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectId}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "toolset" && log.projectSlug && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/mcp/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "project" && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "plugin" && log.projectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/plugins/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug || log.subjectId}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "api_key") {
-    return (
-      <Link
-        to={`/${orgSlug}/api-keys`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {getSubjectLabel(log)}
-      </Link>
-    );
+  const href = subjectHref(log, orgSlug);
+  if (href) {
+    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
   }
 
   if (log.subjectType === "asset") {
@@ -249,9 +230,10 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
-    <div className="flex items-start gap-3.5 px-4 py-2.5">
+    <div className="group flex items-start gap-3.5 px-4 py-2.5">
       <ActionDot action={log.action} />
       <ActionBadge action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
@@ -277,6 +259,15 @@ function AuditLogRow({
       <span className="text-muted-foreground shrink-0 font-mono text-xs">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
+      {subjectLink && (
+        <Link
+          to={subjectLink}
+          aria-label={`Open ${getSubjectLabel(log)}`}
+          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <Icon name="arrow-right" className="size-4" />
+        </Link>
+      )}
     </div>
   );
 

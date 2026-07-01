@@ -1,5 +1,6 @@
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo } from "react";
+import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import {
@@ -15,7 +16,7 @@ import {
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
-} from "./chatRiskHelpers";
+} from "./chatHelpers";
 
 /** A short flagged message rendered inline with the matched span(s) marked in
  * yellow, plus a reveal toggle when the match is sensitive. */
@@ -83,6 +84,13 @@ export function HighlightedMessageText({
   );
 }
 
+// Unlike security/risk-ui.tsx's MaskedMatch, this toggle is intentionally
+// NOT backed by risk.unmaskResult. Its data comes from the chat detail panel's
+// useRiskListResults({ chatId }) call, which server-side already returns raw
+// match/spans here — the caller already holds chat:read for this exact chat
+// (required to load the transcript at all), so the same secret is already
+// present in the message content on this page. See the chat:read bypass
+// comment on risk.ListRiskResults in server/internal/risk/impl.go.
 function MaskedMatchInline({ value }: { value: string }): ReactNode {
   const { revealed, setRevealed } = useRowReveal(true);
   if (!revealed) {
@@ -218,6 +226,22 @@ export function RiskBadge({
                   <p className="text-muted-foreground mt-1 text-xs">
                     {r.description}
                   </p>
+                )}
+                {/* When a durable tool call block was recorded for this
+                 * finding's message (any agent — Claude, Cursor, Codex), link
+                 * to its block page where the viewer can read the full reason
+                 * and leave 👍/👎 feedback. */}
+                {r.blockId && (
+                  <Link
+                    to={`/blocks/${r.blockId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
+                  >
+                    <ArrowRight className="size-3" />
+                    More Info
+                  </Link>
                 )}
                 {spans.length > 0 && (
                   <div className="mt-1 flex flex-col gap-1">

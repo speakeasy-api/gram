@@ -7,6 +7,7 @@ import {
   Laptop,
   Maximize2,
 } from "lucide-react";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -1769,14 +1770,6 @@ function unixNanoToDate(value: string) {
   const nanos = BigInt(value);
   const millis = Number(nanos / 1_000_000n);
   return new Date(millis);
-}
-
-function formatPlatform(value: string) {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part[0]!.toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function formatToolUrn(value: string) {

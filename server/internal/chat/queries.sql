@@ -216,13 +216,36 @@ ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
 -- name: CountChats :one
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results), so the risk presence + threshold
+-- filters become a cheap join instead of a correlated subquery per chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
+    AND (
+      @pinned::text = ''
+      OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR (@pinned::text = 'false' AND c.pinned_at IS NULL)
+    )
     AND (
       @search = ''
       OR c.id::text ILIKE '%' || @search || '%'
@@ -240,28 +263,23 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
+    )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
       OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
     )
 ),
 chat_activity AS (
@@ -278,19 +296,44 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
   AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
 
 -- name: ListChats :many
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results). It feeds both the risk presence +
+-- threshold filters and the risk_findings_count column below, replacing what
+-- were two correlated subqueries per candidate chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
+    AND (
+      @pinned::text = ''
+      OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR (@pinned::text = 'false' AND c.pinned_at IS NULL)
+    )
     AND (
       @search = ''
       OR c.id::text ILIKE '%' || @search || '%'
@@ -308,28 +351,23 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
+    )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
       OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
     )
 ),
 chat_stats AS (
@@ -351,16 +389,7 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = @project_id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -402,8 +431,35 @@ SELECT
   lc.risk_findings_count
 FROM limited_chats lc;
 
+-- name: ListChatSources :many
+-- Distinct inferred source (the latest non-null message source) across the
+-- project's chats, honoring the same visibility scoping as ListChats. Feeds the
+-- agent-type filter options on the Agent Sessions page so the list reflects the
+-- sources actually present in the data rather than a hardcoded catalog.
+WITH latest_sources AS (
+  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
+  FROM chats c
+  JOIN chat_messages cm ON cm.chat_id = c.id
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+    AND cm.source IS NOT NULL
+  ORDER BY cm.chat_id, cm.created_at DESC
+)
+SELECT DISTINCT source
+FROM latest_sources
+WHERE source IS NOT NULL
+ORDER BY source;
+
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetChatTitlesByIDs :many
+SELECT id, title FROM chats
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = ANY(@project_ids::uuid[])
+  AND deleted IS FALSE;
 
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
@@ -466,6 +522,9 @@ SELECT
     SELECT COUNT(*)::bigint FROM ordered o
     WHERE EXISTS (
       SELECT 1 FROM risk_results rr
+      -- Only count a finding while its policy is enabled and not deleted (see
+      -- the risk_counts CTE / risk.results.list for the same gate).
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
       WHERE rr.chat_message_id = o.id
         AND rr.project_id = @project_id::uuid
         AND rr.found IS TRUE
@@ -530,7 +589,9 @@ LIMIT @lim::integer;
 -- is the generation's message count, so the caller can fold consecutive rn into
 -- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 -- messages remain to be expanded. Overlapping windows merge naturally via set
--- membership.
+-- membership. is_risk flags the seed rows (the flagged messages themselves) so
+-- the caller can return the explicit risk seq list (context rows are
+-- is_risk = false).
 WITH ordered AS (
   SELECT
     cm.*,
@@ -545,6 +606,10 @@ risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
     SELECT 1 FROM risk_results rr
+    -- is_risk only fires while the finding's policy is enabled and not deleted,
+    -- so a since-disabled policy drops out of the "Risky only" view too (matches
+    -- risk.results.list, which drives the highlight detail).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
     WHERE rr.chat_message_id = o.id
       AND rr.project_id = @project_id::uuid
       AND rr.found IS TRUE
@@ -552,11 +617,52 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.*
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
+
+-- name: ListSearchWindowedMessages :many
+-- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+-- rows are messages whose searchable text matches @query (case-insensitive
+-- substring over the narrative content, the tool-call name/arguments JSON, and
+-- any structured/multimodal content) instead of messages with a risk finding.
+-- Each match is padded with +/- @context_size ordinal positions. rn/total drive
+-- segment folding and the has_more flags; is_match flags the seed rows so the
+-- caller can return the explicit jump-to-match seq list (context rows are
+-- is_match = false). Seed matches are capped at @match_limit (earliest first by
+-- ordinal) to bound the response on broad queries. Asset-offloaded content (too
+-- large to store inline) is not searchable here.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || @query::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || @query::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || @query::text || '%')
+  ORDER BY o.rn
+  LIMIT @match_limit::integer
+)
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
 )
 ORDER BY o.seq ASC;
 
@@ -567,7 +673,30 @@ WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
 
 -- name: UpdateChatTitle :exec
-UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
+-- Auto-generated title write. Guarded on title_manually_set so a manual rename
+-- landing during title generation (between the activity's read and this write)
+-- is never clobbered: the row no longer matches and the update no-ops.
+UPDATE chats SET title = @title, updated_at = NOW()
+WHERE id = @id AND title_manually_set IS FALSE;
+
+-- name: RenameChat :exec
+-- Set or clear a chat's title and record whether a human chose it. Project-scoped
+-- so a manual rename can never touch another project's chat. A NULL title resets
+-- to auto-naming (paired with title_manually_set = false).
+UPDATE chats
+SET title = sqlc.narg('title'),
+    title_manually_set = @title_manually_set,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: SetChatPinned :exec
+-- Pin or unpin a chat. Project-scoped so a pin can never touch another
+-- project's chat. COALESCE preserves the original pin time when re-pinning an
+-- already-pinned chat; unpinning clears it.
+UPDATE chats
+SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE NULL END,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages
@@ -666,6 +795,9 @@ WHERE c.project_id = @project_id
       @has_risk_filter::text = 'true' AND EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
@@ -677,6 +809,9 @@ WHERE c.project_id = @project_id
       @has_risk_filter::text = 'false' AND NOT EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
@@ -867,10 +1002,33 @@ INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
+-- name: SeedChatMessageWithSource :one
+-- Test fixture: insert a chat message carrying a specific source. The per-chat
+-- inferred source (used by the agent-type filter and ListChatSources) is the
+-- latest non-null message source, so source-filter tests seed messages this way.
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageContent :one
+-- Test fixture: insert a user chat message with explicit content and return its
+-- id, for exercising the text-search windowed view.
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES (@chat_id, @project_id, 'user', @content)
+RETURNING id;
+
 -- name: SeedRiskPolicy :one
 -- Test fixture: insert a minimal risk policy and return its id.
 INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
+RETURNING id;
+
+-- name: SeedDisabledRiskPolicy :one
+-- Test fixture: insert a disabled risk policy and return its id. Findings under
+-- a disabled (or deleted) policy must drop out of every risk surface — the
+-- per-chat count, the is_risk flag, and the risk.results.list detail alike.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
+VALUES (@project_id, @organization_id, 'test-policy-disabled', '{}', FALSE, 'flag', TRUE, 1)
 RETURNING id;
 
 -- name: SeedRiskResult :exec

@@ -455,12 +455,15 @@ function RiskEventsRow({
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
       <div className="min-w-0 truncate">
-        {isShadowMCP && result.match ? (
-          <span className="font-mono text-xs" title={result.match}>
-            {result.match}
+        {isShadowMCP && result.matchRedacted ? (
+          <span className="font-mono text-xs" title={result.matchRedacted}>
+            {result.matchRedacted}
           </span>
         ) : (
-          <MaskedMatch value={result.match} />
+          <MaskedMatch
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         )}
       </div>
       <div className="min-w-0 truncate" title={policyName}>

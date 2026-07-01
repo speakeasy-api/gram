@@ -144,6 +144,9 @@ type GetObservabilityOverviewRequestBody struct {
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -4245,6 +4248,8 @@ type SearchUsersFilterRequestBody struct {
 type UserSummaryResponseBody struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// User email associated with this usage, when present
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano *string `form:"first_seen_unix_nano,omitempty" json:"first_seen_unix_nano,omitempty" xml:"first_seen_unix_nano,omitempty"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -4630,6 +4635,8 @@ type SessionSummaryResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// LLM model used in this chat session
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Chat title, when the session resolves to a named chat
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
 	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
 	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
@@ -4972,6 +4979,8 @@ type ToolUsageTraceLogGroupResponseBody struct {
 type ToolUsageHostedServerFilterOptionResponseBody struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// Hosted MCP toolset display name
+	ToolsetName *string `form:"toolset_name,omitempty" json:"toolset_name,omitempty" xml:"toolset_name,omitempty"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
@@ -5218,6 +5227,7 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 		APIKeyID:          p.APIKeyID,
 		ToolsetSlug:       p.ToolsetSlug,
 		RemoteMcpServerID: p.RemoteMcpServerID,
+		McpServerID:       p.McpServerID,
 		EventSource:       p.EventSource,
 		HookSource:        p.HookSource,
 		IncludeTimeSeries: p.IncludeTimeSeries,
@@ -14118,6 +14128,9 @@ func ValidateUserSummaryResponseBody(body *UserSummaryResponseBody) (err error) 
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
 	if body.FirstSeenUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_unix_nano", "body"))
 	}
@@ -15305,6 +15318,9 @@ func ValidateToolUsageTraceLogGroupResponseBody(body *ToolUsageTraceLogGroupResp
 func ValidateToolUsageHostedServerFilterOptionResponseBody(body *ToolUsageHostedServerFilterOptionResponseBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	if body.ToolsetName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_name", "body"))
 	}
 	if body.EventCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -34,6 +35,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -50,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +75,7 @@ type Service struct {
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
+	audit            *audit.Logger
 }
 
 func NewService(
@@ -89,6 +93,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -109,6 +114,7 @@ func NewService(
 		posthog:          posthog,
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
+		audit:            auditLogger,
 	}
 }
 
@@ -203,37 +209,6 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An assistant principal is set only on the assistant runtime path and
-	// only the managed-assistant platform toolset surfaces chat tools, so
-	// treat it as admin-equivalent for project-wide visibility.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-
-	// Whether the caller sees all project sessions or only their own is decided
-	// by the org:admin RBAC scope — this is a visibility choice, never a gate on
-	// the route, so a caller without org:admin (or when the check can't be made)
-	// still gets a successful response scoped to their own sessions.
-	//
-	// When RBAC is not enforced for the org we must NOT fall through to "see
-	// all" — Require short-circuits to allow when enforcement is off, so check
-	// ShouldEnforce explicitly and treat the disabled case as non-admin.
-	isOrgAdmin := false
-	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
-		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
-	} else if enforce {
-		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
-		var shareableErr *oops.ShareableError
-		switch {
-		case err == nil:
-			isOrgAdmin = true
-		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
-			// Forbidden simply means not an org admin — show own sessions.
-		default:
-			// Any other error is unexpected; log it but still serve own
-			// sessions rather than failing the listing.
-			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
-		}
-	}
-
 	var fromTime, toTime pgtype.Timestamptz
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
@@ -253,19 +228,21 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	search := conv.PtrValOr(payload.Search, "")
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
+	// -1 is the "no threshold" sentinel: the queries short-circuit to "show all"
+	// on a negative bound. A real bound N keeps chats with at least N findings
+	// (inclusive), matching the "Min risk score" control.
+	minRiskScore := int32(-1)
+	if payload.MinRiskScore != nil {
+		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
+	}
 
-	// Payload filters only apply for org admins and the managed-assistant runtime.
-	var externalUserID, userID string
-	switch {
-	case authCtx.ExternalUserID != "":
-		externalUserID = authCtx.ExternalUserID
-	case isOrgAdmin, isAssistantCall:
-		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
-	default:
-		if authCtx.UserID == "" {
-			return nil, oops.C(oops.CodeUnauthorized)
-		}
-		userID = authCtx.UserID
+	// Visibility scoping: callers holding an unrestricted chat:read grant and the
+	// managed-assistant runtime see all project sessions (optionally narrowed by
+	// an explicit external user id); everyone else is restricted to their own
+	// sessions.
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID)
+	if err != nil {
+		return nil, err
 	}
 
 	baseParams := repo.CountChatsParams{
@@ -277,6 +254,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         search,
 		AssistantID:    assistantID,
 		HasRiskFilter:  hasRiskFilter,
+		MinRiskScore:   minRiskScore,
+		Pinned:         conv.PtrValOr(payload.Pinned, ""),
+		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -293,6 +273,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         baseParams.Search,
 		AssistantID:    baseParams.AssistantID,
 		HasRiskFilter:  baseParams.HasRiskFilter,
+		MinRiskScore:   baseParams.MinRiskScore,
+		Pinned:         baseParams.Pinned,
+		Sources:        baseParams.Sources,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -334,6 +317,134 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
+// logChatAccess records an audit entry that a dashboard user opened a chat
+// session transcript. It is written with the pool directly (no surrounding
+// transaction) because it describes a read, not a mutation.
+func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.Chat) error {
+	if err := s.audit.LogChatSessionAccess(ctx, s.db, audit.LogChatSessionAccessEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        chat.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ChatSessionURN:   urn.NewChatSession(chat.ID),
+		ChatTitle:        chat.Title.String,
+		OwnerUserID:      chat.UserID.String,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to record chat access audit log").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// ListSources returns the distinct agent sources present in the project's chats
+// so the dashboard can populate the agent-type filter from real data instead of
+// a hardcoded catalog. Honors the same visibility scoping as ListChats.
+func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPayload) (*gen.ListSourcesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListChatSources(ctx, repo.ListChatSourcesParams{
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
+	}
+
+	sources := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Valid {
+			sources = append(sources, row.String)
+		}
+	}
+
+	return &gen.ListSourcesResult{Sources: sources}, nil
+}
+
+// parseSourceFilter splits the comma-separated `source` filter into the list of
+// exact source strings matched against each chat's inferred source. It always
+// returns a non-nil slice so the no-filter case sends an empty text[]
+// (cardinality 0 disables the filter) rather than SQL NULL, which would drop
+// every row.
+func parseSourceFilter(source string) []string {
+	seen := make(map[string]struct{})
+	sources := []string{}
+	for raw := range strings.SplitSeq(source, ",") {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		sources = append(sources, s)
+	}
+	return sources
+}
+
+// chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
+// the chat listing endpoints. Callers holding an unrestricted chat:read grant
+// (only admins do) and the managed-assistant runtime see all project sessions
+// (optionally narrowed by an explicit external user id); everyone else is
+// restricted to their own sessions. Both empty means "all chats in the project".
+// Visibility is never a hard gate on the route — when the chat:read check can't
+// be made we fall back to own-sessions rather than failing.
+func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID *string) (string, string, error) {
+	// An assistant principal is set only on the assistant runtime path and only
+	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// admin-equivalent for project-wide visibility.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+
+	// Whether the caller sees all project sessions or only their own is decided by
+	// the chat:read RBAC scope. Only admins hold a chat:read grant; members hold
+	// none and fall through to own-session visibility (filtered by user_id in SQL,
+	// which keeps the list paginated and its `total` correct). Members still read
+	// their own sessions; the per-session chat.load route grants that via
+	// owner-matching, not via chat:read.
+	//
+	// When RBAC is not enforced for the org we must NOT fall through to "see all"
+	// — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as constrained.
+	canReadAllSessions := false
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
+	} else if enforce {
+		err := s.authz.Require(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		var shareableErr *oops.ShareableError
+		switch {
+		case err == nil:
+			canReadAllSessions = true
+		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
+			// Forbidden simply means the caller can only read their own sessions.
+		default:
+			// Any other error is unexpected; log it but still serve own sessions
+			// rather than failing the listing.
+			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+		}
+	}
+
+	switch {
+	case authCtx.ExternalUserID != "":
+		return authCtx.ExternalUserID, "", nil
+	case canReadAllSessions, isAssistantCall:
+		return conv.PtrValOr(payloadExternalUserID, ""), "", nil
+	default:
+		if authCtx.UserID == "" {
+			return "", "", oops.C(oops.CodeUnauthorized)
+		}
+		return "", authCtx.UserID, nil
+	}
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -360,11 +471,36 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	// Off-dashboard callers must match the chat owner unless they're the
 	// managed-assistant runtime (see ListChats).
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 	if authCtx.SessionID == nil {
-		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return nil, oops.C(oops.CodeUnauthorized)
 			}
+		}
+	}
+
+	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
+	// enforced for the org (enterprise + feature flag + session). Members can
+	// always read sessions they own, so bypass the scope check for the owner;
+	// reading anyone else's session requires an unrestricted chat:read grant,
+	// which only admins hold. The managed-assistant runtime is exempt — it
+	// consumes transcripts programmatically, not as a reviewer.
+	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	if !isAssistantCall && !isOwner {
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
+			return nil, err
+		}
+	}
+
+	// Record dashboard session-opens in the audit log. Scroll pagination
+	// (before_seq/after_seq) reuses the same open and is not re-logged; only
+	// session-authenticated (dashboard) reads are recorded, since chat-token,
+	// external-user, and assistant reads are the owner/runtime consuming their
+	// own transcript rather than a reviewer accessing a session.
+	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil {
+		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
+			return nil, err
 		}
 	}
 
@@ -395,17 +531,29 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreBefore  bool
 		hasMoreAfter   bool
 		riskSegments   []*gen.RiskSegment
+		matchSegments  []*gen.RiskSegment
 		// latestPageRows holds the repo rows of the initial newest page so we can
 		// infer the chat source from them; only populated on that first request.
 		latestPageRows []repo.ChatMessage
 	)
 
-	// The initial request (latest generation, no cursors, not risk-only) is the
-	// only one that carries source inference and ClickHouse/Claude enrichment:
-	// the dashboard consumes those once from the first page, and they depend on
-	// the most recent messages which that page contains.
+	// query enables the search-windowed view; it's mutually exclusive with the
+	// risk-only view. Trim so a whitespace-only query is treated as no query.
+	queryStr := ""
+	if payload.Query != nil {
+		queryStr = strings.TrimSpace(*payload.Query)
+	}
+	if queryStr != "" && payload.RiskOnly {
+		return nil, oops.E(oops.CodeInvalid, nil, "query and risk_only are mutually exclusive")
+	}
+
+	// The initial request (latest generation, no cursors, not risk-only, not a
+	// search) is the only one that carries source inference and ClickHouse/Claude
+	// enrichment: the dashboard consumes those once from the first page, and they
+	// depend on the most recent messages which that page contains.
 	isInitialLatest := generation == maxGeneration &&
-		payload.BeforeSeq == nil && payload.AfterSeq == nil && !payload.RiskOnly
+		payload.BeforeSeq == nil && payload.AfterSeq == nil &&
+		!payload.RiskOnly && queryStr == ""
 
 	switch {
 	case payload.RiskOnly:
@@ -422,9 +570,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
+			// is_risk marks the flagged messages themselves (vs the surrounding
+			// context windowed in around them) so the dashboard can filter to
+			// findings without the server exposing internal seq positions.
+			isRisk := r.IsRisk
 			resultMessages[i] = &gen.ChatMessage{
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
+				IsRisk:         &isRisk,
 				Role:           r.Role,
 				Model:          r.Model.String,
 				UserID:         &r.UserID.String,
@@ -442,6 +595,50 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if len(riskSegments) > 0 {
 			hasMoreBefore = riskSegments[0].HasMoreBefore
 			hasMoreAfter = riskSegments[len(riskSegments)-1].HasMoreAfter
+		}
+
+	case queryStr != "":
+		// Search view: messages matching the query plus a fixed context window,
+		// grouped into contiguous segments — same windowing as risk-only. Cursors
+		// are ignored on this initial request; the dashboard expands segments with
+		// plain before_seq/after_seq follow-ups. Message construction mirrors the
+		// risk_only branch above.
+		rows, err := s.repo.ListSearchWindowedMessages(ctx, repo.ListSearchWindowedMessagesParams{
+			ContextSize: searchContextWindow,
+			ProjectID:   *authCtx.ProjectID,
+			ChatID:      chat.ID,
+			Generation:  generation,
+			Query:       queryStr,
+			MatchLimit:  searchMatchLimit,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
+		}
+		resultMessages = make([]*gen.ChatMessage, len(rows))
+		for i := range rows {
+			r := rows[i]
+			toolCalls := string(r.ToolCalls)
+			resultMessages[i] = &gen.ChatMessage{
+				ID:             r.ID.String(),
+				Seq:            r.Seq,
+				IsRisk:         nil, // is_risk is a risk_only-mode signal
+				Role:           r.Role,
+				Model:          r.Model.String,
+				UserID:         &r.UserID.String,
+				ExternalUserID: &r.ExternalUserID.String,
+				Content:        s.loadMessageContentFields(ctx, r.ChatID, r.Content, r.ContentRaw, r.ContentAssetUrl),
+				ToolCalls:      &toolCalls,
+				ToolCallID:     &r.ToolCallID.String,
+				FinishReason:   &r.FinishReason.String,
+				PromptID:       conv.FromPGText[string](r.MessageID),
+				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
+				Generation:     int(r.Generation),
+			}
+		}
+		matchSegments = buildSearchSegments(rows)
+		if len(matchSegments) > 0 {
+			hasMoreBefore = matchSegments[0].HasMoreBefore
+			hasMoreAfter = matchSegments[len(matchSegments)-1].HasMoreAfter
 		}
 
 	case payload.AfterSeq != nil:
@@ -580,6 +777,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreBefore:        hasMoreBefore,
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
+		MatchSegments:        matchSegments,
 		Totals: &gen.ChatTotals{
 			Total:             totals.Total,
 			UserMessages:      totals.UserMessages,
@@ -721,20 +919,23 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "assistant" {
+		source = billing.ModelUsageSourceAssistants
+	}
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
+	}
+	sourceName := string(source)
 
 	eventProperties := map[string]any{
 		"action":            "chat_request_received",
 		"organization_slug": authCtx.OrganizationSlug,
 		"project_slug":      *authCtx.ProjectSlug,
 		"success":           false,
-		"source":            metadata.Source,
+		"source":            sourceName,
 		"user_agent":        metadata.UserAgent,
 		"origin":            metadata.Origin,
-	}
-
-	source := billing.ModelUsageSource(metadata.Source)
-	if source == "" {
-		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {
@@ -1108,6 +1309,10 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
+// maxChatTitleLength bounds a manually set chat title. Kept in sync with the
+// MaxLength(200) validation on the generateTitle design payload.
+const maxChatTitleLength = 200
+
 func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitlePayload) (*gen.GenerateTitleResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1132,8 +1337,40 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Return current title from DB. Title generation happens asynchronously via
-	// Temporal after first completion; title will be available on next list()/fetch().
+	// Write path: a manual rename. A non-empty title is pinned (auto-generation
+	// skips it); an empty title clears the manual flag and re-enables auto-naming.
+	if payload.Title != nil {
+		// Mirrors the MaxLength(200) transport validation so the bound also holds
+		// for any non-HTTP caller. Goa's MaxLength counts runes, so we do too —
+		// using byte length here would wrongly reject valid multi-byte titles.
+		if titleLen := utf8.RuneCountInString(*payload.Title); titleLen > maxChatTitleLength {
+			return nil, oops.E(oops.CodeInvalid, fmt.Errorf("title length %d exceeds max %d", titleLen, maxChatTitleLength), "chat title is too long")
+		}
+
+		trimmed := strings.TrimSpace(*payload.Title)
+
+		var newTitle pgtype.Text
+		manual := false
+		if trimmed != "" {
+			newTitle = conv.PtrToPGText(&trimmed)
+			manual = true
+		}
+
+		if err := s.repo.RenameChat(ctx, repo.RenameChatParams{
+			Title:            newTitle,
+			TitleManuallySet: manual,
+			ID:               chatID,
+			ProjectID:        *authCtx.ProjectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to rename chat").LogError(ctx, s.logger)
+		}
+
+		return &gen.GenerateTitleResult{Title: trimmed}, nil
+	}
+
+	// Read path: return the current title from DB. Title generation happens
+	// asynchronously via Temporal after first completion; the title will be
+	// available on the next list()/fetch().
 	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
 		title = chat.Title.String
@@ -1167,6 +1404,51 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 	}
 	if !res.Deleted && res.BacksLiveThread {
 		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
+	}
+
+	// Load the chat to verify access before mutating it.
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see LoadChat).
+	if authCtx.SessionID == nil {
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	if err := s.repo.SetChatPinned(ctx, repo.SetChatPinnedParams{
+		Pinned:    payload.Pinned,
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set chat pinned").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -1307,6 +1589,7 @@ func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.
 	return &gen.ChatMessage{
 		ID:             m.ID.String(),
 		Seq:            m.Seq,
+		IsRisk:         nil, // is_risk is a risk_only-mode signal
 		Role:           m.Role,
 		Model:          m.Model.String,
 		UserID:         &m.UserID.String,
@@ -1325,27 +1608,43 @@ func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.
 // carrying its 1-based ordinal rn within the generation and the generation
 // total) into contiguous segments. A break in rn starts a new segment;
 // has_more_before/after mark whether earlier/later messages remain to expand.
-func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+// foldWindowSegments folds windowed rows (ordinal rn ascending; contiguous rn
+// within a segment) into [first_seq,last_seq] segments carrying edge has_more
+// flags. Shared by the risk-only and query-search windowed views, which return
+// different row types but identical (rn, total, seq) windowing columns.
+func foldWindowSegments(n int, at func(i int) (rn, total, seq int64)) []*gen.RiskSegment {
 	var segments []*gen.RiskSegment
 	var cur *gen.RiskSegment
 	var prevRn int64
-	for i := range rows {
-		r := rows[i]
-		if cur == nil || r.Rn != prevRn+1 {
+	for i := range n {
+		rn, total, seq := at(i)
+		if cur == nil || rn != prevRn+1 {
 			cur = &gen.RiskSegment{
-				FirstSeq:      r.Seq,
-				LastSeq:       r.Seq,
-				HasMoreBefore: r.Rn > 1,
-				HasMoreAfter:  r.Rn < r.Total,
+				FirstSeq:      seq,
+				LastSeq:       seq,
+				HasMoreBefore: rn > 1,
+				HasMoreAfter:  rn < total,
 			}
 			segments = append(segments, cur)
 		} else {
-			cur.LastSeq = r.Seq
-			cur.HasMoreAfter = r.Rn < r.Total
+			cur.LastSeq = seq
+			cur.HasMoreAfter = rn < total
 		}
-		prevRn = r.Rn
+		prevRn = rn
 	}
 	return segments
+}
+
+func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
+		return rows[i].Rn, rows[i].Total, rows[i].Seq
+	})
+}
+
+func buildSearchSegments(rows []repo.ListSearchWindowedMessagesRow) []*gen.RiskSegment {
+	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
+		return rows[i].Rn, rows[i].Total, rows[i].Seq
+	})
 }
 
 type chatMessageRow struct {
@@ -1392,6 +1691,14 @@ const (
 	// riskContextWindow is how many surrounding messages (by ordinal position) to
 	// include on each side of a risk finding in the risk-only view.
 	riskContextWindow = 5
+
+	// searchContextWindow is how many surrounding messages (by ordinal position)
+	// to include on each side of a query match in the search-windowed view.
+	searchContextWindow = 5
+
+	// searchMatchLimit caps how many seed matches the search-windowed view returns
+	// (earliest first by ordinal), bounding the response on broad queries.
+	searchMatchLimit = 200
 
 	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
 	// and asset-upload phases in storeMessages, capping goroutines, memory,

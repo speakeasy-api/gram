@@ -309,11 +309,22 @@ export function GrantRuleDrawerContent({
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
-  // environment scopes apply to every environment in the project.
-  if (resourceType === "org" || resourceType === "environment") {
+  // environment scopes apply to every environment in the project; chat:read is
+  // granted org-wide (members are scoped to their own sessions automatically on
+  // the server, so the role editor only offers the unrestricted "all sessions"
+  // grant that admins receive).
+  if (
+    resourceType === "org" ||
+    resourceType === "environment" ||
+    resourceType === "chat"
+  ) {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
-        {resourceType === "environment" ? "All in project" : "All"}
+        {resourceType === "environment"
+          ? "All in project"
+          : resourceType === "chat"
+            ? "All sessions"
+            : "All"}
       </span>
     );
   }

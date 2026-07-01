@@ -1,13 +1,16 @@
 import re
 import uuid
 
+import pytest
 import structlog
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
+from pystreams.risk import handler as handler_mod
+from pystreams.risk import metrics
 from pystreams.risk.handler import PresidioHandler
-from pystreams.risk.scanner import Detection, _AsyncCloseable
+from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, _AsyncCloseable
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -47,9 +50,13 @@ class FakeScanner(_AsyncCloseable):
         self._detections = detections or []
         self._error = error
         self.calls: list[tuple[str, list[str] | None]] = []
+        self.score_thresholds: list[float] = []
 
-    async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
+    async def scan(
+        self, content: str, entities: list[str] | None, score_threshold: float
+    ) -> list[Detection]:
         self.calls.append((content, entities))
+        self.score_thresholds.append(score_threshold)
         if self._error is not None:
             raise self._error
         return list(self._detections)
@@ -221,6 +228,28 @@ async def test_empty_entities_means_scan_all():
     assert entry["requested_entities"] == []
 
 
+async def test_score_threshold_forwarded_to_scanner():
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    await handler.handle(
+        _message("a@b.com", request_id="req-1", score_threshold=0.9), _meta()
+    )
+
+    # The per-request threshold is passed through to the scanner verbatim.
+    assert scanner.score_thresholds == [0.9]
+
+
+async def test_unset_score_threshold_defaults():
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    # No score_threshold on the request (proto default 0.0) -> default floor.
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    assert scanner.score_thresholds == [DEFAULT_SCORE_THRESHOLD]
+
+
 async def test_scan_failure_is_swallowed_and_logged():
     secret = "my ssn is 123-45-6789"
     # The error carries the content to prove it isn't logged.
@@ -316,6 +345,67 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
     # ...and the summary still lands, reporting zero published.
     summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
     assert summary["published_count"] == 0
+
+
+@pytest.fixture
+def recorded_durations(monkeypatch):
+    """Capture every ``record_process_duration`` call as ``(seconds, outcome)``.
+
+    Patches the helper on the handler's ``metrics`` module so the per-message
+    distribution recording is observable without standing up a real
+    ``MeterProvider`` (which is a process-global singleton, awkward across tests).
+    """
+    calls: list[tuple[float, str]] = []
+
+    def _capture(seconds: float, outcome: str) -> None:
+        calls.append((seconds, outcome))
+
+    monkeypatch.setattr(handler_mod.metrics, "record_process_duration", _capture)
+    return calls
+
+
+async def test_records_detected_outcome_when_findings_published(recorded_durations):
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
+
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_DETECTED
+    assert seconds >= 0.0
+
+
+async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
+    handler = _handler(FakeScanner([]))
+
+    await handler.handle(_message("nothing sensitive here"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_CLEAN
+    assert seconds >= 0.0
+
+
+async def test_records_error_outcome_when_scan_fails(recorded_durations):
+    handler = _handler(FakeScanner(error=RuntimeError("boom")))
+
+    await handler.handle(_message("...", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_ERROR
+    assert seconds >= 0.0
+
+
+async def test_records_error_outcome_when_all_publishes_fail(recorded_durations):
+    # Detections found, but every publish fails: nothing landed, so this must not
+    # inflate the "detected" bucket — it is recorded as an error outcome.
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+
+    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (seconds, outcome) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_ERROR
+    assert seconds >= 0.0
 
 
 async def test_does_not_leak_content_or_values_to_logs():

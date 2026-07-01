@@ -107,6 +107,57 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	}
 }
 
+func TestGenerateClaudePluginEmitsHumanDisplayName(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "MoonPay MCP Servers",
+			Slug:        "moonpay-mcp-servers",
+			Description: "MoonPay MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm-tools", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:     "MoonPay",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "hooks-key", // triggers the synthesized observability plugin
+	})
+	require.NoError(t, err)
+
+	// plugin.json: name stays the kebab slug (used for namespacing/lookup);
+	// displayName carries the human-friendly, correctly-cased name Claude shows.
+	var pluginMeta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["moonpay-mcp-servers/.claude-plugin/plugin.json"], &pluginMeta))
+	require.Equal(t, "moonpay-mcp-servers", pluginMeta.Name)
+	require.Equal(t, "MoonPay MCP Servers", pluginMeta.DisplayName)
+
+	// marketplace.json entry mirrors the same contract.
+	var manifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &manifest))
+
+	entries := make(map[string]marketplaceEntry, len(manifest.Plugins))
+	for _, e := range manifest.Plugins {
+		entries[e.Name] = e
+	}
+
+	feature, ok := entries["moonpay-mcp-servers"]
+	require.True(t, ok, "feature plugin missing from marketplace.json")
+	require.Equal(t, "MoonPay MCP Servers", feature.DisplayName)
+
+	// The synthesized observability plugin gets a human display name too.
+	obs, ok := entries["moonpay-observability"]
+	require.True(t, ok, "observability plugin missing from marketplace.json")
+	require.Equal(t, "MoonPay Observability", obs.DisplayName)
+
+	var obsMeta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["moonpay-observability/.claude-plugin/plugin.json"], &obsMeta))
+	require.Equal(t, "moonpay-observability", obsMeta.Name)
+	require.Equal(t, "MoonPay Observability", obsMeta.DisplayName)
+}
+
 func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -677,6 +728,33 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
 }
 
+// The Claude hook.sh PreToolUse path must close the DNO-286 race rather than
+// merely narrow it: when the per-session inventory file is absent (the first
+// action of a new session is a tool call, before the async SessionStart write
+// lands) it sources the shared gatherer and gathers inline instead of
+// forwarding a payload the server cannot enforce against.
+func TestRenderHookScriptClaudeGathersInventoryInlineOnFileMiss(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	// Sources the shared gatherer (guarded — cursor ships none).
+	require.Contains(t, script, `[ -f "$script_dir/mcp_gather.sh" ] && . "$script_dir/mcp_gather.sh"`)
+	// The replay block signals exit 3 when there is no file and no caller
+	// inventory, and the shell branches to an inline gather with a tighter cap.
+	require.Contains(t, script, "raise SystemExit(3)")
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload" 5)`)
+	require.Contains(t, script, "type gram_gather_mcp_inventory >/dev/null 2>&1")
+	// Caller-supplied inventory is detected by presence (mirroring the server),
+	// not truthiness, so an explicit empty cowork list is not re-gathered.
+	require.Contains(t, script, "cw_val is not None")
+	require.Contains(t, script, "isinstance(cc_val, str)")
+}
+
 func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	t.Parallel()
 	// Cursor's hook endpoint reads Gram-Key + Gram-Project per
@@ -763,6 +841,49 @@ printf '{}\n200'
 	require.Equal(t, 1, strings.Count(postedPayload, `"user_email"`), "identity enrichment must replace user_email, not append a duplicate key")
 }
 
+// Cursor blocks via the JSON body on stdout, not the exit code. When the Gram
+// server is unreachable, errors, or returns a 3xx (an unfollowed redirect
+// carries no decision body), there is no decision to relay, so the hook must
+// fail CLOSED — emit a synthetic deny — rather than allow the call and silently
+// bypass blocking policies.
+func TestRenderCursorHookFailsClosedOnNon2xx(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	// status is what the fake curl reports; a 3xx must fail closed just like a
+	// 5xx, since curl does not follow redirects and the body is not a decision.
+	for _, status := range []string{"500", "302"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			hookPath := filepath.Join(dir, "hook.sh")
+			require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(
+				"#!/usr/bin/env bash\nprintf 'not a decision\\n"+status+"'\n"), 0o755))
+
+			cmd := exec.Command("bash", hookPath)
+			cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution"}`)
+			cmd.Env = append(os.Environ(),
+				"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+			)
+			output, err := cmd.Output()
+			require.NoError(t, err, "hook must exit 0 so Cursor reads the stdout decision")
+
+			var decision map[string]any
+			require.NoError(t, json.Unmarshal(output, &decision), "stdout must be a single valid JSON object: %q", string(output))
+			require.Equal(t, "deny", decision["permission"], "must fail closed on HTTP %s", status)
+			require.NotEmpty(t, decision["user_message"], "deny must carry a human-readable reason")
+		})
+	}
+}
+
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	t.Parallel()
 
@@ -797,6 +918,109 @@ printf '{}\n200'
 	var posted map[string]any
 	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
 	require.Equal(t, "cursor@example.com", posted["user_email"])
+}
+
+func TestRenderCursorHookEnrichesMCPURLFromInstalledPluginManifest(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	pluginDir := filepath.Join(home, ".cursor", "plugins", "local", "kitchen-sink-cursor")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "mcp.json"), []byte(`{
+		"mcpServers": {
+			"GitHub": {"url": "https://chat.speakeasy.com/mcp/int-github"}
+		}
+	}`), 0o644))
+
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{
+		"hook_event_name": "beforeMCPExecution",
+		"tool_name": "github--get_me",
+		"mcp_server_name": "GitHub",
+		"command": "GitHub",
+		"tool_input": "{\"x-gram-toolset-id\":\"019de58d-ef67-743f-9581-8bf2392c2944\"}"
+	}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"HOME="+home,
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	require.Equal(t, "https://chat.speakeasy.com/mcp/int-github", posted["url"])
+	require.Equal(t, "https://chat.speakeasy.com/mcp/int-github", posted["mcp_server_url"])
+}
+
+func TestRenderCursorHookIgnoresWritableMCPManifest(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	pluginDir := filepath.Join(home, ".cursor", "plugins", "local", "tampered-cursor")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	manifestPath := filepath.Join(pluginDir, "mcp.json")
+	require.NoError(t, os.WriteFile(manifestPath, []byte(`{
+		"mcpServers": {
+			"GitHub": {"url": "https://attacker.example/mcp"}
+		}
+	}`), 0o644))
+	require.NoError(t, os.Chmod(manifestPath, 0o666))
+
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{
+		"hook_event_name": "beforeMCPExecution",
+		"tool_name": "github--get_me",
+		"mcp_server_name": "GitHub",
+		"command": "GitHub"
+	}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"HOME="+home,
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	require.NotContains(t, posted, "url")
+	require.NotContains(t, posted, "mcp_server_url")
 }
 
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
@@ -996,6 +1220,25 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
+	// The actual gathering now lives in the shared mcp_gather.sh, sourced here
+	// and reused by hook.sh's PreToolUse inline-gather fallback.
+	require.Contains(t, script, `. "$script_dir/mcp_gather.sh"`)
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload")`)
+	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
+	// regardless of HTTP outcome to keep the hook latency invisible.
+	require.Contains(t, script, "exit 0")
+	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+}
+
+// The shared gatherer is sourced by both mcp_inventory.sh (async, SessionStart/
+// ConfigChange) and hook.sh (inline, PreToolUse on a missing per-session file).
+// It must detect both execution environments, stamp the live-gather freshness
+// marker the server keys off, and persist the per-session file safely.
+func TestRenderSharedMCPInventoryGatherScript(t *testing.T) {
+	t.Parallel()
+	script := string(renderSharedMCPInventoryGatherScript())
+
+	require.Contains(t, script, "gram_gather_mcp_inventory()", "must define the shared function")
 	// Server-side parsers key off these field names — see
 	// server/internal/hooks/claude_hooks.go and mcp_cowork_parser.go.
 	require.Contains(t, script, "mcp_inventory_claude_code")
@@ -1003,10 +1246,15 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	// Cowork detection hinges on CLAUDE_PROJECT_DIR and local_<rid>.json.
 	require.Contains(t, script, "CLAUDE_PROJECT_DIR")
 	require.Contains(t, script, "local_run_json")
-	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
-	// regardless of HTTP outcome to keep the hook latency invisible.
-	require.Contains(t, script, "exit 0")
-	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+	// Freshness marker distinguishes a live gather (authoritative) from a replay.
+	require.Contains(t, script, `ad["mcp_inventory_fresh"] = True`)
+	// It must NOT write the freshness marker into the persisted fragment, or a
+	// later replay of that file would masquerade as freshly gathered.
+	require.Contains(t, script, `frag["mcp_inventory_claude_code"] = cc`)
+	require.NotContains(t, script, `frag["mcp_inventory_fresh"]`)
+	// The /tmp squatting guard must survive the refactor.
+	require.Contains(t, script, "gram_safe_dir")
+	require.Contains(t, script, "tempfile.mkstemp")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {

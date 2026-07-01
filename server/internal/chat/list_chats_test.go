@@ -93,6 +93,47 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 	require.NoError(t, err)
 }
 
+// seedChatWithSource inserts a chat owned by externalUserID with a single
+// message carrying the given source, so the chat's inferred source (the latest
+// non-null message source) is `source`.
+func seedChatWithSource(t *testing.T, ctx context.Context, ti *chatTestInstance, externalUserID, source string) uuid.UUID {
+	t.Helper()
+	chatID := seedChat(t, ctx, ti, "", externalUserID, "chat for "+source)
+	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:    pgtype.Text{String: source, Valid: true},
+	})
+	require.NoError(t, err)
+	return chatID
+}
+
+// seedRiskOnChatDisabledPolicy seeds a found risk result whose policy is
+// disabled. The finding row is real, but every risk surface must treat it as
+// absent because the policy is off (mirrors a policy disabled after detection).
+func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
+	t.Helper()
+	r := repo.New(ti.conn)
+	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	policyID, err := r.SeedDisabledRiskPolicy(ctx, repo.SeedDisabledRiskPolicyParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		RiskPolicyID:   policyID,
+		ChatMessageID:  msgID,
+		Found:          true,
+	})
+	require.NoError(t, err)
+}
+
 // initSessionCtx creates a session-authenticated context and overrides ProjectID
 // to ti.projectID so that ListChats scopes to the same project as seeded chats.
 func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
@@ -104,15 +145,19 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	return ctx
 }
 
-// grantOrgAdmin returns a context carrying an org:admin RBAC grant for the
-// caller's active organization, with RBAC enforcement active (enterprise).
-// This is what a real customer org admin has — distinct from the platform-staff
-// users.admin flag the visibility gate used to read.
-func grantOrgAdmin(t *testing.T, ctx context.Context) context.Context {
+// grantOrgAdminWithChatRead returns a context for an org admin who has ALSO been granted an
+// unrestricted chat:read, with RBAC enforcement active (enterprise). chat:read
+// is not a system-role default — it must be granted explicitly — and it, not
+// org:admin, is what drives chat session see-all visibility. These tests
+// exercise that chat:read-holder path.
+func grantOrgAdminWithChatRead(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	return authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
 }
 
 // externalUserCtx builds a context carrying an external-user AuthContext
@@ -226,13 +271,13 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
-// TestListChats_OrgAdmin_SeesAllChats verifies that a customer org admin (holding
-// the org:admin RBAC scope, no platform-staff flag) can see all chats in the
+// TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
+// unrestricted chat:read (here alongside org:admin) sees every chat in the
 // project, regardless of which user or external user owns them.
-func TestListChats_OrgAdmin_SeesAllChats(t *testing.T) {
+func TestListChats_ChatRead_SeesAllChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-aaa", "chat A")
 	seedChat(t, ctx, ti, "user-bbb", "", "chat B")
@@ -241,6 +286,33 @@ func TestListChats_OrgAdmin_SeesAllChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Chats, 2)
+}
+
+// TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats is the regression guard
+// for the blind spot in the see-all path: org:admin alone does NOT grant chat
+// session see-all visibility — only chat:read does. An admin without chat:read
+// is scoped to their own sessions like any other member.
+func TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	// org:admin only — no chat:read.
+	ctx = authztest.WithExactGrants(
+		t,
+		ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
 // TestListChats_Member_SeesOnlyOwnChats verifies that a session user who holds
@@ -257,6 +329,9 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 
 	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
 	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+	// Anonymous session (no internal owner, no external user): an own-scoped
+	// member must not see it — only an admin's unrestricted chat:read does.
+	seedChat(t, ctx, ti, "", "", "anonymous chat")
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())
 	require.NoError(t, err)
@@ -274,7 +349,7 @@ func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
 	ti := newTestChatServiceRBACDisabled(t)
 	// Mark the context enterprise + grant org:admin; with the org's RBAC
 	// feature flag off, ShouldEnforce still returns false and the grant is moot.
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -326,7 +401,7 @@ func TestLoadChat_ManagedAssistant_LoadsExternalUserChat(t *testing.T) {
 func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-123", "chat for ext-123")
 	seedChat(t, ctx, ti, "", "ext-456", "chat for ext-456")
@@ -406,6 +481,47 @@ func TestListChats_Filter_HasRisk_False(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, safe.String(), result.Chats[0].ID)
+}
+
+// TestListChats_Filter_MinRiskScore verifies that min_risk_score keeps only chats whose active
+// risk-finding count is at least the threshold (inclusive), and that the reported
+// risk_findings_count matches.
+func TestListChats_Filter_MinRiskScore(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-minrisk")
+
+	high := seedChat(t, ctx, ti, "", "ext-minrisk", "high risk chat")
+	low := seedChat(t, ctx, ti, "", "ext-minrisk", "low risk chat")
+	_ = seedChat(t, ctx, ti, "", "ext-minrisk", "safe chat")
+
+	// high accrues 3 findings, low accrues 1, safe none.
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, low, true)
+
+	// Threshold 3 is inclusive: only the chat with exactly 3 findings qualifies.
+	min3 := 3
+	payload := defaultPayload()
+	payload.MinRiskScore = &min3
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, high.String(), result.Chats[0].ID)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
+
+	// Threshold 1 keeps both chats with findings but excludes the safe chat.
+	min1 := 1
+	payload = defaultPayload()
+	payload.MinRiskScore = &min1
+
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
 }
 
 // TestListChats_Filter_DateRange verifies that from/to filters include only chats created within
@@ -578,6 +694,40 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
 }
 
+// TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk
+// result under a disabled policy is excluded from the per-chat count and from
+// the has_risk filter — matching the risk.results.list detail view, so the
+// chat-list "N risk" badge can't disagree with an empty detail panel.
+func TestListChats_DisabledPolicyFinding_NotCounted(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-disabled")
+
+	chatID := seedChat(t, ctx, ti, "", "ext-disabled", "chat with disabled-policy finding")
+	seedRiskOnChatDisabledPolicy(t, ctx, ti, chatID)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 0, *result.Chats[0].RiskFindingsCount, "disabled-policy finding must not count")
+
+	// has_risk=true must not surface the chat; has_risk=false must.
+	hasRisk := "true"
+	pTrue := defaultPayload()
+	pTrue.HasRisk = &hasRisk
+	resTrue, err := ti.service.ListChats(ctx, pTrue)
+	require.NoError(t, err)
+	require.Empty(t, resTrue.Chats, "disabled-policy finding must not match has_risk=true")
+
+	noRisk := "false"
+	pFalse := defaultPayload()
+	pFalse.HasRisk = &noRisk
+	resFalse, err := ti.service.ListChats(ctx, pFalse)
+	require.NoError(t, err)
+	require.Len(t, resFalse.Chats, 1, "chat with only a disabled-policy finding reads as no-risk")
+}
+
 // TestListChats_InvalidFromTimestamp verifies that a malformed from timestamp returns a bad-request error.
 func TestListChats_InvalidFromTimestamp(t *testing.T) {
 	t.Parallel()
@@ -590,4 +740,64 @@ func TestListChats_InvalidFromTimestamp(t *testing.T) {
 
 	_, err := ti.service.ListChats(ctx, payload)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestListChats_Filter_Source verifies the source filter matches chats by their
+// inferred (latest non-null) message source and accepts a comma-separated list.
+func TestListChats_Filter_Source(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	claude := seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	_ = seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+	playground := seedChatWithSource(t, ctx, ti, "ext-src", "playground")
+
+	source := "claude-code,playground"
+	payload := defaultPayload()
+	payload.Source = &source
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	got := map[string]bool{}
+	for _, c := range result.Chats {
+		got[c.ID] = true
+	}
+	require.True(t, got[claude.String()], "expected claude-code chat in results")
+	require.True(t, got[playground.String()], "expected playground chat in results")
+}
+
+// TestListChats_Filter_Source_EmptyReturnsAll guards against the regression
+// where an empty source filter sent SQL NULL and dropped every row.
+func TestListChats_Filter_Source_EmptyReturnsAll(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+
+	empty := ""
+	payload := defaultPayload()
+	payload.Source = &empty
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+}
+
+// TestListSources returns the distinct inferred sources present in the project.
+func TestListSources(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code") // duplicate collapses
+
+	result, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
 }

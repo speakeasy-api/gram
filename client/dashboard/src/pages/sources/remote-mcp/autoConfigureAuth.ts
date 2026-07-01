@@ -1,17 +1,14 @@
 import type { Gram } from "@gram/client";
 import {
   type McpServer,
+  type McpServerVisibility,
   type ProtectedResourceMetadata,
   type RemoteMcpServer,
-  type RemoteSessionClient,
   type RemoteSessionIssuer,
   type RemoteSessionIssuerDraft,
 } from "@gram/client/models/components";
 
-import {
-  buildUserSessionResourceSlug,
-  DEFAULT_USER_SESSION_DURATION_HOURS,
-} from "@/lib/externalMcpUserSessions";
+import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
@@ -51,6 +48,14 @@ export async function autoConfigureRemoteMcpAuth({
   remoteMcpServer,
   mcpServer,
 }: AutoConfigureAuthInput): Promise<AutoConfigureAuthResult> {
+  // Every remote-backed server gets its USI at setup; auto-config only attaches
+  // a client under it, never creates one. No USI means nothing to anchor a
+  // client to, so skip silently (setup already surfaced the link failure).
+  const userSessionIssuerId = mcpServer.userSessionIssuerId;
+  if (!userSessionIssuerId) {
+    return skipped("No user session issuer is linked to this server.", false);
+  }
+
   let protectedResourceMetadata: ProtectedResourceMetadata | undefined;
   try {
     const protectedResource =
@@ -121,53 +126,6 @@ export async function autoConfigureRemoteMcpAuth({
     );
   }
 
-  // When the matched issuer already has a working remote session client,
-  // reuse the whole stack — point the server at the client's
-  // user_session_issuer instead of registering a duplicate client. This is
-  // also the only path that works when the IdP doesn't support DCR.
-  if (existingIssuer) {
-    let existingClient: RemoteSessionClient | null;
-    try {
-      existingClient = await findIssuerClient(client, existingIssuer.id);
-    } catch (error) {
-      console.info("Remote MCP issuer client lookup failed.", {
-        remoteMcpServerId: remoteMcpServer.id,
-        remoteSessionIssuerId: existingIssuer.id,
-        error,
-      });
-      return skipped(
-        "A matching identity provider was found, but its OAuth clients could not be checked.",
-        true,
-      );
-    }
-    if (existingClient) {
-      try {
-        const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
-          client,
-          mcpServer,
-          existingClient.userSessionIssuerId,
-        );
-        return {
-          status: "configured",
-          mcpServer: updatedMcpServer,
-          remoteSessionIssuerId: existingIssuer.id,
-          userSessionIssuerId: existingClient.userSessionIssuerId,
-        };
-      } catch (error) {
-        console.info("Remote MCP existing issuer attachment failed.", {
-          remoteMcpServerId: remoteMcpServer.id,
-          remoteSessionIssuerId: existingIssuer.id,
-          userSessionIssuerId: existingClient.userSessionIssuerId,
-          error,
-        });
-        return skipped(
-          "A matching identity provider was found, but attaching it failed. You can configure it from the Authentication tab.",
-          true,
-        );
-      }
-    }
-  }
-
   if (!draft.registrationEndpoint) {
     return skipped(
       "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
@@ -213,7 +171,6 @@ export async function autoConfigureRemoteMcpAuth({
 
   const resourceSlug = buildUserSessionResourceSlug(mcpServer.slug ?? "mcp");
   let createdRemoteSessionIssuerId: string | undefined;
-  let createdUserSessionIssuerId: string | undefined;
 
   try {
     const remoteSessionIssuer =
@@ -232,6 +189,8 @@ export async function autoConfigureRemoteMcpAuth({
           responseTypesSupported: draft.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? [],
+          clientIdMetadataDocumentSupported:
+            draft.clientIdMetadataDocumentSupported,
           oidc: draft.oidc,
           passthrough: draft.passthrough,
         },
@@ -241,19 +200,12 @@ export async function autoConfigureRemoteMcpAuth({
       createdRemoteSessionIssuerId = remoteSessionIssuer.id;
     }
 
-    const userSessionIssuer = await client.userSessionIssuers.create({
-      createUserSessionIssuerForm: {
-        slug: resourceSlug,
-        authnChallengeMode: "interactive",
-        sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
-      },
-    });
-    createdUserSessionIssuerId = userSessionIssuer.id;
-
+    // Attach the freshly-registered upstream client to the server's permanent
+    // USI.
     await client.remoteSessionClients.create({
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerId: userSessionIssuer.id,
+        userSessionIssuerIds: [userSessionIssuerId],
         clientId: registered.clientId,
         clientSecret: registered.clientSecret || undefined,
         tokenEndpointAuthMethod:
@@ -266,24 +218,27 @@ export async function autoConfigureRemoteMcpAuth({
     const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
       client,
       mcpServer,
-      userSessionIssuer.id,
+      userSessionIssuerId,
+      "private",
     );
 
     return {
       status: "configured",
       mcpServer: updatedMcpServer,
       remoteSessionIssuerId: remoteSessionIssuer.id,
-      userSessionIssuerId: userSessionIssuer.id,
+      userSessionIssuerId,
     };
   } catch (error) {
     console.info("Remote MCP authentication auto-configuration failed.", {
       remoteMcpServerId: remoteMcpServer.id,
       error,
     });
-    await cleanupCreatedAuthRecords(client, {
-      remoteSessionIssuerId: createdRemoteSessionIssuerId,
-      userSessionIssuerId: createdUserSessionIssuerId,
-    });
+    // Clean up only a newly-created issuer. The USI is the server's permanent
+    // identity and must survive a failed client registration.
+    await cleanupCreatedRemoteSessionIssuer(
+      client,
+      createdRemoteSessionIssuerId,
+    );
     return skipped(
       "Automatic authentication setup failed. You can configure it from the Authentication tab.",
       true,
@@ -293,10 +248,11 @@ export async function autoConfigureRemoteMcpAuth({
 
 // Full-record replace: updateMcpServer nulls omitted fields, so re-send the
 // server's existing references alongside the new issuer linkage.
-async function pointMcpServerAtUserSessionIssuer(
+export async function pointMcpServerAtUserSessionIssuer(
   client: Gram,
   mcpServer: McpServer,
   userSessionIssuerId: string,
+  visibility: McpServerVisibility,
 ): Promise<McpServer> {
   return await client.mcpServers.update({
     updateMcpServerForm: {
@@ -306,27 +262,10 @@ async function pointMcpServerAtUserSessionIssuer(
       toolsetId: mcpServer.toolsetId ?? undefined,
       environmentId: mcpServer.environmentId ?? undefined,
       toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-      visibility: "private",
+      visibility,
       userSessionIssuerId,
     },
   });
-}
-
-async function findIssuerClient(
-  client: Gram,
-  remoteSessionIssuerId: string,
-): Promise<RemoteSessionClient | null> {
-  const pages = await client.remoteSessionClients.list({
-    remoteSessionIssuerId,
-    limit: 1,
-  });
-
-  for await (const page of pages) {
-    const match = page.result.items[0];
-    if (match) return match;
-  }
-
-  return null;
 }
 
 async function findMatchingIssuer(
@@ -370,36 +309,18 @@ function normalizeIssuerURL(value: string): string {
   return value.replace(/\/+$/g, "");
 }
 
-async function cleanupCreatedAuthRecords(
+async function cleanupCreatedRemoteSessionIssuer(
   client: Gram,
-  {
-    remoteSessionIssuerId,
-    userSessionIssuerId,
-  }: {
-    remoteSessionIssuerId: string | undefined;
-    userSessionIssuerId: string | undefined;
-  },
+  remoteSessionIssuerId: string | undefined,
 ): Promise<void> {
-  if (userSessionIssuerId) {
-    try {
-      await client.userSessionIssuers.delete({ id: userSessionIssuerId });
-    } catch (error) {
-      console.info("Failed to clean up auto-created user session issuer.", {
-        userSessionIssuerId,
-        error,
-      });
-    }
-  }
-
-  if (remoteSessionIssuerId) {
-    try {
-      await client.remoteSessionIssuers.delete({ id: remoteSessionIssuerId });
-    } catch (error) {
-      console.info("Failed to clean up auto-created remote session issuer.", {
-        remoteSessionIssuerId,
-        error,
-      });
-    }
+  if (!remoteSessionIssuerId) return;
+  try {
+    await client.remoteSessionIssuers.delete({ id: remoteSessionIssuerId });
+  } catch (error) {
+    console.info("Failed to clean up auto-created remote session issuer.", {
+      remoteSessionIssuerId,
+      error,
+    });
   }
 }
 

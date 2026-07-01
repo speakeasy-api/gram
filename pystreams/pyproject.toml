@@ -6,15 +6,17 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
   "aiocop>=1.1.4",
-  "anyio>=4.13.0",
+  "anyio>=4.14.0",
   "asyncer>=0.0.17",
   "click>=8.4.1",
   "en-core-web-lg",
   "gram-infra",
   "maxminddb>=3.1.1",
-  "opentelemetry-api>=1.42.1",
-  "opentelemetry-sdk>=1.42.1",
-  "opentelemetry-semantic-conventions>=0.63b1",
+  "opentelemetry-api>=1.43.0",
+  "opentelemetry-sdk>=1.43.0",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.43.0",
+  "opentelemetry-instrumentation-system-metrics>=0.64b0",
+  "opentelemetry-semantic-conventions>=0.64b0",
   "presidio-analyzer>=2.2.362",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
@@ -24,7 +26,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pyrefly>=1.0.0",
-  "pytest>=8.0.0",
+  "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",
   "ty>=0.0.48",
   "types-protobuf>=7.34.1.20260518",

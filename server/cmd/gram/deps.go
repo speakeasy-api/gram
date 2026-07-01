@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -55,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/bq"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -237,6 +239,14 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 
 	if err := otelpgx.RecordStats(pool, otelpgx.WithStatsMeterProvider(meterProvider)); err != nil {
 		return nil, fmt.Errorf("unable to record pgx metrics: %w", err)
+	}
+
+	// Ping the database to ensure connectivity
+	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("database ping failed: %w", err)
 	}
 
 	return pool, nil
@@ -934,6 +944,28 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 	return client, broker, func(context.Context) error { return client.Close() }, nil
 }
 
+func newBigQueryClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (bq.Client, func(ctx context.Context) error, error) {
+	if c.Bool("disable-bigquery-writes") {
+		return bq.NewNoopClient(), noopShutdown, nil
+	}
+
+	// Fall back to auto-detecting the project from ADC / the GKE metadata
+	// server when the flag is unset, mirroring how the Pub/Sub client behaves.
+	// Without this, an empty project ID yields invalid table references and
+	// every insert fails with a googleapi 400.
+	projectID := conv.Default(c.String("gcp-project-id"), bigquery.DetectProjectID)
+	client, err := bigquery.NewClient(ctx, projectID, option.WithLogger(logger.With(attr.SlogComponent("gcp-bigquery-client"))))
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create bigquery client: %w", err)
+	}
+
+	shutdown := func(ctx context.Context) error {
+		return client.Close()
+	}
+
+	return bq.NewClient(client), shutdown, nil
+}
+
 type labelledStop struct {
 	label string
 	pub   interface {
@@ -980,4 +1012,24 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PresidioAnalysis: presidioAnalysis,
 		GitleaksAnalysis: gitleaksAnalysis,
 	}, shutdown, nil
+}
+
+func parseBigQueryTableSpec(spec string) (dataset string, table string, err error) {
+	split := strings.Split(spec, ".")
+	switch len(split) {
+	case 2:
+		return split[0], split[1], nil
+	case 3:
+		return split[1], split[2], nil
+	default:
+		return "", "", fmt.Errorf("invalid BigQuery table spec: %s", spec)
+	}
+}
+
+func bqTableFromSpec(client bq.Client, spec string) (bq.TableHandle, error) {
+	dataset, table, err := parseBigQueryTableSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	return client.Dataset(dataset).Table(table), nil
 }

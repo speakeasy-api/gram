@@ -38,6 +38,10 @@ export type RemoteSessionClient = {
   clientId: string;
   clientIdIssuedAt: Date;
   /**
+   * When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
+   */
+  clientIdMetadataUri?: string | undefined;
+  /**
    * Null when the secret does not expire.
    */
   clientSecretExpiresAt?: Date | undefined;
@@ -47,7 +51,11 @@ export type RemoteSessionClient = {
    */
   id: string;
   /**
-   * The owning project id.
+   * The owning organization id. Empty for legacy rows not yet backfilled.
+   */
+  organizationId: string;
+  /**
+   * The owning project id. Empty for organization-level clients.
    */
   projectId: string;
   /**
@@ -64,9 +72,9 @@ export type RemoteSessionClient = {
   tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
   updatedAt: Date;
   /**
-   * The user_session_issuer this client is paired with.
+   * The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
    */
-  userSessionIssuerId: string;
+  userSessionIssuerIds: Array<string>;
 };
 
 /** @internal */
@@ -86,6 +94,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    client_id_metadata_uri: z.optional(z.string()),
     client_secret_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -94,6 +103,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
     scope: z.optional(z.array(z.string())),
@@ -104,19 +114,21 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    user_session_issuer_id: z.string(),
+    user_session_issuer_ids: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
+      "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
-      "user_session_issuer_id": "userSessionIssuerId",
+      "user_session_issuer_ids": "userSessionIssuerIds",
     });
   }),
 );

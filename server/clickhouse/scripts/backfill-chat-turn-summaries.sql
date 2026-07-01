@@ -5,7 +5,7 @@
 -- bound matches the MV cutoff so historical rows are not double-counted with
 -- live MV ingestion.
 INSERT INTO chat_turn_summaries
-WITH toUnixTimestamp64Nano(toDateTime64('2026-06-23 18:15:00', 9, 'UTC')) AS chat_turn_cutoff_unix_nano
+WITH toUnixTimestamp64Nano(toDateTime64('2026-07-01 00:00:00', 9, 'UTC')) AS chat_turn_cutoff_unix_nano
 SELECT
     gram_project_id,
     chat_id,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -37,6 +38,7 @@ import (
 
 type Service struct {
 	tracer             trace.Tracer
+	metrics            *metrics
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
@@ -95,6 +97,7 @@ func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
@@ -112,6 +115,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
+		metrics:            newMetrics(meterProvider, logger),
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,

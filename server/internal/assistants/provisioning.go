@@ -31,8 +31,8 @@ var managedAssistantInstructions string
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Upgraded to Opus 4.7 for the Assistants beta (DNO-264).
-	managedAssistantModel = "anthropic/claude-opus-4.7"
+	// assistant. Defaulted to Sonnet 5, matching the in-app default chat model.
+	managedAssistantModel = "anthropic/claude-sonnet-5"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.

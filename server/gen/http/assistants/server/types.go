@@ -84,6 +84,8 @@ type GetAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -111,6 +113,8 @@ type CreateAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -138,6 +142,8 @@ type UpdateAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -177,6 +183,8 @@ type GetManagedAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -204,6 +212,8 @@ type EnsureManagedAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -1716,6 +1726,8 @@ type AssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -1777,16 +1789,17 @@ func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAs
 // the "getAssistant" endpoint of the "assistants" service.
 func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody {
 	body := &GetAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1807,16 +1820,17 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantResponseBody {
 	body := &CreateAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1837,16 +1851,17 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantResponseBody {
 	body := &UpdateAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1878,16 +1893,17 @@ func NewSendMessageResponseBody(res *assistants.SendMessageResult) *SendMessageR
 // result of the "getManagedAssistant" endpoint of the "assistants" service.
 func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssistantResponseBody {
 	body := &GetManagedAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1908,16 +1924,17 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 // result of the "ensureManagedAssistant" endpoint of the "assistants" service.
 func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedAssistantResponseBody {
 	body := &EnsureManagedAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))

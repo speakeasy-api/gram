@@ -34,11 +34,12 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { RBACDevToolbar } from "./components/dev-toolbar";
+import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
@@ -147,7 +148,7 @@ function AppContent() {
           </>
         )}
         <RouteProvider />
-        <RBACDevToolbar />
+        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );
@@ -300,6 +301,7 @@ const RouteProvider = () => {
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
         />
+        <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

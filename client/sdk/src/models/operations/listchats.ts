@@ -34,6 +34,19 @@ export const HasRisk = {
 export type HasRisk = ClosedEnum<typeof HasRisk>;
 
 /**
+ * Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.
+ */
+export const Pinned = {
+  Unknown: "",
+  True: "true",
+  False: "false",
+} as const;
+/**
+ * Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.
+ */
+export type Pinned = ClosedEnum<typeof Pinned>;
+
+/**
  * Field to sort by
  */
 export const SortBy = {
@@ -67,6 +80,10 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
+   * Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
+   */
+  source?: string | undefined;
+  /**
    * Filter to chats produced by this assistant
    */
   assistantId?: string | undefined;
@@ -74,6 +91,14 @@ export type ListChatsRequest = {
    * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
    */
   hasRisk?: HasRisk | undefined;
+  /**
+   * Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.
+   */
+  pinned?: Pinned | undefined;
+  /**
+   * Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.
+   */
+  minRiskScore?: number | undefined;
   /**
    * Filter chats last active after this timestamp (ISO 8601)
    */
@@ -209,6 +234,11 @@ export const HasRisk$outboundSchema: z.ZodMiniEnum<typeof HasRisk> = z.enum(
 );
 
 /** @internal */
+export const Pinned$outboundSchema: z.ZodMiniEnum<typeof Pinned> = z.enum(
+  Pinned,
+);
+
+/** @internal */
 export const SortBy$outboundSchema: z.ZodMiniEnum<typeof SortBy> = z.enum(
   SortBy,
 );
@@ -222,8 +252,11 @@ export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
 export type ListChatsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
+  source?: string | undefined;
   assistant_id?: string | undefined;
   has_risk?: string | undefined;
+  pinned?: string | undefined;
+  min_risk_score?: number | undefined;
   from?: string | undefined;
   to?: string | undefined;
   limit: number;
@@ -243,8 +276,11 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
+    source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
+    pinned: z.optional(Pinned$outboundSchema),
+    minRiskScore: z.optional(z.int()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),
@@ -260,6 +296,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
       externalUserId: "external_user_id",
       assistantId: "assistant_id",
       hasRisk: "has_risk",
+      minRiskScore: "min_risk_score",
       sortBy: "sort_by",
       sortOrder: "sort_order",
       gramSession: "Gram-Session",

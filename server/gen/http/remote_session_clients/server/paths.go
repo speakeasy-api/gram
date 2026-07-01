@@ -12,6 +12,11 @@ func CreateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.create"
 }
 
+// CreateCimdRemoteSessionClientsPath returns the URL path to the remoteSessionClients service createCimd HTTP endpoint.
+func CreateCimdRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.createCimd"
+}
+
 // CloneClientFromOAuthProxyProviderRemoteSessionClientsPath returns the URL path to the remoteSessionClients service cloneClientFromOAuthProxyProvider HTTP endpoint.
 func CloneClientFromOAuthProxyProviderRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider"
@@ -20,6 +25,16 @@ func CloneClientFromOAuthProxyProviderRemoteSessionClientsPath() string {
 // UpdateRemoteSessionClientRemoteSessionClientsPath returns the URL path to the remoteSessionClients service updateRemoteSessionClient HTTP endpoint.
 func UpdateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.update"
+}
+
+// AttachUserSessionIssuerRemoteSessionClientsPath returns the URL path to the remoteSessionClients service attachUserSessionIssuer HTTP endpoint.
+func AttachUserSessionIssuerRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.attachUserSessionIssuer"
+}
+
+// DetachUserSessionIssuerRemoteSessionClientsPath returns the URL path to the remoteSessionClients service detachUserSessionIssuer HTTP endpoint.
+func DetachUserSessionIssuerRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.detachUserSessionIssuer"
 }
 
 // ListRemoteSessionClientsRemoteSessionClientsPath returns the URL path to the remoteSessionClients service listRemoteSessionClients HTTP endpoint.

@@ -5,6 +5,7 @@
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
+import { riskResultsUnmask } from "../funcs/riskResultsUnmask.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -61,6 +62,25 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsForAgentResult> {
     return unwrapAsync(riskResultsListForAgent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unmaskRiskResult risk
+   *
+   * @remarks
+   * Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+   */
+  async unmask(
+    request: operations.UnmaskRiskResultRequest,
+    security?: operations.UnmaskRiskResultSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RiskUnmaskResultResult> {
+    return unwrapAsync(riskResultsUnmask(
       this,
       request,
       security,

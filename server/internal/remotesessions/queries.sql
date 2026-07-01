@@ -20,6 +20,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
     oidc,
     passthrough
 )
@@ -38,6 +39,7 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    @client_id_metadata_document_supported,
     @oidc,
     @passthrough
 )
@@ -107,6 +109,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -177,8 +180,8 @@ ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHIN
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,
+    organization_id,
     remote_session_issuer_id,
-    user_session_issuer_id,
     client_id,
     client_secret_encrypted,
     client_id_issued_at,
@@ -190,8 +193,8 @@ INSERT INTO remote_session_clients (
 )
 VALUES (
     @project_id,
+    @organization_id,
     @remote_session_issuer_id,
-    @user_session_issuer_id,
     @client_id,
     @client_secret_encrypted,
     @client_id_issued_at,
@@ -226,26 +229,33 @@ WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id = @project_id;
 
+-- name: GetRemoteSessionClientForClientMetadataDocument :one
+-- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+-- endpoint is unauthenticated and addresses clients by their globally unique
+-- primary key, and the served document exposes only the client identity Gram
+-- already sends the upstream AS as client_id (CIMD rows never carry a secret).
+-- Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
+-- client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
+SELECT client_id_metadata_uri, scope
+FROM remote_session_clients
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE;
+
 -- name: GetRemoteSessionClientByID :one
 SELECT
-    id,
-    project_id,
-    remote_session_issuer_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_encrypted,
-    client_id_issued_at,
-    client_secret_expires_at,
-    token_endpoint_auth_method,
-    scope,
-    audience,
-    legacy_callback_url,
-    created_at,
-    updated_at,
-    deleted_at,
-    deleted
-FROM remote_session_clients
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+        WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
+    )::uuid[] AS user_session_issuer_ids
+FROM remote_session_clients AS c
+WHERE c.id = @id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
 SELECT id
@@ -254,55 +264,44 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListRemoteSessionClientsByProjectID :many
 SELECT
-    id,
-    project_id,
-    remote_session_issuer_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_encrypted,
-    client_id_issued_at,
-    client_secret_expires_at,
-    token_endpoint_auth_method,
-    scope,
-    audience,
-    legacy_callback_url,
-    created_at,
-    updated_at,
-    deleted_at,
-    deleted
-FROM remote_session_clients
-WHERE project_id = @project_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+        WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
+    )::uuid[] AS user_session_issuer_ids
+FROM remote_session_clients AS c
+WHERE (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
+-- Filters to clients bound to the given user_session_issuer through the join
+-- table, while user_session_issuer_ids reports every issuer each client is
+-- attached to (a correlated subquery independent of the filter join).
+-- Includes both the project's own clients and organization-level clients
+-- (project_id NULL) belonging to the project's org.
 SELECT
-    c.id,
-    c.project_id,
-    c.remote_session_issuer_id,
-    c.user_session_issuer_id,
-    c.client_id,
-    c.client_secret_encrypted,
-    c.client_id_issued_at,
-    c.client_secret_expires_at,
-    c.token_endpoint_auth_method,
-    c.scope,
-    c.audience,
-    c.legacy_callback_url,
-    c.created_at,
-    c.updated_at,
-    c.deleted_at,
-    c.deleted
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS all_link
+        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
+        WHERE all_link.remote_session_client_id = c.id
+          AND all_usi.project_id = @project_id
+    )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
   AND usi.deleted IS FALSE
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -314,12 +313,43 @@ UPDATE remote_session_clients
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     client_secret_expires_at = COALESCE(sqlc.narg('client_secret_expires_at'), client_secret_expires_at),
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
     audience = COALESCE(sqlc.narg('audience'), audience),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: CreateRemoteSessionClientCIMD :one
+-- Create a client directly in Client ID Metadata Document (CIMD) mode. The
+-- createCimd handler generates the row id and the document URL up front, so
+-- client_id and client_id_metadata_uri are both set to that URL in a single
+-- INSERT (kept equal by the remote_session_clients_client_id_metadata_uri_check
+-- constraint). The row carries no secret and token_endpoint_auth_method is none.
+INSERT INTO remote_session_clients (
+    id,
+    project_id,
+    organization_id,
+    remote_session_issuer_id,
+    client_id,
+    client_id_metadata_uri,
+    client_id_issued_at,
+    token_endpoint_auth_method,
+    scope,
+    audience
+)
+VALUES (
+    @id,
+    @project_id,
+    @organization_id,
+    @remote_session_issuer_id,
+    @client_id_metadata_uri,
+    @client_id_metadata_uri,
+    @client_id_issued_at,
+    'none',
+    sqlc.narg('scope')::text[],
+    @audience
+)
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
@@ -466,7 +496,6 @@ SELECT
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
-    c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
@@ -483,7 +512,10 @@ WHERE c.id = @id
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
 -- ChallengeManager. Returns one row per remote_session_client linked to
--- the given user_session_issuer through the join table.
+-- the given user_session_issuer through the join table. Resolves both the
+-- project's own clients and organization-level clients (project_id NULL)
+-- belonging to the project's org, so an org-level client attached to this
+-- project's user_session_issuer is honored at runtime.
 SELECT
     c.id                                   AS client_id,
     c.client_id                            AS external_client_id,
@@ -493,7 +525,6 @@ SELECT
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
-    c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
@@ -506,7 +537,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND usi.project_id = @project_id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -514,13 +545,19 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionsByProjectID :many
+-- Scoped by the session's user_session_issuer project, not the client's project:
+-- a remote_session belongs to the project whose user_session_issuer minted it,
+-- so sessions established through an organization-level client (project_id NULL)
+-- bound to this project's user_session_issuer are listed here, while another
+-- project's sessions on the same shared org-level client are not.
 SELECT sqlc.embed(s),
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE c.project_id = @project_id
+WHERE usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
@@ -530,18 +567,27 @@ ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetRemoteSessionByID :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so an organization-level client's session is
+-- reachable from the project whose user_session_issuer minted it.
 SELECT s.*
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-WHERE s.id = @id AND c.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.id = @id AND usi.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
 
 -- name: RevokeRemoteSession :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so a project admin can revoke a session
+-- established through an organization-level client bound to their own
+-- user_session_issuer, but not another project's session on a shared one.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM remote_session_clients AS c
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
-  AND c.project_id = @project_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
@@ -613,6 +659,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -639,14 +686,20 @@ WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ListOrganizationRemoteSessionClientsByIssuerID :many
--- Clients registered with a given issuer in the org, each with its count of
--- attached MCP servers and active remote_sessions. The mcp_server_count counts
--- DISTINCT mcp_servers so a client whose user_session_issuer is reachable via
--- both the join table and the legacy column is not double-counted. The
--- active_session_count counts non-deleted remote_sessions minted against the
--- client, matching CountActiveRemoteSessionsByClientID and the delete preflight.
+-- Clients registered with a given issuer in the org, each with the list of
+-- user_session_issuers it is attached to (from the join table), its count of
+-- attached MCP servers, and its active remote_sessions. The mcp_server_count
+-- counts DISTINCT mcp_servers reachable through the client's join-table
+-- attachments. The active_session_count counts non-deleted remote_sessions
+-- minted against the client, matching CountActiveRemoteSessionsByClientID and
+-- the delete preflight.
 SELECT
     sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
         FROM mcp_servers AS m
@@ -655,8 +708,6 @@ SELECT
               SELECT link.user_session_issuer_id
               FROM remote_session_client_user_session_issuers AS link
               WHERE link.remote_session_client_id = c.id
-              UNION
-              SELECT c.user_session_issuer_id
           )
     )::bigint AS mcp_server_count,
     (
@@ -677,7 +728,13 @@ LIMIT sqlc.arg('limit_value');
 
 -- name: GetOrganizationRemoteSessionClientByID :one
 -- A client in the org by id, scoped through its issuer's organization_id.
-SELECT c.*
+SELECT
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -692,7 +749,6 @@ WHERE c.id = @id
 UPDATE remote_session_clients AS c
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), c.user_session_issuer_id),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), c.token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], c.scope),
     audience = CASE
@@ -722,9 +778,9 @@ WHERE c.id = @id
 RETURNING c.*;
 
 -- name: ListOrganizationMcpServersForClient :many
--- MCP servers attached to a client through its user_session_issuer(s) — both the
--- join-table bindings and the legacy column. Callers establish the client
--- belongs to the org upstream (GetOrganizationRemoteSessionClientByID).
+-- MCP servers attached to a client through its user_session_issuer(s). Callers
+-- establish the client belongs to the org upstream
+-- (GetOrganizationRemoteSessionClientByID).
 SELECT DISTINCT
     m.id,
     m.project_id,
@@ -740,10 +796,6 @@ WHERE m.deleted IS FALSE
       SELECT link.user_session_issuer_id
       FROM remote_session_client_user_session_issuers AS link
       WHERE link.remote_session_client_id = @remote_session_client_id
-      UNION
-      SELECT c.user_session_issuer_id
-      FROM remote_session_clients AS c
-      WHERE c.id = @remote_session_client_id
   )
 ORDER BY m.id DESC;
 
@@ -761,10 +813,6 @@ WHERE m.deleted IS FALSE
       SELECT link.user_session_issuer_id
       FROM remote_session_client_user_session_issuers AS link
       JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-      WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
-      UNION
-      SELECT c.user_session_issuer_id
-      FROM remote_session_clients AS c
       WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
   );
 

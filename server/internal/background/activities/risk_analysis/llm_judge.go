@@ -180,17 +180,18 @@ func JudgeFinding(verdict JudgeVerdict) Finding {
 		description = "Message matched the prompt-based policy."
 	}
 	return Finding{
-		Source:           SourceLLMJudge,
-		RuleID:           RuleLLMJudge,
-		Description:      description,
-		Match:            "",
-		StartPos:         0,
-		EndPos:           0,
-		Tags:             nil,
-		Confidence:       verdict.Confidence,
-		DeadLetterReason: "",
-		toolCallID:       "",
-		field:            "",
-		path:             "",
+		Source:              SourceLLMJudge,
+		RuleID:              RuleLLMJudge,
+		Description:         description,
+		Match:               "",
+		StartPos:            0,
+		EndPos:              0,
+		Tags:                []string{},
+		Confidence:          verdict.Confidence,
+		DeadLetterReason:    "",
+		mcpLookupToolCallID: "",
+		spanGroupKey:        "",
+		field:               "",
+		path:                "",
 	}
 }

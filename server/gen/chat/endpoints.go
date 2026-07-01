@@ -21,7 +21,9 @@ type Endpoints struct {
 	GenerateTitle  goa.Endpoint
 	CreditUsage    goa.Endpoint
 	DeleteChat     goa.Endpoint
+	SetPinned      goa.Endpoint
 	SubmitFeedback goa.Endpoint
+	ListSources    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -34,7 +36,9 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateTitle:  NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		CreditUsage:    NewCreditUsageEndpoint(s, a.APIKeyAuth),
 		DeleteChat:     NewDeleteChatEndpoint(s, a.APIKeyAuth),
+		SetPinned:      NewSetPinnedEndpoint(s, a.APIKeyAuth),
 		SubmitFeedback: NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListSources:    NewListSourcesEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -45,7 +49,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateTitle = m(e.GenerateTitle)
 	e.CreditUsage = m(e.CreditUsage)
 	e.DeleteChat = m(e.DeleteChat)
+	e.SetPinned = m(e.SetPinned)
 	e.SubmitFeedback = m(e.SubmitFeedback)
+	e.ListSources = m(e.ListSources)
 }
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
@@ -247,6 +253,41 @@ func NewDeleteChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 	}
 }
 
+// NewSetPinnedEndpoint returns an endpoint function that calls the method
+// "setPinned" of service "chat".
+func NewSetPinnedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetPinnedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetPinned(ctx, p)
+	}
+}
+
 // NewSubmitFeedbackEndpoint returns an endpoint function that calls the method
 // "submitFeedback" of service "chat".
 func NewSubmitFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
@@ -291,5 +332,52 @@ func NewSubmitFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, 
 			return nil, err
 		}
 		return s.SubmitFeedback(ctx, p)
+	}
+}
+
+// NewListSourcesEndpoint returns an endpoint function that calls the method
+// "listSources" of service "chat".
+func NewListSourcesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSourcesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSources(ctx, p)
 	}
 }

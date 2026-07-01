@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -259,6 +260,8 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
 	}
 
+	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -299,6 +302,7 @@ func NewTemporalWorker(
 		opts.ChatMessageWriter,
 		opts.Publishers,
 		celEng,
+		judgeRateLimiter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

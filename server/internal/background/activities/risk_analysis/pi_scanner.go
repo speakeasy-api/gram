@@ -177,18 +177,19 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 		description = r.Rationale
 	}
 	return &Finding{
-		RuleID:           ruleID,
-		Description:      description,
-		Match:            text,
-		StartPos:         0,
-		EndPos:           len(text),
-		Tags:             []string{"llm-judge", "layer-1"},
-		Source:           SourcePromptInjection,
-		Confidence:       r.Score,
-		DeadLetterReason: "",
-		toolCallID:       "",
-		field:            "",
-		path:             "",
+		RuleID:              ruleID,
+		Description:         description,
+		Match:               text,
+		StartPos:            0,
+		EndPos:              len(text),
+		Tags:                []string{"llm-judge", "layer-1"},
+		Source:              SourcePromptInjection,
+		Confidence:          r.Score,
+		DeadLetterReason:    "",
+		mcpLookupToolCallID: "",
+		spanGroupKey:        "",
+		field:               "",
+		path:                "",
 	}
 }
 

@@ -49,7 +49,6 @@ import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
-import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -365,6 +364,10 @@ const ROUTE_STRUCTURE = {
           tools: {
             title: "MCP Server Tools",
             url: "tools",
+          },
+          analytics: {
+            title: "MCP Server Analytics",
+            url: "analytics",
           },
           // Legacy route. MCPServerDetails redirects this to
           // settings#authentication now that authentication lives under
@@ -902,12 +905,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "settings",
     component: SetupWizard,
     outsideMainLayout: true,
-  },
-  adminSettings: {
-    title: "Super Admin",
-    url: "admin-settings",
-    icon: "shield-alert",
-    component: OrgAdminSettings,
   },
 } satisfies Record<string, RouteEntry>;
 

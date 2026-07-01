@@ -17,6 +17,10 @@ export type ToolUsageHostedServerFilterOption = {
    */
   eventCount: number;
   /**
+   * Hosted MCP toolset display name
+   */
+  toolsetName: string;
+  /**
    * Hosted MCP toolset slug
    */
   toolsetSlug: string;
@@ -29,11 +33,13 @@ export const ToolUsageHostedServerFilterOption$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     event_count: z.int(),
+    toolset_name: z.string(),
     toolset_slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "event_count": "eventCount",
+      "toolset_name": "toolsetName",
       "toolset_slug": "toolsetSlug",
     });
   }),

@@ -178,6 +178,8 @@ export async function onboardExternalMcpToUserSessions({
         tokenEndpointAuthMethodsSupported:
           draft?.tokenEndpointAuthMethodsSupported ??
           oauth.tokenEndpointAuthMethodsSupported,
+        clientIdMetadataDocumentSupported:
+          draft?.clientIdMetadataDocumentSupported ?? false,
         oidc: draft?.oidc,
         passthrough: draft?.passthrough,
       },
@@ -194,7 +196,7 @@ export async function onboardExternalMcpToUserSessions({
     {
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerId: userSessionIssuer.id,
+        userSessionIssuerIds: [userSessionIssuer.id],
         clientId: proxyRegistered.clientId,
         clientSecret: proxyRegistered.clientSecret || undefined,
         tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(

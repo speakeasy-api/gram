@@ -290,9 +290,12 @@ func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID
 	workflowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := background.ExecuteCorrelateClaudePromptsWorkflow(workflowCtx, s.temporalEnv, background.CorrelateClaudePromptsParams{
-		ProjectID: projectID,
-		ChatID:    chatID,
-		SessionID: sessionID,
+		ProjectID:              projectID,
+		ChatID:                 chatID,
+		SessionID:              sessionID,
+		AfterMessageSeq:        0,
+		AfterEventSequence:     0,
+		AfterEventTimeUnixNano: 0,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to schedule Claude prompt correlation",
 			attr.SlogError(err),

@@ -106,6 +106,8 @@ export function SettingsTab({
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
+      clientIdMetadataDocumentSupported:
+        issuer.clientIdMetadataDocumentSupported,
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL.
@@ -158,6 +160,9 @@ export function SettingsTab({
             : undefined,
           tokenEndpointAuthMethodsSupported: arraysFromDiscovery
             ? discoveredSnapshot.tokenEndpointAuthMethodsSupported
+            : undefined,
+          clientIdMetadataDocumentSupported: arraysFromDiscovery
+            ? discoveredSnapshot.clientIdMetadataDocumentSupported
             : undefined,
         },
       },

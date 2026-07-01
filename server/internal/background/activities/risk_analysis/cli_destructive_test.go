@@ -141,3 +141,20 @@ func TestScanForCLIDestructive_NestedStructures(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+
+func TestScanMessageDestructiveCLICallsMalformedToolCallsFallback(t *testing.T) {
+	t.Parallel()
+
+	var a AnalyzeBatch
+	findings := a.scanMessageDestructiveCLICalls(t.Context(), []recordedToolCall{func() recordedToolCall {
+		var call recordedToolCall
+		call.Function.Name = malformedToolCallsName
+		call.Function.Arguments = `{"command":"rm -rf /tmp/x"`
+		return call
+	}()})
+
+	if assert.Len(t, findings, 1) {
+		assert.Equal(t, SourceCLIDestructive, findings[0].Source)
+		assert.Equal(t, "destructive.shell.rm_rf", findings[0].RuleID)
+	}
+}

@@ -33,6 +33,7 @@ import {
 } from "@gram/client/models/components";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
+  Alert,
   Button,
   Column,
   DropdownMenu,
@@ -523,17 +524,31 @@ function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled && accessMember && !organization.scimEnabled && (
-                <RequireScope scope="org:admin" level="component">
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      void setTimeout(() => setChangingMember(accessMember), 0);
-                    }}
-                  >
-                    Manage roles
-                  </DropdownMenuItem>
-                </RequireScope>
-              )}
+              {isRbacEnabled &&
+                (organization.scimEnabled ? (
+                  <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
+                    <span className="inline-flex w-full">
+                      <DropdownMenuItem disabled className="w-full">
+                        Manage roles
+                      </DropdownMenuItem>
+                    </span>
+                  </SimpleTooltip>
+                ) : (
+                  accessMember && (
+                    <RequireScope scope="org:admin" level="component">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void setTimeout(
+                            () => setChangingMember(accessMember),
+                            0,
+                          );
+                        }}
+                      >
+                        Manage roles
+                      </DropdownMenuItem>
+                    </RequireScope>
+                  )
+                ))}
               {isRbacEnabled && (
                 <DropdownMenuItem
                   onSelect={() => {
@@ -796,6 +811,19 @@ function TeamInner() {
               )}
             </RequireScope>
           </Stack>
+
+          {organization.scimEnabled && (
+            <Alert variant="info" dismissible={false} className="mb-8 text-sm">
+              Directory Sync (SCIM) is enabled. Members are provisioned and
+              roles assigned from your identity provider, not here.{" "}
+              <Link
+                to={orgRoutes.identity.href()}
+                className="underline underline-offset-2"
+              >
+                Manage identity settings
+              </Link>
+            </Alert>
+          )}
 
           <div className="relative">
             <Icon

@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
-    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
+    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -92,6 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -152,7 +158,19 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- part merges; any() is non-deterministic and can pick "" from a sibling
     -- row (e.g. the original PreToolUse log) instead of the row that actually
     -- carried the denial reason.
-    block_reason SimpleAggregateFunction(max, String)
+    block_reason SimpleAggregateFunction(max, String),
+    -- AI account classification ('team' | 'personal'), materialized on
+    -- telemetry_logs from attributes.gram.account_type. Only a subset of a
+    -- trace's rows carry it (e.g. usage/tool rows), so max() lets a non-empty
+    -- value win over empty siblings across part merges, mirroring user_id.
+    -- Kept last so an ALTER ADD COLUMN (which appends) stays positionally aligned
+    -- with this schema and the MV's projection.
+    account_type SimpleAggregateFunction(max, String),
+    -- AI provider for the account ('anthropic' | 'openai' | 'cursor'),
+    -- materialized on telemetry_logs from attributes.gram.provider. Carried (not
+    -- a sort key) — a trace is a single session = single account, so provider is
+    -- constant within a trace_id; max() keeps a non-empty value over empties.
+    provider SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -186,7 +204,9 @@ SELECT
     max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
     max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error,
     max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block,
-    anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason
+    anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
+    anyIf(account_type, account_type != '') AS account_type,
+    anyIf(provider, provider != '') AS provider
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -376,9 +396,29 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     total_cost AggregateFunction(sumIf, Float64, UInt8),
 
     -- Tool call count
-    total_tool_calls AggregateFunction(countIf, UInt8)
+    total_tool_calls AggregateFunction(countIf, UInt8),
+
+    -- AI account classification (gram.account_type): 'team' | 'personal' | ''
+    -- (unclassified) and AI provider (gram.provider): 'anthropic' | 'openai' |
+    -- 'cursor' | ''. Both are sort-key DIMENSIONS (appended to ORDER BY below),
+    -- NOT carried values: account_type is not distinguished by any other key
+    -- column (the same employee's team and personal usage shares user_email +
+    -- WorkOS attrs), so as a carried value team/personal would merge under the
+    -- existing grain. As key columns they stay separate and remain group-/
+    -- filterable. Added via a non-destructive ALTER ADD COLUMN + MODIFY ORDER BY
+    -- (atlas only emits DROP+recreate for a sort-key change, so the migration is
+    -- hand-written). Empty values are treated as team by the query layer.
+    account_type String,
+    provider String
 ) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
+-- Primary key stays the original 12 dimensions; account_type + provider are
+-- appended to ORDER BY only (the sorting key). ALTER MODIFY ORDER BY extends the
+-- sorting key but leaves the primary key as a prefix, so this must be declared
+-- explicitly here to match the migrated table (otherwise a bare ORDER BY would
+-- imply the primary key includes account_type/provider, and atlas would see
+-- drift it can't reconcile — "modifying primary key is not supported").
+PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider)
 TTL time_bucket + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
@@ -430,10 +470,17 @@ SELECT
         toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
-    ) AS total_tool_calls
+    ) AS total_tool_calls,
+
+    -- Account-type + provider dimensions (grouped; appended to the sort key so
+    -- team/personal and provider usage stay separate). Kept last to match the
+    -- table column order.
+    account_type,
+    provider
 FROM telemetry_logs
--- Admit usage-metrics rows (the source of token/cost sums; the per-aggregate
--- `x != ''` guards stop non-usage rows from inflating cost) AND tool-call rows.
+-- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
+-- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
+-- inflating cost) AND tool-call rows.
 -- Tool calls are captured by the hook events' gram.tool.name, which covers all
 -- tools used in a session, not just Gram-proxied ones. The previous filter kept
 -- only usage rows, so total_tool_calls (counted from a separate event class) was
@@ -444,6 +491,7 @@ WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
     startsWith(gram_urn, 'claude-code:usage') OR
     startsWith(gram_urn, 'codex:usage') OR
     startsWith(gram_urn, 'cursor:usage') OR
+    (toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '') OR
     (toString(attributes.gram.tool.name) != '' AND
      toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
 GROUP BY
@@ -458,7 +506,9 @@ GROUP BY
     model,
     hook_source,
     roles,
-    groups;
+    groups,
+    account_type,
+    provider;
 
 CREATE TABLE IF NOT EXISTS chat_turn_summaries (
     -- Turn identity
@@ -532,7 +582,7 @@ COMMENT 'Claude Code per-turn request attribution by chat, turn, MCP server/tool
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS chat_turn_summaries_mv TO chat_turn_summaries AS
 -- Cutoff separates live MV ingestion from one-time historical backfill.
-WITH toUnixTimestamp64Nano(toDateTime64('2026-06-23 18:15:00', 9, 'UTC')) AS chat_turn_cutoff_unix_nano
+WITH toUnixTimestamp64Nano(toDateTime64('2026-07-01 00:00:00', 9, 'UTC')) AS chat_turn_cutoff_unix_nano
 SELECT
     gram_project_id,
     chat_id,

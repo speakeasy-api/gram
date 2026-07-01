@@ -11,6 +11,10 @@ export type CreateIssuerRequestBody = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+   */
+  clientIdMetadataDocumentSupported?: boolean | undefined;
+  /**
    * Grant types advertised by the issuer.
    */
   grantTypesSupported?: Array<string> | undefined;
@@ -71,6 +75,7 @@ export type CreateIssuerRequestBody = {
 /** @internal */
 export type CreateIssuerRequestBody$Outbound = {
   authorization_endpoint?: string | undefined;
+  client_id_metadata_document_supported?: boolean | undefined;
   grant_types_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
@@ -94,6 +99,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     grantTypesSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
@@ -112,6 +118,8 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      clientIdMetadataDocumentSupported:
+        "client_id_metadata_document_supported",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
