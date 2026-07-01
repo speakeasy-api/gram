@@ -12,11 +12,17 @@ import {
 import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
+import {
+  clearSetupThreadId,
+  readSetupThreadId,
+  writeSetupThreadId,
+} from "./setupThreadStorage";
 import { useAssistantDraft } from "./useAssistantDraft";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 import {
@@ -107,7 +113,18 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const { theme: resolvedTheme } = useMoonshineConfig();
   const [searchParams] = useSearchParams();
 
-  const initialThreadId = searchParams.get("threadId") ?? undefined;
+  // The chat backing this assistant's setup conversation, resolved once at
+  // mount: an explicit ?threadId (a shared link) wins, otherwise the thread we
+  // remembered for this assistant so reopening its setup restores the history.
+  // undefined starts a fresh thread — the case in "create" mode, where no
+  // assistant exists yet.
+  const [setupThreadId] = useState<string | undefined>(() => {
+    const fromUrl = searchParams.get("threadId");
+    if (fromUrl) return fromUrl;
+    return draft.assistantId
+      ? (readSetupThreadId(project.id, draft.assistantId) ?? undefined)
+      : undefined;
+  });
 
   const onboarding = useOnboardingTools();
 
@@ -220,7 +237,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           history: {
             enabled: true,
             showThreadList: false,
-            initialThreadId,
+            // Reopening the remembered thread is driven by <SetupChatSurface>
+            // below rather than config.initialThreadId: the built-in switch
+            // fires on a fixed 100ms timer that races chat.list and silently
+            // no-ops on a cold load, which is exactly the reopen path here.
           },
           thread: {
             showFeedback: false,
@@ -253,10 +273,105 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
         }}
       >
-        <div className="h-full overflow-hidden">
-          <Chat />
-        </div>
+        <SetupChatSurface
+          projectId={project.id}
+          assistantId={draft.assistantId}
+          target={setupThreadId}
+        />
       </GramElementsProvider>
+    </div>
+  );
+}
+
+// assistant-ui's prefix for local (unpersisted) thread ids. `remoteId` is
+// normally a server chat id, but guard against ever persisting a local id.
+const LOCAL_THREAD_ID_PREFIX = "__LOCALID_";
+
+// Upper bound on how long the surface waits for a reopen switch before showing
+// the chat anyway, so a slow or wedged switch never blocks the composer.
+const REOPEN_TIMEOUT_MS = 6000;
+
+/**
+ * Hosts the onboarding <Chat> and keeps the setup conversation stable across
+ * reopens. Rendered inside GramElementsProvider so it can drive the runtime:
+ *
+ * - Reopen: when `target` names a remembered thread, switch to it once the
+ *   thread list has settled (the same reliable pattern the full chat page uses,
+ *   rather than the racy config.initialThreadId timer). A loader holds the
+ *   surface back until the thread binds, with a failure/timeout escape so a
+ *   stale id never wedges the page.
+ * - Persist: as the active thread adopts a server chat id, remember it against
+ *   the assistant so the next open reopens the same conversation.
+ */
+function SetupChatSurface({
+  projectId,
+  assistantId,
+  target,
+}: {
+  projectId: string;
+  assistantId: string | null;
+  target: string | undefined;
+}): JSX.Element {
+  const runtime = useAssistantRuntime();
+  const isListLoading = useAssistantState(({ threads }) => threads.isLoading);
+  const activeRemoteId = useAssistantState(
+    ({ threadListItem }) => threadListItem.remoteId ?? null,
+  );
+
+  // Nothing to reopen (create mode, first-time setup, shared-link miss) → ready
+  // immediately. Otherwise hold back until the target thread is active.
+  const [reopened, setReopened] = useState(!target);
+  const switchStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!target || switchStartedRef.current || isListLoading) return;
+    switchStartedRef.current = true;
+    if (activeRemoteId === target) {
+      setReopened(true);
+      return;
+    }
+    runtime.threads
+      .switchToThread(target)
+      .then(() => setReopened(true))
+      .catch(() => {
+        // The remembered chat no longer resolves (deleted, wrong project) —
+        // forget it and fall back to the fresh thread already active.
+        if (assistantId) clearSetupThreadId(projectId, assistantId);
+        setReopened(true);
+      });
+  }, [target, isListLoading, activeRemoteId, runtime, assistantId, projectId]);
+
+  useEffect(() => {
+    if (reopened) return;
+    const timer = setTimeout(() => setReopened(true), REOPEN_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [reopened]);
+
+  // Remember the active thread against the assistant for the next reopen. Skips
+  // local ids and waits until the assistant exists (created mid-conversation in
+  // "create" mode), so the first thing persisted is a real, reopenable chat.
+  useEffect(() => {
+    if (
+      !assistantId ||
+      !activeRemoteId ||
+      activeRemoteId.startsWith(LOCAL_THREAD_ID_PREFIX)
+    ) {
+      return;
+    }
+    writeSetupThreadId(projectId, assistantId, activeRemoteId);
+  }, [assistantId, activeRemoteId, projectId]);
+
+  const showLoader = !reopened && activeRemoteId !== target;
+
+  return (
+    <div className="h-full overflow-hidden">
+      {showLoader ? (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+        </div>
+      ) : (
+        <Chat />
+      )}
     </div>
   );
 }
