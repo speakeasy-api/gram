@@ -113,7 +113,13 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     event_source SimpleAggregateFunction(any, String),
     user_email SimpleAggregateFunction(any, String),
     hook_source SimpleAggregateFunction(any, String),
-    skill_name SimpleAggregateFunction(any, String),
+    -- skill_name is materialized on telemetry_logs only for rows where
+    -- tool_name = 'Skill', so it is empty on every sibling row of a skill trace
+    -- (the same "subset of a trace's rows" problem described below). any() can
+    -- therefore persist/merge an empty string over the populated skill name and
+    -- drop the trace from the skill-usage aggregate (which filters skill_name != '').
+    -- max() makes "" always lose to the real skill name across part merges.
+    skill_name SimpleAggregateFunction(max, String),
     -- Tool-usage classification + identity cols, used to serve the unified Tool
     -- Logs page (hosted MCP / shadow MCP / skill / local target classification and
     -- multi-identity user resolution) directly from this MV instead of scanning raw
@@ -189,7 +195,7 @@ SELECT
     any(event_source) AS event_source,
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
-    any(skill_name) AS skill_name,
+    anyIf(skill_name, skill_name != '') AS skill_name,
     anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
