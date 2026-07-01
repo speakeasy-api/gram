@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
 // SourceShadowMCP is the policy source value that enables the shadow-MCP
@@ -199,7 +200,13 @@ func (c *Client) ValidateRemoteMCPServerCall(
 		ID:        serverID,
 		ProjectID: projectUUID,
 	}); err != nil {
-		return fail(fmt.Sprintf("remote mcp server %s not found in this project", serverID))
+		// Tunnel echoes are source IDs, so validate against tunneled_mcp_servers after remote lookup misses.
+		if _, terr := tunneledmcprepo.New(c.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+			ID:        serverID,
+			ProjectID: projectUUID,
+		}); terr != nil {
+			return fail(fmt.Sprintf("remote mcp server %s not found in this project", serverID))
+		}
 	}
 
 	if toolName == "" {

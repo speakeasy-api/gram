@@ -81,6 +81,7 @@ var TokensUnderManagement = Type("TokensUnderManagement", func() {
 	})
 	Attribute("tokens", Int64, "Tokens under management consumed during the active billing cycle")
 	Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit, if one has been configured")
+	Attribute("tunneled_mcp_server_limit", Int, "The contracted tunneled MCP server source cap, if one has been configured")
 	Attribute("billing_cycle_anchor_day", Int, "Day of month (1-31) the billing cycle starts, at 00:00 UTC")
 	Attribute("alert_email", String, "Email address to notify on TUM threshold events. Only populated for platform admins.")
 	Attribute("history", ArrayOf(TUMPeriod), "TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.")
@@ -139,6 +140,9 @@ var _ = Service("usage", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit. Omit to clear.", func() {
+				Minimum(0)
+			})
+			Attribute("tunneled_mcp_server_limit", Int, "The contracted tunneled MCP server source cap. Omit to use the plan default.", func() {
 				Minimum(0)
 			})
 			Attribute("alert_email", String, "Email address to notify on TUM threshold events. Omit to clear.", func() {

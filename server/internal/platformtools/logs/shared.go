@@ -19,6 +19,7 @@ type TelemetryService interface {
 	SearchToolCalls(ctx context.Context, payload *telemetry.SearchToolCallsPayload) (*telemetry.SearchToolCallsResult, error)
 	SearchChats(ctx context.Context, payload *telemetry.SearchChatsPayload) (*telemetry.SearchChatsResult, error)
 	SearchUsers(ctx context.Context, payload *telemetry.SearchUsersPayload) (*telemetry.SearchUsersResult, error)
+	GetToolUsageSummary(ctx context.Context, payload *telemetry.GetToolUsageSummaryPayload) (*telemetry.GetToolUsageSummaryResult, error)
 	GetProjectMetricsSummary(ctx context.Context, payload *telemetry.GetProjectMetricsSummaryPayload) (*telemetry.GetMetricsSummaryResult, error)
 	GetUserMetricsSummary(ctx context.Context, payload *telemetry.GetUserMetricsSummaryPayload) (*telemetry.GetUserMetricsSummaryResult, error)
 	GetObservabilityOverview(ctx context.Context, payload *telemetry.GetObservabilityOverviewPayload) (*telemetry.GetObservabilityOverviewResult, error)

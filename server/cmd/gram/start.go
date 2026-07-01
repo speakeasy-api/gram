@@ -109,11 +109,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
@@ -251,6 +253,12 @@ func newStartCommand() *cli.Command {
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
+		},
+		&cli.StringFlag{
+			Name:     "tunnel-forward-token",
+			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-server",
+			Required: true,
+			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
 		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
@@ -821,6 +829,8 @@ func newStartCommand() *cli.Command {
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,
 				remoteProxyManager,
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -1079,6 +1089,7 @@ func newStartCommand() *cli.Command {
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
+			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient)))
 			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))

@@ -253,9 +253,9 @@ type BillingMetadatum struct {
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
 	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
-	TunnelledMcpServerLimit pgtype.Int4
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	TunneledMcpServerLimit pgtype.Int4
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 type Chat struct {
@@ -812,7 +812,7 @@ type McpServer struct {
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
 	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
-	TunnelledMcpServerID  uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -1625,7 +1625,7 @@ type TriggerInstance struct {
 }
 
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
-type TunnelledMcpServer struct {
+type TunneledMcpServer struct {
 	// Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
 	ID uuid.UUID
 	// Project that owns this tunnelled MCP source. All management queries are scoped by project_id.

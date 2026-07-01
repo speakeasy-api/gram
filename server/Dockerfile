@@ -5,7 +5,7 @@ WORKDIR /app
 USER nonroot
 
 COPY --chown=nonroot:nonroot --chmod=0755 ./bin/gram /app/gram
-# Add this line to copy the migrations folder
+COPY --chown=nonroot:nonroot --chmod=0755 ./bin/tunnel-gateway /app/tunnel-gateway
 COPY ./migrations ./migrations
 
 ENTRYPOINT ["/app/gram"]

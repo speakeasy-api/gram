@@ -3,7 +3,6 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +11,7 @@ import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
@@ -29,6 +29,7 @@ import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
+import { seedTunnel } from "./seed/tunnel.mts";
 
 type Asset = {
   slug: string;
@@ -163,6 +164,11 @@ async function seed() {
   if (!activeOrgID) {
     abort("Active organization ID not found", sessionJSON);
   }
+  const activeUserID = sessionInfo.result.userId;
+  if (!activeUserID) {
+    abort("Active user ID not found", sessionJSON);
+  }
+  await seedCurrentUserSuperAdmin(activeUserID);
 
   const orgs = sessionInfo.result.organizations;
   const org = orgs.find(
@@ -203,6 +209,20 @@ async function seed() {
     const err = e as { stderr?: string; message?: string };
     log.warn(
       `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
+    log.info("Enabled local logs and tool_io_logs features");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 
@@ -312,6 +332,7 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
+  await seedTunnel();
 
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
@@ -346,7 +367,131 @@ async function seed() {
     );
   }
 
+  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!enableRBACRes.ok) {
+    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
+  }
+  log.info("Enabled RBAC and seeded system roles");
+
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+
   success = true;
+}
+
+async function seedCurrentUserAdminRole(init: {
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH admin_role AS (
+  SELECT id
+  FROM global_roles
+  WHERE workos_slug = 'admin'
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  LIMIT 1
+),
+active_user AS (
+  SELECT users.id AS user_id, users.workos_id, our.workos_membership_id
+  FROM users
+  JOIN organization_user_relationships AS our
+    ON our.user_id = users.id
+  WHERE users.id = :'user_id'
+    AND our.organization_id = :'organization_id'
+    AND users.workos_id IS NOT NULL
+    AND our.deleted IS FALSE
+  LIMIT 1
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    :'organization_id',
+    active_user.workos_id,
+    active_user.user_id,
+    'role:global:' || admin_role.id::text,
+    active_user.workos_membership_id,
+    clock_timestamp(),
+    NULL
+  FROM active_user
+  CROSS JOIN admin_role
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
+  DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  RETURNING id
+)
+SELECT COUNT(*) FROM upserted;
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== "1") {
+    abort("Failed to assign current user to seeded Admin role", {
+      organizationId,
+      userId,
+      assignments: result.stdout.trim(),
+    });
+  }
+  log.info("Assigned current user to seeded Admin role");
+}
+
+async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH updated AS (
+  UPDATE users
+  SET admin = TRUE,
+      updated_at = clock_timestamp()
+  WHERE id = :'user_id'
+  RETURNING id
+)
+SELECT COALESCE((SELECT id FROM updated), '');
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== userId) {
+    abort("Failed to mark current user as super admin", {
+      userId,
+      updatedUserId: result.stdout.trim(),
+    });
+  }
+
+  try {
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Marked current user as super admin, but failed to clear user info cache: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  log.info("Marked current user as super admin");
 }
 
 async function initAPIKey(init: {

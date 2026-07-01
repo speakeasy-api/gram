@@ -1767,7 +1767,7 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Description("Tool usage target type")
-	Enum("hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {

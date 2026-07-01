@@ -2,7 +2,11 @@ import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
+import {
+  formatRemoteMcpDisplay,
+  formatTunneledMcpDisplay,
+  sourceTypeToUrnKind,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
@@ -13,6 +17,7 @@ const sourceTypeConfig = {
   function: { label: "Function" },
   externalmcp: { label: "Catalog" },
   remotemcp: { label: "Remote MCP" },
+  tunneledmcp: { label: "Tunneled MCP" },
 };
 
 function formatDate(date: Date | undefined) {
@@ -54,10 +59,8 @@ export function SourceTableRow({
   const createdAt = "createdAt" in asset ? asset.createdAt : undefined;
   const updatedAt = "updatedAt" in asset ? asset.updatedAt : undefined;
 
-  // See SourceCard.tsx for why remotemcp delegates management actions to its
-  // detail page Settings tab.
   const actions =
-    asset.type === "remotemcp"
+    asset.type === "remotemcp" || asset.type === "tunneledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -104,14 +107,22 @@ export function SourceTableRow({
         />
       );
     }
-    if (asset.type === "externalmcp" || asset.type === "remotemcp") {
+    if (
+      asset.type === "externalmcp" ||
+      asset.type === "remotemcp" ||
+      asset.type === "tunneledmcp"
+    ) {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }
     return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
 
   const displayName =
-    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
+    asset.type === "remotemcp"
+      ? formatRemoteMcpDisplay(asset)
+      : asset.type === "tunneledmcp"
+        ? formatTunneledMcpDisplay(asset)
+        : asset.name;
 
   return (
     <DotRow

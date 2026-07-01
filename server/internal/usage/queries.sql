@@ -16,16 +16,19 @@ INSERT INTO billing_metadata (
   , tum_monthly_token_limit
   , alert_email
   , billing_cycle_anchor_day
+  , tunnelled_mcp_server_limit
 ) VALUES (
     @organization_id
   , sqlc.narg(tum_monthly_token_limit)
   , sqlc.narg(alert_email)
   , @billing_cycle_anchor_day
+  , sqlc.narg(tunneled_mcp_server_limit)
 )
 ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
+  , tunnelled_mcp_server_limit = EXCLUDED.tunnelled_mcp_server_limit
   , updated_at = clock_timestamp()
 RETURNING *;
 

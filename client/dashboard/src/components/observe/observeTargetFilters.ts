@@ -21,6 +21,7 @@ const SHADOW_SERVER_PREFIX = "shadow:";
 export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
+  "tunneled_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -30,6 +31,7 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   value: ObserveTypeFilterValue;
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
+  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },

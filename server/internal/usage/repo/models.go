@@ -16,7 +16,7 @@ type BillingMetadatum struct {
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
 	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
-	TunnelledMcpServerLimit pgtype.Int4
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	TunneledMcpServerLimit pgtype.Int4
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }

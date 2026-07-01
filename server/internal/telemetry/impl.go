@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -2344,6 +2345,10 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
 
 	summary, err := s.chRepo.GetToolUsageSummary(ctx, repo.GetToolUsageSummaryParams{
 		GramProjectID:      authCtx.ProjectID.String(),
@@ -2351,6 +2356,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		TimeEnd:            timeEnd,
 		BucketSizeNs:       bucketSizeNs,
 		HostedMCPMatchers:  hostedMCPMatchers,
+		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
 		ShadowServerNames:  payload.ShadowServerNames,
@@ -2412,12 +2418,17 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers").LogError(ctx, logger)
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
+	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
 		GramProjectID:      params.projectID,
 		TimeStart:          params.timeStart,
 		TimeEnd:            params.timeEnd,
 		HostedMCPMatchers:  hostedMCPMatchers,
+		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
 		ShadowServerNames:  payload.ShadowServerNames,
@@ -2472,12 +2483,17 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
 
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
 		GramProjectID:     authCtx.ProjectID.String(),
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
@@ -2501,6 +2517,50 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 			ToolsetSlug: toolset.Slug,
 			ToolsetName: toolset.Name,
 			McpSlug:     toolset.McpSlug.String,
+		})
+	}
+	return matchers, nil
+}
+
+func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
+	servers, err := mcpserversRepo.New(s.db).ListMCPServersByProjectID(ctx, mcpserversRepo.ListMCPServersByProjectIDParams{
+		ProjectID:           projectID,
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list project MCP servers: %w", err)
+	}
+
+	matchers := make([]repo.MCPServerMatcher, 0, len(servers))
+	for _, server := range servers {
+		targetType := repo.ToolUsageTargetTypeHostedMCP
+		sourceID := ""
+		switch {
+		case server.TunneledMcpServerID.Valid:
+			targetType = repo.ToolUsageTargetTypeTunneledMCP
+			sourceID = server.TunneledMcpServerID.UUID.String()
+		case server.RemoteMcpServerID.Valid:
+			sourceID = server.RemoteMcpServerID.UUID.String()
+		default:
+			continue
+		}
+
+		targetID := server.ID.String()
+		if server.Slug.Valid && server.Slug.String != "" {
+			targetID = server.Slug.String
+		}
+		targetLabel := targetID
+		if server.Name.Valid && server.Name.String != "" {
+			targetLabel = server.Name.String
+		}
+
+		matchers = append(matchers, repo.MCPServerMatcher{
+			SourceID:    sourceID,
+			TargetType:  targetType,
+			TargetID:    targetID,
+			TargetLabel: targetLabel,
 		})
 	}
 	return matchers, nil

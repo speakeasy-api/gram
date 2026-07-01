@@ -17,6 +17,8 @@ import (
 type SetBillingMetadataRequestBody struct {
 	// The contracted monthly tokens under management limit. Omit to clear.
 	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// The contracted tunneled MCP server source cap. Omit to use the plan default.
+	TunneledMcpServerLimit *int `form:"tunneled_mcp_server_limit,omitempty" json:"tunneled_mcp_server_limit,omitempty" xml:"tunneled_mcp_server_limit,omitempty"`
 	// Email address to notify on TUM threshold events. Omit to clear.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
@@ -56,6 +58,8 @@ type GetTokensUnderManagementResponseBody struct {
 	// The contracted monthly tokens under management limit, if one has been
 	// configured
 	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// The contracted tunneled MCP server source cap, if one has been configured
+	TunneledMcpServerLimit *int `form:"tunneled_mcp_server_limit,omitempty" json:"tunneled_mcp_server_limit,omitempty" xml:"tunneled_mcp_server_limit,omitempty"`
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int `form:"billing_cycle_anchor_day" json:"billing_cycle_anchor_day" xml:"billing_cycle_anchor_day"`
 	// Email address to notify on TUM threshold events. Only populated for platform
@@ -78,6 +82,8 @@ type SetBillingMetadataResponseBody struct {
 	// The contracted monthly tokens under management limit, if one has been
 	// configured
 	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// The contracted tunneled MCP server source cap, if one has been configured
+	TunneledMcpServerLimit *int `form:"tunneled_mcp_server_limit,omitempty" json:"tunneled_mcp_server_limit,omitempty" xml:"tunneled_mcp_server_limit,omitempty"`
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int `form:"billing_cycle_anchor_day" json:"billing_cycle_anchor_day" xml:"billing_cycle_anchor_day"`
 	// Email address to notify on TUM threshold events. Only populated for platform
@@ -1455,12 +1461,13 @@ func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageRespon
 // the result of the "getTokensUnderManagement" endpoint of the "usage" service.
 func NewGetTokensUnderManagementResponseBody(res *usage.TokensUnderManagement) *GetTokensUnderManagementResponseBody {
 	body := &GetTokensUnderManagementResponseBody{
-		PeriodStart:           res.PeriodStart,
-		PeriodEnd:             res.PeriodEnd,
-		Tokens:                res.Tokens,
-		MonthlyTokenLimit:     res.MonthlyTokenLimit,
-		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
-		AlertEmail:            res.AlertEmail,
+		PeriodStart:            res.PeriodStart,
+		PeriodEnd:              res.PeriodEnd,
+		Tokens:                 res.Tokens,
+		MonthlyTokenLimit:      res.MonthlyTokenLimit,
+		TunneledMcpServerLimit: res.TunneledMcpServerLimit,
+		BillingCycleAnchorDay:  res.BillingCycleAnchorDay,
+		AlertEmail:             res.AlertEmail,
 	}
 	if res.History != nil {
 		body.History = make([]*TUMPeriodResponseBody, len(res.History))
@@ -1481,12 +1488,13 @@ func NewGetTokensUnderManagementResponseBody(res *usage.TokensUnderManagement) *
 // result of the "setBillingMetadata" endpoint of the "usage" service.
 func NewSetBillingMetadataResponseBody(res *usage.TokensUnderManagement) *SetBillingMetadataResponseBody {
 	body := &SetBillingMetadataResponseBody{
-		PeriodStart:           res.PeriodStart,
-		PeriodEnd:             res.PeriodEnd,
-		Tokens:                res.Tokens,
-		MonthlyTokenLimit:     res.MonthlyTokenLimit,
-		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
-		AlertEmail:            res.AlertEmail,
+		PeriodStart:            res.PeriodStart,
+		PeriodEnd:              res.PeriodEnd,
+		Tokens:                 res.Tokens,
+		MonthlyTokenLimit:      res.MonthlyTokenLimit,
+		TunneledMcpServerLimit: res.TunneledMcpServerLimit,
+		BillingCycleAnchorDay:  res.BillingCycleAnchorDay,
+		AlertEmail:             res.AlertEmail,
 	}
 	if res.History != nil {
 		body.History = make([]*TUMPeriodResponseBody, len(res.History))
@@ -2545,9 +2553,10 @@ func NewGetTokensUnderManagementPayload(sessionToken *string) *usage.GetTokensUn
 // endpoint payload.
 func NewSetBillingMetadataPayload(body *SetBillingMetadataRequestBody, sessionToken *string) *usage.SetBillingMetadataPayload {
 	v := &usage.SetBillingMetadataPayload{
-		MonthlyTokenLimit:     body.MonthlyTokenLimit,
-		AlertEmail:            body.AlertEmail,
-		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
+		MonthlyTokenLimit:      body.MonthlyTokenLimit,
+		TunneledMcpServerLimit: body.TunneledMcpServerLimit,
+		AlertEmail:             body.AlertEmail,
+		BillingCycleAnchorDay:  *body.BillingCycleAnchorDay,
 	}
 	v.SessionToken = sessionToken
 
@@ -2590,6 +2599,11 @@ func ValidateSetBillingMetadataRequestBody(body *SetBillingMetadataRequestBody) 
 	if body.MonthlyTokenLimit != nil {
 		if *body.MonthlyTokenLimit < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_token_limit", *body.MonthlyTokenLimit, 0, true))
+		}
+	}
+	if body.TunneledMcpServerLimit != nil {
+		if *body.TunneledMcpServerLimit < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.tunneled_mcp_server_limit", *body.TunneledMcpServerLimit, 0, true))
 		}
 	}
 	if body.AlertEmail != nil {

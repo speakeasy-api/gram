@@ -2,9 +2,12 @@ package remotemcp
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -108,9 +111,17 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	requestBytes := int64(len(call.Request.Params.Arguments))
 
 	var outputBytes int64
+	var outputContent []byte
 	if call.RemoteMessage != nil {
 		if rpcResp, ok := call.RemoteMessage.Message.(*jsonrpc.Response); ok && rpcResp != nil {
 			outputBytes = int64(len(rpcResp.Result))
+			outputContent = rpcResp.Result
+		}
+	}
+	if len(outputContent) == 0 && call.Error != nil {
+		if encodedError, err := json.Marshal(call.Error); err == nil {
+			outputContent = encodedError
+			outputBytes = int64(len(encodedError))
 		}
 	}
 
@@ -118,18 +129,23 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 
 	// Synthetic URN: the dashboard's tool-call queries filter on
 	// startsWith(gram_urn, 'tools:'), so the prefix is required. Use the
-	// remote MCP server's UUID (stable) rather than its slug (mutable) in
-	// the source segment so historical URNs remain queryable across renames.
+	// backend UUID (stable) rather than a slug (mutable) in the source
+	// segment so historical URNs remain queryable across renames.
 	// urn.ParseTool will reject names with characters outside SlugPatternRE
 	// (uppercase, dots, etc.), which means the materialized tool_source
 	// column may be empty for those tool names — acceptable; gram_urn
 	// (used for grouping) and tool_name (separate materialized column from
 	// gram.tool.name attribute) are still populated correctly.
-	toolURN := "tools:externalmcp:" + i.identity.RemoteMCPServerID + ":" + toolName
+	toolURN := "tools:" + i.identity.ToolURNKind() + ":" + i.identity.SourceID() + ":" + toolName
 
 	logAttrs := tm.HTTPLogAttributes{
-		attr.EventSourceKey:       string(tm.EventSourceToolCall),
-		attr.RemoteMCPServerIDKey: i.identity.RemoteMCPServerID,
+		attr.EventSourceKey: string(tm.EventSourceToolCall),
+	}
+	if i.identity.RemoteMCPServerID != "" {
+		logAttrs[attr.RemoteMCPServerIDKey] = i.identity.RemoteMCPServerID
+	}
+	if i.identity.TunnelledMCPServerID != "" {
+		logAttrs[attr.TunnelledMCPServerIDKey] = i.identity.TunnelledMCPServerID
 	}
 	if i.identity.McpServerID != "" {
 		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID
@@ -138,7 +154,10 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
+	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
+	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
+	ensureTraceContext(logAttrs)
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
 	}
@@ -171,6 +190,31 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	go i.telemLogger.Log(context.WithoutCancel(ctx), params)
 
 	return nil
+}
+
+// ensureTraceContext fills trace/span ids when this telemetry row has no
+// active OTel span context. That is expected when tracing is disabled or when
+// tests invoke the interceptor directly: the row is still valid, but
+// trace_summaries_mv drops rows without trace_id and the tool-log dashboards
+// read from that summary path. The generated ids are therefore a local
+// ClickHouse grouping key, not distributed trace context.
+//
+// Hosted/toolset-backed MCP rows do the equivalent earlier in
+// gateway.ToolProxy.Do by recording the active gateway.toolCall span onto the
+// shared log attributes.
+func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
+	if _, ok := logAttrs[attr.TraceIDKey]; !ok {
+		traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+		logAttrs[attr.TraceIDKey] = traceID
+	}
+	if _, ok := logAttrs[attr.SpanIDKey]; !ok {
+		traceID, _ := logAttrs[attr.TraceIDKey].(string)
+		if len(traceID) >= 16 {
+			logAttrs[attr.SpanIDKey] = traceID[:16]
+			return
+		}
+		logAttrs[attr.SpanIDKey] = strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
+	}
 }
 
 // upstreamStatusCode returns the upstream HTTP status code for a tools/call

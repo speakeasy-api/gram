@@ -169,6 +169,46 @@ services:
       mcp-registry-db:
         condition: service_healthy
 
+  tunnel-postgres-mcp:
+    profiles: [tunnel]
+    image: gram-postgres-mcp-streamable:07eb329c8c48
+    build:
+      context: https://github.com/crystaldba/postgres-mcp.git#07eb329c8c48e49640e0d1b5b35465d4d024c3ee
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DATABASE_URI: postgresql://${DB_USER}:${DB_PASSWORD}@gram-db:5432/${DB_NAME}
+    command:
+      [
+        "--access-mode=unrestricted",
+        "--transport=streamable-http",
+        "--streamable-http-host=0.0.0.0",
+        "--streamable-http-port=9000",
+      ]
+    depends_on:
+      gram-db:
+        condition: service_healthy
+
+  tunnel-agent:
+    profiles: [tunnel]
+    image: golang:1.26.3-bookworm
+    restart: unless-stopped
+    network_mode: "service:tunnel-postgres-mcp"
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    environment:
+      TUNNEL_GATEWAY_URL: ${TUNNEL_AGENT_GATEWAY_URL:-ws://host.docker.internal:8090/connect}
+      TUNNEL_KEY: ${TUNNEL_LOCAL_KEY:-}
+      TUNNEL_LOCAL_MCP_URL: http://127.0.0.1:9000/mcp
+      TUNNEL_SERVICE_VERSION: 0.3.0
+      TUNNEL_METADATA: '{"environment":"local","server":"postgres-mcp","database":"gram","transport":"streamable-http"}'
+    command: ["go", "run", "./tunnel/cmd/tunnel-agent"]
+    depends_on:
+      tunnel-postgres-mcp:
+        condition: service_started
+
 volumes:
   postgres_data:
     driver: local

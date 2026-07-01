@@ -72,17 +72,66 @@ const (
 	DefaultMaxBufferedBodyBytes int64 = 50 * 1024 * 1024
 )
 
-// ServerIdentity bundles the two correlation ids the proxy stamps onto its
-// telemetry: RemoteMCPServerID is the remote_mcp_servers row id (the upstream
-// the proxy forwards to) and McpServerID is the fronting mcp_servers row id
-// (the server users manage). Bundling them keeps the pair from being
-// transposed across the constructors and record calls that thread them, and
-// both are omitted from emitted telemetry when empty rather than recorded as
-// empty-string labels.
+// ServerIdentity bundles the correlation ids the proxy stamps onto its
+// telemetry. RemoteMCPServerID is populated for remote_mcp_servers-backed
+// proxies, TunnelledMCPServerID is populated for tunneled_mcp_servers-backed
+// proxies, and McpServerID is the fronting mcp_servers row id users manage.
+// Keeping these distinct prevents tunneled IDs from being recorded as remote
+// MCP server IDs, while still threading the fronting server id alongside either
+// backend id.
 type ServerIdentity struct {
-	RemoteMCPServerID string
-	McpServerID       string
+	RemoteMCPServerID    string
+	TunnelledMCPServerID string
+	McpServerID          string
 }
+
+func (i ServerIdentity) SourceID() string {
+	if i.RemoteMCPServerID != "" {
+		return i.RemoteMCPServerID
+	}
+	return i.TunnelledMCPServerID
+}
+
+func (i ServerIdentity) ToolURNKind() string {
+	if i.TunnelledMCPServerID != "" && i.RemoteMCPServerID == "" {
+		return "tunneledmcp"
+	}
+	return "externalmcp"
+}
+
+func (i ServerIdentity) SlogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, 3)
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunnelledMCPServerID != "" {
+		attrs = append(attrs, attr.SlogTunnelledMCPServerID(i.TunnelledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
+	}
+	return attrs
+}
+
+func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunnelledMCPServerID != "" {
+		attrs = append(attrs, attr.TunnelledMCPServerID(i.TunnelledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.McpServerID(i.McpServerID))
+	}
+	return attrs
+}
+
+type UpstreamResponseRetry struct {
+	RemoteURL string
+	Headers   []ConfiguredHeader
+}
+
+type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
 
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
@@ -157,6 +206,11 @@ type Proxy struct {
 	//
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
+
+	// UpstreamResponseRetryer may replace the upstream target once after
+	// response headers arrive but before any response is relayed to the user.
+	// It is used by tunneled MCP to fail over stale gateway owners.
+	UpstreamResponseRetryer UpstreamResponseRetryer
 
 	UserRequestInterceptors []UserRequestInterceptor
 
@@ -252,7 +306,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	_, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -302,7 +356,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -452,14 +506,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if mutated, err := userReq.refreshBody(); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
 	} else if mutated {
-		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
-			attr.SlogComponent("remotemcp.proxy"),
-			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-			attr.SlogMcpServerID(p.Identity.McpServerID))
+		p.infoContextWithIdentity(ctx, "forwarding mutated request body upstream",
+			attr.SlogComponent("remotemcp.proxy"))
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, userReq.BodyReader())
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader)
 	if err != nil {
 		return err
 	}
@@ -558,10 +610,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
 		} else if ok {
 			bodyBytes = mutated
-			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
-				attr.SlogComponent("remotemcp.proxy"),
-				attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-				attr.SlogMcpServerID(p.Identity.McpServerID))
+			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
+				attr.SlogComponent("remotemcp.proxy"))
 		}
 	}
 
@@ -652,6 +702,23 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	}
 
 	return upstreamReq, resp, nil
+}
+
+func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, body func() io.Reader) (*http.Request, *http.Response, error) {
+	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body())
+	if err != nil || p.UpstreamResponseRetryer == nil {
+		return upstreamReq, upstreamResp, err
+	}
+
+	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
+	if err != nil || retry == nil {
+		return upstreamReq, upstreamResp, err
+	}
+	o11y.NoLogDefer(upstreamResp.Body.Close)
+
+	p.RemoteURL = retry.RemoteURL
+	p.Headers = retry.Headers
+	return p.forwardRequest(ctx, r, body())
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays
@@ -840,10 +907,8 @@ func (p *Proxy) relaySSEStream(
 				return fmt.Errorf("encode mutated sse event: %w", err)
 			} else if ok {
 				emit = formatSSEEventWithData(nonData, mutated)
-				p.Logger.InfoContext(ctx, "relaying mutated SSE event to client",
-					attr.SlogComponent("remotemcp.proxy"),
-					attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-					attr.SlogMcpServerID(p.Identity.McpServerID))
+				p.infoContextWithIdentity(ctx, "relaying mutated SSE event to client",
+					attr.SlogComponent("remotemcp.proxy"))
 			}
 		}
 		if _, writeErr := w.Write(emit); writeErr != nil {
@@ -871,13 +936,12 @@ func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
-	if p.Identity.RemoteMCPServerID != "" {
-		attrs = append(attrs, attr.RemoteMCPServerID(p.Identity.RemoteMCPServerID))
-	}
-	if p.Identity.McpServerID != "" {
-		attrs = append(attrs, attr.McpServerID(p.Identity.McpServerID))
-	}
-	return attrs
+	return p.Identity.AppendAttributes(attrs)
+}
+
+func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
+	attrs = append(attrs, p.Identity.SlogAttrs()...)
+	p.Logger.LogAttrs(ctx, slog.LevelInfo, msg, attrs...)
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an

@@ -167,6 +167,42 @@ func TestUpdateMcpServer_LeavesNameWhenOmitted(t *testing.T) {
 	require.Equal(t, "original name", *updated.Name)
 }
 
+func TestUpdateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "private tunneled mcp server",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                nil,
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestUpdateMcpServer_RecomputesSlugOnNameChange(t *testing.T) {
 	t.Parallel()
 

@@ -1941,10 +1941,11 @@ type HooksServerSummaryRow struct {
 }
 
 const (
-	ToolUsageTargetTypeHostedMCP = "hosted_mcp_server"
-	ToolUsageTargetTypeShadowMCP = "shadow_mcp_server"
-	ToolUsageTargetTypeLocalTool = "local_tool"
-	ToolUsageTargetTypeSkill     = "skill"
+	ToolUsageTargetTypeHostedMCP   = "hosted_mcp_server"
+	ToolUsageTargetTypeTunneledMCP = "tunneled_mcp_server"
+	ToolUsageTargetTypeShadowMCP   = "shadow_mcp_server"
+	ToolUsageTargetTypeLocalTool   = "local_tool"
+	ToolUsageTargetTypeSkill       = "skill"
 
 	toolUsageTargetKindServer     = "server"
 	toolUsageTargetKindLocalTools = "local_tools"
@@ -1969,6 +1970,16 @@ type HostedMCPMatcher struct {
 	McpSlug     string
 }
 
+// MCPServerMatcher maps direct MCP server source ids from telemetry to their
+// fronting mcp_servers target. Remote-backed servers stay hosted MCP; tunneled
+// servers receive their own target type.
+type MCPServerMatcher struct {
+	SourceID    string
+	TargetType  string
+	TargetID    string
+	TargetLabel string
+}
+
 // GetToolUsageSummaryParams defines the parameters for target-aware tool usage.
 type GetToolUsageSummaryParams struct {
 	GramProjectID      string
@@ -1976,6 +1987,7 @@ type GetToolUsageSummaryParams struct {
 	TimeEnd            int64
 	BucketSizeNs       int64
 	HostedMCPMatchers  []HostedMCPMatcher
+	MCPServerMatchers  []MCPServerMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
@@ -1994,6 +2006,7 @@ type ListToolUsageTracesParams struct {
 	TimeStart          int64
 	TimeEnd            int64
 	HostedMCPMatchers  []HostedMCPMatcher
+	MCPServerMatchers  []MCPServerMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
@@ -2047,6 +2060,7 @@ type GetToolUsageFilterOptionsParams struct {
 	TimeStart         int64
 	TimeEnd           int64
 	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
 }
 
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
@@ -2205,6 +2219,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		TimeEnd:            arg.TimeEnd,
 		BucketSizeNs:       0,
 		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		MCPServerMatchers:  arg.MCPServerMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
@@ -2864,6 +2879,27 @@ func toolUsageHostedMatcherArrays(matchers []HostedMCPMatcher) (toolsetSlugs []s
 	return toolsetSlugs, mcpSlugs, urlSuffixes
 }
 
+func toolUsageMCPServerMatcherArrays(matchers []MCPServerMatcher) (sourceIDs []string, targetTypes []string, targetIDs []string, targetLabels []string) {
+	sourceIDs = make([]string, 0, len(matchers))
+	targetTypes = make([]string, 0, len(matchers))
+	targetIDs = make([]string, 0, len(matchers))
+	targetLabels = make([]string, 0, len(matchers))
+	for _, matcher := range matchers {
+		if matcher.SourceID == "" || matcher.TargetType == "" || matcher.TargetID == "" {
+			continue
+		}
+		sourceIDs = append(sourceIDs, matcher.SourceID)
+		targetTypes = append(targetTypes, matcher.TargetType)
+		targetIDs = append(targetIDs, matcher.TargetID)
+		if matcher.TargetLabel != "" {
+			targetLabels = append(targetLabels, matcher.TargetLabel)
+		} else {
+			targetLabels = append(targetLabels, matcher.TargetID)
+		}
+	}
+	return sourceIDs, targetTypes, targetIDs, targetLabels
+}
+
 func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 	matchIndex := "indexOf(?, " + matchExpr + ")"
 	urlIndex := "arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?)"
@@ -2872,6 +2908,10 @@ func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 		urlIndex+" > 0", urlIndex,
 		"0",
 	)
+}
+
+func toolUsageMCPServerMatchIndexExpr(sourceExpr string) string {
+	return "indexOf(?, " + sourceExpr + ")"
 }
 
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
@@ -2910,7 +2950,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("((startsWith(g_gram_urn, 'tools:') AND g_toolset_slug != '') OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -2921,10 +2961,22 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	sourceArgs := groupedArgs
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	hasMatchers := len(hostedToolsetSlugs) > 0
-	if hasMatchers {
-		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
-		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, groupedSQL)
-		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+	hasMCPServerMatchers := len(mcpSourceIDs) > 0
+	if hasMatchers || hasMCPServerMatchers {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if hasMatchers {
+			hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if hasMCPServerMatchers {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), groupedSQL)
+		sourceArgs = prefixArgs
 		sourceArgs = append(sourceArgs, groupedArgs...)
 	}
 
@@ -2933,36 +2985,57 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
 
 	var targetType, targetKind, targetID, targetLabel string
-	if hasMatchers {
-		hostedMatch := "hosted_match_index > 0"
-		targetType = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
-			hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if hasMatchers || hasMCPServerMatchers {
+		targetTypeArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
+		}
+		targetKindArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
+		}
+		targetIDArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+		}
+		targetLabelArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+		}
+		if hasMCPServerMatchers {
+			mcpServerMatch := "mcp_server_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+			targetKindArgs = append(targetKindArgs, mcpServerMatch, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+			targetLabelArgs = append(targetLabelArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+		}
+		if hasMatchers {
+			hostedMatch := "hosted_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			targetKindArgs = append(targetKindArgs, hostedMatch, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
+			targetLabelArgs = append(targetLabelArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
+		}
+		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		targetKind = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
-			hostedMatch, "'"+toolUsageTargetKindServer+"'",
+		targetKindArgs = append(targetKindArgs,
 			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		targetID = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
-			hostedMatch, "arrayElement(?, hosted_match_index)",
+		targetIDArgs = append(targetIDArgs,
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
-		targetLabel = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
-			hostedMatch, "arrayElement(?, hosted_match_index)",
+		targetLabelArgs = append(targetLabelArgs,
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
+		targetType = chMultiIf(targetTypeArgs...)
+		targetKind = chMultiIf(targetKindArgs...)
+		targetID = chMultiIf(targetIDArgs...)
+		targetLabel = chMultiIf(targetLabelArgs...)
 	} else {
 		targetType = chMultiIf(
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
@@ -3035,9 +3108,20 @@ FROM (%s)`,
 	)
 
 	finalArgs := make([]any, 0, 2+len(sourceArgs))
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetTypes)
+	}
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetIDs)
+	}
 	if hasMatchers {
-		// arrayElement(?, hosted_match_index) appears in target_id and target_label.
-		finalArgs = append(finalArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		finalArgs = append(finalArgs, hostedToolsetSlugs)
+	}
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetLabels)
+	}
+	if hasMatchers {
+		finalArgs = append(finalArgs, hostedToolsetSlugs)
 	}
 	finalArgs = append(finalArgs, sourceArgs...)
 
@@ -3092,7 +3176,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -3130,12 +3214,23 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	}
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
 	sourceSQL := rawSQL
 	sourceArgs := rawArgs
-	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
-		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, rawSQL)
-		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if len(mcpSourceIDs) > 0 {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), rawSQL)
+		sourceArgs = prefixArgs
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
@@ -3187,36 +3282,57 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"tool_source != ''", "tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedMatchCondition := "hosted_match_index > 0"
-		targetType = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
-			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		targetTypeArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
+		}
+		targetKindArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
+		}
+		targetIDArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
+		}
+		targetLabelArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
+		}
+		if len(mcpSourceIDs) > 0 {
+			mcpServerMatchCondition := "mcp_server_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			targetKindArgs = append(targetKindArgs, mcpServerMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			targetLabelArgs = append(targetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+		}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedMatchCondition := "hosted_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			targetKindArgs = append(targetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+			targetLabelArgs = append(targetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		targetKind = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
-			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
+		targetKindArgs = append(targetKindArgs,
 			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		targetID = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		targetIDArgs = append(targetIDArgs,
 			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'local'",
 		)
-		targetLabel = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		targetLabelArgs = append(targetLabelArgs,
 			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'Local Tools'",
 		)
+		targetType = chMultiIf(targetTypeArgs...)
+		targetKind = chMultiIf(targetKindArgs...)
+		targetID = chMultiIf(targetIDArgs...)
+		targetLabel = chMultiIf(targetLabelArgs...)
 	}
 	normalizedSQL := fmt.Sprintf(`
 SELECT
@@ -3243,8 +3359,20 @@ SELECT
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetTypes)
+	}
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
-		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
+	}
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetLabels)
+	}
+	if len(hostedToolsetSlugs) > 0 {
+		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
 	}
 	normalizedArgs = append(normalizedArgs, sourceArgs...)
 
@@ -3307,9 +3435,10 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	)
 	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
-	hostedGroupedSB := sq.Select(
+	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
+		"any(tool_source) AS g_tool_source",
 		"any(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
@@ -3324,7 +3453,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) != 'hook'").
 		Having("startsWith(g_gram_urn, 'tools:')").
-		Having("g_toolset_slug != ''")
+		Having("(g_toolset_slug != '' OR g_tool_source != '')")
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
@@ -3348,17 +3477,66 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(g_tool_name != '' OR g_skill_name != '')")
 
-	hostedGroupedSQL, hostedArgs, err := hostedGroupedSB.ToSql()
+	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
 	if err != nil {
-		return "", nil, fmt.Errorf("building hosted tool usage source: %w", err)
+		return "", nil, fmt.Errorf("building direct tool usage source: %w", err)
 	}
-	hostedSQL := fmt.Sprintf(`
+
+	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+
+	directSourceSQL := directGroupedSQL
+	directSourceArgs := directGroupedArgs
+	if len(mcpSourceIDs) > 0 {
+		directSourceSQL = fmt.Sprintf("SELECT *, %s AS mcp_server_match_index FROM (%s)", toolUsageMCPServerMatchIndexExpr("g_tool_source"), directGroupedSQL)
+		directSourceArgs = []any{mcpSourceIDs}
+		directSourceArgs = append(directSourceArgs, directGroupedArgs...)
+	}
+
+	directTargetType := chMultiIf(
+		"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+		"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+		"'"+ToolUsageTargetTypeLocalTool+"'",
+	)
+	directTargetID := chMultiIf(
+		"g_toolset_slug != ''", "g_toolset_slug",
+		"g_tool_source != ''", "g_tool_source",
+		"'local'",
+	)
+	directTargetLabel := chMultiIf(
+		"g_toolset_slug != ''", "g_toolset_slug",
+		"g_tool_source != ''", "g_tool_source",
+		"'Local Tools'",
+	)
+	if len(mcpSourceIDs) > 0 {
+		mcpServerMatchCondition := "mcp_server_match_index > 0"
+		directTargetType = chMultiIf(
+			"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		directTargetID = chMultiIf(
+			"g_toolset_slug != ''", "g_toolset_slug",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		directTargetLabel = chMultiIf(
+			"g_toolset_slug != ''", "g_toolset_slug",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	}
+
+	directSQL := fmt.Sprintf(`
 SELECT
 	event_time_ns,
-	'%s' AS target_type,
+	%s AS target_type,
 	'%s' AS target_kind,
-	g_toolset_slug AS target_id,
-	g_toolset_slug AS target_label,
+	%s AS target_id,
+	%s AS target_label,
 	%s AS tool_name,
 	%s AS user_key,
 	%s AS user_label,
@@ -3367,13 +3545,15 @@ SELECT
 	toUInt8(g_http_status_code >= 400) AS failure,
 	'' AS hook_source
 FROM (%s)`,
-		ToolUsageTargetTypeHostedMCP,
+		directTargetType,
 		toolUsageTargetKindServer,
+		directTargetID,
+		directTargetLabel,
 		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
 		userKey,
 		userKey,
 		userKind,
-		hostedGroupedSQL,
+		directSourceSQL,
 	)
 
 	hookGroupedSQL, hookGroupedArgs, err := hookGroupedSB.ToSql()
@@ -3383,11 +3563,20 @@ FROM (%s)`,
 
 	hookSourceSQL := hookGroupedSQL
 	hookSourceArgs := hookGroupedArgs
-	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
-		hookSourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, hookGroupedSQL)
-		hookSourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if len(mcpSourceIDs) > 0 {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		hookSourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), hookGroupedSQL)
+		hookSourceArgs = prefixArgs
 		hookSourceArgs = append(hookSourceArgs, hookGroupedArgs...)
 	}
 
@@ -3411,32 +3600,49 @@ FROM (%s)`,
 		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedMatchCondition := "hosted_match_index > 0"
-		hookTargetType = chMultiIf(
-			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		hookTargetTypeArgs := []string{}
+		hookTargetKindArgs := []string{}
+		hookTargetIDArgs := []string{}
+		hookTargetLabelArgs := []string{}
+		if len(mcpSourceIDs) > 0 {
+			mcpServerMatchCondition := "mcp_server_match_index > 0"
+			hookTargetTypeArgs = append(hookTargetTypeArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			hookTargetKindArgs = append(hookTargetKindArgs, mcpServerMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			hookTargetIDArgs = append(hookTargetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			hookTargetLabelArgs = append(hookTargetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+		}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedMatchCondition := "hosted_match_index > 0"
+			hookTargetTypeArgs = append(hookTargetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			hookTargetKindArgs = append(hookTargetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			hookTargetIDArgs = append(hookTargetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+			hookTargetLabelArgs = append(hookTargetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		hookTargetTypeArgs = append(hookTargetTypeArgs,
 			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		hookTargetKind = chMultiIf(
-			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
+		hookTargetKindArgs = append(hookTargetKindArgs,
 			"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
 			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		hookTargetID = chMultiIf(
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		hookTargetIDArgs = append(hookTargetIDArgs,
 			"g_skill_name != ''", "g_skill_name",
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
-		hookTargetLabel = chMultiIf(
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		hookTargetLabelArgs = append(hookTargetLabelArgs,
 			"g_skill_name != ''", "g_skill_name",
 			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
+		hookTargetType = chMultiIf(hookTargetTypeArgs...)
+		hookTargetKind = chMultiIf(hookTargetKindArgs...)
+		hookTargetID = chMultiIf(hookTargetIDArgs...)
+		hookTargetLabel = chMultiIf(hookTargetLabelArgs...)
 	}
 	hookToolName := chMultiIf("g_skill_name != ''", "g_skill_name", "g_tool_name")
 
@@ -3456,17 +3662,32 @@ SELECT
 	g_hook_source AS hook_source
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
-	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
+	directArgs := make([]any, 0, 3+len(directSourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		directArgs = append(directArgs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels)
+	}
+	directArgs = append(directArgs, directSourceArgs...)
+
+	hookArgs := make([]any, 0, 5+len(hookSourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		hookArgs = append(hookArgs, mcpTargetTypes, mcpTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
-		hookArgs = append(hookArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		hookArgs = append(hookArgs, hostedToolsetSlugs)
+	}
+	if len(mcpSourceIDs) > 0 {
+		hookArgs = append(hookArgs, mcpTargetLabels)
+	}
+	if len(hostedToolsetSlugs) > 0 {
+		hookArgs = append(hookArgs, hostedToolsetSlugs)
 	}
 	hookArgs = append(hookArgs, hookSourceArgs...)
 
-	args := make([]any, 0, len(hostedArgs)+len(hookArgs))
-	args = append(args, hostedArgs...)
+	args := make([]any, 0, len(directArgs)+len(hookArgs))
+	args = append(args, directArgs...)
 	args = append(args, hookArgs...)
 
-	return "WITH normalized_events AS (" + hostedSQL + " UNION ALL " + hookSQL + ")", args, nil
+	return "WITH normalized_events AS (" + directSQL + " UNION ALL " + hookSQL + ")", args, nil
 }
 
 func nonZeroLimit(value, fallback uint64) uint64 {
