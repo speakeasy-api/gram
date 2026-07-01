@@ -97,6 +97,8 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ExternalUserID:    input.ExternalUserID,
 		Source:            input.Source,
 		AssistantID:       input.AssistantID,
+		SourceKind:        nil,
+		ExcludeSourceKind: nil,
 		HasRisk:           input.HasRisk,
 		Pinned:            input.Pinned,
 		AccountType:       nil,
