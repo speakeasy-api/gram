@@ -58,7 +58,7 @@
     "@speakeasy-api/moonshine": "1.43.1",
     "@tailwindcss/vite": "^4.3.1",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@tanstack/react-virtual": "^3.14.3",
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.8.6",
     "ai": "catalog:",
