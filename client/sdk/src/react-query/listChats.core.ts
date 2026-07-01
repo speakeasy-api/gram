@@ -48,6 +48,8 @@ export function buildListChatsQuery(
       externalUserId: request?.externalUserId,
       source: request?.source,
       assistantId: request?.assistantId,
+      sourceKind: request?.sourceKind,
+      excludeSourceKind: request?.excludeSourceKind,
       hasRisk: request?.hasRisk,
       accountType: request?.accountType,
       pinned: request?.pinned,
@@ -90,6 +92,8 @@ export function queryKeyListChats(
     externalUserId?: string | undefined;
     source?: string | undefined;
     assistantId?: string | undefined;
+    sourceKind?: string | undefined;
+    excludeSourceKind?: string | undefined;
     hasRisk?: operations.HasRisk | undefined;
     accountType?: operations.AccountType | undefined;
     pinned?: operations.Pinned | undefined;
