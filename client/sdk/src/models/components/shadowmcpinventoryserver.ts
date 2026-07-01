@@ -13,26 +13,30 @@ import {
   ShadowMCPInventoryAccessRuleMatch$inboundSchema,
 } from "./shadowmcpinventoryaccessrulematch.js";
 
-export const EffectiveAccess = {
+export const ShadowMCPInventoryServerEffectiveAccess = {
   None: "none",
   Allowed: "allowed",
   Denied: "denied",
 } as const;
-export type EffectiveAccess = ClosedEnum<typeof EffectiveAccess>;
+export type ShadowMCPInventoryServerEffectiveAccess = ClosedEnum<
+  typeof ShadowMCPInventoryServerEffectiveAccess
+>;
 
-export const ExplicitAccess = {
+export const ShadowMCPInventoryServerExplicitAccess = {
   None: "none",
   Allowed: "allowed",
   Denied: "denied",
 } as const;
-export type ExplicitAccess = ClosedEnum<typeof ExplicitAccess>;
+export type ShadowMCPInventoryServerExplicitAccess = ClosedEnum<
+  typeof ShadowMCPInventoryServerExplicitAccess
+>;
 
 export type ShadowMCPInventoryServer = {
   canonicalServerUrl: string;
-  effectiveAccess: EffectiveAccess;
+  effectiveAccess: ShadowMCPInventoryServerEffectiveAccess;
   effectiveRule?: ShadowMCPInventoryAccessRuleMatch | undefined;
   explanatoryRules: Array<ShadowMCPInventoryAccessRuleMatch>;
-  explicitAccess: ExplicitAccess;
+  explicitAccess: ShadowMCPInventoryServerExplicitAccess;
   explicitRule?: ShadowMCPInventoryAccessRuleMatch | undefined;
   firstSeen: Date;
   lastCalled?: Date | undefined;
@@ -45,14 +49,16 @@ export type ShadowMCPInventoryServer = {
 };
 
 /** @internal */
-export const EffectiveAccess$inboundSchema: z.ZodMiniEnum<
-  typeof EffectiveAccess
-> = z.enum(EffectiveAccess);
+export const ShadowMCPInventoryServerEffectiveAccess$inboundSchema:
+  z.ZodMiniEnum<typeof ShadowMCPInventoryServerEffectiveAccess> = z.enum(
+    ShadowMCPInventoryServerEffectiveAccess,
+  );
 
 /** @internal */
-export const ExplicitAccess$inboundSchema: z.ZodMiniEnum<
-  typeof ExplicitAccess
-> = z.enum(ExplicitAccess);
+export const ShadowMCPInventoryServerExplicitAccess$inboundSchema:
+  z.ZodMiniEnum<typeof ShadowMCPInventoryServerExplicitAccess> = z.enum(
+    ShadowMCPInventoryServerExplicitAccess,
+  );
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
@@ -61,10 +67,10 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     canonical_server_url: z.string(),
-    effective_access: EffectiveAccess$inboundSchema,
+    effective_access: ShadowMCPInventoryServerEffectiveAccess$inboundSchema,
     effective_rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
     explanatory_rules: z.array(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
-    explicit_access: ExplicitAccess$inboundSchema,
+    explicit_access: ShadowMCPInventoryServerExplicitAccess$inboundSchema,
     explicit_rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),

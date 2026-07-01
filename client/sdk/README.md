@@ -147,6 +147,9 @@ run();
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
+* [allowShadowMCPInventoryServer](docs/sdks/access/README.md#allowshadowmcpinventoryserver) - allowShadowMCPInventoryServer access
+* [blockShadowMCPInventoryServer](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
+* [clearShadowMCPInventoryServerAccess](docs/sdks/access/README.md#clearshadowmcpinventoryserveraccess) - clearShadowMCPInventoryServerAccess access
 * [listShadowMCPInventory](docs/sdks/access/README.md#listshadowmcpinventory) - listShadowMCPInventory access
 * [approveShadowMCPApprovalRequest](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 * [createShadowMCPApprovalRequest](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
@@ -661,7 +664,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessAllowShadowMCPInventoryServer`](docs/sdks/access/README.md#allowshadowmcpinventoryserver) - allowShadowMCPInventoryServer access
 - [`accessApproveShadowMCPApprovalRequest`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
+- [`accessBlockShadowMCPInventoryServer`](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
+- [`accessClearShadowMCPInventoryServerAccess`](docs/sdks/access/README.md#clearshadowmcpinventoryserveraccess) - clearShadowMCPInventoryServerAccess access
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
 - [`accessCreateShadowMCPAccessRule`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
 - [`accessCreateShadowMCPApprovalRequest`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
@@ -1033,6 +1039,7 @@ To learn about this feature and how to get started, check
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`useAgentPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
+- [`useAllowShadowMCPInventoryServerMutation`](docs/sdks/access/README.md#allowshadowmcpinventoryserver) - allowShadowMCPInventoryServer access
 - [`useApproveShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
@@ -1044,6 +1051,7 @@ To learn about this feature and how to get started, check
 - [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useBlockShadowMCPInventoryServerMutation`](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
@@ -1054,6 +1062,7 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useClearShadowMCPInventoryServerAccessMutation`](docs/sdks/access/README.md#clearshadowmcpinventoryserveraccess) - clearShadowMCPInventoryServerAccess access
 - [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
