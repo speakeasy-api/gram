@@ -39,13 +39,29 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	require.NoError(t, err)
 
 	return &proxy.Proxy{
-		GuardianPolicy:       policy,
-		Logger:               testenv.NewLogger(t),
-		Tracer:               testenv.NewTracerProvider(t).Tracer("test"),
-		NonStreamingTimeout:  5 * time.Second,
-		StreamingTimeout:     5 * time.Second,
-		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
-		RemoteURL:            upstreamURL,
+		GuardianPolicy:                    policy,
+		Logger:                            testenv.NewLogger(t),
+		Tracer:                            testenv.NewTracerProvider(t).Tracer("test"),
+		NonStreamingTimeout:               5 * time.Second,
+		StreamingTimeout:                  5 * time.Second,
+		Metrics:                           nil,
+		MaxBufferedBodyBytes:              proxy.DefaultMaxBufferedBodyBytes,
+		Identity:                          proxy.ServerIdentity{},
+		RemoteURL:                         upstreamURL,
+		Headers:                           nil,
+		AuthorizationOverride:             "",
+		UpstreamResponseRetryer:           nil,
+		UserRequestInterceptors:           nil,
+		InitializeRequestInterceptors:     nil,
+		RemoteMessageInterceptors:         nil,
+		ToolsCallRequestInterceptors:      nil,
+		ToolsCallResponseInterceptors:     nil,
+		ToolsListRequestInterceptors:      nil,
+		ToolsListResponseInterceptors:     nil,
+		ResourcesReadRequestInterceptors:  nil,
+		ResourcesReadResponseInterceptors: nil,
+		ResourcesListRequestInterceptors:  nil,
+		ResourcesListResponseInterceptors: nil,
 	}
 }
 
@@ -82,6 +98,52 @@ func TestProxy_Post_ForwardsRequestAndResponse(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
+}
+
+func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
+	t.Parallel()
+
+	var firstRequests, secondRequests atomic.Int64
+	var secondBody string
+
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondRequests.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		secondBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+	}))
+	t.Cleanup(second.Close)
+
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		firstRequests.Add(1)
+		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("stale gateway"))
+	}))
+	t.Cleanup(first.Close)
+
+	p := newProxyForTest(t, first.URL)
+	p.UpstreamResponseRetryer = func(_ context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
+		if resp.Header.Get("X-Gram-Tunnel-Error") != "no-live-session" {
+			return nil, nil
+		}
+		return &proxy.UpstreamResponseRetry{RemoteURL: second.URL, Headers: nil}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	err := p.Post(rr, req)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int64(1), firstRequests.Load())
+	require.Equal(t, int64(1), secondRequests.Load())
+	require.JSONEq(t, initializeRequest, secondBody)
 	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
 }
 

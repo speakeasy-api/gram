@@ -26,6 +26,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -135,6 +136,23 @@ func seedRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		TransportType: "streamable-http",
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
+
+	return server.ID
+}
+
+// seedTunneledMcpServer inserts a tunnelled_mcp_servers row directly through
+// the generated repo so we have a valid backend FK for mcp_servers tests.
+func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: projectID,
+		Name:      "test tunneled mcp server " + uuid.NewString(),
+		KeyHash:   "test-key-hash-" + uuid.NewString(),
+		KeyPrefix: "test-key-prefix",
+	})
+	require.NoError(t, err)
 
 	return server.ID
 }

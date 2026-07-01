@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 )
 
 // singleUpstreamToken collapses the per-remote-issuer token map for the
@@ -94,7 +96,7 @@ func TestTunnelGatewayURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := tunnelGatewayURL(tt.addr)
+			got, err := tunnelrouting.GatewayURL(tt.addr)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

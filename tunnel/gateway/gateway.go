@@ -20,7 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-const routeTTL = 30 * time.Second
+const (
+	routeTTL              = 30 * time.Second
+	routeOperationTimeout = 5 * time.Second
+)
 
 var errMissingForwardToken = errors.New("tunnel gateway forward token is required")
 
@@ -167,10 +170,12 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		ActiveConsumerSessions: 0,
 		Metadata:               metadata,
 	})
-	if err := g.routes.Publish(r.Context(), tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
+	stateCtx, cancelState := routeOperationContext(r.Context())
+	if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
 		g.logger.WarnContext(r.Context(), "tunnel route publish failed", slog.Any("error", err))
 	}
-	g.publishConnectionSnapshot(r.Context(), tunnelID, now)
+	g.publishConnectionSnapshot(stateCtx, tunnelID, now)
+	cancelState()
 	g.logger.InfoContext(r.Context(), "tunnel connected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.String("agent_version", agentVersion), slog.Int("active", g.reg.activeSessions()))
@@ -183,14 +188,16 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	<-session.CloseChan()
 	close(stop)
 	remove()
+	stateCtx, cancelState = routeOperationContext(context.Background())
 	if g.reg.tunnelSessionCount(tunnelID) == 0 {
-		if err := g.routes.Delete(context.Background(), tunnelID); err != nil {
-			g.logger.WarnContext(context.Background(), "tunnel route delete failed", slog.Any("error", err))
+		if err := g.routes.Unpublish(stateCtx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
+			g.logger.WarnContext(stateCtx, "tunnel route unpublish failed", slog.Any("error", err))
 		}
-		g.deleteConnectionSnapshot(context.Background(), tunnelID)
+		g.deleteConnectionSnapshot(stateCtx, tunnelID)
 	} else {
-		g.publishConnectionSnapshot(context.Background(), tunnelID, time.Now().UTC())
+		g.publishConnectionSnapshot(stateCtx, tunnelID, time.Now().UTC())
 	}
+	cancelState()
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.Int("active", g.reg.activeSessions()))
@@ -205,7 +212,9 @@ func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.S
 			return
 		case <-t.C:
 			if checker, ok := g.keys.(ActiveTunnelChecker); ok {
-				active, err := checker.IsActive(context.Background(), tunnelID, keyHash)
+				opCtx, cancel := routeOperationContext(context.Background())
+				active, err := checker.IsActive(opCtx, tunnelID, keyHash)
+				cancel()
 				if err != nil {
 					g.logger.WarnContext(context.Background(), "tunnel active check failed",
 						slog.String("tunnel_id", tunnelID), slog.Any("error", err))
@@ -218,13 +227,19 @@ func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.S
 					return
 				}
 			}
-			if err := g.routes.Publish(context.Background(), tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
-				g.logger.WarnContext(context.Background(), "tunnel route refresh failed",
+			opCtx, cancel := routeOperationContext(context.Background())
+			if err := g.routes.Publish(opCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
+				g.logger.WarnContext(opCtx, "tunnel route refresh failed",
 					slog.String("tunnel_id", tunnelID), slog.Any("error", err))
 			}
-			g.publishConnectionSnapshot(context.Background(), tunnelID, time.Now().UTC())
+			g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
+			cancel()
 		}
 	}
+}
+
+func routeOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, routeOperationTimeout)
 }
 
 func hashBearerKey(bearer string) string {
@@ -237,7 +252,7 @@ func (g *Gateway) publishConnectionSnapshot(ctx context.Context, tunnelID string
 	if !ok {
 		return
 	}
-	if err := store.PublishConnections(ctx, tunnelID, g.reg.connections(tunnelID, heartbeatAt), routeTTL); err != nil {
+	if err := store.PublishConnections(ctx, tunnelID, g.cfg.AdvertiseAddr, g.reg.connections(tunnelID, heartbeatAt), routeTTL); err != nil {
 		g.logger.WarnContext(ctx, "tunnel connection snapshot publish failed",
 			slog.String("tunnel_id", tunnelID), slog.Any("error", err))
 	}
@@ -248,7 +263,7 @@ func (g *Gateway) deleteConnectionSnapshot(ctx context.Context, tunnelID string)
 	if !ok {
 		return
 	}
-	if err := store.DeleteConnections(ctx, tunnelID); err != nil {
+	if err := store.DeleteConnectionOwner(ctx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
 		g.logger.WarnContext(ctx, "tunnel connection snapshot delete failed",
 			slog.String("tunnel_id", tunnelID), slog.Any("error", err))
 	}
@@ -355,7 +370,12 @@ func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 	if revoker, ok := g.keys.(interface{ Revoke(string) }); ok {
 		revoker.Revoke(tunnelID)
 	}
-	_ = g.routes.Delete(ctx, tunnelID)
+	opCtx, cancel := routeOperationContext(ctx)
+	defer cancel()
+	_ = g.routes.Delete(opCtx, tunnelID)
+	if store, ok := g.routes.(route.ConnectionSnapshotStore); ok {
+		_ = store.DeleteConnections(opCtx, tunnelID)
+	}
 	return g.reg.kill(tunnelID)
 }
 

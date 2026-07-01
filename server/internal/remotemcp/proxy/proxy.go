@@ -84,6 +84,13 @@ type ServerIdentity struct {
 	McpServerID       string
 }
 
+type UpstreamResponseRetry struct {
+	RemoteURL string
+	Headers   []ConfiguredHeader
+}
+
+type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
+
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
 // request so the SessionID and interceptor state stay tied to a single
@@ -157,6 +164,11 @@ type Proxy struct {
 	//
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
+
+	// UpstreamResponseRetryer may replace the upstream target once after
+	// response headers arrive but before any response is relayed to the user.
+	// It is used by tunneled MCP to fail over stale gateway owners.
+	UpstreamResponseRetryer UpstreamResponseRetryer
 
 	UserRequestInterceptors []UserRequestInterceptor
 
@@ -252,7 +264,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	_, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -302,7 +314,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -459,7 +471,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, userReq.BodyReader())
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader)
 	if err != nil {
 		return err
 	}
@@ -652,6 +664,23 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	}
 
 	return upstreamReq, resp, nil
+}
+
+func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, body func() io.Reader) (*http.Request, *http.Response, error) {
+	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body())
+	if err != nil || p.UpstreamResponseRetryer == nil {
+		return upstreamReq, upstreamResp, err
+	}
+
+	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
+	if err != nil || retry == nil {
+		return upstreamReq, upstreamResp, err
+	}
+	o11y.NoLogDefer(upstreamResp.Body.Close)
+
+	p.RemoteURL = retry.RemoteURL
+	p.Headers = retry.Headers
+	return p.forwardRequest(ctx, r, body())
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays

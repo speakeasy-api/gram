@@ -119,6 +119,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
+	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -398,6 +401,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
+	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -622,6 +628,13 @@ func parseServerIDs(
 func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID uuid.NullUUID) error {
 	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) != 1 {
 		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided")
+	}
+	return nil
+}
+
+func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
+	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
+		return fmt.Errorf("tunneled MCP servers cannot be public")
 	}
 	return nil
 }

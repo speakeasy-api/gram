@@ -26,13 +26,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type Service struct {
@@ -55,7 +55,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	cacheAdapter cache.Cache,
+	runtime route.RuntimeStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("tunneledmcp"))
 
@@ -66,7 +66,7 @@ func NewService(
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		audit:         auditLogger,
-		tunnelManager: newTunnelManager(cacheAdapter),
+		tunnelManager: newTunnelManager(runtime),
 	}
 }
 

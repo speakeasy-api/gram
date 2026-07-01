@@ -2,9 +2,8 @@ package mcp
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 )
 
 // AuthorizationBearerToken returns the Bearer token from the request's
@@ -22,12 +21,7 @@ import (
 // identity-auth path. OAuth-forwarding callers must keep the strict
 // semantics here.
 func AuthorizationBearerToken(r *http.Request) string {
-	const bearerPrefix = "Bearer "
-	token := r.Header.Get("Authorization")
-	if len(token) >= len(bearerPrefix) && strings.EqualFold(token[:len(bearerPrefix)], bearerPrefix) {
-		return token[len(bearerPrefix):]
-	}
-	return ""
+	return httpheaders.AuthorizationBearerToken(r)
 }
 
 // AuthorizationOrChatSessionToken returns the caller's identity token,
@@ -50,13 +44,5 @@ func AuthorizationBearerToken(r *http.Request) string {
 // lookup. It is NOT safe for OAuth upstream-forwarding callers, which is
 // why [AuthorizationBearerToken] stays strict.
 func AuthorizationOrChatSessionToken(r *http.Request) string {
-	const bearerPrefix = "Bearer "
-	raw := r.Header.Get("Authorization")
-	if len(raw) >= len(bearerPrefix) && strings.EqualFold(raw[:len(bearerPrefix)], bearerPrefix) {
-		raw = raw[len(bearerPrefix):]
-	}
-	if raw != "" {
-		return raw
-	}
-	return r.Header.Get(constants.ChatSessionsTokenHeader)
+	return httpheaders.AuthorizationOrChatSessionToken(r)
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -19,7 +18,7 @@ import (
 const tunnelKeyPreviewBytes = 5
 
 type tunnelManager struct {
-	cache cache.Cache
+	runtime route.RuntimeStore
 }
 
 type issuedTunnelKey struct {
@@ -28,8 +27,8 @@ type issuedTunnelKey struct {
 	Prefix    string
 }
 
-func newTunnelManager(cacheAdapter cache.Cache) *tunnelManager {
-	return &tunnelManager{cache: cacheAdapter}
+func newTunnelManager(runtime route.RuntimeStore) *tunnelManager {
+	return &tunnelManager{runtime: runtime}
 }
 
 func (m *tunnelManager) issueKey() (issuedTunnelKey, error) {
@@ -70,32 +69,28 @@ func (m *tunnelManager) serverViewWithoutRuntime(server repo.TunneledMcpServer) 
 	return mv.BuildTunneledMcpServerView(server, nil)
 }
 
-type connectionCacheValue struct {
-	Connections []mv.TunneledMcpConnectionCache `json:"connections"`
-}
-
 func (m *tunnelManager) connectionsForServer(ctx context.Context, serverID uuid.UUID) []mv.TunneledMcpConnectionCache {
-	if m.cache == nil {
+	if m.runtime == nil {
 		return nil
 	}
 
-	value := connectionCacheValue{Connections: []mv.TunneledMcpConnectionCache{}}
-	if err := m.cache.Get(ctx, route.ConnectionKey(serverID.String()), &value); err != nil {
+	connections, err := m.runtime.Connections(ctx, serverID.String())
+	if err != nil {
 		return nil
 	}
 
-	return value.Connections
+	return connections
 }
 
 func (m *tunnelManager) deleteRuntimeState(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
-	if m.cache == nil {
+	if m.runtime == nil {
 		return
 	}
 	tunnelID := serverID.String()
-	if err := m.cache.Delete(ctx, route.ConnectionKey(tunnelID)); err != nil {
+	if err := m.runtime.DeleteConnections(ctx, tunnelID); err != nil {
 		logger.WarnContext(ctx, "delete tunneled mcp connection cache", attr.SlogError(err))
 	}
-	if err := m.cache.Delete(ctx, route.RouteKey(tunnelID)); err != nil {
+	if err := m.runtime.Delete(ctx, tunnelID); err != nil {
 		logger.WarnContext(ctx, "delete tunneled mcp route cache", attr.SlogError(err))
 	}
 }
