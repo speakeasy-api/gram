@@ -1295,6 +1295,111 @@ paths:
       x-speakeasy-name-override: resolveChallenge
       x-speakeasy-react-hook:
         name: ResolveChallenge
+  /rpc/access.shadowMcp.inventory.list:
+    get:
+      description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.
+      operationId: listShadowMCPInventory
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: project_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Cursor for the next page of results.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of results.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListShadowMCPInventoryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listShadowMCPInventory access
+      tags:
+        - access
+      x-speakeasy-name-override: listShadowMCPInventory
+      x-speakeasy-react-hook:
+        name: ShadowMCPInventory
   /rpc/access.shadowMcp.requests.approve:
     post:
       description: Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
@@ -41690,6 +41795,18 @@ components:
             $ref: '#/components/schemas/ShadowMCPApprovalRequest'
       required:
         - requests
+    ListShadowMCPInventoryResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor for the next page of results.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPInventoryServer'
+      required:
+        - servers
     ListSourcesResult:
       type: object
       properties:
@@ -47178,6 +47295,94 @@ components:
         - requested_at
         - created_at
         - updated_at
+    ShadowMCPInventoryAccessRuleMatch:
+      type: object
+      properties:
+        access_scope:
+          type: string
+        display_name:
+          type: string
+        disposition:
+          type: string
+          enum:
+            - allowed
+            - denied
+        id:
+          type: string
+          format: uuid
+        match_breadth:
+          type: string
+        match_value:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - access_scope
+        - disposition
+        - match_breadth
+        - match_value
+        - display_name
+    ShadowMCPInventoryServer:
+      type: object
+      properties:
+        canonical_server_url:
+          type: string
+        effective_access:
+          type: string
+          enum:
+            - none
+            - allowed
+            - denied
+        effective_rule:
+          $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
+        explanatory_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
+        explicit_access:
+          type: string
+          enum:
+            - none
+            - allowed
+            - denied
+        explicit_rule:
+          $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
+        first_seen:
+          type: string
+          format: date-time
+        last_called:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        observed_use_count:
+          type: integer
+          format: int64
+        server_name:
+          type: string
+        top_users:
+          type: array
+          items:
+            type: string
+        url_host:
+          type: string
+        user_count:
+          type: integer
+          format: int64
+      required:
+        - canonical_server_url
+        - url_host
+        - first_seen
+        - last_seen
+        - observed_use_count
+        - user_count
+        - top_users
+        - explicit_access
+        - effective_access
+        - explanatory_rules
     SkillBreakdownRow:
       type: object
       properties:

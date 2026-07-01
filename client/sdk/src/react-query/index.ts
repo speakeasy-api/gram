@@ -291,6 +291,7 @@ export * from "./setToolsetToolVariationsGroup.js";
 export * from "./setToolsetUserSessionIssuer.js";
 export * from "./shadowMCPAccessRules.js";
 export * from "./shadowMCPApprovalRequests.js";
+export * from "./shadowMCPInventory.js";
 export * from "./switchScopes.js";
 export * from "./telemetryCaptureEvent.js";
 export * from "./telemetryQuery.js";

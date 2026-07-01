@@ -616,6 +616,59 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	return v, nil
 }
 
+// BuildListShadowMCPInventoryPayload builds the payload for the access
+// listShadowMCPInventory endpoint from CLI flags.
+func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID string, accessListShadowMCPInventoryLimit string, accessListShadowMCPInventoryCursor string, accessListShadowMCPInventorySessionToken string) (*access.ListShadowMCPInventoryPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessListShadowMCPInventoryProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if accessListShadowMCPInventoryLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if accessListShadowMCPInventoryCursor != "" {
+			cursor = &accessListShadowMCPInventoryCursor
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventorySessionToken != "" {
+			sessionToken = &accessListShadowMCPInventorySessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryPayload{}
+	v.ProjectID = projectID
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
 func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {

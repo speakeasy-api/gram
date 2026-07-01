@@ -189,6 +189,40 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 	assert.Equal(t, []string{"ada@example.com", "grace@example.com"}, usage[0].TopUsers)
 }
 
+func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 13, 30, 0, 0, time.UTC)
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://target.example.com/mcp?token=older",
+		ServerName: "Target",
+		UserEmail:  "alex@example.com",
+		ObservedAt: base,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://other.example.com/mcp",
+		ServerName: "Other",
+		UserEmail:  "sam@example.com",
+		ObservedAt: base.Add(time.Hour),
+	})
+
+	usage := requireShadowMCPInventoryUsageEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryUsageParams{
+		GramProjectID:       projectID,
+		CanonicalServerURLs: []string{"https://target.example.com/mcp"},
+		Limit:               1,
+	}, 1)
+	require.Len(t, usage, 1)
+	assert.Equal(t, "https://target.example.com/mcp", usage[0].CanonicalServerURL)
+	assert.EqualValues(t, 1, usage[0].CallCount)
+	assert.EqualValues(t, 1, usage[0].UserCount)
+	assert.Equal(t, []string{"alex@example.com"}, usage[0].TopUsers)
+}
+
 func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {
 	t.Parallel()
 
