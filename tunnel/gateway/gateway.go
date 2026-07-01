@@ -333,10 +333,14 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Header.Del(wire.HeaderTunnelID)
 	r.Header.Del(wire.HeaderTunnelConsumerSession)
-	g.publishConnectionSnapshot(r.Context(), tunnelID, time.Now().UTC())
+	opCtx, cancel := routeOperationContext(r.Context())
+	g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
+	cancel()
 	defer func() {
 		g.reg.finishForward(entry, time.Now().UTC())
-		g.publishConnectionSnapshot(context.Background(), tunnelID, time.Now().UTC())
+		opCtx, cancel := routeOperationContext(context.Background())
+		defer cancel()
+		g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
 	}()
 
 	proxy := &httputil.ReverseProxy{
