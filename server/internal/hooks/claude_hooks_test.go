@@ -48,7 +48,7 @@ func (s userScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Cont
 	if userID != s.userID {
 		return nil, nil
 	}
-	return &risk.ShadowMCPPolicy{Name: "shadow-mcp-block"}, nil
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
 }
 
 func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {

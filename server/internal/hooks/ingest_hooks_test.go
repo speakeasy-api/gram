@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -13,8 +14,32 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+// ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
+// single user. Unlike userScopedShadowMCPScanner it returns a policy without
+// an ID: these tests read the persisted tool_call_blocks row back, and a
+// made-up policy UUID would fail the row's risk_policies reference.
+type ingestUserScopedShadowMCPScanner struct {
+	userID string
+}
+
+func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+	return nil, nil
+}
+
+func (s ingestUserScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, userID string) (*risk.ShadowMCPPolicy, error) {
+	if userID != s.userID {
+		return nil, nil
+	}
+	return &risk.ShadowMCPPolicy{Name: "shadow-mcp-block"}, nil
+}
+
+func (s ingestUserScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
 
 func requireBlockIDFromMessage(t *testing.T, message string) uuid.UUID {
 	t.Helper()
@@ -61,7 +86,7 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
