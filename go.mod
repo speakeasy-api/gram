@@ -45,7 +45,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d
+	github.com/hashicorp/yamux v0.1.2
 	github.com/itchyny/gojq v0.12.18
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.2
