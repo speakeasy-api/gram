@@ -175,11 +175,14 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // validateUserSessionToken delegates the JWT verify + revocation check to
 // usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
 // stamps a contextvalues.AuthContext scoped to the endpoint's org/project.
-// Returns ok=false on any of: missing token, bad signature, expired/
-// notBefore, audience mismatch, jti revoked, unparseable subject URN.
+// A nil subject means "not authenticated as a user session"; the returned
+// error carries the reason (bad signature, expired/notBefore, audience
+// mismatch, jti revoked, unparseable subject URN) when a token was presented
+// and rejected, and is nil when no token was presented at all — so the caller
+// can log a real rejection without logging the no-credentials handshake probe.
 //
-// Anonymous subjects deliberately leave the context untouched (ok=true,
-// no AuthContext set). The request belongs to no known principal, so
+// Anonymous subjects deliberately leave the context untouched (non-nil
+// subject, no AuthContext set). The request belongs to no known principal, so
 // stamping the endpoint's org as ActiveOrganizationID would misrepresent
 // the caller as a member of that org. Downstream code on the public
 // path reads org/project off the resolved endpoint directly, the same
@@ -191,32 +194,22 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // silently bypasses on enterprise endpoints (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, bool) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
-		return ctx, nil, false
+		return ctx, nil, nil
 	}
 	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
-		// A non-empty token that fails validation is an actionable auth
-		// failure. ValidateBearer folds several distinct causes — audience
-		// mismatch, expiry, bad signature, revoked jti, unparseable subject —
-		// into one error, and the eventual 401 flattens them further, so
-		// surface the underlying reason here instead of dropping it.
-		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
-			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-			attr.SlogOAuthFailureReason("invalid_bearer_token"),
-			attr.SlogError(err),
-		)
-		return ctx, nil, false
+		return ctx, nil, fmt.Errorf("validate user-session bearer: %w", err)
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
-		return ctx, &subject, true
+		return ctx, &subject, nil
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
-		return ctx, nil, false
+		return ctx, nil, fmt.Errorf("describe organization for issuer-gated endpoint: %w", err)
 	}
 	projectID := endpoint.ProjectID
 	authCtx := &contextvalues.AuthContext{
@@ -246,7 +239,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), &subject, true
+	return contextvalues.SetAuthContext(ctx, authCtx), &subject, nil
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
@@ -322,18 +315,30 @@ func (s *Service) ApplyIssuerGate(
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
-	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
-	if !ok {
+	newCtx, subject, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
+	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
 		// the same user in project B.
 		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
 			ssubj := urn.NewUserSubject(claims.UserID)
-			newCtx, subject, ok = assistCtx, &ssubj, true
+			newCtx, subject = assistCtx, &ssubj
 		}
 	}
-	if !ok {
+	if subject == nil {
+		// Both the user-session and assistant-runtime paths rejected the
+		// token. valErr is set only when a token was presented and failed
+		// validation (audience mismatch / expiry / bad signature / revoked
+		// jti), so this stays silent for the no-credentials handshake probe
+		// and never fires for a token the assistant path just accepted.
+		if valErr != nil {
+			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
+				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+				attr.SlogOAuthFailureReason("invalid_bearer_token"),
+				attr.SlogError(valErr),
+			)
+		}
 		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
