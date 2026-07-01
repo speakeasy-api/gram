@@ -61,12 +61,51 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 	},
 	"model": {
 		aggregateColumn: "model",
-		rawExpr:         "toString(attributes.gen_ai.response.model)",
-		kind:            attributeDimScalar,
+		// Source-aware: Claude api_request rows carry the model on
+		// attributes.model / gen_ai.request.model, everyone else on
+		// gen_ai.response.model. Matches the aggregate MV + session select so a
+		// Model filter resolves Claude sessions too (see sessionModelExpr).
+		rawExpr: sessionModelExpr,
+		kind:    attributeDimScalar,
 	},
 	"hook_source": {
 		aggregateColumn: "hook_source",
 		rawExpr:         "hook_source",
+		kind:            attributeDimScalar,
+	},
+	"account_type": {
+		aggregateColumn: "account_type",
+		rawExpr:         "account_type",
+		kind:            attributeDimScalar,
+	},
+	"provider": {
+		aggregateColumn: "provider",
+		rawExpr:         "provider",
+		kind:            attributeDimScalar,
+	},
+	"query_source": {
+		aggregateColumn: "query_source",
+		rawExpr:         "toString(attributes.query_source)",
+		kind:            attributeDimScalar,
+	},
+	"skill_name": {
+		aggregateColumn: "skill_name",
+		rawExpr:         "toString(attributes.skill.name)",
+		kind:            attributeDimScalar,
+	},
+	"agent_name": {
+		aggregateColumn: "agent_name",
+		rawExpr:         "toString(attributes.agent.name)",
+		kind:            attributeDimScalar,
+	},
+	"mcp_server_name": {
+		aggregateColumn: "mcp_server_name",
+		rawExpr:         "toString(attributes.mcp_server.name)",
+		kind:            attributeDimScalar,
+	},
+	"mcp_tool_name": {
+		aggregateColumn: "mcp_tool_name",
+		rawExpr:         "toString(attributes.mcp_tool.name)",
 		kind:            attributeDimScalar,
 	},
 	"role": {

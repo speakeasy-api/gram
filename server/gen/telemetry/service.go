@@ -45,11 +45,6 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
-	// Generic, org-scoped analytics query over Claude Code chat turn attribution
-	// summaries. Returns both a grouped table and matching timeseries for
-	// context-added tokens, request counts, token totals, and costs, supporting
-	// allowlisted chat, turn, attribution, project, and identity dimensions.
-	QueryChatTurns(context.Context, *QueryChatTurnsPayload) (res *QueryChatTurnsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
 	// cost, token, and tool metrics with cursor pagination.
@@ -93,7 +88,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryChatTurns", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [19]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -146,60 +141,6 @@ type ChatSummary struct {
 	TotalOutputTokens int64
 	// Total tokens used (input + output)
 	TotalTokens int64
-}
-
-// A single filter predicate on an allowlisted chat turn dimension
-type ChatTurnQueryFilter struct {
-	// Dimension to filter on
-	Dimension string
-	// Match if the dimension equals any of these values (IN semantics; for
-	// multi-valued dimensions like role/group, matches if any element is present).
-	Values []string
-}
-
-// Aggregated chat turn attribution measure values for a group or time bucket
-type ChatTurnQueryMeasures struct {
-	// Sum of prompt-cache creation tokens; the primary context-added attribution
-	// measure
-	CacheCreationTokens int64
-	// Sum of prompt-cache read tokens
-	CacheReadTokens int64
-	// Sum of input, output, cache read, and cache creation tokens
-	TotalTokens int64
-	// Total cost in USD
-	TotalCost float64
-	// Total cost in micro-USD
-	CostUsdMicros int64
-}
-
-// A single chat turn attribution time bucket within a series
-type ChatTurnQueryPoint struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string
-	// Aggregated measures for this bucket
-	Measures *ChatTurnQueryMeasures
-}
-
-// One row of the grouped chat turn table: measures aggregated over the full
-// time range for a single group value.
-type ChatTurnQueryRow struct {
-	// The dimension value for this row. Empty string when no group_by was
-	// requested; 'Other' for the rolled-up remainder beyond top_n.
-	GroupValue string
-	// Aggregated measures for this group
-	Measures *ChatTurnQueryMeasures
-	// Distinct values of every allowlisted dimension other than the group_by
-	// dimension, observed within this group. Keyed by dimension identifier.
-	DimensionValues map[string][]string
-}
-
-// A gap-filled timeseries for a single chat turn group value.
-type ChatTurnQuerySeries struct {
-	// The dimension value for this series. Empty string when no group_by was
-	// requested; 'Other' for the rolled-up remainder beyond top_n.
-	GroupValue string
-	// Time buckets in ascending order, gap-filled with zeros.
-	Points []*ChatTurnQueryPoint
 }
 
 // A weighted edge in the employee data flow graph
@@ -877,43 +818,6 @@ type ProjectSummary struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
-}
-
-// QueryChatTurnsPayload is the payload type of the telemetry service
-// queryChatTurns method.
-type QueryChatTurnsPayload struct {
-	SessionToken *string
-	// Start time in ISO 8601 format
-	From string
-	// End time in ISO 8601 format
-	To string
-	// Optional dimension to break results down by. When omitted, a single
-	// aggregate row/series for the whole slice is returned.
-	GroupBy *string
-	// Optional filters; all filters are ANDed together.
-	Filters []*ChatTurnQueryFilter
-	// Optional timeseries bucket size in seconds. Defaults to an interval derived
-	// from the time range.
-	GranularitySeconds *int64
-	// When group_by is set, keep at most this many groups (ranked by sort_by); the
-	// remainder are rolled into an 'Other' group. Defaults to 10.
-	TopN int
-	// Measure used to rank groups for top_n. Defaults to cache_creation_tokens,
-	// the primary context-added attribution measure.
-	SortBy string
-}
-
-// QueryChatTurnsResult is the result type of the telemetry service
-// queryChatTurns method.
-type QueryChatTurnsResult struct {
-	// Echoes the requested group_by dimension; empty when none was requested.
-	GroupBy string
-	// The timeseries bucket interval in seconds.
-	IntervalSeconds int64
-	// Grouped totals over the full time range, ordered by sort_by descending.
-	Table []*ChatTurnQueryRow
-	// One series per group value (aligned with table rows), each gap-filled.
-	Timeseries []*ChatTurnQuerySeries
 }
 
 // A single filter predicate on an allowlisted dimension

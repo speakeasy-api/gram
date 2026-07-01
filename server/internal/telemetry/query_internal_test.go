@@ -19,18 +19,6 @@ func tsPoint(group string, bucket int64, cost float64) repo.AttributeMetricsTime
 	return repo.AttributeMetricsTimePoint{GroupValue: group, BucketTimeUnixNano: bucket, TotalCost: cost}
 }
 
-func chatTurnTableRow(group string, cacheCreationTokens int64) repo.ChatTurnSummaryRow {
-	return repo.ChatTurnSummaryRow{GroupValue: group, CacheCreationTokens: cacheCreationTokens}
-}
-
-func chatTurnTSPoint(group string, bucket int64, cacheCreationTokens int64) repo.ChatTurnSummaryTimePoint {
-	return repo.ChatTurnSummaryTimePoint{
-		GroupValue:          group,
-		BucketTimeUnixNano:  bucket,
-		CacheCreationTokens: cacheCreationTokens,
-	}
-}
-
 // seriesByGroup indexes a result's timeseries by group value for assertions.
 func seriesCostByBucket(t *testing.T, series []*telem_gen.QuerySeries, group string) map[string]float64 {
 	t.Helper()
@@ -44,21 +32,6 @@ func seriesCostByBucket(t *testing.T, series []*telem_gen.QuerySeries, group str
 		}
 	}
 	t.Fatalf("series for group %q not found", group)
-	return nil
-}
-
-func chatTurnSeriesCacheCreationByBucket(t *testing.T, series []*telem_gen.ChatTurnQuerySeries, group string) map[string]int64 {
-	t.Helper()
-	for _, s := range series {
-		if s.GroupValue == group {
-			out := make(map[string]int64, len(s.Points))
-			for _, p := range s.Points {
-				out[p.BucketTimeUnixNano] = p.Measures.CacheCreationTokens
-			}
-			return out
-		}
-	}
-	t.Fatalf("chat turn series for group %q not found", group)
 	return nil
 }
 
@@ -234,50 +207,6 @@ func TestBuildQueryResult_NoOtherWhenWithinTopN(t *testing.T) {
 		require.NotEqual(t, otherGroupLabel, r.GroupValue)
 	}
 	require.Len(t, res.Timeseries, 2)
-}
-
-func TestBuildChatTurnQueryResult_UsesSharedRollupAndGapFill(t *testing.T) {
-	t.Parallel()
-
-	tableRows := []repo.ChatTurnSummaryRow{
-		chatTurnTableRow("filesystem", 5),
-		chatTurnTableRow("slack", 3),
-		chatTurnTableRow("github", 1),
-	}
-	tsRows := []repo.ChatTurnSummaryTimePoint{
-		chatTurnTSPoint("filesystem", 0, 2),
-		chatTurnTSPoint("github", 0, 1),
-	}
-
-	res := buildChatTurnQueryResult("mcp_server_name", 3600, 0, hourNanos, 2, tableRows, tsRows)
-
-	require.Equal(t, "mcp_server_name", res.GroupBy)
-	require.Equal(t, int64(3600), res.IntervalSeconds)
-	require.Len(t, res.Table, 3)
-	require.Equal(t, "filesystem", res.Table[0].GroupValue)
-	require.Equal(t, int64(5), res.Table[0].Measures.CacheCreationTokens)
-	require.Equal(t, "slack", res.Table[1].GroupValue)
-	require.Equal(t, otherGroupLabel, res.Table[2].GroupValue)
-	require.Equal(t, int64(1), res.Table[2].Measures.CacheCreationTokens)
-
-	require.Len(t, res.Timeseries, 3)
-	for _, series := range res.Timeseries {
-		require.Len(t, series.Points, 2)
-	}
-
-	b0 := strconv.FormatInt(0, 10)
-	b1 := strconv.FormatInt(hourNanos, 10)
-	filesystem := chatTurnSeriesCacheCreationByBucket(t, res.Timeseries, "filesystem")
-	require.Equal(t, int64(2), filesystem[b0])
-	require.Equal(t, int64(0), filesystem[b1])
-
-	slack := chatTurnSeriesCacheCreationByBucket(t, res.Timeseries, "slack")
-	require.Equal(t, int64(0), slack[b0])
-	require.Equal(t, int64(0), slack[b1])
-
-	other := chatTurnSeriesCacheCreationByBucket(t, res.Timeseries, otherGroupLabel)
-	require.Equal(t, int64(1), other[b0])
-	require.Equal(t, int64(0), other[b1])
 }
 
 func TestBucketStarts(t *testing.T) {

@@ -60,10 +60,6 @@ type Client struct {
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
 
-	// QueryChatTurns Doer is the HTTP client used to make requests to the
-	// queryChatTurns endpoint.
-	QueryChatTurnsDoer goahttp.Doer
-
 	// ListSessions Doer is the HTTP client used to make requests to the
 	// listSessions endpoint.
 	ListSessionsDoer goahttp.Doer
@@ -127,7 +123,6 @@ func NewClient(
 		GetObservabilityOverviewDoer:  doer,
 		GetProjectOverviewDoer:        doer,
 		QueryDoer:                     doer,
-		QueryChatTurnsDoer:            doer,
 		ListSessionsDoer:              doer,
 		ListFilterOptionsDoer:         doer,
 		ListAttributeKeysDoer:         doer,
@@ -403,30 +398,6 @@ func (c *Client) Query() goa.Endpoint {
 		resp, err := c.QueryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "query", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// QueryChatTurns returns an endpoint that makes HTTP requests to the telemetry
-// service queryChatTurns server.
-func (c *Client) QueryChatTurns() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeQueryChatTurnsRequest(c.encoder)
-		decodeResponse = DecodeQueryChatTurnsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildQueryChatTurnsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.QueryChatTurnsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "queryChatTurns", err)
 		}
 		return decodeResponse(resp)
 	}

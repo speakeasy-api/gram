@@ -332,31 +332,6 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
-	Method("queryChatTurns", func() {
-		Description("Generic, org-scoped analytics query over Claude Code chat turn attribution summaries. Returns both a grouped table and matching timeseries for context-added tokens, request counts, token totals, and costs, supporting allowlisted chat, turn, attribution, project, and identity dimensions.")
-
-		// Org-scoped: the query spans every project in the caller's
-		// organization. project_id is an optional filter, not the auth scope.
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(QueryChatTurnsPayload)
-			security.SessionPayload()
-		})
-
-		Result(QueryChatTurnsResult)
-
-		HTTP(func() {
-			POST("/rpc/telemetry.queryChatTurns")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "queryChatTurns")
-		Meta("openapi:extension:x-speakeasy-name-override", "queryChatTurns")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryChatTurns", "type": "query"}`)
-	})
-
 	Method("listSessions", func() {
 		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
 
@@ -1327,6 +1302,13 @@ var queryDimensions = []any{
 	"email",
 	"model",
 	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type",
+	"provider",
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",
@@ -1446,139 +1428,6 @@ var QueryResult = Type("QueryResult", func() {
 	Attribute("interval_seconds", Int64, "The timeseries bucket interval in seconds.")
 	Attribute("table", ArrayOf(QueryRow), "Grouped totals over the full time range, ordered by sort_by descending.")
 	Attribute("timeseries", ArrayOf(QuerySeries), "One series per group value (aligned with table rows), each gap-filled.")
-
-	Required("group_by", "interval_seconds", "table", "timeseries")
-})
-
-// chatTurnQueryDimensions is the allowlist of dimensions that
-// telemetry.queryChatTurns may group by or filter on. Each maps to a safe column
-// expression in the repo layer.
-var chatTurnQueryDimensions = []any{
-	"chat_id",
-	"turn_id",
-	"query_source",
-	"skill_name",
-	"agent_name",
-	"mcp_server_name",
-	"mcp_tool_name",
-	"department_name",
-	"job_title",
-	"employee_type",
-	"division_name",
-	"cost_center_name",
-	"email",
-	"model",
-	"hook_source",
-	"role",
-	"group",
-	"project_id",
-}
-
-// chatTurnQueryMeasures is the allowlist of measures available for ranking
-// queryChatTurns groups. Every measure is always returned in
-// ChatTurnQueryMeasures regardless of this choice.
-var chatTurnQueryMeasures = []any{
-	"cache_creation_tokens",
-	"total_cost",
-	"total_tokens",
-	"cache_read_tokens",
-}
-
-var QueryChatTurnsPayload = Type("QueryChatTurnsPayload", func() {
-	Description("Payload for a generic org-scoped Claude Code chat turn attribution query")
-
-	Attribute("from", String, "Start time in ISO 8601 format", func() {
-		Format(FormatDateTime)
-		Example("2025-12-19T10:00:00Z")
-	})
-	Attribute("to", String, "End time in ISO 8601 format", func() {
-		Format(FormatDateTime)
-		Example("2025-12-26T10:00:00Z")
-	})
-	Attribute("group_by", String, "Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.", func() {
-		Enum(chatTurnQueryDimensions...)
-		Example("mcp_server_name")
-	})
-	Attribute("filters", ArrayOf(ChatTurnQueryFilter), "Optional filters; all filters are ANDed together.")
-	Attribute("granularity_seconds", Int64, "Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range.")
-	Attribute("top_n", Int, "When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.", func() {
-		Default(10)
-		Minimum(1)
-	})
-	Attribute("sort_by", String, "Measure used to rank groups for top_n. Defaults to cache_creation_tokens, the primary context-added attribution measure.", func() {
-		Enum(chatTurnQueryMeasures...)
-		Default("cache_creation_tokens")
-	})
-
-	Required("from", "to")
-})
-
-var ChatTurnQueryFilter = Type("ChatTurnQueryFilter", func() {
-	Description("A single filter predicate on an allowlisted chat turn dimension")
-
-	Attribute("dimension", String, "Dimension to filter on", func() {
-		Enum(chatTurnQueryDimensions...)
-	})
-	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).", func() {
-		MinLength(1)
-	})
-
-	Required("dimension", "values")
-})
-
-var ChatTurnQueryMeasures = Type("ChatTurnQueryMeasures", func() {
-	Description("Aggregated chat turn attribution measure values for a group or time bucket")
-
-	Attribute("cache_creation_tokens", Int64, "Sum of prompt-cache creation tokens; the primary context-added attribution measure")
-	Attribute("cache_read_tokens", Int64, "Sum of prompt-cache read tokens")
-	Attribute("total_tokens", Int64, "Sum of input, output, cache read, and cache creation tokens")
-	Attribute("total_cost", Float64, "Total cost in USD")
-	Attribute("cost_usd_micros", Int64, "Total cost in micro-USD")
-
-	Required(
-		"cache_creation_tokens",
-		"cache_read_tokens",
-		"total_tokens",
-		"total_cost",
-		"cost_usd_micros",
-	)
-})
-
-var ChatTurnQueryRow = Type("ChatTurnQueryRow", func() {
-	Description("One row of the grouped chat turn table: measures aggregated over the full time range for a single group value.")
-
-	Attribute("group_value", String, "The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
-	Attribute("measures", ChatTurnQueryMeasures, "Aggregated measures for this group")
-	Attribute("dimension_values", MapOf(String, ArrayOf(String)), "Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier.")
-
-	Required("group_value", "measures", "dimension_values")
-})
-
-var ChatTurnQueryPoint = Type("ChatTurnQueryPoint", func() {
-	Description("A single chat turn attribution time bucket within a series")
-
-	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
-	Attribute("measures", ChatTurnQueryMeasures, "Aggregated measures for this bucket")
-
-	Required("bucket_time_unix_nano", "measures")
-})
-
-var ChatTurnQuerySeries = Type("ChatTurnQuerySeries", func() {
-	Description("A gap-filled timeseries for a single chat turn group value.")
-
-	Attribute("group_value", String, "The dimension value for this series. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
-	Attribute("points", ArrayOf(ChatTurnQueryPoint), "Time buckets in ascending order, gap-filled with zeros.")
-
-	Required("group_value", "points")
-})
-
-var QueryChatTurnsResult = Type("QueryChatTurnsResult", func() {
-	Description("Result of a generic chat turn attribution query: a grouped table and a matching per-group timeseries over the same data slice.")
-
-	Attribute("group_by", String, "Echoes the requested group_by dimension; empty when none was requested.")
-	Attribute("interval_seconds", Int64, "The timeseries bucket interval in seconds.")
-	Attribute("table", ArrayOf(ChatTurnQueryRow), "Grouped totals over the full time range, ordered by sort_by descending.")
-	Attribute("timeseries", ArrayOf(ChatTurnQuerySeries), "One series per group value (aligned with table rows), each gap-filled.")
 
 	Required("group_by", "interval_seconds", "table", "timeseries")
 })

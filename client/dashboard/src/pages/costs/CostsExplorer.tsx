@@ -37,10 +37,12 @@ import {
   type Axis,
   availableDimensions,
   BREAKDOWN_PARAM,
+  collectionLabel,
   type Crumb,
   defaultGroupBy,
   displayName,
   encodeCrumb,
+  isAttributionDim,
   isDimension,
   isSessionLeaf,
   isSessionsAxis,
@@ -49,11 +51,18 @@ import {
   nextAvailableDimension,
   parseDrillPath,
   PIVOTS,
+  pivotParent,
   SESSIONS_AXIS,
   showsTopSessionsWidget,
 } from "./taxonomy";
 
-const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
+const EMPTY_MEASURES: Measures = {
+  cost: 0,
+  sessions: 0,
+  tools: 0,
+  tokens: 0,
+  cacheCreation: 0,
+};
 
 // Per-breakdown secondary cuts shown as "mix" widgets above the table. Keyed by
 // the current group-by axis; complementary to it (never the same dimension).
@@ -62,13 +71,18 @@ const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
 const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
   [Dimension.DivisionName]: [Dimension.DepartmentName, Dimension.Email],
   [Dimension.DepartmentName]: [Dimension.Email, Dimension.Model],
-  [Dimension.Email]: [Dimension.HookSource],
-  [Dimension.HookSource]: [Dimension.Model],
+  [Dimension.Email]: [Dimension.HookSource, Dimension.McpServerName],
+  [Dimension.HookSource]: [Dimension.Model, Dimension.McpServerName],
   [Dimension.JobTitle]: [Dimension.Email, Dimension.DepartmentName],
   [Dimension.EmployeeType]: [Dimension.Email, Dimension.DepartmentName],
   [Dimension.CostCenterName]: [Dimension.Email, Dimension.DepartmentName],
   [Dimension.Role]: [Dimension.Email, Dimension.DepartmentName],
-  [Dimension.Model]: [Dimension.Email, Dimension.HookSource],
+  [Dimension.Model]: [Dimension.Email, Dimension.McpServerName],
+  // Claude attribution axes cross-cut each other and model.
+  [Dimension.McpServerName]: [Dimension.McpToolName, Dimension.Model],
+  [Dimension.McpToolName]: [Dimension.McpServerName, Dimension.Model],
+  [Dimension.SkillName]: [Dimension.Model, Dimension.McpServerName],
+  [Dimension.AgentName]: [Dimension.Model, Dimension.McpServerName],
 };
 
 // Which kind of taxonomy node is in view — drives the assistant-dock prompts.
@@ -170,38 +184,10 @@ export function CostsExplorer(): JSX.Element {
     clearCustomRange,
   } = useDateRangeFilter("30d");
 
-  // Every cost query is scoped to the current project via a project_id filter
-  // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
-  // then narrowed further by the drill path. This keeps the dashboard to the
-  // project in the URL and guarantees session detail (project-scoped) loads.
-  const filters: QueryFilter[] = useMemo(() => {
-    const drill = path.map((c) => ({ dimension: c.dim, values: [c.value] }));
-    if (!project.id) return drill;
-    return [{ dimension: Dimension.ProjectId, values: [project.id] }, ...drill];
-  }, [path, project.id]);
-
-  // Drop session columns whose dimension the drill path already pins to a single
-  // value — that column would just repeat the same value down every row. Mapped
-  // from drill dimension to the session-table column id it makes redundant.
-  const hiddenSessionColumns = useMemo<SessionColumnId[]>(() => {
-    const byDimension: Partial<Record<Dimension, SessionColumnId>> = {
-      [Dimension.Email]: "user",
-      [Dimension.HookSource]: "agent",
-      [Dimension.Model]: "model",
-    };
-    return path
-      .map((c) => byDimension[c.dim])
-      .filter((id): id is SessionColumnId => id !== undefined);
-  }, [path]);
-
   // The generated useTelemetryQuery hook keys its cache on gramSession only — it
   // ignores the request body — so every drill would return the first cached
   // result. Drive useQuery directly with a key that encodes the payload.
   const client = useGramContext();
-
-  // Project-scoped queries wait until the active project id resolves, so they
-  // never run org-wide (without the project_id filter) during the first paint.
-  const projectReady = Boolean(project.id);
 
   // Which dimensions the org actually has data for in this range — drives both
   // the breakdown dropdown (hide empties) and the default axis (so a customer
@@ -225,6 +211,49 @@ export function CostsExplorer(): JSX.Element {
   const groupBy = isDimension(byParam)
     ? byParam
     : defaultGroupBy(path, availableDims);
+
+  // Every cost query is scoped to the current project via a project_id filter
+  // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
+  // then narrowed further by the drill path. This keeps the dashboard to the
+  // project in the URL and guarantees session detail (project-scoped) loads.
+  const filters: QueryFilter[] = useMemo(() => {
+    const drill = path.map((c) => ({ dimension: c.dim, values: [c.value] }));
+    // Skill is its own drill tree (Subagent → Skill). When Skill is in view —
+    // grouped, or already drilled into — without an ancestor Subagent, this is
+    // the "skills run outside a subagent" branch: exclude rows that also carry a
+    // subagent (agent_name = '') so agent+skill spend surfaces only under
+    // Subagent → Skill, never leaking into the root Skill breakdown.
+    const skillInContext =
+      groupBy === Dimension.SkillName ||
+      path.some((c) => c.dim === Dimension.SkillName);
+    const hasAgentCrumb = path.some((c) => c.dim === Dimension.AgentName);
+    const synthetic: QueryFilter[] =
+      skillInContext && !hasAgentCrumb
+        ? [{ dimension: Dimension.AgentName, values: [""] }]
+        : [];
+    const base: QueryFilter[] = project.id
+      ? [{ dimension: Dimension.ProjectId, values: [project.id] }]
+      : [];
+    return [...base, ...drill, ...synthetic];
+  }, [path, project.id, groupBy]);
+
+  // Drop session columns whose dimension the drill path already pins to a single
+  // value — that column would just repeat the same value down every row. Mapped
+  // from drill dimension to the session-table column id it makes redundant.
+  const hiddenSessionColumns = useMemo<SessionColumnId[]>(() => {
+    const byDimension: Partial<Record<Dimension, SessionColumnId>> = {
+      [Dimension.Email]: "user",
+      [Dimension.HookSource]: "agent",
+      [Dimension.Model]: "model",
+    };
+    return path
+      .map((c) => byDimension[c.dim])
+      .filter((id): id is SessionColumnId => id !== undefined);
+  }, [path]);
+
+  // Project-scoped queries wait until the active project id resolves, so they
+  // never run org-wide (without the project_id filter) during the first paint.
+  const projectReady = Boolean(project.id);
 
   // The primary query also doubles as the logs-enabled probe: telemetry.query
   // returns 404 when logging is off for the org. Opt out of the app-wide
@@ -383,19 +412,38 @@ export function CostsExplorer(): JSX.Element {
 
   const rows = data?.table ?? [];
 
+  // Attribution breakdowns hide the "" group — it's spend where the attribute
+  // is not applicable ("not included"), not an "(unset)" slice worth drilling.
+  const visibleRows = isAttributionDim(groupBy)
+    ? rows.filter((r) => r.groupValue !== "")
+    : rows;
+
+  // At the root, an attribution breakdown is presented as a "collection" (e.g.
+  // "MCP Servers") rather than the project — and its headline stats then sum
+  // only the attributed rows, so the hero reconciles with the residual-hidden
+  // table below. Everywhere else the hero keeps the full slice total.
+  const collectionDim: Dimension | null =
+    path.length === 0 && !sessionsMode && isAttributionDim(groupBy)
+      ? groupBy
+      : null;
+
   // Roll the child rows up into the current entity's headline stats.
   const stats: Measures = useMemo(() => {
     const table = data?.table ?? [];
-    return table.reduce<Measures>(
+    const statsRows =
+      collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
+    return statsRows.reduce<Measures>(
       (acc, r) => ({
         cost: acc.cost + (r.measures.totalCost ?? 0),
         sessions: acc.sessions + (r.measures.totalChats ?? 0),
         tools: acc.tools + (r.measures.totalToolCalls ?? 0),
         tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+        cacheCreation:
+          acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
       }),
       { ...EMPTY_MEASURES },
     );
-  }, [data]);
+  }, [data, collectionDim]);
 
   // Per-group daily cost series for the trend sparklines, keyed by group value.
   const seriesByGroup = useMemo(() => {
@@ -412,36 +460,45 @@ export function CostsExplorer(): JSX.Element {
   // Previous-period totals per measure (for the KPI deltas).
   const prevTotals: Measures = useMemo(() => {
     const table = prevData?.table ?? [];
-    return table.reduce<Measures>(
+    const statsRows =
+      collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
+    return statsRows.reduce<Measures>(
       (acc, r) => ({
         cost: acc.cost + (r.measures.totalCost ?? 0),
         sessions: acc.sessions + (r.measures.totalChats ?? 0),
         tools: acc.tools + (r.measures.totalToolCalls ?? 0),
         tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+        cacheCreation:
+          acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
       }),
       { ...EMPTY_MEASURES },
     );
-  }, [prevData]);
+  }, [prevData, collectionDim]);
 
   // Each measure summed across groups per time bucket — drives the hero trend
   // chart and the KPI sparklines.
   const widgetSeries = useMemo(() => {
-    const ts = data?.timeseries ?? [];
+    const ts = (data?.timeseries ?? []).filter(
+      (s) => collectionDim == null || s.groupValue !== "",
+    );
     const n = ts[0]?.points.length ?? 0;
     const cost = Array<number>(n).fill(0);
     const chats = Array<number>(n).fill(0);
     const tools = Array<number>(n).fill(0);
     const tokens = Array<number>(n).fill(0);
+    const cacheCreation = Array<number>(n).fill(0);
     for (const s of ts) {
       s.points.forEach((p, i) => {
         cost[i] = (cost[i] ?? 0) + (p.measures.totalCost ?? 0);
         chats[i] = (chats[i] ?? 0) + (p.measures.totalChats ?? 0);
         tools[i] = (tools[i] ?? 0) + (p.measures.totalToolCalls ?? 0);
         tokens[i] = (tokens[i] ?? 0) + (p.measures.totalTokens ?? 0);
+        cacheCreation[i] =
+          (cacheCreation[i] ?? 0) + (p.measures.cacheCreationInputTokens ?? 0);
       });
     }
-    return { cost, chats, tools, tokens };
-  }, [data]);
+    return { cost, chats, tools, tokens, cacheCreation };
+  }, [data, collectionDim]);
 
   // Per-level secondary breakdowns: the configured cuts for the current axis,
   // minus any already filtered or that don't vary within this slice (≤1 value).
@@ -506,8 +563,14 @@ export function CostsExplorer(): JSX.Element {
 
   const cards: CardSpec[] = useMemo(() => {
     const out: CardSpec[] = [];
+    // Mix cards are compact "spend by X" rankings, so drop the "" bucket
+    // entirely — an "(unset)" row is noise here (e.g. the $0 tool-row model
+    // bucket). The full breakdown table still surfaces it for non-attribution
+    // dims where "unset" is a real, drillable slice.
     const toRows = (t: QueryRow[]) =>
-      t.map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+      t
+        .filter((r) => r.groupValue !== "")
+        .map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
     const cardTitle = (dim: Dimension) =>
       dim === Dimension.Email
         ? "Top spenders"
@@ -670,6 +733,10 @@ export function CostsExplorer(): JSX.Element {
   const pivotOptions = PIVOTS.filter((p) => {
     if (filteredDims.has(p.dim)) return false;
     if (p.dim === groupBy) return true;
+    // A nested attribution cut (MCP Tool) is only meaningful under its parent
+    // (MCP Server) — offer it as a breakdown axis only once the parent is pinned.
+    const parent = pivotParent(p.dim);
+    if (parent && !filteredDims.has(parent)) return false;
     // Hide dimensions the org has no data for at all (IDP doesn't populate them).
     if (availableDims && !availableDims.has(p.dim)) return false;
     if (!attributes) return true;
@@ -693,8 +760,35 @@ export function CostsExplorer(): JSX.Element {
     ? undefined
     : () => changeGroupBy(SESSIONS_AXIS);
 
+  // The root Skill breakdown is scoped to agent-less spend (skill-only branch of
+  // the Subagent → Skill tree). Rather than relabel the axis "Skill (only)",
+  // surface the caveat as an info tooltip beside the breakdown select.
+  const skillOnlyBranch =
+    groupBy === Dimension.SkillName &&
+    !path.some((c) => c.dim === Dimension.AgentName);
+  const axisHint =
+    skillOnlyBranch && !sessionsMode
+      ? "Skills run outside a subagent. Skills invoked inside a subagent are grouped under that subagent (Subagent → Skill)."
+      : undefined;
+
   const currentEntity = deepestCrumb;
   const parentValue = path.length >= 2 ? path[path.length - 2]!.value : null;
+
+  // The root attribution "collection" identity (title + icon) for the hero, in
+  // place of the project. Null everywhere else.
+  const collection =
+    collectionDim != null
+      ? {
+          dim: collectionDim,
+          label: collectionLabel(collectionDim) ?? LABELS[collectionDim] ?? "",
+        }
+      : null;
+  // Whether this view is an attribution lens (root collection, or drilled into
+  // an attribution entity). Drives the hero/KPI swap of "Tool calls" → "Cache
+  // added" — the meaningful measure for a server/tool/skill/subagent.
+  const attributionView =
+    collectionDim != null ||
+    (currentEntity != null && isAttributionDim(currentEntity.dim));
 
   // Project Assistant dock config — recomputed per render, so drilling into a
   // new entity re-registers fresh prompts + context (InsightsConfig diffs on the
@@ -769,6 +863,7 @@ export function CostsExplorer(): JSX.Element {
       prevTotals={prevTotals}
       cards={widgetCards}
       rangeLabel={formatDateRange(from, to)}
+      cacheMetric={attributionView}
       onDrill={drillIntoDim}
       onOpenSession={setOpenChatId}
       loading={loadingSlice}
@@ -814,6 +909,8 @@ export function CostsExplorer(): JSX.Element {
       />
       <EntityProfile
         entity={currentEntity}
+        collection={collection}
+        cacheMetric={attributionView}
         widgets={widgets}
         onBack={goUp}
         onHome={goHome}
@@ -825,8 +922,9 @@ export function CostsExplorer(): JSX.Element {
         canDrill={canDrill}
         axisValue={axisValue}
         axisOptions={axisOptions}
+        axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
-        rows={rows}
+        rows={visibleRows}
         onDrill={drillInto}
         tableOverride={
           sessionsMode ? (

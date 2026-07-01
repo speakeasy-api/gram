@@ -29,8 +29,6 @@ const (
 	defaultQueryTopN   = 10
 )
 
-const defaultChatTurnQuerySortBy = "cache_creation_tokens"
-
 // otherGroupLabel is the default synthetic group value that holds the rolled-up
 // remainder beyond top_n. If a real group already uses this value, the response
 // picks a suffixed label so the synthetic rollup cannot collide with user data.
@@ -126,89 +124,6 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
-}
-
-// QueryChatTurns is a generic, org-scoped analytics query over the
-// chat_turn_summaries view. It returns both a grouped table and a matching
-// timeseries for the same slice of Claude Code turn attribution data.
-func (s *Service) QueryChatTurns(ctx context.Context, payload *telem_gen.QueryChatTurnsPayload) (*telem_gen.QueryChatTurnsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
-	}
-	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
-	}
-
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
-	if err != nil {
-		return nil, err
-	}
-
-	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
-	}
-	projectIDs := make([]string, 0, len(projects))
-	for _, p := range projects {
-		projectIDs = append(projectIDs, p.ID.String())
-	}
-
-	groupBy := ""
-	if payload.GroupBy != nil {
-		groupBy = *payload.GroupBy
-	}
-	sortBy := payload.SortBy
-	if sortBy == "" {
-		sortBy = defaultChatTurnQuerySortBy
-	}
-	topN := payload.TopN
-	if topN == 0 {
-		topN = defaultQueryTopN
-	}
-
-	interval := calculateInterval(timeStart, timeEnd)
-	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
-		interval = *payload.GranularitySeconds
-	}
-
-	filters := make([]repo.ChatTurnSummaryFilter, 0, len(payload.Filters))
-	for _, f := range payload.Filters {
-		if f == nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
-		}
-		filters = append(filters, repo.ChatTurnSummaryFilter{Dimension: f.Dimension, Values: f.Values})
-	}
-
-	params := repo.ChatTurnSummaryQueryParams{
-		ProjectIDs:      projectIDs,
-		TimeStart:       timeStart,
-		TimeEnd:         timeEnd,
-		GroupBy:         groupBy,
-		SortBy:          sortBy,
-		Filters:         filters,
-		IntervalSeconds: interval,
-	}
-
-	tableRows, err := s.chRepo.QueryChatTurnSummariesTable(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error running chat turn attribution table query")
-	}
-	tsRows, err := s.chRepo.QueryChatTurnSummariesTimeseries(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error running chat turn attribution timeseries query")
-	}
-
-	return buildChatTurnQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.
@@ -422,137 +337,46 @@ func buildQueryResult(
 	tableRows []repo.AttributeMetricsRow,
 	tsRows []repo.AttributeMetricsTimePoint,
 ) *telem_gen.QueryResult {
-	tableInputs := make([]groupedTableInput[repo.AttributeMetricsMeasures], 0, len(tableRows))
-	for _, row := range tableRows {
-		tableInputs = append(tableInputs, groupedTableInput[repo.AttributeMetricsMeasures]{
-			GroupValue:      row.GroupValue,
-			Measures:        row.Measures(),
-			DimensionValues: row.DimensionValues,
-		})
-	}
-	pointInputs := make([]groupedTimePointInput[repo.AttributeMetricsMeasures], 0, len(tsRows))
-	for _, point := range tsRows {
-		pointInputs = append(pointInputs, groupedTimePointInput[repo.AttributeMetricsMeasures]{
-			GroupValue:         point.GroupValue,
-			BucketTimeUnixNano: point.BucketTimeUnixNano,
-			Measures:           point.Measures(),
-		})
-	}
-
-	tableParts, seriesParts := assembleGroupedQueryResult(
-		groupBy,
-		intervalSeconds,
-		timeStart,
-		timeEnd,
-		topN,
-		tableInputs,
-		pointInputs,
-		func(acc *repo.AttributeMetricsMeasures, m repo.AttributeMetricsMeasures) {
-			acc.Add(m)
-		},
-	)
-
-	table := make([]*telem_gen.QueryRow, 0, len(tableParts))
-	for _, row := range tableParts {
-		table = append(table, &telem_gen.QueryRow{
-			GroupValue:      row.GroupValue,
-			Measures:        toGenMeasures(row.Measures),
-			DimensionValues: row.DimensionValues,
-		})
-	}
-
-	timeseries := make([]*telem_gen.QuerySeries, 0, len(seriesParts))
-	for _, series := range seriesParts {
-		points := make([]*telem_gen.QueryPoint, 0, len(series.Points))
-		for _, point := range series.Points {
-			points = append(points, &telem_gen.QueryPoint{
-				BucketTimeUnixNano: strconv.FormatInt(point.BucketTimeUnixNano, 10),
-				Measures:           toGenMeasures(point.Measures),
-			})
-		}
-		timeseries = append(timeseries, &telem_gen.QuerySeries{GroupValue: series.GroupValue, Points: points})
-	}
-
-	return &telem_gen.QueryResult{
-		GroupBy:         groupBy,
-		IntervalSeconds: intervalSeconds,
-		Table:           table,
-		Timeseries:      timeseries,
-	}
-}
-
-type groupedTableInput[M any] struct {
-	GroupValue      string
-	Measures        M
-	DimensionValues map[string][]string
-}
-
-type groupedTimePointInput[M any] struct {
-	GroupValue         string
-	BucketTimeUnixNano int64
-	Measures           M
-}
-
-type groupedTablePart[M any] struct {
-	GroupValue      string
-	Measures        M
-	DimensionValues map[string][]string
-}
-
-type groupedTimePointPart[M any] struct {
-	BucketTimeUnixNano int64
-	Measures           M
-}
-
-type groupedSeriesPart[M any] struct {
-	GroupValue string
-	Points     []groupedTimePointPart[M]
-}
-
-// assembleGroupedQueryResult applies the top_n + "Other" rollup and gap-fill
-// behavior shared by telemetry.query and telemetry.queryChatTurns. The table
-// rows must arrive ordered by the requested sort measure descending.
-func assembleGroupedQueryResult[M any](
-	groupBy string,
-	intervalSeconds int64,
-	timeStart, timeEnd int64,
-	topN int,
-	tableRows []groupedTableInput[M],
-	tsRows []groupedTimePointInput[M],
-	addMeasures func(acc *M, next M),
-) ([]groupedTablePart[M], []groupedSeriesPart[M]) {
 	buckets := bucketStarts(timeStart, timeEnd, intervalSeconds)
+
+	// Decide which group values are kept and which fold into the synthetic
+	// rollup. The table rows arrive ordered by sort_by descending from ClickHouse.
 	kept, hasOther := selectGroups(groupBy, topN, tableRows)
 	otherLabel := uniqueOtherGroupLabel(tableRows)
 
+	// keptIndex preserves chart series ordering and lets the timeseries pass map
+	// each group value to its slot. "Other" (when present) is the final slot.
 	keptIndex := make(map[string]int, len(kept))
 	for i, g := range kept {
 		keptIndex[g] = i
 	}
 
-	table := make([]groupedTablePart[M], 0, len(kept)+1)
-	var otherTable M
+	// --- table ---
+	table := make([]*telem_gen.QueryRow, 0, len(kept)+1)
+	var otherTable repo.AttributeMetricsMeasures
 	otherDimValues := map[string]map[string]struct{}{}
 	for _, row := range tableRows {
 		if _, ok := keptIndex[row.GroupValue]; ok || groupBy == "" {
-			table = append(table, groupedTablePart[M]{
+			table = append(table, &telem_gen.QueryRow{
 				GroupValue:      row.GroupValue,
-				Measures:        row.Measures,
+				Measures:        toGenMeasures(row.Measures()),
 				DimensionValues: normalizeDimensionValues(row.DimensionValues),
 			})
 			continue
 		}
-		addMeasures(&otherTable, row.Measures)
+		otherTable.Add(row.Measures())
 		mergeDimensionValues(otherDimValues, row.DimensionValues)
 	}
 	if hasOther {
-		table = append(table, groupedTablePart[M]{
+		table = append(table, &telem_gen.QueryRow{
 			GroupValue:      otherLabel,
-			Measures:        otherTable,
+			Measures:        toGenMeasures(otherTable),
 			DimensionValues: flattenDimensionValues(otherDimValues),
 		})
 	}
 
+	// --- timeseries ---
+	// seriesBuckets[seriesValue][bucketTime] = accumulated measures
 	seriesValues := append([]string{}, kept...)
 	if hasOther {
 		seriesValues = append(seriesValues, otherLabel)
@@ -562,9 +386,9 @@ func assembleGroupedQueryResult[M any](
 		seriesValues = []string{""}
 	}
 
-	seriesBuckets := make(map[string]map[int64]*M, len(seriesValues))
+	seriesBuckets := make(map[string]map[int64]*repo.AttributeMetricsMeasures, len(seriesValues))
 	for _, v := range seriesValues {
-		seriesBuckets[v] = make(map[int64]*M, len(buckets))
+		seriesBuckets[v] = make(map[int64]*repo.AttributeMetricsMeasures, len(buckets))
 	}
 
 	for _, point := range tsRows {
@@ -583,36 +407,44 @@ func assembleGroupedQueryResult[M any](
 		}
 		m := byBucket[point.BucketTimeUnixNano]
 		if m == nil {
-			m = new(M)
+			m = new(repo.AttributeMetricsMeasures)
 			byBucket[point.BucketTimeUnixNano] = m
 		}
-		addMeasures(m, point.Measures)
+		m.Add(point.Measures())
 	}
 
-	timeseries := make([]groupedSeriesPart[M], 0, len(seriesValues))
+	timeseries := make([]*telem_gen.QuerySeries, 0, len(seriesValues))
 	for _, v := range seriesValues {
 		byBucket := seriesBuckets[v]
-		points := make([]groupedTimePointPart[M], 0, len(buckets))
+		points := make([]*telem_gen.QueryPoint, 0, len(buckets))
 		for _, b := range buckets {
-			var measures M
+			var measures repo.AttributeMetricsMeasures
 			if m := byBucket[b]; m != nil {
 				measures = *m
 			}
-			points = append(points, groupedTimePointPart[M]{
-				BucketTimeUnixNano: b,
-				Measures:           measures,
+			points = append(points, &telem_gen.QueryPoint{
+				BucketTimeUnixNano: strconv.FormatInt(b, 10),
+				Measures:           toGenMeasures(measures),
 			})
 		}
-		timeseries = append(timeseries, groupedSeriesPart[M]{GroupValue: v, Points: points})
+		timeseries = append(timeseries, &telem_gen.QuerySeries{
+			GroupValue: v,
+			Points:     points,
+		})
 	}
 
-	return table, timeseries
+	return &telem_gen.QueryResult{
+		GroupBy:         groupBy,
+		IntervalSeconds: intervalSeconds,
+		Table:           table,
+		Timeseries:      timeseries,
+	}
 }
 
 // selectGroups returns the ordered group values to keep (top_n by the SQL sort
 // order) and whether an "Other" rollup group is needed. When there is no
 // group_by, the single (empty-keyed) group is always kept.
-func selectGroups[M any](groupBy string, topN int, tableRows []groupedTableInput[M]) (kept []string, hasOther bool) {
+func selectGroups(groupBy string, topN int, tableRows []repo.AttributeMetricsRow) (kept []string, hasOther bool) {
 	if groupBy == "" {
 		for _, r := range tableRows {
 			kept = append(kept, r.GroupValue)
@@ -632,7 +464,7 @@ func selectGroups[M any](groupBy string, topN int, tableRows []groupedTableInput
 	return kept, hasOther
 }
 
-func uniqueOtherGroupLabel[M any](tableRows []groupedTableInput[M]) string {
+func uniqueOtherGroupLabel(tableRows []repo.AttributeMetricsRow) string {
 	seen := make(map[string]struct{}, len(tableRows))
 	for _, row := range tableRows {
 		seen[row.GroupValue] = struct{}{}
@@ -716,82 +548,5 @@ func toGenMeasures(m repo.AttributeMetricsMeasures) *telem_gen.QueryMeasures {
 		CacheCreationInputTokens: m.CacheCreationInputTokens,
 		TotalToolCalls:           int64(m.TotalToolCalls), //nolint:gosec // bounded count
 		TotalChats:               int64(m.TotalChats),     //nolint:gosec // bounded count
-	}
-}
-
-func buildChatTurnQueryResult(
-	groupBy string,
-	intervalSeconds int64,
-	timeStart, timeEnd int64,
-	topN int,
-	tableRows []repo.ChatTurnSummaryRow,
-	tsRows []repo.ChatTurnSummaryTimePoint,
-) *telem_gen.QueryChatTurnsResult {
-	tableInputs := make([]groupedTableInput[repo.ChatTurnSummaryMeasures], 0, len(tableRows))
-	for _, row := range tableRows {
-		tableInputs = append(tableInputs, groupedTableInput[repo.ChatTurnSummaryMeasures]{
-			GroupValue:      row.GroupValue,
-			Measures:        row.Measures(),
-			DimensionValues: row.DimensionValues,
-		})
-	}
-	pointInputs := make([]groupedTimePointInput[repo.ChatTurnSummaryMeasures], 0, len(tsRows))
-	for _, point := range tsRows {
-		pointInputs = append(pointInputs, groupedTimePointInput[repo.ChatTurnSummaryMeasures]{
-			GroupValue:         point.GroupValue,
-			BucketTimeUnixNano: point.BucketTimeUnixNano,
-			Measures:           point.Measures(),
-		})
-	}
-
-	tableParts, seriesParts := assembleGroupedQueryResult(
-		groupBy,
-		intervalSeconds,
-		timeStart,
-		timeEnd,
-		topN,
-		tableInputs,
-		pointInputs,
-		func(acc *repo.ChatTurnSummaryMeasures, m repo.ChatTurnSummaryMeasures) {
-			acc.Add(m)
-		},
-	)
-
-	table := make([]*telem_gen.ChatTurnQueryRow, 0, len(tableParts))
-	for _, row := range tableParts {
-		table = append(table, &telem_gen.ChatTurnQueryRow{
-			GroupValue:      row.GroupValue,
-			Measures:        toGenChatTurnMeasures(row.Measures),
-			DimensionValues: row.DimensionValues,
-		})
-	}
-
-	timeseries := make([]*telem_gen.ChatTurnQuerySeries, 0, len(seriesParts))
-	for _, series := range seriesParts {
-		points := make([]*telem_gen.ChatTurnQueryPoint, 0, len(series.Points))
-		for _, point := range series.Points {
-			points = append(points, &telem_gen.ChatTurnQueryPoint{
-				BucketTimeUnixNano: strconv.FormatInt(point.BucketTimeUnixNano, 10),
-				Measures:           toGenChatTurnMeasures(point.Measures),
-			})
-		}
-		timeseries = append(timeseries, &telem_gen.ChatTurnQuerySeries{GroupValue: series.GroupValue, Points: points})
-	}
-
-	return &telem_gen.QueryChatTurnsResult{
-		GroupBy:         groupBy,
-		IntervalSeconds: intervalSeconds,
-		Table:           table,
-		Timeseries:      timeseries,
-	}
-}
-
-func toGenChatTurnMeasures(m repo.ChatTurnSummaryMeasures) *telem_gen.ChatTurnQueryMeasures {
-	return &telem_gen.ChatTurnQueryMeasures{
-		CacheCreationTokens: m.CacheCreationTokens,
-		CacheReadTokens:     m.CacheReadTokens,
-		TotalTokens:         m.TotalTokens,
-		TotalCost:           sanitizeFloat64(m.TotalCost),
-		CostUsdMicros:       m.CostUSDMicros,
 	}
 }
