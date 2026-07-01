@@ -56,6 +56,11 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
+      # sloglint's constant key linter does not recognise the use of constants with type `attribute.Key` from `go.opentelemetry.io/otel/attribute`.
+      - path: internal/attr/conventions\.go
+        linters:
+          - sloglint
+        text: key should be a constant
   settings:
     gosec:
       config:

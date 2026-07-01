@@ -27,7 +27,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@11.3.0",
+  "packageManager": "pnpm@11.9.0",
   "files": [
     "src",
     "dist"
