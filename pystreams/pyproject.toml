@@ -28,7 +28,7 @@ dev = [
   "pyrefly>=1.0.0",
   "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",
-  "ty>=0.0.48",
+  "ty>=0.0.53",
   "types-protobuf>=7.34.1.20260518",
 ]
 
