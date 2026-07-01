@@ -8,7 +8,7 @@ WITH latest_deployments AS (
   ORDER BY project_id, d.created_at DESC
 ),
 toolset_metrics AS (
-  SELECT 
+  SELECT
     p.organization_id,
     COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
     COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
@@ -19,7 +19,7 @@ toolset_metrics AS (
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
-  SELECT 
+  SELECT
     p.organization_id,
     COUNT(DISTINCT htd.id) as total_tools
   FROM projects p
@@ -27,7 +27,7 @@ tool_metrics AS (
   LEFT JOIN http_tool_definitions htd ON ld.deployment_id = htd.deployment_id AND htd.deleted = false
   GROUP BY p.organization_id
 )
-SELECT 
+SELECT
   COALESCE(tm.organization_id, tlm.organization_id) as organization_id,
   COALESCE(tm.public_mcp_servers, 0) as public_mcp_servers,
   COALESCE(tm.private_mcp_servers, 0) as private_mcp_servers,
@@ -109,6 +109,16 @@ WHERE id = @message_id
   AND (project_id IS NULL OR project_id = @project_id)
   AND role = 'user'
   AND (message_id IS NULL OR message_id = '');
+
+-- name: ListLatestDirectoryUsersForAttributeMetricsBackfill :many
+SELECT DISTINCT ON (lower(email))
+    email,
+    attributes
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND deleted_at IS NULL
+  AND email IS NOT NULL
+ORDER BY lower(email), workos_updated_at DESC, updated_at DESC;
 
 -- name: FetchPendingOutboxIDs :many
 -- Fetch the next batch of outbox row IDs (across all organizations) that the

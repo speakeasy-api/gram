@@ -280,7 +280,7 @@ WITH latest_deployments AS (
   ORDER BY project_id, d.created_at DESC
 ),
 toolset_metrics AS (
-  SELECT 
+  SELECT
     p.organization_id,
     COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
     COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
@@ -291,7 +291,7 @@ toolset_metrics AS (
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
-  SELECT 
+  SELECT
     p.organization_id,
     COUNT(DISTINCT htd.id) as total_tools
   FROM projects p
@@ -299,7 +299,7 @@ tool_metrics AS (
   LEFT JOIN http_tool_definitions htd ON ld.deployment_id = htd.deployment_id AND htd.deleted = false
   GROUP BY p.organization_id
 )
-SELECT 
+SELECT
   COALESCE(tm.organization_id, tlm.organization_id) as organization_id,
   COALESCE(tm.public_mcp_servers, 0) as public_mcp_servers,
   COALESCE(tm.private_mcp_servers, 0) as private_mcp_servers,
@@ -378,6 +378,42 @@ func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) 
 	for rows.Next() {
 		var i GetUserEmailsByOrgIDsRow
 		if err := rows.Scan(&i.OrganizationID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLatestDirectoryUsersForAttributeMetricsBackfill = `-- name: ListLatestDirectoryUsersForAttributeMetricsBackfill :many
+SELECT DISTINCT ON (lower(email))
+    email,
+    attributes
+FROM directory_users
+WHERE organization_id = $1
+  AND deleted_at IS NULL
+  AND email IS NOT NULL
+ORDER BY lower(email), workos_updated_at DESC, updated_at DESC
+`
+
+type ListLatestDirectoryUsersForAttributeMetricsBackfillRow struct {
+	Email      pgtype.Text
+	Attributes []byte
+}
+
+func (q *Queries) ListLatestDirectoryUsersForAttributeMetricsBackfill(ctx context.Context, organizationID string) ([]ListLatestDirectoryUsersForAttributeMetricsBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listLatestDirectoryUsersForAttributeMetricsBackfill, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestDirectoryUsersForAttributeMetricsBackfillRow
+	for rows.Next() {
+		var i ListLatestDirectoryUsersForAttributeMetricsBackfillRow
+		if err := rows.Scan(&i.Email, &i.Attributes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

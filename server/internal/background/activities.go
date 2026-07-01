@@ -102,6 +102,7 @@ type Activities struct {
 	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
 	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
 	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
+	backfillAttributeMetrics        *activities.BackfillAttributeMetricsSummaries
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
@@ -200,6 +201,7 @@ func NewActivities(
 		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
 		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
 		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
+		backfillAttributeMetrics:        activities.NewBackfillAttributeMetricsSummaries(logger, db, chConn),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
@@ -220,6 +222,10 @@ func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params acti
 
 func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
 	return a.backfillWorkOSGlobalRoles.Do(ctx)
+}
+
+func (a *Activities) BackfillAttributeMetricsSummaries(ctx context.Context, params activities.BackfillAttributeMetricsSummariesParams) (*activities.BackfillAttributeMetricsSummariesResult, error) {
+	return a.backfillAttributeMetrics.Do(ctx, params)
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
