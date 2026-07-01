@@ -197,6 +197,16 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
+		// A non-empty token that fails validation is an actionable auth
+		// failure. ValidateBearer folds several distinct causes — audience
+		// mismatch, expiry, bad signature, revoked jti, unparseable subject —
+		// into one error, and the eventual 401 flattens them further, so
+		// surface the underlying reason here instead of dropping it.
+		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
+			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+			attr.SlogOAuthFailureReason("invalid_bearer_token"),
+			attr.SlogError(err),
+		)
 		return ctx, nil, false
 	}
 
@@ -337,6 +347,18 @@ func (s *Service) ApplyIssuerGate(
 		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
+			// The Gram user-session token is valid, but a required upstream
+			// remote session for this issuer is missing or unusable, so the
+			// runtime issues a re-auth challenge pointing the user at
+			// {routeBase}/{slug}/connect. This 401 is byte-identical to an
+			// invalid-token rejection (both are CodeUnauthorized), so without
+			// this line the two are indistinguishable in production. The
+			// specific broken upstream (and its refresh reason) is logged by
+			// remotesessions.ResolveAccessToken.
+			endpoint.LogWith(s.logger).WarnContext(newCtx, "mcp issuer gate rejected: upstream remote session missing or unusable",
+				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+				attr.SlogOAuthFailureReason("remote_session_required"),
+			)
 			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
 			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)

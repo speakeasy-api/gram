@@ -35,6 +35,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -114,6 +115,26 @@ func (m *ChallengeManager) ResolveAccessToken(
 
 	tok, err := m.validateAndRefresh(ctx, sess)
 	if err != nil {
+		// validateAndRefresh errors only when a refresh was required (the
+		// stored access token is past its usable window) and could not be
+		// completed — the upstream rejected the refresh token, or the stored
+		// token could not be decrypted. That is a broken link needing a
+		// re-connect, distinct from "never linked" (the pgx.ErrNoRows case
+		// above). Both collapse to the same empty-token signal downstream and
+		// then to a byte-identical 401, so log the reason here — using the
+		// public-safe TokenRefreshError.Reason when present — instead of
+		// discarding it silently.
+		reason := "upstream token refresh failed"
+		var refreshErr *TokenRefreshError
+		if errors.As(err, &refreshErr) {
+			reason = refreshErr.Reason
+		}
+		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed",
+			attr.SlogRemoteSessionClientID(clientID.String()),
+			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+			attr.SlogOAuthFailureReason(reason),
+			attr.SlogError(err),
+		)
 		return "", nil
 	}
 	return tok, nil
