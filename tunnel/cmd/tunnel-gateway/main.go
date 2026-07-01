@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +33,16 @@ func main() {
 		logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_FORWARD_TOKEN is required")
 		os.Exit(2)
 	}
+	// Zero falls back to the benchmarked default in gateway.New.
+	maxSessions := 0
+	if raw := strings.TrimSpace(os.Getenv("TUNNEL_GATEWAY_MAX_SESSIONS")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_MAX_SESSIONS must be a positive integer")
+			os.Exit(2)
+		}
+		maxSessions = parsed
+	}
 
 	routes, err := buildRouteStore(logger)
 	if err != nil {
@@ -48,6 +59,7 @@ func main() {
 	gw, err := gateway.New(gateway.Config{
 		AdvertiseAddr:       advertiseAddr,
 		MaxStreamsPerTunnel: 256,
+		MaxSessions:         maxSessions,
 		ForwardToken:        forwardToken,
 	}, keys, routes, logger)
 	if err != nil {

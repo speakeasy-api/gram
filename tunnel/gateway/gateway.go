@@ -25,13 +25,22 @@ const (
 	routeOperationTimeout = 5 * time.Second
 )
 
+// defaultMaxSessions caps live agent sessions per gateway process. Loopback
+// benchmarks (2026-07) held 16k live sessions with flat ~4ms forward p50 and
+// ~120KB heap per session; past resource exhaustion, agent reconnect storms
+// killed established sessions too. 10k leaves headroom to shed instead.
+const defaultMaxSessions = 10_000
+
 var errMissingForwardToken = errors.New("tunnel gateway forward token is required")
 
 type Config struct {
 	// AdvertiseAddr is the internal gram-server -> gateway address published in Redis.
 	AdvertiseAddr       string
 	MaxStreamsPerTunnel int
-	ForwardToken        string
+	// MaxSessions bounds live agent sessions; connects beyond it shed with 503
+	// so load moves to sibling gateway pods via agent retry.
+	MaxSessions  int
+	ForwardToken string
 }
 
 // Gateway owns live agent yamux sessions and maps internal forwards to substreams.
@@ -50,6 +59,9 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	}
 	if cfg.MaxStreamsPerTunnel <= 0 {
 		cfg.MaxStreamsPerTunnel = 256
+	}
+	if cfg.MaxSessions <= 0 {
+		cfg.MaxSessions = defaultMaxSessions
 	}
 	return &Gateway{
 		cfg:    cfg,
@@ -85,6 +97,14 @@ func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
+	// Shed before key lookup so a connect storm cannot load the key resolver.
+	if g.reg.activeSessions() >= g.cfg.MaxSessions {
+		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
+			slog.String("reason", "max-sessions"), slog.Int("max_sessions", g.cfg.MaxSessions))
+		http.Error(w, "tunnel gateway at session capacity", http.StatusServiceUnavailable)
+		return
+	}
+
 	authHeader := r.Header.Get("Authorization")
 	presentedKeyHash := hashBearerKey(authHeader)
 	tunnelID, ok, err := g.keys.Resolve(r.Context(), authHeader)
