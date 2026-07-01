@@ -65,7 +65,7 @@
     "zx": "8.8.5-lite"
   },
   "devDependencies": {
-    "@types/archiver": "^6.0.3",
+    "@types/archiver": "^6.0.4",
     "vitest": "^4.1.9"
   }
 }
