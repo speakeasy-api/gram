@@ -200,7 +200,7 @@
     "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
-    "tw-shimmer": "^0.4.0",
+    "tw-shimmer": "^0.4.11",
     "vega": "^6.2.0",
     "vega-interpreter": "^1.0.5",
     "vite-plugin-externalize-deps": "^0.10.0",
