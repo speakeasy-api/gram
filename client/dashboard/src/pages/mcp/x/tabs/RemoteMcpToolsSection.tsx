@@ -18,7 +18,7 @@ import {
   type RemoteMcpToolAnnotations,
 } from "@/hooks/useRemoteMcpTools";
 import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
-import { handleError } from "@/lib/errors";
+import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
@@ -84,9 +84,10 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
 }
 
 function RemoteMcpToolsErrorFallback({
-  error,
+  error: rawError,
   resetErrorBoundary,
 }: FallbackProps): JSX.Element {
+  const error = toError(rawError);
   handleError(error, { silent: true });
 
   return (
