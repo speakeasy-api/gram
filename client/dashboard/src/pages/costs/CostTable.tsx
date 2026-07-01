@@ -18,6 +18,7 @@ import {
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
+import { isAttributionDim } from "./taxonomy";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -142,6 +143,7 @@ type SortKey =
   | "perSession"
   | "chats"
   | "tools"
+  | "cache"
   | "tokens"
   | "trend";
 type SortDir = "asc" | "desc";
@@ -165,6 +167,8 @@ function sortValue(
       return row.measures.totalChats ?? 0;
     case "tools":
       return row.measures.totalToolCalls ?? 0;
+    case "cache":
+      return row.measures.cacheCreationInputTokens ?? 0;
     case "tokens":
       return row.measures.totalTokens ?? 0;
     case "trend": {
@@ -254,6 +258,9 @@ export function CostTable({
 
   const showModelIcon = groupBy === Dimension.Model;
   const showAgentIcon = groupBy === Dimension.HookSource;
+  // Attribution cuts (MCP server/tool, skill, subagent) replace the tool-calls
+  // column with cache-creation tokens — the context weight they add to a session.
+  const cacheMetric = isAttributionDim(groupBy);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
@@ -330,13 +337,25 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex">
-          <HeaderButton
-            label="Tool calls"
-            sortKey="tools"
-            sort={sort}
-            onSort={onSort}
-          />
+        <span className="flex items-center gap-1">
+          {cacheMetric ? (
+            <>
+              <HeaderButton
+                label="Tokens added"
+                sortKey="cache"
+                sort={sort}
+                onSort={onSort}
+              />
+              <InfoTooltip text="Tokens this MCP server, tool, skill, or subagent adds to a session's context." />
+            </>
+          ) : (
+            <HeaderButton
+              label="Tool calls"
+              sortKey="tools"
+              sort={sort}
+              onSort={onSort}
+            />
+          )}
         </span>
         <span className="flex">
           <HeaderButton
@@ -440,7 +459,11 @@ export function CostTable({
                 {(row.measures.totalChats ?? 0).toLocaleString()}
               </span>
               <span className="text-left tabular-nums whitespace-nowrap">
-                {(row.measures.totalToolCalls ?? 0).toLocaleString()}
+                {cacheMetric
+                  ? (
+                      row.measures.cacheCreationInputTokens ?? 0
+                    ).toLocaleString()
+                  : (row.measures.totalToolCalls ?? 0).toLocaleString()}
               </span>
               <span className="text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}

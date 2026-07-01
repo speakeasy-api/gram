@@ -1302,6 +1302,13 @@ var queryDimensions = []any{
 	"email",
 	"model",
 	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type",
+	"provider",
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",
