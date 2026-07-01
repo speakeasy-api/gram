@@ -31,7 +31,7 @@ dev = [
   # never shipped — runtime activation is the consuming app's job (e.g. pystreams).
   "aiocop>=1.1.4",
   "pyrefly>=1.0.0",
-  "pytest>=8.0.0",
+  "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",
   # Pulls in trio so the backend-agnostic tests can exercise the library under
   # anyio's trio backend, not just asyncio.
