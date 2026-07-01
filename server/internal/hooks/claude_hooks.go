@@ -869,7 +869,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		}
 	}
 
-	allow := "allow"
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
@@ -891,10 +890,11 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		rawToolName = *payload.ToolName
 	}
 	parsed := parseClaudeToolName(rawToolName)
+	// Non-blocking paths must leave permissionDecision unset. An explicit
+	// "allow" makes Claude Code skip the user's own permission prompts
+	// entirely — silently disabling their allowlists and ask rules (DNO-386).
+	// Omitting the field defers to the client's normal permission flow.
 	if !parsed.IsMCP {
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
 		return result, nil
 	}
 	serverPrefix := parsed.Server
@@ -948,9 +948,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
 	if policy == nil {
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
 		return result, nil
 	}
 
@@ -1012,12 +1009,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		}
 	}
 	// A non-empty detail means this call is blocked. Return immediately for
-	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
-	// the call before recording and returning the block below.
+	// clean passes; otherwise give a URL-scoped bypass grant a chance to let
+	// the call through before recording and returning the block below.
 	if detail == "" {
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
 		return result, nil
 	}
 
@@ -1037,9 +1031,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				"matchedCommand": matchedCommand,
 			}),
 		)
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
 		return result, nil
 	}
 

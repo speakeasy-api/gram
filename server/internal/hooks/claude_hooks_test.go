@@ -183,7 +183,7 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
 // must build SessionMetadata from the auth context instead of short-circuiting
-// to "allow" because Redis hasn't been seeded by OTEL Logs yet. Otherwise the
+// past the guard because Redis hasn't been seeded by OTEL Logs yet. Otherwise the
 // shadow-MCP guard never fires on the first PreToolUse of a plugin-driven
 // session — exactly when the guard is most needed (no toolset_id present yet
 // in the conversation's tool history).
@@ -192,8 +192,8 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
-	// blocking shadow-MCP policy, otherwise the handler short-circuits to
-	// allow before the cached-MCP-list check runs.
+	// blocking shadow-MCP policy, otherwise the handler short-circuits past
+	// the guard before the cached-MCP-list check runs.
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -487,8 +487,8 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
-	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision)
+	assert.Nil(t, output.PermissionDecision,
+		"non-blocking paths must omit permissionDecision so Claude Code's own permission flow runs")
 }
 
 // DNO-286: the blocking PreToolUse guard must enforce against the inventory
@@ -526,8 +526,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
-	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
+	assert.Nil(t, output.PermissionDecision,
 		"payload-supplied inventory must drive enforcement even with no cached snapshot")
 
 	// The payload inventory also self-heals the cache, so the best-effort
@@ -666,8 +665,7 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
-	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
+	assert.Nil(t, output.PermissionDecision,
 		"a non-fresh replayed inventory must not override the cached snapshot")
 
 	// The cache must remain the Gram-hosted entry, untouched by the replay.
