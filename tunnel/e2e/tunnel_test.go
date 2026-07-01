@@ -436,3 +436,59 @@ func (s *snapshotStore) copyConnectionsLocked(tunnelID string) []route.Connectio
 
 var _ route.Store = (*snapshotStore)(nil)
 var _ route.ConnectionSnapshotStore = (*snapshotStore)(nil)
+
+func TestTunnelGatewayShedsConnectsAtSessionCap(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := t.Context()
+
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mcp.Close()
+
+	const tunnelID = "tunnel-cap"
+	plaintext, _, err := wire.NewKey()
+	require.NoError(t, err)
+	routes := newSnapshotStore()
+	gw, err := gateway.New(
+		gateway.Config{ForwardToken: "forward-token", MaxSessions: 1},
+		gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}),
+		routes,
+		logger,
+	)
+	require.NoError(t, err)
+
+	publicServer := httptest.NewServer(gw.PublicHandler())
+	defer publicServer.Close()
+	forwardServer := httptest.NewServer(gw.ForwardHandler())
+	defer forwardServer.Close()
+	gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
+
+	wsURL := "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect"
+	ag, err := agent.New(agent.Config{
+		GatewayURL:     wsURL,
+		APIKey:         plaintext,
+		LocalMCPURL:    mcp.URL,
+		ServiceVersion: "0.1.0",
+	}, logger)
+	require.NoError(t, err)
+	go func() { _ = ag.Run(ctx) }()
+
+	requireEventually(t, 5*time.Second, func() bool { return gw.ActiveSessions() == 1 })
+
+	// At the cap, connects shed with 503 before key lookup runs.
+	resp, err := http.Get(publicServer.URL + "/connect")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+
+	// The live session keeps forwarding while new connects shed.
+	req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp", strings.NewReader(`{}`))
+	require.NoError(t, err)
+	req.Header.Set(wire.HeaderTunnelID, tunnelID)
+	req.Header.Set(wire.HeaderTunnelForwardToken, "forward-token")
+	forwardResp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer forwardResp.Body.Close()
+	require.Equal(t, http.StatusOK, forwardResp.StatusCode)
+}
