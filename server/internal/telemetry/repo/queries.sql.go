@@ -318,8 +318,9 @@ type ShadowMCPInventoryURLRow struct {
 }
 
 type ListShadowMCPInventoryUsageParams struct {
-	GramProjectID string
-	Limit         int
+	GramProjectID       string
+	CanonicalServerURLs []string
+	Limit               int
 }
 
 type ShadowMCPInventoryUsageRow struct {
@@ -643,16 +644,20 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.CanonicalServerURLs, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 
+	canonicalURLSet := shadowMCPInventoryCanonicalURLSet(arg.CanonicalServerURLs)
 	usageByURL := make(map[string]*ShadowMCPInventoryUsageRow)
 	usersByURL := make(map[string]map[string]*ShadowMCPInventoryUserRow)
 	for _, traceRow := range traceRows {
 		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
 		if !ok {
+			continue
+		}
+		if len(canonicalURLSet) > 0 && !canonicalURLSet[invURL.CanonicalURL] {
 			continue
 		}
 		usage := usageByURL[invURL.CanonicalURL]
@@ -725,7 +730,7 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 }
 
 func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShadowMCPInventoryUsersParams) ([]ShadowMCPInventoryUserRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -759,8 +764,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
-	queryLimit := clampShadowMCPInventoryUsageTraceLimit(limit)
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -772,8 +776,26 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		Where("gram_project_id = ?", projectID).
 		GroupBy("trace_id").
 		Having("server_url != ''").
-		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC").
-		Limit(queryLimit)
+		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	if len(canonicalServerURLs) > 0 {
+		predicates := make(squirrel.Or, 0, len(canonicalServerURLs))
+		for _, canonicalURL := range canonicalServerURLs {
+			if canonicalURL == "" {
+				continue
+			}
+			predicates = append(predicates, squirrel.Or{
+				squirrel.Expr("server_url = ?", canonicalURL),
+				squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"?"),
+				squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"#"),
+			})
+		}
+		if len(predicates) > 0 {
+			sb = sb.Having(predicates)
+		}
+	} else {
+		sb = sb.Limit(clampShadowMCPInventoryUsageTraceLimit(limit))
+	}
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -799,6 +821,19 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 	}
 
 	return traceRows, nil
+}
+
+func shadowMCPInventoryCanonicalURLSet(canonicalServerURLs []string) map[string]bool {
+	if len(canonicalServerURLs) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(canonicalServerURLs))
+	for _, canonicalURL := range canonicalServerURLs {
+		if canonicalURL != "" {
+			out[canonicalURL] = true
+		}
+	}
+	return out
 }
 
 func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) []ShadowMCPInventoryUserRow {
