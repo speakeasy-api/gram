@@ -8,10 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  TunneledMcpConnection,
-  TunneledMcpConnection$inboundSchema,
-} from "./tunneledmcpconnection.js";
 
 /**
  * Derived live connection status for a tunneled MCP server source
@@ -61,10 +57,6 @@ export type TunneledMcpServer = {
    * Derived live connection status for a tunneled MCP server source
    */
   connectionStatus: ConnectionStatus;
-  /**
-   * Live tunnel connections currently visible in Redis
-   */
-  connections: Array<TunneledMcpConnection>;
   /**
    * When the tunneled MCP server source was created
    */
@@ -119,7 +111,6 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     active_consumer_session_count: z.int(),
     agent_version: z.optional(z.string()),
     connection_status: ConnectionStatus$inboundSchema,
-    connections: z.array(TunneledMcpConnection$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

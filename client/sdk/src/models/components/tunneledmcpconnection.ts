@@ -26,6 +26,10 @@ export type TunneledMcpConnection = {
    */
   connectedAt: Date;
   /**
+   * Gateway session ID for a live tunnel connection
+   */
+  gatewaySessionId: string;
+  /**
    * Most recent heartbeat observed for this tunnel session
    */
   lastHeartbeatAt: Date;
@@ -49,10 +53,6 @@ export type TunneledMcpConnection = {
    * Customer-declared version of the MCP service behind this tunnel connection
    */
   serviceVersion: string;
-  /**
-   * Gateway session ID for a live tunnel connection
-   */
-  sessionId: string;
 };
 
 /** @internal */
@@ -68,6 +68,7 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    gateway_session_id: z.string(),
     last_heartbeat_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -77,7 +78,6 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
     service_id: z.string(),
     service_slug: z.string(),
     service_version: z.string(),
-    session_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -85,12 +85,12 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
       "active_substreams": "activeSubstreams",
       "agent_version": "agentVersion",
       "connected_at": "connectedAt",
+      "gateway_session_id": "gatewaySessionId",
       "last_heartbeat_at": "lastHeartbeatAt",
       "remote_addr": "remoteAddr",
       "service_id": "serviceId",
       "service_slug": "serviceSlug",
       "service_version": "serviceVersion",
-      "session_id": "sessionId",
     });
   }),
 );

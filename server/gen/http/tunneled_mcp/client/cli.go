@@ -122,6 +122,45 @@ func BuildGetServerPayload(tunneledMcpGetServerID string, tunneledMcpGetServerSe
 	return v, nil
 }
 
+// BuildGetServerConnectionsPayload builds the payload for the tunneledMcp
+// getServerConnections endpoint from CLI flags.
+func BuildGetServerConnectionsPayload(tunneledMcpGetServerConnectionsID string, tunneledMcpGetServerConnectionsSessionToken string, tunneledMcpGetServerConnectionsApikeyToken string, tunneledMcpGetServerConnectionsProjectSlugInput string) (*tunneledmcp.GetServerConnectionsPayload, error) {
+	var err error
+	var id string
+	{
+		id = tunneledMcpGetServerConnectionsID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpGetServerConnectionsSessionToken != "" {
+			sessionToken = &tunneledMcpGetServerConnectionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpGetServerConnectionsApikeyToken != "" {
+			apikeyToken = &tunneledMcpGetServerConnectionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpGetServerConnectionsProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpGetServerConnectionsProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.GetServerConnectionsPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildUpdateServerPayload builds the payload for the tunneledMcp updateServer
 // endpoint from CLI flags.
 func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpdateServerSessionToken string, tunneledMcpUpdateServerApikeyToken string, tunneledMcpUpdateServerProjectSlugInput string) (*tunneledmcp.UpdateServerPayload, error) {

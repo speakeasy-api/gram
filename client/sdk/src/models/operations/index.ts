@@ -169,6 +169,7 @@ export * from "./gettoolusagefilteroptions.js";
 export * from "./gettoolusagesummary.js";
 export * from "./gettriggerinstance.js";
 export * from "./gettunneledmcpserver.js";
+export * from "./gettunneledmcpserverconnections.js";
 export * from "./getusermetricssummary.js";
 export * from "./getusersessionclient.js";
 export * from "./getusersessionissuer.js";

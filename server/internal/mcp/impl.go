@@ -136,8 +136,7 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
-	tunnelRoutes       route.Store
-	tunnelForwardToken string
+	tunnelManager      *tunnelManager
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -337,8 +336,7 @@ func NewService(
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
-		tunnelRoutes:       tunnelRoutes,
-		tunnelForwardToken: tunnelForwardToken,
+		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager),
 	}
 }
 

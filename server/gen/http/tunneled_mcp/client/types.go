@@ -69,8 +69,6 @@ type GetServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
-	// Live tunnel connections currently visible in Redis
-	Connections []*TunneledMcpConnectionResponseBody `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
 	ActiveConnectionCount *int `form:"active_connection_count,omitempty" json:"active_connection_count,omitempty" xml:"active_connection_count,omitempty"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
@@ -79,6 +77,17 @@ type GetServerResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the tunneled MCP server source was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// GetServerConnectionsResponseBody is the type of the "tunneledMcp" service
+// "getServerConnections" endpoint HTTP response body.
+type GetServerConnectionsResponseBody struct {
+	// Live tunnel connections currently visible in Redis
+	Connections []*TunneledMcpConnectionResponseBody `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
+	// Number of active tunnel connections currently visible in Redis
+	ActiveConnectionCount *int `form:"active_connection_count,omitempty" json:"active_connection_count,omitempty" xml:"active_connection_count,omitempty"`
+	// Total MCP consumer sessions currently pinned across active tunnel connections
+	ActiveConsumerSessionCount *int `form:"active_consumer_session_count,omitempty" json:"active_consumer_session_count,omitempty" xml:"active_consumer_session_count,omitempty"`
 }
 
 // UpdateServerResponseBody is the type of the "tunneledMcp" service
@@ -100,8 +109,6 @@ type UpdateServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
-	// Live tunnel connections currently visible in Redis
-	Connections []*TunneledMcpConnectionResponseBody `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
 	ActiveConnectionCount *int `form:"active_connection_count,omitempty" json:"active_connection_count,omitempty" xml:"active_connection_count,omitempty"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
@@ -653,6 +660,196 @@ type GetServerUnexpectedResponseBody struct {
 // GetServerGatewayErrorResponseBody is the type of the "tunneledMcp" service
 // "getServer" endpoint HTTP response body for the "gateway_error" error.
 type GetServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsUnauthorizedResponseBody is the type of the
+// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetServerConnectionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsForbiddenResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the
+// "forbidden" error.
+type GetServerConnectionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsBadRequestResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the
+// "bad_request" error.
+type GetServerConnectionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsNotFoundResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the
+// "not_found" error.
+type GetServerConnectionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsConflictResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the
+// "conflict" error.
+type GetServerConnectionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetServerConnectionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsInvalidResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the "invalid"
+// error.
+type GetServerConnectionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetServerConnectionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "getServerConnections" endpoint HTTP response body for the
+// "unexpected" error.
+type GetServerConnectionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerConnectionsGatewayErrorResponseBody is the type of the
+// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetServerConnectionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1242,8 +1439,6 @@ type TunneledMcpServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
-	// Live tunnel connections currently visible in Redis
-	Connections []*TunneledMcpConnectionResponseBody `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
 	ActiveConnectionCount *int `form:"active_connection_count,omitempty" json:"active_connection_count,omitempty" xml:"active_connection_count,omitempty"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
@@ -1258,7 +1453,7 @@ type TunneledMcpServerResponseBody struct {
 // types.
 type TunneledMcpConnectionResponseBody struct {
 	// Gateway session ID for a live tunnel connection
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	GatewaySessionID *string `form:"gateway_session_id,omitempty" json:"gateway_session_id,omitempty" xml:"gateway_session_id,omitempty"`
 	// Customer-declared stable ID for the MCP service behind this tunnel connection
 	ServiceID *string `form:"service_id,omitempty" json:"service_id,omitempty" xml:"service_id,omitempty"`
 	// Customer-declared slug for the MCP service behind this tunnel connection
@@ -1653,14 +1848,6 @@ func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.Tunnele
 		CreatedAt:                  *body.CreatedAt,
 		UpdatedAt:                  *body.UpdatedAt,
 	}
-	v.Connections = make([]*types.TunneledMcpConnection, len(body.Connections))
-	for i, val := range body.Connections {
-		if val == nil {
-			v.Connections[i] = nil
-			continue
-		}
-		v.Connections[i] = unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(val)
-	}
 
 	return v
 }
@@ -1815,6 +2002,175 @@ func NewGetServerGatewayError(body *GetServerGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewGetServerConnectionsTunneledMcpServerConnectionsOK builds a "tunneledMcp"
+// service "getServerConnections" endpoint result from a HTTP "OK" response.
+func NewGetServerConnectionsTunneledMcpServerConnectionsOK(body *GetServerConnectionsResponseBody) *types.TunneledMcpServerConnections {
+	v := &types.TunneledMcpServerConnections{
+		ActiveConnectionCount:      *body.ActiveConnectionCount,
+		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
+	}
+	v.Connections = make([]*types.TunneledMcpConnection, len(body.Connections))
+	for i, val := range body.Connections {
+		if val == nil {
+			v.Connections[i] = nil
+			continue
+		}
+		v.Connections[i] = unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(val)
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsUnauthorized builds a tunneledMcp service
+// getServerConnections endpoint unauthorized error.
+func NewGetServerConnectionsUnauthorized(body *GetServerConnectionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsForbidden builds a tunneledMcp service
+// getServerConnections endpoint forbidden error.
+func NewGetServerConnectionsForbidden(body *GetServerConnectionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsBadRequest builds a tunneledMcp service
+// getServerConnections endpoint bad_request error.
+func NewGetServerConnectionsBadRequest(body *GetServerConnectionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsNotFound builds a tunneledMcp service
+// getServerConnections endpoint not_found error.
+func NewGetServerConnectionsNotFound(body *GetServerConnectionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsConflict builds a tunneledMcp service
+// getServerConnections endpoint conflict error.
+func NewGetServerConnectionsConflict(body *GetServerConnectionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsUnsupportedMedia builds a tunneledMcp service
+// getServerConnections endpoint unsupported_media error.
+func NewGetServerConnectionsUnsupportedMedia(body *GetServerConnectionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsInvalid builds a tunneledMcp service
+// getServerConnections endpoint invalid error.
+func NewGetServerConnectionsInvalid(body *GetServerConnectionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsInvariantViolation builds a tunneledMcp service
+// getServerConnections endpoint invariant_violation error.
+func NewGetServerConnectionsInvariantViolation(body *GetServerConnectionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsUnexpected builds a tunneledMcp service
+// getServerConnections endpoint unexpected error.
+func NewGetServerConnectionsUnexpected(body *GetServerConnectionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerConnectionsGatewayError builds a tunneledMcp service
+// getServerConnections endpoint gateway_error error.
+func NewGetServerConnectionsGatewayError(body *GetServerConnectionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateServerTunneledMcpServerOK builds a "tunneledMcp" service
 // "updateServer" endpoint result from a HTTP "OK" response.
 func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.TunneledMcpServer {
@@ -1831,14 +2187,6 @@ func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.T
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
 		CreatedAt:                  *body.CreatedAt,
 		UpdatedAt:                  *body.UpdatedAt,
-	}
-	v.Connections = make([]*types.TunneledMcpConnection, len(body.Connections))
-	for i, val := range body.Connections {
-		if val == nil {
-			v.Connections[i] = nil
-			continue
-		}
-		v.Connections[i] = unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(val)
 	}
 
 	return v
@@ -2359,9 +2707,6 @@ func ValidateGetServerResponseBody(body *GetServerResponseBody) (err error) {
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
 	}
-	if body.Connections == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("connections", "body"))
-	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
 	}
@@ -2393,18 +2738,33 @@ func ValidateGetServerResponseBody(body *GetServerResponseBody) (err error) {
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsResponseBody runs the validations defined on
+// GetServerConnectionsResponseBody
+func ValidateGetServerConnectionsResponseBody(body *GetServerConnectionsResponseBody) (err error) {
+	if body.Connections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connections", "body"))
+	}
+	if body.ActiveConnectionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
+	}
+	if body.ActiveConsumerSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_consumer_session_count", "body"))
+	}
 	for _, e := range body.Connections {
 		if e != nil {
 			if err2 := ValidateTunneledMcpConnectionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -2430,9 +2790,6 @@ func ValidateUpdateServerResponseBody(body *UpdateServerResponseBody) (err error
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
 	}
-	if body.Connections == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("connections", "body"))
-	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
 	}
@@ -2463,13 +2820,6 @@ func ValidateUpdateServerResponseBody(body *UpdateServerResponseBody) (err error
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
-	}
-	for _, e := range body.Connections {
-		if e != nil {
-			if err2 := ValidateTunneledMcpConnectionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3196,6 +3546,246 @@ func ValidateGetServerUnexpectedResponseBody(body *GetServerUnexpectedResponseBo
 // ValidateGetServerGatewayErrorResponseBody runs the validations defined on
 // getServer_gateway_error_response_body
 func ValidateGetServerGatewayErrorResponseBody(body *GetServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsUnauthorizedResponseBody runs the validations
+// defined on getServerConnections_unauthorized_response_body
+func ValidateGetServerConnectionsUnauthorizedResponseBody(body *GetServerConnectionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsForbiddenResponseBody runs the validations
+// defined on getServerConnections_forbidden_response_body
+func ValidateGetServerConnectionsForbiddenResponseBody(body *GetServerConnectionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsBadRequestResponseBody runs the validations
+// defined on getServerConnections_bad_request_response_body
+func ValidateGetServerConnectionsBadRequestResponseBody(body *GetServerConnectionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsNotFoundResponseBody runs the validations
+// defined on getServerConnections_not_found_response_body
+func ValidateGetServerConnectionsNotFoundResponseBody(body *GetServerConnectionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsConflictResponseBody runs the validations
+// defined on getServerConnections_conflict_response_body
+func ValidateGetServerConnectionsConflictResponseBody(body *GetServerConnectionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsUnsupportedMediaResponseBody runs the
+// validations defined on getServerConnections_unsupported_media_response_body
+func ValidateGetServerConnectionsUnsupportedMediaResponseBody(body *GetServerConnectionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsInvalidResponseBody runs the validations defined
+// on getServerConnections_invalid_response_body
+func ValidateGetServerConnectionsInvalidResponseBody(body *GetServerConnectionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsInvariantViolationResponseBody runs the
+// validations defined on getServerConnections_invariant_violation_response_body
+func ValidateGetServerConnectionsInvariantViolationResponseBody(body *GetServerConnectionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsUnexpectedResponseBody runs the validations
+// defined on getServerConnections_unexpected_response_body
+func ValidateGetServerConnectionsUnexpectedResponseBody(body *GetServerConnectionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerConnectionsGatewayErrorResponseBody runs the validations
+// defined on getServerConnections_gateway_error_response_body
+func ValidateGetServerConnectionsGatewayErrorResponseBody(body *GetServerConnectionsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3958,9 +4548,6 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
 	}
-	if body.Connections == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("connections", "body"))
-	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
 	}
@@ -3992,13 +4579,6 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
-	for _, e := range body.Connections {
-		if e != nil {
-			if err2 := ValidateTunneledMcpConnectionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4011,8 +4591,8 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 // ValidateTunneledMcpConnectionResponseBody runs the validations defined on
 // TunneledMcpConnectionResponseBody
 func ValidateTunneledMcpConnectionResponseBody(body *TunneledMcpConnectionResponseBody) (err error) {
-	if body.SessionID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	if body.GatewaySessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_session_id", "body"))
 	}
 	if body.ServiceID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("service_id", "body"))

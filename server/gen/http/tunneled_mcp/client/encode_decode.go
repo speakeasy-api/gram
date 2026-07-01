@@ -740,6 +740,248 @@ func DecodeGetServerResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildGetServerConnectionsRequest instantiates a HTTP request object with
+// method and path set to call the "tunneledMcp" service "getServerConnections"
+// endpoint
+func (c *Client) BuildGetServerConnectionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerConnectionsTunneledMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("tunneledMcp", "getServerConnections", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetServerConnectionsRequest returns an encoder for requests sent to
+// the tunneledMcp getServerConnections server.
+func EncodeGetServerConnectionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*tunneledmcp.GetServerConnectionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("tunneledMcp", "getServerConnections", "*tunneledmcp.GetServerConnectionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerConnectionsResponse returns a decoder for responses returned
+// by the tunneledMcp getServerConnections endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetServerConnectionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerConnectionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerConnectionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			res := NewGetServerConnectionsTunneledMcpServerConnectionsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerConnectionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerConnectionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerConnectionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerConnectionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerConnectionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerConnectionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerConnectionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerConnectionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				}
+				err = ValidateGetServerConnectionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				}
+				return nil, NewGetServerConnectionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerConnectionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				}
+				err = ValidateGetServerConnectionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				}
+				return nil, NewGetServerConnectionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerConnections", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerConnectionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+			}
+			err = ValidateGetServerConnectionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+			}
+			return nil, NewGetServerConnectionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerConnections", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateServerRequest instantiates a HTTP request object with method and
 // path set to call the "tunneledMcp" service "updateServer" endpoint
 func (c *Client) BuildUpdateServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1470,14 +1712,6 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 		CreatedAt:                  *v.CreatedAt,
 		UpdatedAt:                  *v.UpdatedAt,
 	}
-	res.Connections = make([]*types.TunneledMcpConnection, len(v.Connections))
-	for i, val := range v.Connections {
-		if val == nil {
-			res.Connections[i] = nil
-			continue
-		}
-		res.Connections[i] = unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(val)
-	}
 
 	return res
 }
@@ -1487,7 +1721,7 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 // *TunneledMcpConnectionResponseBody.
 func unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(v *TunneledMcpConnectionResponseBody) *types.TunneledMcpConnection {
 	res := &types.TunneledMcpConnection{
-		SessionID:              *v.SessionID,
+		GatewaySessionID:       *v.GatewaySessionID,
 		ServiceID:              *v.ServiceID,
 		ServiceSlug:            *v.ServiceSlug,
 		ServiceVersion:         *v.ServiceVersion,

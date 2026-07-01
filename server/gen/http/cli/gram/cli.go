@@ -121,7 +121,7 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"tunneled-mcp (create-server|list-servers|get-server|update-server|rotate-server-key|delete-server)",
+		"tunneled-mcp (create-server|list-servers|get-server|get-server-connections|update-server|rotate-server-key|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
@@ -2123,6 +2123,12 @@ func ParseEndpoint(
 		tunneledMcpGetServerApikeyTokenFlag      = tunneledMcpGetServerFlags.String("apikey-token", "", "")
 		tunneledMcpGetServerProjectSlugInputFlag = tunneledMcpGetServerFlags.String("project-slug-input", "", "")
 
+		tunneledMcpGetServerConnectionsFlags                = flag.NewFlagSet("get-server-connections", flag.ExitOnError)
+		tunneledMcpGetServerConnectionsIDFlag               = tunneledMcpGetServerConnectionsFlags.String("id", "REQUIRED", "")
+		tunneledMcpGetServerConnectionsSessionTokenFlag     = tunneledMcpGetServerConnectionsFlags.String("session-token", "", "")
+		tunneledMcpGetServerConnectionsApikeyTokenFlag      = tunneledMcpGetServerConnectionsFlags.String("apikey-token", "", "")
+		tunneledMcpGetServerConnectionsProjectSlugInputFlag = tunneledMcpGetServerConnectionsFlags.String("project-slug-input", "", "")
+
 		tunneledMcpUpdateServerFlags                = flag.NewFlagSet("update-server", flag.ExitOnError)
 		tunneledMcpUpdateServerBodyFlag             = tunneledMcpUpdateServerFlags.String("body", "REQUIRED", "")
 		tunneledMcpUpdateServerSessionTokenFlag     = tunneledMcpUpdateServerFlags.String("session-token", "", "")
@@ -2735,6 +2741,7 @@ func ParseEndpoint(
 	tunneledMcpCreateServerFlags.Usage = tunneledMcpCreateServerUsage
 	tunneledMcpListServersFlags.Usage = tunneledMcpListServersUsage
 	tunneledMcpGetServerFlags.Usage = tunneledMcpGetServerUsage
+	tunneledMcpGetServerConnectionsFlags.Usage = tunneledMcpGetServerConnectionsUsage
 	tunneledMcpUpdateServerFlags.Usage = tunneledMcpUpdateServerUsage
 	tunneledMcpRotateServerKeyFlags.Usage = tunneledMcpRotateServerKeyUsage
 	tunneledMcpDeleteServerFlags.Usage = tunneledMcpDeleteServerUsage
@@ -4120,6 +4127,9 @@ func ParseEndpoint(
 			case "get-server":
 				epf = tunneledMcpGetServerFlags
 
+			case "get-server-connections":
+				epf = tunneledMcpGetServerConnectionsFlags
+
 			case "update-server":
 				epf = tunneledMcpUpdateServerFlags
 
@@ -5477,6 +5487,9 @@ func ParseEndpoint(
 			case "get-server":
 				endpoint = c.GetServer()
 				data, err = tunneledmcpc.BuildGetServerPayload(*tunneledMcpGetServerIDFlag, *tunneledMcpGetServerSessionTokenFlag, *tunneledMcpGetServerApikeyTokenFlag, *tunneledMcpGetServerProjectSlugInputFlag)
+			case "get-server-connections":
+				endpoint = c.GetServerConnections()
+				data, err = tunneledmcpc.BuildGetServerConnectionsPayload(*tunneledMcpGetServerConnectionsIDFlag, *tunneledMcpGetServerConnectionsSessionTokenFlag, *tunneledMcpGetServerConnectionsApikeyTokenFlag, *tunneledMcpGetServerConnectionsProjectSlugInputFlag)
 			case "update-server":
 				endpoint = c.UpdateServer()
 				data, err = tunneledmcpc.BuildUpdateServerPayload(*tunneledMcpUpdateServerBodyFlag, *tunneledMcpUpdateServerSessionTokenFlag, *tunneledMcpUpdateServerApikeyTokenFlag, *tunneledMcpUpdateServerProjectSlugInputFlag)
@@ -14153,6 +14166,7 @@ func tunneledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    create-server: Create a new tunneled MCP server source. Returns the tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    list-servers: List all tunneled MCP server sources for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get a tunneled MCP server by ID`)
+	fmt.Fprintln(os.Stderr, `    get-server-connections: Get live tunnel connections for a tunneled MCP server`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunneled MCP server source`)
 	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunneled MCP server source key. Returns the new tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source`)
@@ -14228,6 +14242,30 @@ func tunneledMcpGetServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp get-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpGetServerConnectionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp get-server-connections", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get live tunnel connections for a tunneled MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp get-server-connections --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpUpdateServerUsage() {

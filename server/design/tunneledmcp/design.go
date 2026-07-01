@@ -94,6 +94,35 @@ var _ = Service("tunneledMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTunneledMcpServer"}`)
 	})
 
+	Method("getServerConnections", func() {
+		Description("Get live tunnel connections for a tunneled MCP server")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the tunneled MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(TunneledMcpServerConnections)
+
+		HTTP(func() {
+			GET("/rpc/tunneledMcp.getServerConnections")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getTunneledMcpServerConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTunneledMcpServerConnections"}`)
+	})
+
 	Method("updateServer", func() {
 		Description("Update a tunneled MCP server source")
 
@@ -223,7 +252,7 @@ var TunneledMcpConnectionStatus = Type("TunneledMcpConnectionStatus", String, fu
 var TunneledMcpConnection = Type("TunneledMcpConnection", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("session_id", String, "Gateway session ID for a live tunnel connection")
+	Attribute("gateway_session_id", String, "Gateway session ID for a live tunnel connection")
 	Attribute("service_id", String, "Customer-declared stable ID for the MCP service behind this tunnel connection")
 	Attribute("service_slug", String, "Customer-declared slug for the MCP service behind this tunnel connection")
 	Attribute("service_version", String, "Customer-declared version of the MCP service behind this tunnel connection")
@@ -241,7 +270,7 @@ var TunneledMcpConnection = Type("TunneledMcpConnection", func() {
 	Attribute("active_consumer_sessions", Int, "Number of MCP consumer sessions currently pinned to this tunnel connection")
 	Attribute("metadata", MapOf(String, String), "User-provided tunnel metadata reported by the agent")
 
-	Required("session_id", "service_id", "service_slug", "service_version", "connected_at", "last_heartbeat_at", "active_substreams", "active_consumer_sessions", "metadata")
+	Required("gateway_session_id", "service_id", "service_slug", "service_version", "connected_at", "last_heartbeat_at", "active_substreams", "active_consumer_sessions", "metadata")
 })
 
 var TunneledMcpServer = Type("TunneledMcpServer", func() {
@@ -264,7 +293,6 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 		Description("Most recent persisted heartbeat timestamp")
 		Format(FormatDateTime)
 	})
-	Attribute("connections", ArrayOf(TunneledMcpConnection), "Live tunnel connections currently visible in Redis")
 	Attribute("active_connection_count", Int, "Number of active tunnel connections currently visible in Redis")
 	Attribute("active_consumer_session_count", Int, "Total MCP consumer sessions currently pinned across active tunnel connections")
 	Attribute("created_at", String, func() {
@@ -276,7 +304,19 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "connections", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at")
+	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at")
+})
+
+var TunneledMcpServerConnections = Type("TunneledMcpServerConnections", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Live connection details for a tunneled MCP server")
+
+	Attribute("connections", ArrayOf(TunneledMcpConnection), "Live tunnel connections currently visible in Redis")
+	Attribute("active_connection_count", Int, "Number of active tunnel connections currently visible in Redis")
+	Attribute("active_consumer_session_count", Int, "Total MCP consumer sessions currently pinned across active tunnel connections")
+
+	Required("connections", "active_connection_count", "active_consumer_session_count")
 })
 
 var CreateServerResult = Type("CreateTunneledMcpServerResult", func() {

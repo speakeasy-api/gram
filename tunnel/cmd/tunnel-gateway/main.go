@@ -45,11 +45,15 @@ func main() {
 	}
 	defer keys.Close()
 
-	gw := gateway.New(gateway.Config{
+	gw, err := gateway.New(gateway.Config{
 		AdvertiseAddr:       advertiseAddr,
 		MaxStreamsPerTunnel: 256,
 		ForwardToken:        forwardToken,
 	}, keys, routes, logger)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "tunnel-gateway init failed", slog.Any("error", err))
+		os.Exit(2)
+	}
 
 	publicSrv := &http.Server{
 		Addr:              publicListenAddr,
