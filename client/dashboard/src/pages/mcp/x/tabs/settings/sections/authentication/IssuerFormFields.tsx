@@ -29,8 +29,9 @@ function remoteLoginCallbackURL(): string {
 }
 
 // RedirectURICallout shows the redirect_uri operators must register on the
-// upstream provider's OAuth app before a Manual client's credentials will
-// work.
+// upstream provider's OAuth app before typed-in client credentials will
+// work. Rendered inside ClientCredentialsFields so both the Attach sheet's
+// Manual add path and the Modify sheet's existing-client edit path show it.
 function RedirectURICallout(): JSX.Element {
   const redirectURI = remoteLoginCallbackURL();
   return (
@@ -324,6 +325,8 @@ export function ClientCredentialsFields({
         </Stack>
       )}
 
+      <RedirectURICallout />
+
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>
         {clientIdEditable ? (
@@ -461,18 +464,15 @@ export function ClientTypeFields({
       break;
     case "manual":
       credentials = (
-        <Stack gap={4}>
-          <RedirectURICallout />
-          <ClientCredentialsFields
-            showHeading={false}
-            clientId={clientId}
-            clientSecret={clientSecret}
-            tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-            onClientIdChange={onClientIdChange}
-            onClientSecretChange={onClientSecretChange}
-            onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
-          />
-        </Stack>
+        <ClientCredentialsFields
+          showHeading={false}
+          clientId={clientId}
+          clientSecret={clientSecret}
+          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+          onClientIdChange={onClientIdChange}
+          onClientSecretChange={onClientSecretChange}
+          onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
+        />
       );
   }
 
