@@ -2703,3 +2703,52 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 	err := row.Scan(&id)
 	return id, err
 }
+
+const upsertSetupAssistantThread = `-- name: UpsertSetupAssistantThread :one
+INSERT INTO assistant_threads (
+  assistant_id,
+  project_id,
+  correlation_id,
+  chat_id,
+  source_kind
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  'setup'
+)
+ON CONFLICT (project_id, assistant_id, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertSetupAssistantThreadParams struct {
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+}
+
+// Links a client-side setup/onboarding chat to its assistant so the chat is
+// listable (chat.list?assistant_id=) and URL-addressable like runtime threads.
+// Mirrors the runtime UpsertAssistantThread idempotency (ON CONFLICT on
+// project_id/assistant_id/correlation_id). Fixed source_kind='setup' marks the
+// row as a client-driven onboarding thread: it enqueues no runtime events, so
+// the active-thread accounting excludes 'setup' and it never consumes
+// max_concurrency or a warm-pool slot. Unlike the runtime upsert this does NOT
+// refresh last_event_at on conflict — a setup thread has no runtime events, so
+// its last_event_at stays at first-link time and it can never be counted as a
+// warm/active runtime thread even if that exclusion regressed.
+func (q *Queries) UpsertSetupAssistantThread(ctx context.Context, arg UpsertSetupAssistantThreadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertSetupAssistantThread,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
