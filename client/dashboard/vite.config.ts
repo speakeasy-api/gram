@@ -65,7 +65,7 @@ export default defineConfig(({ command }) => {
       // (src/values/color.rs:441 SIGABRT). Pin CSS minification to esbuild —
       // the Vite 7 default — until the upstream Lightning CSS bug is fixed.
       cssMinify: "esbuild",
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
@@ -115,13 +115,15 @@ export default defineConfig(({ command }) => {
     worker: {
       format: "es",
     },
-    esbuild: {
+    oxc: {
       target: "es2022",
     },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
+      rolldownOptions: {
+        transform: {
+          target: "es2022",
+        },
       },
     },
     server: {

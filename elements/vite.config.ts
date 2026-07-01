@@ -15,7 +15,7 @@ export default defineConfig({
     tailwindcss(),
 
     // Automatically keep peerDependencies as they are defined in the package.json in sync
-    // with the rollupOptions.external list
+    // with the rolldownOptions.external list
     externalizeDeps({
       deps: false,
       peerDeps: true,
@@ -52,7 +52,7 @@ export default defineConfig({
       },
       formats: ["es", "cjs"],
     },
-    rollupOptions: {
+    rolldownOptions: {
       // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
       output: {
         globals: {
