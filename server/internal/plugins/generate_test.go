@@ -21,6 +21,13 @@ func requireFileBytes(t *testing.T, path string) []byte {
 	return data
 }
 
+func requireMapValue(t *testing.T, values map[string]any, key string) map[string]any {
+	t.Helper()
+	value, ok := values[key].(map[string]any)
+	require.Truef(t, ok, "%q must be an object, got %T (%#v)", key, values[key], values[key])
+	return value
+}
+
 // TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
 // generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
 // hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
@@ -765,19 +772,37 @@ func TestRenderHookScriptCursorBackfillsSkippedPromptFromTranscript(t *testing.T
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
 key=""
+url=""
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = "-H" ] && [ "$#" -gt 1 ]; then
-    case "$2" in
-      Idempotency-Key:*) key="${2#Idempotency-Key: }" ;;
-    esac
-    shift 2
-    continue
-  fi
-  shift
+  case "$1" in
+    -H)
+      if [ "$#" -gt 1 ]; then
+        case "$2" in
+          Idempotency-Key:*) key="${2#Idempotency-Key: }" ;;
+        esac
+      fi
+      shift 2
+      ;;
+    -w|-X|--data-binary|--max-time|--config)
+      shift 2
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
 done
-printf '%s\n' "$key" >> "$GRAM_CAPTURE_KEYS"
-cat >> "$GRAM_CAPTURE_PAYLOADS"
-printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s\n' "$key" >> "$GRAM_CAPTURE_KEYS"
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
 printf '{}\n200'
 `), 0o755))
 	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nGRAM_CURSOR_BACKFILL_PROMPT\n\nPlease reply.\n</user_query>"}]}}
@@ -817,18 +842,18 @@ printf '{}\n200'
 
 	var backfilled map[string]any
 	require.NoError(t, json.Unmarshal([]byte(firstPayload), &backfilled))
-	backfilledEvent := backfilled["event"].(map[string]any)
+	backfilledEvent := requireMapValue(t, backfilled, "event")
 	require.Equal(t, "prompt.submitted", backfilledEvent["type"])
-	backfilledData := backfilled["data"].(map[string]any)
-	backfilledPrompt := backfilledData["prompt"].(map[string]any)
+	backfilledData := requireMapValue(t, backfilled, "data")
+	backfilledPrompt := requireMapValue(t, backfilledData, "prompt")
 	require.Equal(t, "GRAM_CURSOR_BACKFILL_PROMPT\n\nPlease reply.", backfilledPrompt["text"])
 
 	var actual map[string]any
 	require.NoError(t, json.Unmarshal([]byte(secondPayload), &actual))
-	actualEvent := actual["event"].(map[string]any)
+	actualEvent := requireMapValue(t, actual, "event")
 	require.Equal(t, "assistant.responded", actualEvent["type"])
-	actualData := actual["data"].(map[string]any)
-	actualMessage := actualData["message"].(map[string]any)
+	actualData := requireMapValue(t, actual, "data")
+	actualMessage := requireMapValue(t, actualData, "message")
 	require.Equal(t, "assistant ok", actualMessage["text"])
 
 	keys := strings.Fields(string(requireFileBytes(t, keysPath)))
@@ -1408,7 +1433,25 @@ func TestGenerateCodexObservabilityPluginScriptEnrichesMCPMetadataOnDemand(t *te
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
-cat > "$GRAM_CAPTURE_PAYLOAD"
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -w|-X|-H|--data-binary|--max-time|--config)
+      shift 2
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest) printf '%s' "$payload" > "$GRAM_CAPTURE_PAYLOAD" ;;
+esac
 printf '{}\n200'
 `), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(`#!/usr/bin/env bash
@@ -1432,10 +1475,10 @@ exit 1
 
 	var posted map[string]any
 	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
-	data := posted["data"].(map[string]any)
-	toolCall := data["tool_call"].(map[string]any)
+	data := requireMapValue(t, posted, "data")
+	toolCall := requireMapValue(t, data, "tool_call")
 	require.Equal(t, "mcp__shadow_e2e__lookup", toolCall["name"])
-	mcp := data["mcp"].(map[string]any)
+	mcp := requireMapValue(t, data, "mcp")
 	require.Equal(t, "shadow_e2e", mcp["server_name"])
 	require.Equal(t, "https://app.getgram.ai/mcp/shadow-e2e", mcp["url"])
 }

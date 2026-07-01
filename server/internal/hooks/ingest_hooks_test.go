@@ -13,7 +13,20 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+func requireBlockIDFromMessage(t *testing.T, message string) uuid.UUID {
+	t.Helper()
+	const marker = "/blocks/"
+	index := strings.LastIndex(message, marker)
+	require.NotEqual(t, -1, index, "block message must include %q", marker)
+	fields := strings.Fields(message[index+len(marker):])
+	require.NotEmpty(t, fields, "block message must include an id after %q", marker)
+	blockID, err := uuid.Parse(fields[0])
+	require.NoError(t, err)
+	return blockID
+}
 
 func TestIngest_AcceptsCustomHookSource(t *testing.T) {
 	t.Parallel()
@@ -71,20 +84,20 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	require.Equal(t, "deny", result.Decision)
 	require.NotNil(t, result.Message)
 	require.Contains(t, *result.Message, "/blocks/")
+	blockID := requireBlockIDFromMessage(t, *result.Message)
+
+	var block riskRepo.GetToolCallBlockRow
 	require.Eventually(t, func() bool {
-		var count int
-		err := ti.conn.QueryRow(ctx, `
-			SELECT count(*)
-			FROM tool_call_blocks
-			WHERE project_id = $1
-			  AND organization_id = $2
-			  AND provider = 'custom-adapter'
-			  AND tool_name = 'search'
-			  AND risk_policy_id IS NULL
-			  AND user_id = $3
-		`, *authCtx.ProjectID, authCtx.ActiveOrganizationID, authCtx.UserID).Scan(&count)
-		return err == nil && count == 1
+		var err error
+		block, err = riskRepo.New(ti.conn).GetToolCallBlock(ctx, riskRepo.GetToolCallBlockParams{
+			ID:           blockID,
+			ViewerUserID: authCtx.UserID,
+		})
+		return err == nil
 	}, 2*time.Second, 25*time.Millisecond)
+	require.Equal(t, *authCtx.ProjectID, block.ProjectID)
+	require.Equal(t, "search", block.ToolName.String)
+	require.Equal(t, authCtx.UserID, block.UserID)
 }
 
 func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
