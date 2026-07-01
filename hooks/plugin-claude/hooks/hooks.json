@@ -5,6 +5,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/auth_preflight.sh\"",
+            "async": false
+          },
+          {
+            "type": "command",
             "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_mcp_inventory.sh\"",
             "async": true
           }

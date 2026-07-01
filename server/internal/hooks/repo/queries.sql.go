@@ -192,7 +192,7 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 }
 
 const getUserAccount = `-- name: GetUserAccount :one
-SELECT id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM user_accounts
+SELECT id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type, billing_mode, plan_type, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM user_accounts
 WHERE organization_id = $1
   AND provider = $2
   AND external_account_uuid = $3
@@ -218,6 +218,8 @@ func (q *Queries) GetUserAccount(ctx context.Context, arg GetUserAccountParams) 
 		&i.ExternalAccountID,
 		&i.Email,
 		&i.AccountType,
+		&i.BillingMode,
+		&i.PlanType,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.CreatedAt,

@@ -1784,6 +1784,22 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   account_type TEXT
     CONSTRAINT user_accounts_account_type_check
     CHECK (account_type IN ('team', 'personal')),
+  -- Billing-mode override for this specific account. NULL means inherit:
+  -- attribution falls through to the org-level declaration on
+  -- ai_integration_configs.billing_mode, and to 'unknown' when neither is set.
+  -- Set by admins via the management API, or programmatically when a provider
+  -- exposes a reliable billing signal (none do today; e.g. a future Admin API
+  -- cost integration could mark accounts metered). Free-form text (deliberately
+  -- not an enum / CHECK) so new modes can be introduced without a schema change.
+  -- Well-known values: 'metered', 'flat_rate', 'unknown'. Cost figures are real
+  -- spend only for 'metered'.
+  billing_mode TEXT,
+  -- The provider's plan name for this account (e.g. 'max', 'pro', 'team',
+  -- 'enterprise'), for providers that expose it. Claude exposes no plan signal
+  -- in telemetry today, so this stays NULL for Anthropic accounts; recorded when
+  -- a provider (or a provider-side API integration) makes the plan visible.
+  -- Free-form text — plan names are provider-defined.
+  plan_type TEXT,
 
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2584,6 +2600,18 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   external_organization_id TEXT,
   api_key_encrypted TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
+  -- Billing mode for the provider org this integration covers. Dashboard cost
+  -- figures are derived from token usage (tokens x published API price), which
+  -- equals real spend only for a metered (pay-per-token) provider org;
+  -- subscription seats (e.g. Claude Max/Pro/Team/Enterprise) include usage in a
+  -- flat fee, making the figure an estimate. Providers expose no billing signal
+  -- in telemetry, so the mode cannot be inferred from a session — it is declared
+  -- by an admin (or set programmatically if a provider ever exposes a reliable
+  -- signal) and attribution stamps it onto the org's telemetry (gram.billing_mode).
+  -- Free-form text (deliberately not an enum / CHECK) so new modes can be
+  -- introduced without a schema change. Well-known values: 'metered', 'flat_rate',
+  -- 'unknown'. NULL means undeclared, treated as unknown (never assume real cost).
+  billing_mode TEXT,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
