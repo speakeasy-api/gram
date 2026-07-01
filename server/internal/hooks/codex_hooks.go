@@ -311,6 +311,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		AccountType:         "",
+		BillingMode:         "",
 		UserAccountID:       "",
 		GramOrgID:           orgID,
 		ProjectID:           projectID,

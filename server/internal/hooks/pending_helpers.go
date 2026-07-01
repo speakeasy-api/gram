@@ -342,6 +342,23 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.ProviderKey:       providerAnthropic,
 		}
 
+		// Stamp the account attribution (account_type, provider, external_org_id,
+		// device_id) the OTEL Logs endpoint computed for this session, so cost and
+		// token metric rows carry the same personal/team classification as the log
+		// rows. Without this, cost rows land unclassified and a personal (Claude
+		// Max) session's spend can't be told apart from billed team usage in the
+		// cost rollup (DNO-384). The metric datapoints carry session.id; the logs
+		// path seeds SessionMetadata under sessionCacheKey. A cache miss (metrics
+		// arriving before logs seed the session) leaves the columns empty and
+		// self-heals on the session's later metric batches.
+		var sessionMeta SessionMetadata
+		if m.SessionID != "" {
+			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil {
+				sessionMeta = meta
+			}
+		}
+		stampAccountAttribution(attrs, sessionMeta)
+
 		// Only include non-zero values
 		if m.InputTokens > 0 {
 			attrs[attr.GenAIUsageInputTokensKey] = m.InputTokens
@@ -375,9 +392,17 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		// Attribute usage to the owning employee. Team accounts resolve by email;
+		// a personal account's email won't resolve, but the device bridge may have
+		// supplied the owner on the OTEL Logs path — prefer it so personal spend
+		// still rolls up under the employee while account_type=personal preserves
+		// the split.
 		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
 		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
 			userInfo = telemetry.UserInfoByID(userID)
+		}
+		if sessionMeta.UserID != "" {
+			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
 		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{

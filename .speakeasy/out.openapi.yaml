@@ -34578,6 +34578,9 @@ components:
     AIIntegrationConfig:
       type: object
       properties:
+        billing_mode:
+          type: string
+          description: 'How the provider org is billed: ''metered'' (pay-per-token; dashboard cost is real spend), ''flat_rate'' (subscription seats; cost is an estimate), or ''unknown''. Empty/omitted when not declared.'
         created_at:
           type: string
           description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
@@ -43820,6 +43823,7 @@ components:
             - hook_source
             - account_type
             - provider
+            - billing_mode
             - role
             - group
             - project_id
@@ -43910,6 +43914,7 @@ components:
             - hook_source
             - account_type
             - provider
+            - billing_mode
             - role
             - group
             - project_id
@@ -49757,6 +49762,9 @@ components:
         api_key:
           type: string
           description: Provider API key. Stored encrypted at rest; never returned on reads.
+        billing_mode:
+          type: string
+          description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
         enabled:
           type: boolean
           description: Whether the integration should be active.

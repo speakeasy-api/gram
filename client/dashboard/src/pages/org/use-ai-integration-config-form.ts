@@ -30,6 +30,8 @@ type AIIntegrationConfigForm = {
   setApiKey: Dispatch<SetStateAction<string>>;
   organizationId: string;
   setOrganizationId: Dispatch<SetStateAction<string>>;
+  billingMode: string;
+  setBillingMode: Dispatch<SetStateAction<string>>;
   isConfigured: boolean;
   hasSavedKey: boolean;
   isMutating: boolean;
@@ -50,6 +52,7 @@ export function useAIIntegrationConfigForm(
   const [enabled, setEnabled] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [organizationId, setOrganizationId] = useState("");
+  const [billingMode, setBillingMode] = useState("unknown");
   const lastSyncedConfigIdRef = useRef<string | null>(null);
 
   const { mutate: upsert, status: upsertStatus } =
@@ -90,6 +93,7 @@ export function useAIIntegrationConfigForm(
       setEnabled(false);
       setApiKey("");
       setOrganizationId("");
+      setBillingMode("unknown");
       return;
     }
 
@@ -98,6 +102,7 @@ export function useAIIntegrationConfigForm(
     setEnabled(data.enabled);
     setApiKey("");
     setOrganizationId(data.externalOrganizationId ?? "");
+    setBillingMode(data.billingMode ?? "unknown");
   }, [data]);
 
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
@@ -123,6 +128,7 @@ export function useAIIntegrationConfigForm(
           provider: provider.provider,
           apiKey: apiKey.trim(),
           enabled,
+          billingMode,
           ...(provider.requiresOrganizationId
             ? { externalOrganizationId: organizationId.trim() }
             : {}),
@@ -151,6 +157,8 @@ export function useAIIntegrationConfigForm(
     setApiKey,
     organizationId,
     setOrganizationId,
+    billingMode,
+    setBillingMode,
     isConfigured,
     hasSavedKey,
     isMutating,

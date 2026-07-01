@@ -236,6 +236,9 @@ export type EntityProfileProps = {
   onAxisChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
+  // The view's resolved billing mode; "metered" shows real cost instead of the
+  // API-rate estimate on the cost columns.
+  billingMode?: string;
   onDrill: (row: QueryRow) => void;
   // When set, replaces the dimension CostTable (the per-session list in sessions
   // mode). The override owns its own loading/empty/error states.
@@ -275,6 +278,7 @@ export function EntityProfile({
   axisOptions,
   onAxisChange,
   rows,
+  billingMode,
   onDrill,
   tableOverride,
   onViewSessions,
@@ -318,6 +322,7 @@ export function EntityProfile({
       onDrill={onDrill}
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
+      billingMode={billingMode}
     />
   );
 
