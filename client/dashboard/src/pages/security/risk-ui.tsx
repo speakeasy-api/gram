@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,6 +16,15 @@ import {
   useRevealAll,
   type RevealAllContextValue,
 } from "./reveal-all-context";
+import { useRBAC, type Scope } from "@/hooks/useRBAC";
+
+// Revealing a flagged secret exposes the raw value captured from agent/chat
+// traffic, so it is gated behind the same `chat:read` scope that grants access
+// to other members' session transcripts. hasScope short-circuits to true when
+// RBAC is disabled, preserving existing behavior for non-RBAC orgs.
+const REVEAL_SCOPE: Scope = "chat:read";
+const REVEAL_DENIED_REASON =
+  "You need the chat:read scope to reveal flagged values.";
 
 export function CategoryLabel({
   source,
@@ -85,8 +94,11 @@ export function RevealAllToggle({
 }: {
   className?: string;
 }): JSX.Element | null {
+  const { hasScope } = useRBAC();
   const ctx = useRevealAll();
   if (!ctx) return null;
+  // No point offering a reveal-all control when every value stays masked.
+  if (!hasScope(REVEAL_SCOPE)) return null;
   const { revealAll, setRevealAll } = ctx;
   return (
     <SimpleTooltip
@@ -114,6 +126,8 @@ export function MaskedMatch({
 }: {
   value: string | undefined;
 }): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canReveal = hasScope(REVEAL_SCOPE);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
@@ -130,6 +144,19 @@ export function MaskedMatch({
   }, [generation, revealAll]);
 
   if (!value) return <span>-</span>;
+
+  // Without chat:read the value can never be revealed — render a static,
+  // non-interactive placeholder so reveal-all can't flip it open either.
+  if (!canReveal) {
+    return (
+      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+          <Lock className="h-3 w-3" />
+          <span>Hidden</span>
+        </span>
+      </SimpleTooltip>
+    );
+  }
 
   if (!revealed) {
     return (
