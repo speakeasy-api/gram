@@ -46,3 +46,4 @@ allowBuilds:
   cpu-features: false
   msw: false
   ssh2: false
+  "@openrouter/sdk": false
