@@ -60,6 +60,12 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
 		form.Set("client_secret", clientSecret)
 	}
+	// Basic auth already carries client_id as the header username; leaving it
+	// in the body too puts client_id on the wire twice, which some upstreams
+	// (e.g. Pylon) reject outright as ambiguous client identification.
+	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
+		form.Del("client_id")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("build token endpoint request: %w", err)
