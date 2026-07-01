@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -215,6 +216,47 @@ func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {
 	assert.Equal(t, "toolu_cursor_attr", attrs[attr.GenAIToolCallIDKey])
 	// Trace ID should be hashed from toolUseID
 	assert.Equal(t, hashToolCallIDToTraceID("toolu_cursor_attr"), attrs[attr.TraceIDKey])
+}
+
+// TestCursor_StampsProviderOnUsageMetrics drives the Cursor usage-metrics path
+// end-to-end (Cursor afterAgentResponse -> writeCursorMetricsToClickHouse) and
+// asserts the persisted usage row carries provider=cursor.
+func TestCursor_StampsProviderOnUsageMetrics(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	email := "cursor-user@example.com"
+	convID := "cursor-usage-conv"
+	inputTokens := 123
+	_, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "afterAgentResponse",
+		UserEmail:      &email,
+		ConversationID: &convID,
+		InputTokens:    &inputTokens,
+	})
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "cursor:usage:metrics", now, 1)
+	require.Contains(t, logs[0].Attributes, providerCursor)
+}
+
+func TestBuildCursorTelemetryAttributes_StampsCursorProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "Edit"
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		ToolName:      &toolName,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	assert.Equal(t, providerCursor, attrs[attr.ProviderKey])
 }
 
 func TestBuildCursorTelemetryAttributes_MCPToolParsing(t *testing.T) {

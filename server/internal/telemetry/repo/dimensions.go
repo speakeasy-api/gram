@@ -69,6 +69,22 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:         "hook_source",
 		kind:            attributeDimScalar,
 	},
+	"account_type": {
+		// AI account classification: 'team' | 'personal' | '' (unclassified).
+		// Materialized on telemetry_logs and a sort-key dimension on
+		// attribute_metrics_summaries, so the column name is identical on both paths.
+		aggregateColumn: "account_type",
+		rawExpr:         "account_type",
+		kind:            attributeDimScalar,
+	},
+	"provider": {
+		// AI provider for the account: 'anthropic' | 'openai' | 'cursor' | ''.
+		// Materialized on telemetry_logs and a sort-key dimension on
+		// attribute_metrics_summaries, so the column name is identical on both paths.
+		aggregateColumn: "provider",
+		rawExpr:         "provider",
+		kind:            attributeDimScalar,
+	},
 	"role": {
 		aggregateColumn: "roles",
 		rawExpr:         "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))",

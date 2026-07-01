@@ -258,18 +258,37 @@ func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
 		UserEmail:     &email,
 	}
 	metadata := &SessionMetadata{
-		SessionID:   "",
-		ServiceName: "Codex",
-		UserEmail:   email,
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     "",
+		ServiceName:   "Codex",
+		UserEmail:     email,
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	}
 
 	// User identity travels on LogParams.UserInfo, not the attributes map.
 	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), payload, metadata)
 	require.NotContains(t, attrs, attr.UserEmailKey)
+}
+
+func TestBuildCodexTelemetryAttributes_StampsOpenAIProvider(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	email := "dev@example.com"
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		UserEmail:     &email,
+	}, &SessionMetadata{
+		ServiceName: "Codex",
+		UserEmail:   email,
+		Provider:    providerOpenAI,
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+
+	require.Equal(t, providerOpenAI, attrs[attr.ProviderKey])
 }
 
 func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {
@@ -330,13 +349,13 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 	}, &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     "",
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	})
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", attrs[attr.MCPServerURLKey])
 	require.Equal(t, "int-linear", attrs[attr.ToolCallSourceKey])
@@ -369,13 +388,13 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPMetaToolFromInventory(t *testi
 		ToolName:      &toolName,
 		ToolInput:     map[string]any{"server": "platform-logs"},
 	}, &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     "",
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	})
 	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPServerURLKey])
 	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPMatchKey])
@@ -551,13 +570,13 @@ func TestCodexSessionMetadata_IgnoresCachedUserIDWhenEmailDoesNotResolve(t *test
 	sessionID := "codex-session-with-stale-cache"
 	email := "cached@example.com"
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   email,
-		UserID:      "cached-user-id",
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     email,
+		UserID:        "cached-user-id",
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}, 0))
 
 	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{

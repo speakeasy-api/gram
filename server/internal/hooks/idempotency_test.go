@@ -35,13 +35,13 @@ func TestClaudeHookIdempotency_DeliveredTwiceStoredOnce(t *testing.T) {
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   userEmail,
-		UserID:      userID,
-		ClaudeOrgID: authCtx.ActiveOrganizationID,
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     userEmail,
+		UserID:        userID,
+		ExternalOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}, time.Hour))
 
 	token := uuid.NewString()

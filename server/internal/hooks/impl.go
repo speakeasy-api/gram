@@ -61,15 +61,39 @@ type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
-// SessionMetadata contains validated session information from the Logs endpoint
+// SessionMetadata contains validated session information from the Logs endpoint.
+//
+// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// own account identity, normalized into provider-agnostic fields, so personal vs
+// team AI-account usage can be attributed and tracked. For Claude these map from
+// organization.id, user.account_uuid, user.account_id, and the per-device user.id.
 type SessionMetadata struct {
 	SessionID   string
 	ServiceName string
 	UserEmail   string
 	UserID      string
-	ClaudeOrgID string
-	GramOrgID   string
-	ProjectID   string
+	// Provider is the AI provider this session's account belongs to (e.g.
+	// "anthropic"). Empty for sources that don't track personal accounts yet.
+	Provider string
+	// ExternalOrgID is the provider's organization id (Claude organization.id):
+	// the personal-vs-team discriminator, distinct from GramOrgID.
+	ExternalOrgID string
+	// ExternalAccountUUID is the provider's stable per-account id (Claude
+	// user.account_uuid) — the user_accounts entity key.
+	ExternalAccountUUID string
+	// ExternalAccountID is the provider's tagged account id (Claude user.account_id).
+	ExternalAccountID string
+	// DeviceID is the per-device anonymous id (Claude user.id), stable across the
+	// accounts logged in on one machine — the device bridge that links a personal
+	// account to the employee learned from a team session on the same device.
+	DeviceID string
+	// AccountType is "team" or "personal" once classified, else empty.
+	AccountType string
+	// UserAccountID is the user_accounts row id for this session's account, set
+	// once the account entity has been upserted.
+	UserAccountID string
+	GramOrgID     string
+	ProjectID     string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses

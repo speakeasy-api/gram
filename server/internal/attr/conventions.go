@@ -108,8 +108,15 @@ const (
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
 	SubscriberBatchSizeKey   = attribute.Key("gram.subscriber.batch_size")
 
-	AssetIDKey                     = attribute.Key("gram.asset.id")
-	AssetURLKey                    = attribute.Key("gram.asset.url")
+	AssetIDKey  = attribute.Key("gram.asset.id")
+	AssetURLKey = attribute.Key("gram.asset.url")
+	// Personal-account tracking. These are stamped by hook/OTEL ingest and
+	// materialized into ClickHouse columns of the same suffix (provider,
+	// external_org_id, account_type) for org-level usage dashboards.
+	ProviderKey                    = attribute.Key("gram.provider")
+	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
+	AccountTypeKey                 = attribute.Key("gram.account_type")
+	DeviceIDKey                    = attribute.Key("gram.device_id")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")

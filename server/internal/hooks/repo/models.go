@@ -9,6 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type DeviceOwner struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+	LinkedUserID   pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -16,4 +30,22 @@ type HooksServerNameOverride struct {
 	DisplayName   string
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type UserAccount struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	UserID              pgtype.Text
+	Provider            string
+	ExternalOrgID       pgtype.Text
+	ExternalAccountUuid string
+	ExternalAccountID   pgtype.Text
+	Email               pgtype.Text
+	AccountType         pgtype.Text
+	FirstSeenAt         pgtype.Timestamptz
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
