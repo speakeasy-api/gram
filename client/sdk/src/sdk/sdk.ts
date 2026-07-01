@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
@@ -56,6 +57,13 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _adminRemoteSessions?: AdminRemoteSessions;
+  get adminRemoteSessions(): AdminRemoteSessions {
+    return (this._adminRemoteSessions ??= new AdminRemoteSessions(
+      this._options,
+    ));
   }
 
   private _agent?: Agent;
