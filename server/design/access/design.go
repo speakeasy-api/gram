@@ -397,6 +397,40 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPAccessRules"}`)
 	})
 
+	Method("listShadowMCPInventory", func() {
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			Required("project_id")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryResult)
+
+		HTTP(func() {
+			GET("/rpc/access.shadowMcp.inventory.list")
+			Param("project_id")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventory")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+	})
+
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
 		Security(security.Session)
@@ -924,6 +958,59 @@ var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
 var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func() {
 	Required("rules")
 	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryAccessRuleMatchModel = Type("ShadowMCPInventoryAccessRuleMatch", func() {
+	Required("id", "access_scope", "disposition", "match_breadth", "match_value", "display_name")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("access_scope", String)
+	Attribute("disposition", String, func() {
+		Enum("allowed", "denied")
+	})
+	Attribute("match_breadth", String)
+	Attribute("match_value", String)
+	Attribute("display_name", String)
+})
+
+var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
+	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "explicit_access", "effective_access", "explanatory_rules")
+
+	Attribute("canonical_server_url", String)
+	Attribute("url_host", String)
+	Attribute("server_name", String)
+	Attribute("first_seen", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_called", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("observed_use_count", Int)
+	Attribute("user_count", Int)
+	Attribute("top_users", ArrayOf(String))
+	Attribute("explicit_access", String, func() {
+		Enum("none", "allowed", "denied")
+	})
+	Attribute("effective_access", String, func() {
+		Enum("none", "allowed", "denied")
+	})
+	Attribute("explicit_rule", ShadowMCPInventoryAccessRuleMatchModel)
+	Attribute("effective_rule", ShadowMCPInventoryAccessRuleMatchModel)
+	Attribute("explanatory_rules", ArrayOf(ShadowMCPInventoryAccessRuleMatchModel))
+})
+
+var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 

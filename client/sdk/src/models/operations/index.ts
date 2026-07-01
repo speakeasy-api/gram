@@ -239,6 +239,7 @@ export * from "./listservernameoverrides.js";
 export * from "./listsessions.js";
 export * from "./listshadowmcpaccessrules.js";
 export * from "./listshadowmcpapprovalrequests.js";
+export * from "./listshadowmcpinventory.js";
 export * from "./listtemplates.js";
 export * from "./listtools.js";
 export * from "./listtoolsets.js";

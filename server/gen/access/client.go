@@ -29,6 +29,7 @@ type Client struct {
 	ApproveShadowMCPApprovalRequestEndpoint goa.Endpoint
 	DenyShadowMCPApprovalRequestEndpoint    goa.Endpoint
 	ListShadowMCPAccessRulesEndpoint        goa.Endpoint
+	ListShadowMCPInventoryEndpoint          goa.Endpoint
 	CreateShadowMCPAccessRuleEndpoint       goa.Endpoint
 	UpdateShadowMCPAccessRuleEndpoint       goa.Endpoint
 	DeleteShadowMCPAccessRuleEndpoint       goa.Endpoint
@@ -41,7 +42,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPApprovalRequests, createShadowMCPApprovalRequest, approveShadowMCPApprovalRequest, denyShadowMCPApprovalRequest, listShadowMCPAccessRules, createShadowMCPAccessRule, updateShadowMCPAccessRule, deleteShadowMCPAccessRule, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPApprovalRequests, createShadowMCPApprovalRequest, approveShadowMCPApprovalRequest, denyShadowMCPApprovalRequest, listShadowMCPAccessRules, listShadowMCPInventory, createShadowMCPAccessRule, updateShadowMCPAccessRule, deleteShadowMCPAccessRule, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                       listRoles,
 		GetRoleEndpoint:                         getRole,
@@ -57,6 +58,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ApproveShadowMCPApprovalRequestEndpoint: approveShadowMCPApprovalRequest,
 		DenyShadowMCPApprovalRequestEndpoint:    denyShadowMCPApprovalRequest,
 		ListShadowMCPAccessRulesEndpoint:        listShadowMCPAccessRules,
+		ListShadowMCPInventoryEndpoint:          listShadowMCPInventory,
 		CreateShadowMCPAccessRuleEndpoint:       createShadowMCPAccessRule,
 		UpdateShadowMCPAccessRuleEndpoint:       updateShadowMCPAccessRule,
 		DeleteShadowMCPAccessRuleEndpoint:       deleteShadowMCPAccessRule,
@@ -377,6 +379,29 @@ func (c *Client) ListShadowMCPAccessRules(ctx context.Context, p *ListShadowMCPA
 		return
 	}
 	return ires.(*ListShadowMCPAccessRulesResult), nil
+}
+
+// ListShadowMCPInventory calls the "listShadowMCPInventory" endpoint of the
+// "access" service.
+// ListShadowMCPInventory may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListShadowMCPInventory(ctx context.Context, p *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error) {
+	var ires any
+	ires, err = c.ListShadowMCPInventoryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListShadowMCPInventoryResult), nil
 }
 
 // CreateShadowMCPAccessRule calls the "createShadowMCPAccessRule" endpoint of

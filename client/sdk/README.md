@@ -152,6 +152,7 @@ run();
 * [listShadowMCPApprovalRequests](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 * [listShadowMCPAccessRules](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
+* [listShadowMCPInventory](docs/sdks/access/README.md#listshadowmcpinventory) - listShadowMCPInventory access
 * [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 * [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
@@ -713,6 +714,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`accessListShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`accessListShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+- [`accessListShadowMCPInventory`](docs/sdks/access/README.md#listshadowmcpinventory) - listShadowMCPInventory access
 - [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
@@ -1389,6 +1391,7 @@ To learn about this feature and how to get started, check
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+- [`useShadowMCPInventory`](docs/sdks/access/README.md#listshadowmcpinventory) - listShadowMCPInventory access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
