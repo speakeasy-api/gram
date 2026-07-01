@@ -187,6 +187,16 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	return nil
 }
 
+// ensureTraceContext fills trace/span ids when this telemetry row has no
+// active OTel span context. That is expected when tracing is disabled or when
+// tests invoke the interceptor directly: the row is still valid, but
+// trace_summaries_mv drops rows without trace_id and the tool-log dashboards
+// read from that summary path. The generated ids are therefore a local
+// ClickHouse grouping key, not distributed trace context.
+//
+// Hosted/toolset-backed MCP rows do the equivalent earlier in
+// gateway.ToolProxy.Do by recording the active gateway.toolCall span onto the
+// shared log attributes.
 func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
 	if _, ok := logAttrs[attr.TraceIDKey]; !ok {
 		traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
