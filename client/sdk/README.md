@@ -287,6 +287,7 @@ run();
 * [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 * [hooksNumberCodex](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
+* [dispatch](docs/sdks/hooks/README.md#dispatch) - dispatch hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 * [hooksNumberMetrics](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
 
@@ -760,6 +761,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
+- [`hooksDispatch`](docs/sdks/hooks/README.md#dispatch) - dispatch hooks
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
@@ -1116,6 +1118,7 @@ To learn about this feature and how to get started, check
 - [`useDisableWebhooksMutation`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`useDiscoverRemoteMcpProtectedResourceMetadataMutation`](docs/sdks/remotemcp/README.md#discoverprotectedresourcemetadata) - discoverProtectedResourceMetadata remoteMcp
 - [`useDiscoverRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
+- [`useDispatchAgentHookMutation`](docs/sdks/hooks/README.md#dispatch) - dispatch hooks
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 - [`useEnsureManagedAssistantMutation`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants

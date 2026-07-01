@@ -93,7 +93,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|codex|logs|metrics)",
+		"hooks (claude|cursor|codex|dispatch|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -839,6 +839,10 @@ func ParseEndpoint(
 		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
 		hooksCodexHookHostnameFlag     = hooksCodexFlags.String("hook-hostname", "", "")
 		hooksCodexIdempotencyKeyFlag   = hooksCodexFlags.String("idempotency-key", "", "")
+
+		hooksDispatchFlags           = flag.NewFlagSet("dispatch", flag.ExitOnError)
+		hooksDispatchBodyFlag        = hooksDispatchFlags.String("body", "REQUIRED", "")
+		hooksDispatchApikeyTokenFlag = hooksDispatchFlags.String("apikey-token", "", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -2340,6 +2344,7 @@ func ParseEndpoint(
 	hooksClaudeFlags.Usage = hooksClaudeUsage
 	hooksCursorFlags.Usage = hooksCursorUsage
 	hooksCodexFlags.Usage = hooksCodexUsage
+	hooksDispatchFlags.Usage = hooksDispatchUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -3204,6 +3209,9 @@ func ParseEndpoint(
 
 			case "codex":
 				epf = hooksCodexFlags
+
+			case "dispatch":
+				epf = hooksDispatchFlags
 
 			case "logs":
 				epf = hooksLogsFlags
@@ -4488,6 +4496,9 @@ func ParseEndpoint(
 			case "codex":
 				endpoint = c.Codex()
 				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag, *hooksCodexIdempotencyKeyFlag)
+			case "dispatch":
+				endpoint = c.Dispatch()
+				data, err = hooksc.BuildDispatchPayload(*hooksDispatchBodyFlag, *hooksDispatchApikeyTokenFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -8291,6 +8302,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
 	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.`)
 	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
+	fmt.Fprintln(os.Stderr, `    dispatch: Agent-forwarded hook dispatch. The device-agent daemon authenticates with its agent-scoped key and forwards a tool's hook event, vouching for the user's email. Unlike the per-tool endpoints (which take a hooks-scoped key + Gram-Project), the agent stays org-scoped: the event attributes to the org's default project unless an optional project_slug override is supplied. Fans out to the same per-tool event handling and returns a normalized decision.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -8373,6 +8385,26 @@ func hooksCodexUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
+}
+
+func hooksDispatchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks dispatch", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent-forwarded hook dispatch. The device-agent daemon authenticates with its agent-scoped key and forwards a tool's hook event, vouching for the user's email. Unlike the per-tool endpoints (which take a hooks-scoped key + Gram-Project), the agent stays org-scoped: the event attributes to the org's default project unless an optional project_slug override is supplied. Fans out to the same per-tool event handling and returns a normalized decision.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks dispatch --body '{\n      \"hook_hostname\": \"abc123\",\n      \"idempotency_key\": \"abc123\",\n      \"payload\": \"abc123\",\n      \"project_slug\": \"abc123\",\n      \"tool\": \"claude_code\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\"")
 }
 
 func hooksLogsUsage() {

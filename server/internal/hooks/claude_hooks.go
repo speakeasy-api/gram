@@ -1110,7 +1110,13 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
-	if cached.UserEmail != "" {
+	// The auth-context email (plugin-supplied, or agent-vouched via hooks.dispatch)
+	// is authoritative; the OTEL-seeded cached email only fills a gap. The Claude
+	// method's contract is "when the key is set, attribute directly", and the
+	// agent vouches for user_email within its org (DNO-376) — so a stale cached
+	// session email (e.g. after an AI-tool-account switch, the exact bypass we
+	// guard against) must not override it. Matches codex's payload-wins order.
+	if metadata.UserEmail == "" {
 		metadata.UserEmail = cached.UserEmail
 	}
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)

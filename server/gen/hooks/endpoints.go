@@ -16,11 +16,12 @@ import (
 
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
-	Claude  goa.Endpoint
-	Cursor  goa.Endpoint
-	Codex   goa.Endpoint
-	Logs    goa.Endpoint
-	Metrics goa.Endpoint
+	Claude   goa.Endpoint
+	Cursor   goa.Endpoint
+	Codex    goa.Endpoint
+	Dispatch goa.Endpoint
+	Logs     goa.Endpoint
+	Metrics  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -28,11 +29,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Claude:  NewClaudeEndpoint(s),
-		Cursor:  NewCursorEndpoint(s, a.APIKeyAuth),
-		Codex:   NewCodexEndpoint(s, a.APIKeyAuth),
-		Logs:    NewLogsEndpoint(s, a.APIKeyAuth),
-		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
+		Claude:   NewClaudeEndpoint(s),
+		Cursor:   NewCursorEndpoint(s, a.APIKeyAuth),
+		Codex:    NewCodexEndpoint(s, a.APIKeyAuth),
+		Dispatch: NewDispatchEndpoint(s, a.APIKeyAuth),
+		Logs:     NewLogsEndpoint(s, a.APIKeyAuth),
+		Metrics:  NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -41,6 +43,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
 	e.Cursor = m(e.Cursor)
 	e.Codex = m(e.Codex)
+	e.Dispatch = m(e.Dispatch)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
 }
@@ -121,6 +124,29 @@ func NewCodexEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 			return nil, err
 		}
 		return s.Codex(ctx, p)
+	}
+}
+
+// NewDispatchEndpoint returns an endpoint function that calls the method
+// "dispatch" of service "hooks".
+func NewDispatchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DispatchPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"agent"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Dispatch(ctx, p)
 	}
 }
 

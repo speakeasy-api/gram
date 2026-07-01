@@ -22,6 +22,11 @@ func CodexHooksPath() string {
 	return "/rpc/hooks.codex"
 }
 
+// DispatchHooksPath returns the URL path to the hooks service dispatch HTTP endpoint.
+func DispatchHooksPath() string {
+	return "/rpc/hooks.dispatch"
+}
+
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"

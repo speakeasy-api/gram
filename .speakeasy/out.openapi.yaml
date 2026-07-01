@@ -10436,6 +10436,94 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.dispatch:
+    post:
+      description: 'Agent-forwarded hook dispatch. The device-agent daemon authenticates with its agent-scoped key and forwards a tool''s hook event, vouching for the user''s email. Unlike the per-tool endpoints (which take a hooks-scoped key + Gram-Project), the agent stays org-scoped: the event attributes to the org''s default project unless an optional project_slug override is supplied. Fans out to the same per-tool event handling and returns a normalized decision.'
+      operationId: dispatchAgentHook
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchHookPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchHookResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: dispatch hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: dispatch
+      x-speakeasy-react-hook:
+        name: DispatchAgentHook
   /rpc/hooks.listServerNameOverrides:
     get:
       tags:
@@ -38166,6 +38254,48 @@ components:
           description: Issuer URL to discover (e.g. https://login.linear.com).
       required:
         - issuer
+    DispatchHookPayload:
+      type: object
+      properties:
+        hook_hostname:
+          type: string
+          description: Optional originating hostname.
+        idempotency_key:
+          type: string
+          description: Optional per-invocation token reused across retries so a redelivered event is stored once.
+        payload:
+          description: The tool's raw hook event JSON, opaque to the transport.
+        project_slug:
+          type: string
+          description: Optional project override. When omitted, the event attributes to the org's default project; when set, it must name a project in the authenticated org. The override hook exists for future multi-project routing; the agent does not populate it today.
+        tool:
+          type: string
+          description: Source AI tool the event came from
+          enum:
+            - cursor
+            - claude_code
+            - codex
+        user_email:
+          type: string
+          description: Email of the user the agent resolved and is vouching for, attributed within the authenticated org.
+      description: 'Agent-forwarded hook event: the device agent authenticates with its agent-scoped key and forwards a tool''s hook event on behalf of a user.'
+      required:
+        - tool
+        - user_email
+        - payload
+    DispatchHookResult:
+      type: object
+      properties:
+        agent_message:
+          type: string
+          description: Agent-facing explanation for a deny.
+        permission:
+          type: string
+          description: 'Decision for blocking events: allow or deny.'
+        user_message:
+          type: string
+          description: Human-facing explanation for a deny.
+      description: Normalized hook decision.
     EmployeeDataFlowEdge:
       type: object
       properties:

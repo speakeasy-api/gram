@@ -246,6 +246,45 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 	return v, nil
 }
 
+// BuildDispatchPayload builds the payload for the hooks dispatch endpoint from
+// CLI flags.
+func BuildDispatchPayload(hooksDispatchBody string, hooksDispatchApikeyToken string) (*hooks.DispatchPayload, error) {
+	var err error
+	var body DispatchRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksDispatchBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"hook_hostname\": \"abc123\",\n      \"idempotency_key\": \"abc123\",\n      \"payload\": \"abc123\",\n      \"project_slug\": \"abc123\",\n      \"tool\": \"claude_code\",\n      \"user_email\": \"abc123\"\n   }'")
+		}
+		if body.Payload == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("payload", "body"))
+		}
+		if !(body.Tool == "cursor" || body.Tool == "claude_code" || body.Tool == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool", body.Tool, []any{"cursor", "claude_code", "codex"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksDispatchApikeyToken != "" {
+			apikeyToken = &hooksDispatchApikeyToken
+		}
+	}
+	v := &hooks.DispatchPayload{
+		Tool:           body.Tool,
+		UserEmail:      body.UserEmail,
+		Payload:        body.Payload,
+		ProjectSlug:    body.ProjectSlug,
+		HookHostname:   body.HookHostname,
+		IdempotencyKey: body.IdempotencyKey,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {
