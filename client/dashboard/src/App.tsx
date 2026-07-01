@@ -135,7 +135,14 @@ function AppContent() {
   const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
-    return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+    return (
+      <CliCallback
+        localCallbackUrl={cliFlow.cliCallbackUrl}
+        client={cliFlow.client}
+        codeChallenge={cliFlow.codeChallenge}
+        codeChallengeMethod={cliFlow.codeChallengeMethod}
+      />
+    );
   }
 
   return (
@@ -424,9 +431,12 @@ function useCliAuthFlow() {
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
+  const client = searchParams.get("client");
+  const codeChallenge = searchParams.get("code_challenge");
+  const codeChallengeMethod = searchParams.get("code_challenge_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl };
+    return { cliCallbackUrl, client, codeChallenge, codeChallengeMethod };
   }
 
   return null;

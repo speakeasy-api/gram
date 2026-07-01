@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e561723813fae8752676cd30aedc9ad7
+  docChecksum: 32b6541009749f056ace703a1b84108e
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -106,6 +106,10 @@ trackedFiles:
     last_write_checksum: sha1:273d6d3f0a22e7dbde90b8d820322ec4f38058c4
   docs/models/components/authnchallengemode.md:
     last_write_checksum: sha1:3c2fd0d0ef485e15b3cf673325d20deb5663156b
+  docs/models/components/authorizerequestbody.md:
+    last_write_checksum: sha1:ed8fae1e7d2aca62bdb45f7410cf6f6f16b03e21
+  docs/models/components/authorizeresponsebody.md:
+    last_write_checksum: sha1:6dcaa3892d322c9b58805ee7495794c5cd2f7a2e
   docs/models/components/authzchallenge.md:
     last_write_checksum: sha1:10393470b4844c24ff05e9a96677b3f01e3e90c7
   docs/models/components/authzchallengeoperation.md:
@@ -158,6 +162,8 @@ trackedFiles:
     last_write_checksum: sha1:1a1d1aa2b64281dde00d7127ea51e5c4102f0b5b
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
+  docs/models/components/codechallengemethod.md:
+    last_write_checksum: sha1:064bd0a90215d1b70deecfb7d10a33340856f676
   docs/models/components/codexhookpayload.md:
     last_write_checksum: sha1:a14857e5b7828d96031e7fe0c55cee74c4f7e6a4
   docs/models/components/codexhookpayloadhookeventname.md:
@@ -836,6 +842,10 @@ trackedFiles:
     last_write_checksum: sha1:a1751e0bc4882c9845778fd6d849acc58031c82e
   docs/models/components/reason.md:
     last_write_checksum: sha1:5dd4c7b55edbc64c218d956e8c4ee5b1b247cb1a
+  docs/models/components/redeemrequestbody.md:
+    last_write_checksum: sha1:4d7d763cce8b104e1a7c30497aa593fc6d02a327
+  docs/models/components/redeemresponsebody.md:
+    last_write_checksum: sha1:9a84a1d192617df3f2b2699714cdb6a713c0046b
   docs/models/components/redeployrequestbody.md:
     last_write_checksum: sha1:ce5975e0572331dee1ef25b019656fce4aaebf3a
   docs/models/components/redeployresult.md:
@@ -1484,6 +1494,10 @@ trackedFiles:
     last_write_checksum: sha1:df0ade5b1bee55ad3029d5e609fe67d8dbfbc2b5
   docs/models/operations/clearmcpregistrycachesecurityoption2.md:
     last_write_checksum: sha1:4b9e06e065173677603f86f6b62ddf0c843a356e
+  docs/models/operations/cliauthauthorizerequest.md:
+    last_write_checksum: sha1:54ebfafd113b2b25c137ea683eb6521cf162dd9a
+  docs/models/operations/cliauthauthorizesecurity.md:
+    last_write_checksum: sha1:876366ee7e773688b327fd1fa566cb7b66f7be2b
   docs/models/operations/cloneclientfromoauthproxyproviderrequest.md:
     last_write_checksum: sha1:5876665a825110ac31418e586ab7afaff51ef8d0
   docs/models/operations/cloneclientfromoauthproxyprovidersecurity.md:
@@ -3508,6 +3522,8 @@ trackedFiles:
     last_write_checksum: sha1:6b5aef9813cbb0e14906b218b56c7c85ce63493e
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
+  docs/sdks/cliauth/README.md:
+    last_write_checksum: sha1:c4116426326d6da23731011d86656c536f5020a5
   docs/sdks/collections/README.md:
     last_write_checksum: sha1:c89e96348dfa7bf58b80683a96303e6407b49b59
   docs/sdks/customrules/README.md:
@@ -3752,6 +3768,10 @@ trackedFiles:
     last_write_checksum: sha1:f804f51797d5d63aec34c63efe4190ec4ad9cfb5
   src/funcs/chatSubmitFeedback.ts:
     last_write_checksum: sha1:2b5dfe65502d81e6f4a010683253ae854e29e024
+  src/funcs/cliAuthAuthorize.ts:
+    last_write_checksum: sha1:444dca91c3a58acaf1ccdbf7b4b44c2a5b160efb
+  src/funcs/cliAuthRedeem.ts:
+    last_write_checksum: sha1:f03aafa29de7ac8bde7df9346fc5fa0d61ca61e7
   src/funcs/collectionsAttachServer.ts:
     last_write_checksum: sha1:945bcb8a10b4451adbfbb4924de60f6ac719f5b5
   src/funcs/collectionsCreate.ts:
@@ -4376,6 +4396,10 @@ trackedFiles:
     last_write_checksum: sha1:f2850e269d248a6b51579977ac170210b1278b32
   src/models/components/auditlogfacetoption.ts:
     last_write_checksum: sha1:b135dfcb735db7c9c4d1791c6fb46fb925292969
+  src/models/components/authorizerequestbody.ts:
+    last_write_checksum: sha1:a7a5e26baca60294100a882ab59bf74421c7cab7
+  src/models/components/authorizeresponsebody.ts:
+    last_write_checksum: sha1:bd02ee4e2f60bfe39c770c12784cb1c0883f5e30
   src/models/components/authzchallenge.ts:
     last_write_checksum: sha1:89a3ccb4c7649dc17b67802487ff8836a8e956aa
   src/models/components/canonicaltoolattributes.ts:
@@ -4655,7 +4679,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:607da1867fbde7e8d953b4fbc4529b42d13c7fee
+    last_write_checksum: sha1:d95cf3a6c633544937ac49617e7702ab8aaa817d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4990,6 +5014,10 @@ trackedFiles:
     last_write_checksum: sha1:7c4a4e579302f2a6c79394b4089c31b3f533b1a7
   src/models/components/rbacstatus.ts:
     last_write_checksum: sha1:16621be3d302c1526dbd21d165453c9028f1bcfd
+  src/models/components/redeemrequestbody.ts:
+    last_write_checksum: sha1:0f6e8deccc25ecb8d82b2362f5ed436299837d63
+  src/models/components/redeemresponsebody.ts:
+    last_write_checksum: sha1:60db78cd3820ea5fb63c3bde7df9c871edea7c07
   src/models/components/redeployrequestbody.ts:
     last_write_checksum: sha1:f0a8f4277c6d540cfec34506d35e843676094ed7
   src/models/components/redeployresult.ts:
@@ -5416,6 +5444,8 @@ trackedFiles:
     last_write_checksum: sha1:f2539f30b283b82b5b9fed7a1c11859d7277957a
   src/models/operations/clearmcpregistrycache.ts:
     last_write_checksum: sha1:d6fd706c54c7f486d9cf289ea3ebe4b848e4a92d
+  src/models/operations/cliauthauthorize.ts:
+    last_write_checksum: sha1:5df646f08f8117083ca84bad8a1a82498171e571
   src/models/operations/cloneclientfromoauthproxyprovider.ts:
     last_write_checksum: sha1:0703bd13fe6c4285a5d8769ec4d316b7e5b2e025
   src/models/operations/cloneenvironment.ts:
@@ -5718,7 +5748,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d5ea882ff67e8aa437a791a9bd19169d8a550564
+    last_write_checksum: sha1:6b370f8aeed98ca552983ecd8a647d1999996b79
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6148,6 +6178,10 @@ trackedFiles:
     last_write_checksum: sha1:190264ef0cadd979e482f39ae67726aafe790764
   src/react-query/checkMcpEndpointSlugAvailability.ts:
     last_write_checksum: sha1:d946709fb6eae6ff66c4d8e33a6bee4b42d44f52
+  src/react-query/cliAuthAuthorize.ts:
+    last_write_checksum: sha1:dbae4a53bbf09da9b21c2fb33b9f478ab2498ba7
+  src/react-query/cliAuthRedeem.ts:
+    last_write_checksum: sha1:65ab121487401e65f4ba7fdfb38bb46a1a9342ef
   src/react-query/cloneClientFromOAuthProxyProvider.ts:
     last_write_checksum: sha1:12a74af12efb5958952336758d916295f5a14e42
   src/react-query/cloneEnvironment.ts:
@@ -6416,7 +6450,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:aa9f9c1f103f87037db69825aa1d39a1fd133c4f
+    last_write_checksum: sha1:9dc7941d50aea520aef3f69568671ec1ae7301b8
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -7066,6 +7100,8 @@ trackedFiles:
     last_write_checksum: sha1:3e2ac811796ba8f5d5efadbad170320b67da83ce
   src/sdk/chatsessions.ts:
     last_write_checksum: sha1:130846542da7bbe81bd0c676bc1513a4a1e4e8a5
+  src/sdk/cliauth.ts:
+    last_write_checksum: sha1:1726a507a84673bc5f93a670ee64583c7992f65a
   src/sdk/collections.ts:
     last_write_checksum: sha1:ebfe07c2d6ae3be7f9f8cac1b612efb2131283fb
   src/sdk/customrules.ts:
@@ -7139,7 +7175,7 @@ trackedFiles:
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
-    last_write_checksum: sha1:3f49de13ac37f33d758f257f99a2623acaa18af0
+    last_write_checksum: sha1:2a0e5de17294b92f692de8c3c9cb1c1f4cc42eba
   src/sdk/telemetry.ts:
     last_write_checksum: sha1:fb3602b0e60a86d4b00268f71934b8a928d6a02f
   src/sdk/templates.ts:
@@ -10844,5 +10880,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  cliAuthAuthorize:
+    speakeasy-default-cli-auth-authorize:
+      requestBody:
+        application/json: {"code_challenge": "<value>", "code_challenge_method": "S256"}
+      responses:
+        "200":
+          application/json: {"code": "<value>", "expires_in": 195102}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cliAuthRedeem:
+    speakeasy-default-cli-auth-redeem:
+      requestBody:
+        application/json: {"code": "<value>", "code_verifier": "<value>"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "project_slug": "<value>", "user_email": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

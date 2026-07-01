@@ -230,6 +230,11 @@ run();
 * [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
 * [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 
+### [CliAuth](docs/sdks/cliauth/README.md)
+
+* [authorize](docs/sdks/cliauth/README.md#authorize) - authorize cliAuth
+* [redeem](docs/sdks/cliauth/README.md#redeem) - redeem cliAuth
+
 ### [Collections](docs/sdks/collections/README.md)
 
 * [attachServer](docs/sdks/collections/README.md#attachserver) - attachServer collections
@@ -726,6 +731,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`chatSetPinned`](docs/sdks/chat/README.md#setpinned) - setPinned chat
 - [`chatSubmitFeedback`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
+- [`cliAuthAuthorize`](docs/sdks/cliauth/README.md#authorize) - authorize cliAuth
+- [`cliAuthRedeem`](docs/sdks/cliauth/README.md#redeem) - redeem cliAuth
 - [`collectionsAttachServer`](docs/sdks/collections/README.md#attachserver) - attachServer collections
 - [`collectionsCreate`](docs/sdks/collections/README.md#create) - create collections
 - [`collectionsDelete`](docs/sdks/collections/README.md#delete) - delete collections
@@ -1048,6 +1055,8 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useCliAuthAuthorizeMutation`](docs/sdks/cliauth/README.md#authorize) - authorize cliAuth
+- [`useCliAuthRedeemMutation`](docs/sdks/cliauth/README.md#redeem) - redeem cliAuth
 - [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
