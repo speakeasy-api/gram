@@ -757,11 +757,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ProjectID:           authCtx.ProjectID.String(),
 	}
 	if metadata.UserEmail != "" {
-		if authCtx.Email != nil && conv.NormalizeEmail(*authCtx.Email) == conv.NormalizeEmail(metadata.UserEmail) {
-			metadata.UserID = authCtx.UserID
-		} else {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
 
 	return metadata, true
@@ -1133,7 +1129,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
 	if cached.UserEmail != "" {
-		metadata.UserEmail = strings.TrimSpace(cached.UserEmail)
+		metadata.UserEmail = cached.UserEmail
 	}
 	// Prefer email resolution, which is authoritative for team accounts and
 	// avoids trusting a possibly-stale cached id. Only a personal account — whose

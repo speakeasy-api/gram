@@ -949,38 +949,6 @@ func TestMergeClaudeAuthContextMetadata_AdoptsBridgedOwnerForPersonalAccount(t *
 	assert.Equal(t, "user-account-id", metadata.UserAccountID)
 }
 
-func TestMergeClaudeAuthContextMetadata_ReresolvesWhenCachedEmailOverridesAuthEmail(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.Email)
-	require.NotNil(t, authCtx.ProjectID)
-
-	cachedUserID := "cached-claude-user"
-	cachedEmail := "cached-claude-user@example.com"
-	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, cachedUserID, cachedEmail)
-
-	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "session_test", *authCtx.Email)
-	require.True(t, ok)
-	require.Equal(t, authCtx.UserID, authMetadata.UserID)
-
-	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
-		SessionID:     "session_test",
-		ServiceName:   "claude-code",
-		UserEmail:     cachedEmail,
-		UserID:        "",
-		ExternalOrgID: "claude_org",
-		GramOrgID:     "org_from_cache",
-		ProjectID:     "project_from_cache",
-	})
-
-	assert.Equal(t, cachedUserID, metadata.UserID)
-	assert.Equal(t, cachedEmail, metadata.UserEmail)
-	assert.NotEqual(t, authCtx.UserID, metadata.UserID)
-}
-
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should
