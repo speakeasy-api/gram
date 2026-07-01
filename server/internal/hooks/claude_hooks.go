@@ -1133,11 +1133,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
 	if cached.UserEmail != "" {
-		cachedEmail := strings.TrimSpace(cached.UserEmail)
-		if conv.NormalizeEmail(cachedEmail) != conv.NormalizeEmail(metadata.UserEmail) {
-			metadata.UserID = ""
-		}
-		metadata.UserEmail = cachedEmail
+		metadata.UserEmail = strings.TrimSpace(cached.UserEmail)
 	}
 	// Prefer email resolution, which is authoritative for team accounts and
 	// avoids trusting a possibly-stale cached id. Only a personal account — whose

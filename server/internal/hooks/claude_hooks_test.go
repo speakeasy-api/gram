@@ -967,13 +967,13 @@ func TestMergeClaudeAuthContextMetadata_ReresolvesWhenCachedEmailOverridesAuthEm
 	require.Equal(t, authCtx.UserID, authMetadata.UserID)
 
 	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
-		SessionID:   "session_test",
-		ServiceName: "claude-code",
-		UserEmail:   cachedEmail,
-		UserID:      "",
-		ClaudeOrgID: "claude_org",
-		GramOrgID:   "org_from_cache",
-		ProjectID:   "project_from_cache",
+		SessionID:     "session_test",
+		ServiceName:   "claude-code",
+		UserEmail:     cachedEmail,
+		UserID:        "",
+		ExternalOrgID: "claude_org",
+		GramOrgID:     "org_from_cache",
+		ProjectID:     "project_from_cache",
 	})
 
 	assert.Equal(t, cachedUserID, metadata.UserID)

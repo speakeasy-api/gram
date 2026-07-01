@@ -391,13 +391,19 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		actorEmail = strings.TrimSpace(*authCtx.Email)
 	}
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: strings.TrimSpace(payload.Source.Adapter),
-		UserEmail:   actorEmail,
-		UserID:      authCtx.UserID,
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:           sessionID,
+		ServiceName:         strings.TrimSpace(payload.Source.Adapter),
+		UserEmail:           actorEmail,
+		UserID:              authCtx.UserID,
+		Provider:            "",
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		UserAccountID:       "",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
