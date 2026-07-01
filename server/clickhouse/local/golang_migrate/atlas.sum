@@ -1,4 +1,4 @@
-h1:3ideuY4Z6Y4Y/QAJpmkXbFLp2O9gnBrkO3jNvWlOI5w=
+h1:WRoq3OxqZgTAJQ6uZo+wB2yNqzc2Awe2QCU2RSjrUu4=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -45,5 +45,5 @@ h1:3ideuY4Z6Y4Y/QAJpmkXbFLp2O9gnBrkO3jNvWlOI5w=
 20260619180658_set-cutoff-date-for-attributes-summaries-mv.up.sql h1:Zx9IqEAFZ9d9Y3M9YJ2tEgFTHF9flGidVEeUwFxMTdM=
 20260622132504_include-session-tool-calls-in-attribute-metrics.up.sql h1:MVVFyQv6vsF/F0w70w/wGzoL/0b/ioeDEtRRMdedm6I=
 20260626094434_include-chat-completion-usage-cost.up.sql h1:Tqn1gL/ffrZ7ubhcddFKtbTpd165TpPwpaFbYW+r/iM=
-20260629200140_add-personal-account-telemetry-cols.up.sql h1:04R85hpt+XnayqW4lL828fREFETTeyheqp/cwcNq8w8=
-20260630211520_pat-account-type-and-provider-summaries.up.sql h1:nWyMj1FhU6sZU6CYDqXaRg6FhfLrugMGxRg4kLjwV2I=
+20260629200140_add-personal-account-telemetry-cols.up.sql h1:kRwK9Foo9RtIM+V7sYD+v/B2tEO34JKIZ4ieb3cKlBI=
+20260630211520_pat-account-type-and-provider-summaries.up.sql h1:2QpdfVeyQ2LjC9Ms0lRaDjnf6rDNbnREfZfX1Eu/X38=
