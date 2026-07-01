@@ -19,7 +19,7 @@ export type AgentPluginsQueryData = components.GetPluginsResult;
 export function prefetchAgentPlugins(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAgentPluginsRequest,
+  request?: operations.GetAgentPluginsRequest | undefined,
   security?: operations.GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchAgentPlugins(
 
 export function buildAgentPluginsQuery(
   client$: GramCore,
-  request: operations.GetAgentPluginsRequest,
+  request?: operations.GetAgentPluginsRequest | undefined,
   security?: operations.GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -44,8 +44,8 @@ export function buildAgentPluginsQuery(
 } {
   return {
     queryKey: queryKeyAgentPlugins({
-      email: request.email,
-      gramKey: request.gramKey,
+      email: request?.email,
+      gramKey: request?.gramKey,
     }),
     queryFn: async function agentPluginsQueryFn(
       ctx,
@@ -72,7 +72,7 @@ export function buildAgentPluginsQuery(
 }
 
 export function queryKeyAgentPlugins(
-  parameters: { email: string; gramKey?: string | undefined },
+  parameters: { email?: string | undefined; gramKey?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "agent", "getPlugins", parameters];
 }

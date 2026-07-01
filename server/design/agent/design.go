@@ -19,12 +19,24 @@ var _ = Service("agent", func() {
 	Method("getPlugins", func() {
 		Description("Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.")
 
+		// Authenticated with an API key carrying the `agent` scope. The
+		// device-agent token exchange mints a per-user key with the `agent`
+		// (and `hooks`) scope, so the enrolled user is the key owner and the
+		// org derives from the key. `email` is retained as an optional param
+		// for backward compatibility with the legacy vouched-email path.
+		Security(security.ByKey, func() {
+			Scope("agent")
+		})
+
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("email", String, "Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.", func() {
+			// Optional: the enrolled user is the authenticated key owner. The
+			// param is kept only for backward compatibility with agents that
+			// still vouch an email, and is used solely as a fallback when the
+			// key does not resolve to a user email.
+			Attribute("email", String, "Email address of the enrolled user. Optional: the enrolled user is normally the authenticated key owner; this is a backward-compatible fallback.", func() {
 				Example("dev@acme.corp")
 			})
-			Required("email")
 		})
 
 		Result(GetPluginsResult)

@@ -42,6 +42,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
+import { TokenExchange } from "./tokenexchange.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
@@ -251,6 +252,11 @@ export class Gram extends ClientSDK {
   private _templates?: Templates;
   get templates(): Templates {
     return (this._templates ??= new Templates(this._options));
+  }
+
+  private _tokenExchange?: TokenExchange;
+  get tokenExchange(): TokenExchange {
+    return (this._tokenExchange ??= new TokenExchange(this._options));
   }
 
   private _tools?: Tools;

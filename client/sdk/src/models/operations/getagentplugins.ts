@@ -11,9 +11,9 @@ export type GetAgentPluginsSecurity = {
 
 export type GetAgentPluginsRequest = {
   /**
-   * Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+   * Email address of the enrolled user. Optional: the enrolled user is normally the authenticated key owner; this is a backward-compatible fallback.
    */
-  email: string;
+  email?: string | undefined;
   /**
    * API Key header
    */
@@ -50,7 +50,7 @@ export function getAgentPluginsSecurityToJSON(
 
 /** @internal */
 export type GetAgentPluginsRequest$Outbound = {
-  email: string;
+  email?: string | undefined;
   "Gram-Key"?: string | undefined;
 };
 
@@ -60,7 +60,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
   GetAgentPluginsRequest
 > = z.pipe(
   z.object({
-    email: z.string(),
+    email: z.optional(z.string()),
     gramKey: z.optional(z.string()),
   }),
   z.transform((v) => {

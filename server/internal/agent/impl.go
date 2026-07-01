@@ -40,6 +40,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
+// NewService constructs the agent service.
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -76,7 +77,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // GetPlugins returns every plugin in the published projects of the caller's
 // org. Per-principal assignment scoping is intentionally disabled for now (see
 // DNO-239): every org member receives every published-project plugin. The
-// supplied email is still validated and will drive principal resolution again
+// enrolled user is the authenticated key owner (authCtx.Email); the optional
+// `email` param is only a backward-compatible fallback for agents that still
+// vouch an email. The resolved email will drive principal resolution again
 // (user:/role: lookups) once RBAC-backed assignment management ships.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -84,11 +87,20 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Validate the caller sent a well-formed email even though it does not yet
-	// scope the result, so the request contract stays stable for DNO-239.
-	email := conv.NormalizeEmail(payload.Email)
-	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
+	// Derive the enrolled user from the authenticated key owner. Fall back to
+	// the optional vouched `email` param only when the key does not carry an
+	// email (transition). When present, validate it is well-formed so the
+	// request contract stays stable.
+	var enrolledEmail string
+	if authCtx.Email != nil && *authCtx.Email != "" {
+		enrolledEmail = conv.NormalizeEmail(*authCtx.Email)
+	} else if payload.Email != nil {
+		enrolledEmail = conv.NormalizeEmail(*payload.Email)
+	}
+	if enrolledEmail != "" {
+		if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + enrolledEmail); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
+		}
 	}
 
 	rows, err := s.repo.GetAgentPluginSet(ctx, authCtx.ActiveOrganizationID)

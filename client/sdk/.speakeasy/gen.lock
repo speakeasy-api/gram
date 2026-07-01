@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e561723813fae8752676cd30aedc9ad7
+  docChecksum: 267b1796597854f8a94dbd3b82dffb11
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -322,6 +322,8 @@ trackedFiles:
     last_write_checksum: sha1:77109d97c0e09a16399eff19bbd6eeda93a48b2e
   docs/models/components/evolveresult.md:
     last_write_checksum: sha1:db06ce126556570bbfa4033c393953026f88280a
+  docs/models/components/exchangerequestbody.md:
+    last_write_checksum: sha1:c4033f5515a1ae9495377f296cabca2d94ad29b7
   docs/models/components/exclusionscope.md:
     last_write_checksum: sha1:1462d9f6a7db539217a8232b04fcac5ec4ee43be
   docs/models/components/exportmcpmetadatarequestbody.md:
@@ -1122,6 +1124,8 @@ trackedFiles:
     last_write_checksum: sha1:0f9f31c7a4adb6abd079a9d1e46852e52bf5a942
   docs/models/components/tokenendpointauthmethod.md:
     last_write_checksum: sha1:e67937fc02f219f4bd0de26448bb4aa2d3f2d9d2
+  docs/models/components/tokenresult.md:
+    last_write_checksum: sha1:7f18035ec9c3ee520b9939f49963629f1fc94c62
   docs/models/components/tokensundermanagement.md:
     last_write_checksum: sha1:9ef495d5be8bbaf753d373bc093a4ca1a92790c3
   docs/models/components/tool.md:
@@ -2023,7 +2027,7 @@ trackedFiles:
   docs/models/operations/getactivedeploymentsecurityoption2.md:
     last_write_checksum: sha1:b7a794e93f52ba73fc4513ff0ecd10c2aede8eaf
   docs/models/operations/getagentpluginsrequest.md:
-    last_write_checksum: sha1:a4268dedfa9bef127040e1126ca2f334e41f4e8a
+    last_write_checksum: sha1:76464f593907050a997d5e1e2ac5bc8d4c1e244b
   docs/models/operations/getagentpluginssecurity.md:
     last_write_checksum: sha1:019094a5f8866a3c1a7bc6b7584ba31e40913cf0
   docs/models/operations/getaiintegrationconfigrequest.md:
@@ -3230,6 +3234,10 @@ trackedFiles:
     last_write_checksum: sha1:ef735daa306578d5ff34ba90fe71fb806cdeba91
   docs/models/operations/testdetectionrulesecurityoption2.md:
     last_write_checksum: sha1:0342386fe3584dcb14e9db8c4e4dba73cf8c3e29
+  docs/models/operations/tokenexchangerequest.md:
+    last_write_checksum: sha1:d4702c5a1050d39a70005e6dc7b4a233de0ba619
+  docs/models/operations/tokenexchangesecurity.md:
+    last_write_checksum: sha1:5cf7369814b3e356548555443d2cf05ac50f7c64
   docs/models/operations/tooltypes.md:
     last_write_checksum: sha1:edba292f449a5068c06f65f27ce8a762c9dbaa7a
   docs/models/operations/triggerriskanalysisrequest.md:
@@ -3580,6 +3588,8 @@ trackedFiles:
     last_write_checksum: sha1:68db4654e218a7cf41bdb27663d41607bb2b9bf4
   docs/sdks/templates/README.md:
     last_write_checksum: sha1:0551bb07610cc1f06705cbd857013befdb5090ca
+  docs/sdks/tokenexchange/README.md:
+    last_write_checksum: sha1:33b4c2a09cb7dc394a51e0a8a2b525a9685ab7fe
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
@@ -3663,7 +3673,7 @@ trackedFiles:
   src/funcs/accessUpdateShadowMCPAccessRule.ts:
     last_write_checksum: sha1:0784a48e88a5db5f2840126aaa1471e2f962e4d3
   src/funcs/agentGetPlugins.ts:
-    last_write_checksum: sha1:a11c40c6917c62fbf6570a25161ab2b216d8d5c8
+    last_write_checksum: sha1:17d1f928d04a4ee93fcc66fa6590ee171540c13b
   src/funcs/aiIntegrationsDeleteConfig.ts:
     last_write_checksum: sha1:1ea838e6b36b309892cef9c5190d33b87af9304c
   src/funcs/aiIntegrationsGetConfig.ts:
@@ -4188,6 +4198,8 @@ trackedFiles:
     last_write_checksum: sha1:0336a1e8de4a619540bc4345cfd5bf86d8ad9e19
   src/funcs/templatesUpdate.ts:
     last_write_checksum: sha1:fdae3b645767c1603cf7383b722a22b7df7f84a1
+  src/funcs/tokenExchangeExchange.ts:
+    last_write_checksum: sha1:8fa80285d4230092436ee40af78555b1522ac749
   src/funcs/toolsList.ts:
     last_write_checksum: sha1:06b52e6b86f0197ed0b71b9c3863f1e321969187
   src/funcs/toolsetsAddExternalOAuthServer.ts:
@@ -4541,6 +4553,8 @@ trackedFiles:
     last_write_checksum: sha1:68770111d897e4e6ed0a489454180da16212b6cb
   src/models/components/evolveresult.ts:
     last_write_checksum: sha1:2b1a8840975d45f5c196a8f8e682279ad7fe4f44
+  src/models/components/exchangerequestbody.ts:
+    last_write_checksum: sha1:2e5511d8639ee898826a5ce9f8e37b8e478a4ff2
   src/models/components/exportmcpmetadatarequestbody.ts:
     last_write_checksum: sha1:39ceae9ebec465fcd7ffa438b779cd2539d0d05d
   src/models/components/exprcompileresult.ts:
@@ -4655,7 +4669,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:607da1867fbde7e8d953b4fbc4529b42d13c7fee
+    last_write_checksum: sha1:0e9ae77e9851ffadfb3279025339b92da6485bbe
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -5190,6 +5204,8 @@ trackedFiles:
     last_write_checksum: sha1:51cbdd17885ffa219589535e5a6fbd7ac6c0c8cc
   src/models/components/timeseriesbucket.ts:
     last_write_checksum: sha1:b587c1da39059714051cf70a186a1ff7bff91059
+  src/models/components/tokenresult.ts:
+    last_write_checksum: sha1:592c58837ff0e66c12e0f5d4c2912a5763984677
   src/models/components/tokensundermanagement.ts:
     last_write_checksum: sha1:1ecda96ac5700940e580cd52a58fb3f72bbc8197
   src/models/components/tool.ts:
@@ -5597,7 +5613,7 @@ trackedFiles:
   src/models/operations/getactivedeployment.ts:
     last_write_checksum: sha1:72ccae6acaa06ae73373ceba82c1bb4d2a5686d4
   src/models/operations/getagentplugins.ts:
-    last_write_checksum: sha1:ec3c7404106d4a19e577b3b3270f8ac658480479
+    last_write_checksum: sha1:41f768a517dacc8b1ea62ed456fd18ce86c7d65b
   src/models/operations/getaiintegrationconfig.ts:
     last_write_checksum: sha1:c5e790c4dd9133c11babab9a0e1e273dc55d06aa
   src/models/operations/getassistant.ts:
@@ -5718,7 +5734,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d5ea882ff67e8aa437a791a9bd19169d8a550564
+    last_write_checksum: sha1:b742726dcbac186426b342e8f43bfb4ec6c0d830
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5986,6 +6002,8 @@ trackedFiles:
     last_write_checksum: sha1:e2f71802d0db6604410400bc6249aca730a87ca1
   src/models/operations/testdetectionrule.ts:
     last_write_checksum: sha1:8968e2895085c3c3e9eebac9711a6de1ee03e050
+  src/models/operations/tokenexchange.ts:
+    last_write_checksum: sha1:b93c6ac08dc32ee101afba317cc9012dbf979abc
   src/models/operations/triggerriskanalysis.ts:
     last_write_checksum: sha1:cc24d7b20e84ea9c94e6e95f7d84bcc03f789484
   src/models/operations/updateassistant.ts:
@@ -6081,9 +6099,9 @@ trackedFiles:
   src/react-query/addPluginServer.ts:
     last_write_checksum: sha1:2e4aa5ad010f25fdf16b1de1c7a8a6ee060bd643
   src/react-query/agentPlugins.core.ts:
-    last_write_checksum: sha1:350356a0aa02a4a714ac30c61506c79a7158af14
+    last_write_checksum: sha1:b03ebb2d6d16e5fa5112a69d4ef50632498ed0c6
   src/react-query/agentPlugins.ts:
-    last_write_checksum: sha1:fab08bfdc5eb50def41cf165ae054ed2757d8908
+    last_write_checksum: sha1:20725d3ffcc6b9f1bdc77b44077fffd74fabd2ac
   src/react-query/aiIntegrationConfig.core.ts:
     last_write_checksum: sha1:8e5a3952bc3754bbe88360fe8e27fa8c48a0a484
   src/react-query/aiIntegrationConfig.ts:
@@ -6416,7 +6434,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:aa9f9c1f103f87037db69825aa1d39a1fd133c4f
+    last_write_checksum: sha1:7643df9b6bc70b87e9a18ecfe62e94f1646002ca
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6924,6 +6942,8 @@ trackedFiles:
     last_write_checksum: sha1:7604670456776fb81cf2663ab772256570c01021
   src/react-query/templates.ts:
     last_write_checksum: sha1:e95b00f09a4093a0f897ad698a3854b42196d3c5
+  src/react-query/tokenExchangeExchange.ts:
+    last_write_checksum: sha1:1574325693ec020b6cd810134db705534f33e682
   src/react-query/toolVariationGroups.core.ts:
     last_write_checksum: sha1:66813ec4113cd51bfc9988f0abd266a4867377d6
   src/react-query/toolVariationGroups.ts:
@@ -7045,7 +7065,7 @@ trackedFiles:
   src/sdk/access.ts:
     last_write_checksum: sha1:7baf17cc4c215913f513d4dd60d2283e01a24ac1
   src/sdk/agent.ts:
-    last_write_checksum: sha1:80c605718b2797a5298185fd2710d19aaeb095e4
+    last_write_checksum: sha1:59b5b7c25db593b5687a1b438c0f29aba16adbcb
   src/sdk/aiintegrations.ts:
     last_write_checksum: sha1:3e48a983553920eb58c08bb83e89f01b28d95e1a
   src/sdk/assets.ts:
@@ -7139,11 +7159,13 @@ trackedFiles:
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
-    last_write_checksum: sha1:3f49de13ac37f33d758f257f99a2623acaa18af0
+    last_write_checksum: sha1:82a9a548cb1d9340fb08d44ee54dcd8f482c30f5
   src/sdk/telemetry.ts:
     last_write_checksum: sha1:fb3602b0e60a86d4b00268f71934b8a928d6a02f
   src/sdk/templates.ts:
     last_write_checksum: sha1:e87a18ceb93fd904e226390906def204d5487b07
+  src/sdk/tokenexchange.ts:
+    last_write_checksum: sha1:016de357b7fd4992e8febeb1ac40e342f7025a0c
   src/sdk/tools.ts:
     last_write_checksum: sha1:2c9c67240a043d084d6475db2dc13a9275d7227d
   src/sdk/toolsets.ts:
@@ -10844,5 +10866,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  tokenExchange:
+    speakeasy-default-token-exchange:
+      requestBody:
+        application/json: {"email": "dev@acme.corp"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "expires_in": 235611, "refresh_token": "<value>", "user_email": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  tokenExchangeRefresh:
+    speakeasy-default-token-exchange-refresh:
+      requestBody:
+        application/json: {"refresh_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "expires_in": 428392, "refresh_token": "<value>", "user_email": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
