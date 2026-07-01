@@ -3659,11 +3659,10 @@ type SkillSummaryRow struct {
 
 // GetSkillsSummaryParams defines the parameters for getting skills summary.
 type GetSkillsSummaryParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	Filters        []AttributeFilter
-	TypesToInclude []string
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	Filters       []AttributeFilter
 }
 
 // GetSkillsSummary retrieves aggregated skills usage metrics.
@@ -3682,7 +3681,14 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	// Apply attribute filters (user, server) but not type filters: skill_name != ''
+	// is the authoritative skill signal (skill_name is materialized only when
+	// tool_name = 'Skill'). Re-adding a tool_name = 'Skill' condition via the
+	// "skill" type filter would test the any()-aggregated tool_name column, which
+	// may hold a sibling row's value and spuriously drop genuine skill traces.
+	// This mirrors GetSkillBreakdown / GetSkillTimeSeries, which also ignore the
+	// page-level type filter for the skills section.
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
 
 	sb = sb.GroupBy("skill_name").
 		OrderBy("use_count DESC")
@@ -3733,16 +3739,19 @@ type GetSkillBreakdownParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownParams) ([]SkillBreakdownRow, error) {
+	// skill_name is materialized only for rows where tool_name = 'Skill', so
+	// skill_name != '' is the authoritative skill signal. We deliberately do NOT
+	// also filter on tool_name = 'Skill' / event_source = 'hook': those columns
+	// are any()-aggregated in trace_summaries and may carry a sibling row's value
+	// within the same trace, which would spuriously drop genuine skill traces.
 	sb := sq.Select("skill_name", "user_email", "count(*) as use_count").
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
 
-	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
+	// Apply attribute filters (user, server) but not type filters — skill type is implied by skill_name != ''.
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
 	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC").
 		Limit(10000) // Defensive cap
@@ -3941,13 +3950,16 @@ func (q *Queries) GetSkillTimeSeries(ctx context.Context, arg GetSkillTimeSeries
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
 
-	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
+	// skill_name is materialized only for rows where tool_name = 'Skill', so
+	// skill_name != '' is the authoritative skill signal. We deliberately do NOT
+	// also filter on tool_name = 'Skill' / event_source = 'hook': those columns
+	// are any()-aggregated in trace_summaries and may carry a sibling row's value
+	// within the same trace, which would spuriously drop genuine skill traces.
+	// Apply attribute filters (user, server) but not type filters.
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
 
 	sb = sb.GroupBy("bucket_start", "skill_name").

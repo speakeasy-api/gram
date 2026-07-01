@@ -2110,11 +2110,10 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
+			Filters:       attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)

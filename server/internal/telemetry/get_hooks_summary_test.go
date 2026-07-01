@@ -626,6 +626,82 @@ func TestGetHooksSummary_SkillBreakdownEmptyWhenNoSkillEvents(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+// TestGetHooksSummary_SkillCountedWhenSkillNameOnSubsetOfTraceRows guards against
+// the undercount bug (DNO-312): skill_name is materialized only on the Skill tool
+// row, so a skill trace's sibling rows carry an empty skill_name. The
+// trace_summaries MV must let the populated skill name win over those empty
+// siblings (anyIf/max), otherwise the skill-usage aggregate drops the trace.
+func TestGetHooksSummary_SkillCountedWhenSkillNameOnSubsetOfTraceRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	// A single skill trace made of two hook rows: a sibling row that does NOT
+	// carry the skill name, plus the Skill tool row that does. Both share one
+	// trace_id so trace_summaries aggregates them into one row.
+	sharedTraceID := uuid.New().String()
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   deploymentID,
+		timestamp:      now.Add(-10 * time.Minute),
+		traceID:        sharedTraceID,
+		userEmail:      "user@example.com",
+		hookSource:     "local",
+		toolName:       "", // sibling row: empty tool_name => empty skill_name
+		conversationID: "conv-1",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   deploymentID,
+		timestamp:      now.Add(-9 * time.Minute),
+		traceID:        sharedTraceID,
+		userEmail:      "user@example.com",
+		hookSource:     "local",
+		toolName:       "Skill",
+		skillName:      "golang",
+		result:         "done",
+		conversationID: "conv-1",
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		// The skill trace must appear in the aggregate exactly once, despite the
+		// empty-skill_name sibling row in the same trace.
+		if !assert.Len(c, res.Skills, 1) {
+			return
+		}
+		assert.Equal(c, "golang", res.Skills[0].SkillName)
+		assert.Equal(c, int64(1), res.Skills[0].UseCount)
+		assert.Equal(c, int64(1), res.Skills[0].UniqueUsers)
+
+		// And in the breakdown / time series, which key off skill_name != ''.
+		if !assert.Len(c, res.SkillBreakdown, 1) {
+			return
+		}
+		assert.Equal(c, "golang", res.SkillBreakdown[0].SkillName)
+		assert.Equal(c, int64(1), res.SkillBreakdown[0].UseCount)
+		if !assert.Len(c, res.SkillTimeSeries, 1) {
+			return
+		}
+		assert.Equal(c, "golang", res.SkillTimeSeries[0].SkillName)
+		assert.Equal(c, int64(1), res.SkillTimeSeries[0].EventCount)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 	t.Parallel()
 
@@ -660,8 +736,8 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 		conversationID: "conv-2",
 	})
 
-	// TypesToInclude=["skill"] scopes the overall summary to skill events,
-	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
+	// TypesToInclude=["skill"] scopes the overall summary to skill events;
+	// skill_time_series and skill_breakdown key off skill_name != '' so they
 	// return skill data regardless of TypesToInclude.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
@@ -723,7 +799,7 @@ func TestGetHooksSummary_SkillFieldsIgnoreTypesToInclude(t *testing.T) {
 	})
 
 	// TypesToInclude=["mcp"] scopes TotalEvents/Servers/Users to MCP events only,
-	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
+	// but skill_time_series and skill_breakdown key off skill_name != '' so they
 	// must always return skill data regardless of TypesToInclude.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
