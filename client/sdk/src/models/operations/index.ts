@@ -299,6 +299,7 @@ export * from "./suggestcustomdetectionrule.js";
 export * from "./switchauthscopes.js";
 export * from "./testdetectionrule.js";
 export * from "./triggerriskanalysis.js";
+export * from "./unmaskriskresult.js";
 export * from "./updateassistant.js";
 export * from "./updatecollection.js";
 export * from "./updatecustomdetectionrule.js";

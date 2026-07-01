@@ -318,6 +318,36 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsForAgent"}`)
 	})
 
+	Method("unmaskRiskResult", func() {
+		Description("Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The risk result ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskUnmaskResultResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.unmask")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmaskRiskResult")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmask")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmaskResult", "type": "mutation"}`)
+	})
+
 	Method("listRiskResultsByChat", func() {
 		Description("List risk results grouped by chat session for the current project.")
 
@@ -1188,6 +1218,14 @@ var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
+})
+
+var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
+	Attribute("id", String, "The risk result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match", String, "The plaintext matched secret or sensitive data for this result.")
+	Required("id")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {

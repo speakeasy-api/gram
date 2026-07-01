@@ -706,6 +706,15 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
+-- name: GetRiskResultByID :one
+-- Single-row lookup backing risk.results.unmask: fetch a result's raw match
+-- plus its owning chat_id so the caller can authorize a chat:read check
+-- before returning the plaintext.
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = @id AND rr.project_id = @project_id;
+
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
 -- rr.created_at (the scan time). The background drain workflow analyzes

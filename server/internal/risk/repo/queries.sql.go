@@ -1227,6 +1227,40 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	return name, err
 }
 
+const getRiskResultByID = `-- name: GetRiskResultByID :one
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = $1 AND rr.project_id = $2
+`
+
+type GetRiskResultByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetRiskResultByIDRow struct {
+	ID     uuid.UUID
+	Match  pgtype.Text
+	Source string
+	ChatID uuid.UUID
+}
+
+// Single-row lookup backing risk.results.unmask: fetch a result's raw match
+// plus its owning chat_id so the caller can authorize a chat:read check
+// before returning the plaintext.
+func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDParams) (GetRiskResultByIDRow, error) {
+	row := q.db.QueryRow(ctx, getRiskResultByID, arg.ID, arg.ProjectID)
+	var i GetRiskResultByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Match,
+		&i.Source,
+		&i.ChatID,
+	)
+	return i, err
+}
+
 const getToolCallBlock = `-- name: GetToolCallBlock :one
 SELECT
     b.id,

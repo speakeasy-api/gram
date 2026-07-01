@@ -626,6 +626,45 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	return v, nil
 }
 
+// BuildUnmaskRiskResultPayload builds the payload for the risk
+// unmaskRiskResult endpoint from CLI flags.
+func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultID string, riskUnmaskRiskResultApikeyToken string, riskUnmaskRiskResultSessionToken string, riskUnmaskRiskResultProjectSlugInput string) (*risk.UnmaskRiskResultPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskUnmaskRiskResultID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUnmaskRiskResultApikeyToken != "" {
+			apikeyToken = &riskUnmaskRiskResultApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUnmaskRiskResultSessionToken != "" {
+			sessionToken = &riskUnmaskRiskResultSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUnmaskRiskResultProjectSlugInput != "" {
+			projectSlugInput = &riskUnmaskRiskResultProjectSlugInput
+		}
+	}
+	v := &risk.UnmaskRiskResultPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRiskResultsByChatPayload builds the payload for the risk
 // listRiskResultsByChat endpoint from CLI flags.
 func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
