@@ -216,6 +216,7 @@ func (f *ProxyManager) BuildTarget(
 		RemoteURL:               upstreamURL,
 		Headers:                 headers,
 		AuthorizationOverride:   upstreamAuth,
+		UpstreamResponseRetryer: nil,
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),

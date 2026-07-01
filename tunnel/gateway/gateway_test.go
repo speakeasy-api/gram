@@ -3,12 +3,15 @@ package gateway
 import (
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -118,4 +121,71 @@ func TestParseServiceMetadataRejectsOversizedMetadata(t *testing.T) {
 
 	_, err := parseServiceMetadata(`{"value":"` + strings.Repeat("a", wire.MaxServiceMetadataBytes) + `"}`)
 	require.ErrorIs(t, err, errServiceMetadataTooLarge)
+}
+
+func TestRegistryBeginForwardRoundRobinsWithoutConsumerSession(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	sessionB := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", sessionB, route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+	t.Cleanup(removeB)
+
+	first, ok := reg.beginForward("tunnel-1", "", time.Now().UTC(), 0)
+	require.True(t, ok)
+	second, ok := reg.beginForward("tunnel-1", "", time.Now().UTC(), 0)
+	require.True(t, ok)
+
+	require.NotEqual(t, first.id, second.id)
+}
+
+func TestRegistryBeginForwardSticksStableConsumerSession(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	sessionB := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", sessionB, route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+	t.Cleanup(removeB)
+
+	first, ok := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 0)
+	require.True(t, ok)
+	for range 5 {
+		entry, ok := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 0)
+		require.True(t, ok)
+		require.Equal(t, first.id, entry.id)
+	}
+}
+
+func TestRegistryBeginForwardUsesNextRankedEligibleSession(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	sessionB := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", sessionB, route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+	t.Cleanup(removeB)
+
+	first, ok := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 1)
+	require.True(t, ok)
+	second, ok := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 1)
+	require.True(t, ok)
+
+	require.NotEqual(t, first.id, second.id)
+}
+
+func newYamuxSession(t *testing.T) *yamux.Session {
+	t.Helper()
+
+	clientConn, serverConn := net.Pipe()
+	client, err := yamux.Client(clientConn, yamux.DefaultConfig())
+	require.NoError(t, err)
+	server, err := yamux.Server(serverConn, yamux.DefaultConfig())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+		require.NoError(t, server.Close())
+	})
+	return client
 }

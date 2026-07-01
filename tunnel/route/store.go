@@ -1,8 +1,9 @@
-// Package route stores live tunnelID -> gateway address mappings and connection snapshots.
+// Package route stores live tunnel gateway owners and connection snapshots.
 package route
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 )
@@ -22,10 +23,11 @@ func ConnectionKey(tunnelID string) string {
 	return tunnelConnectionsKeyPrefix + tunnelID
 }
 
-// Store maps tunnel IDs to the gateway pod currently holding each session.
+// Store tracks live gateway owners for each tunnel.
 type Store interface {
 	Publish(ctx context.Context, tunnelID, addr string, ttl time.Duration) error
-	Lookup(ctx context.Context, tunnelID string) (string, bool, error)
+	Candidates(ctx context.Context, tunnelID string) ([]string, error)
+	Unpublish(ctx context.Context, tunnelID, addr string) error
 	Delete(ctx context.Context, tunnelID string) error
 }
 
@@ -45,39 +47,68 @@ type Connection struct {
 }
 
 type ConnectionSnapshotStore interface {
-	PublishConnections(ctx context.Context, tunnelID string, connections []Connection, ttl time.Duration) error
+	PublishConnections(ctx context.Context, tunnelID, owner string, connections []Connection, ttl time.Duration) error
+	Connections(ctx context.Context, tunnelID string) ([]Connection, error)
+	DeleteConnectionOwner(ctx context.Context, tunnelID, owner string) error
 	DeleteConnections(ctx context.Context, tunnelID string) error
+}
+
+type RuntimeStore interface {
+	Store
+	ConnectionSnapshotStore
 }
 
 // RouteTable is an in-memory Store implementation for local development and tests.
 type RouteTable struct {
 	mu     sync.RWMutex
-	routes map[string]memEntry
-}
-
-type memEntry struct {
-	addr      string
-	expiresAt time.Time
+	routes map[string]map[string]time.Time
 }
 
 // NewRouteTable creates an empty in-memory route table.
-func NewRouteTable() *RouteTable { return &RouteTable{routes: make(map[string]memEntry)} }
+func NewRouteTable() *RouteTable { return &RouteTable{routes: make(map[string]map[string]time.Time)} }
 
 func (m *RouteTable) Publish(_ context.Context, tunnelID, addr string, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.routes[tunnelID] = memEntry{addr: addr, expiresAt: time.Now().Add(ttl)}
+	if m.routes[tunnelID] == nil {
+		m.routes[tunnelID] = make(map[string]time.Time)
+	}
+	m.routes[tunnelID][addr] = time.Now().Add(ttl)
 	return nil
 }
 
-func (m *RouteTable) Lookup(_ context.Context, tunnelID string) (string, bool, error) {
-	m.mu.RLock()
-	e, ok := m.routes[tunnelID]
-	m.mu.RUnlock()
-	if !ok || time.Now().After(e.expiresAt) {
-		return "", false, nil
+func (m *RouteTable) Candidates(_ context.Context, tunnelID string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	owners := m.routes[tunnelID]
+	if len(owners) == 0 {
+		return nil, nil
 	}
-	return e.addr, true, nil
+	candidates := make([]string, 0, len(owners))
+	for addr, expiresAt := range owners {
+		if now.After(expiresAt) {
+			delete(owners, addr)
+			continue
+		}
+		candidates = append(candidates, addr)
+	}
+	if len(owners) == 0 {
+		delete(m.routes, tunnelID)
+	}
+	sort.Strings(candidates)
+	return candidates, nil
+}
+
+func (m *RouteTable) Unpublish(_ context.Context, tunnelID, addr string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.routes[tunnelID], addr)
+	if len(m.routes[tunnelID]) == 0 {
+		delete(m.routes, tunnelID)
+	}
+	return nil
 }
 
 func (m *RouteTable) Delete(_ context.Context, tunnelID string) error {

@@ -36,7 +36,8 @@ Postgres. Redis is the live routing table and connection snapshot store.
 MCP client
   -> gram-server /mcp/<slug>
   -> mcp_servers row resolves tunneled_mcp_server_id
-  -> Redis lookup: tunnel_routes:<tunnelID> -> internal gateway forward address
+  -> Redis candidates: tunnel_routes:<tunnelID> -> live gateway forward addresses
+  -> gram-server selects one gateway by client affinity or random fallback
   -> gram-server proxies to gateway with X-Gram-Tunnel-Id
   -> gateway opens yamux substream to a live agent
   -> agent proxies to TUNNEL_LOCAL_MCP_URL
@@ -56,10 +57,10 @@ Postgres is durable control-plane state:
 
 Redis is live data-plane state:
 
-- `tunnel_routes:<tunnelID>` -> gateway address, refreshed while an agent is
-  connected.
-- `tunnel_connections:<tunnelID>` -> live connection snapshots for UI/API
-  overview data.
+- `tunnel_routes:<tunnelID>`: sorted set of live gateway addresses, refreshed
+  while an agent is connected.
+- `tunnel_connections:<tunnelID>`: owner-scoped live connection snapshots for
+  UI/API overview data, merged on read.
 
 ## Local Validation
 

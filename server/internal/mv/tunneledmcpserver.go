@@ -8,21 +8,10 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
-type TunneledMcpConnectionCache struct {
-	GatewaySessionID       string            `json:"gateway_session_id"`
-	ServiceID              string            `json:"service_id"`
-	ServiceSlug            string            `json:"service_slug"`
-	ServiceVersion         string            `json:"service_version"`
-	AgentVersion           string            `json:"agent_version"`
-	ConnectedAt            time.Time         `json:"connected_at"`
-	LastHeartbeatAt        time.Time         `json:"last_heartbeat_at"`
-	RemoteAddr             string            `json:"remote_addr"`
-	ActiveSubstreams       int               `json:"active_substreams"`
-	ActiveConsumerSessions int               `json:"active_consumer_sessions"`
-	Metadata               map[string]string `json:"metadata"`
-}
+type TunneledMcpConnectionCache = route.Connection
 
 // BuildTunneledMcpServerView adds live Redis connection summary fields to the tunnel row.
 func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []TunneledMcpConnectionCache) *types.TunneledMcpServer {

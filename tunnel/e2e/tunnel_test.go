@@ -69,8 +69,8 @@ func TestTunnelEndToEnd(t *testing.T) {
 	go func() { _ = ag.Run(ctx) }()
 
 	requireEventually(t, 5*time.Second, func() bool {
-		_, ok, _ := routes.Lookup(ctx, tunnelID)
-		return ok && gw.ActiveSessions() == 1
+		candidates, _ := routes.Candidates(ctx, tunnelID)
+		return len(candidates) == 1 && gw.ActiveSessions() == 1
 	})
 
 	req, err := http.NewRequest(http.MethodPost, forwardServer.URL+"/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -137,6 +137,139 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.Equal(t, "no-live-session", resp2.Header.Get("X-Gram-Tunnel-Error"))
 }
 
+func TestTunnelRouteSurvivesCurrentGatewayDisconnect(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := t.Context()
+
+	const tunnelID = "tunnel-shared-route"
+	const forwardToken = "forward-token"
+	plaintext, _, err := wire.NewKey()
+	require.NoError(t, err)
+
+	routes := route.NewRouteTable()
+	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
+
+	type peer struct {
+		label       string
+		gateway     *gateway.Gateway
+		forwardAddr string
+		cancelAgent context.CancelFunc
+	}
+
+	startPeer := func(label string) peer {
+		mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(label + ":" + r.URL.Path))
+		}))
+		t.Cleanup(mcp.Close)
+
+		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		require.NoError(t, err)
+
+		publicServer := httptest.NewServer(gw.PublicHandler())
+		t.Cleanup(publicServer.Close)
+		forwardServer := httptest.NewServer(gw.ForwardHandler())
+		t.Cleanup(forwardServer.Close)
+		gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
+
+		ag, err := agent.New(agent.Config{
+			GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
+			APIKey:         plaintext,
+			LocalMCPURL:    mcp.URL,
+			ServiceID:      label,
+			ServiceSlug:    label,
+			ServiceVersion: "0.1.0",
+			MaxBackoff:     200 * time.Millisecond,
+		}, logger)
+		require.NoError(t, err)
+
+		agentCtx, cancelAgent := context.WithCancel(ctx)
+		t.Cleanup(cancelAgent)
+		go func() { _ = ag.Run(agentCtx) }()
+
+		return peer{
+			label:       label,
+			gateway:     gw,
+			forwardAddr: forwardServer.Listener.Addr().String(),
+			cancelAgent: cancelAgent,
+		}
+	}
+
+	peerA := startPeer("gateway-a")
+	peerB := startPeer("gateway-b")
+
+	requireEventually(t, 5*time.Second, func() bool {
+		candidates, _ := routes.Candidates(ctx, tunnelID)
+		return len(candidates) == 2 && peerA.gateway.ActiveSessions() == 1 && peerB.gateway.ActiveSessions() == 1
+	})
+
+	peerA.cancelAgent()
+	requireEventually(t, 5*time.Second, func() bool {
+		candidates, _ := routes.Candidates(ctx, tunnelID)
+		return len(candidates) == 1 &&
+			candidates[0] == peerB.forwardAddr &&
+			peerA.gateway.ActiveSessions() == 0 &&
+			peerB.gateway.ActiveSessions() == 1
+	})
+
+	status, body := forwardThroughRoute(t, ctx, routes, tunnelID, forwardToken, "/mcp/after-owner-disconnect")
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, peerB.label+":/mcp/after-owner-disconnect")
+}
+
+func TestTunnelConsumerSessionSticksToAgent(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := t.Context()
+
+	const tunnelID = "tunnel-consumer-sticky"
+	const forwardToken = "forward-token"
+	plaintext, _, err := wire.NewKey()
+	require.NoError(t, err)
+
+	routes := route.NewRouteTable()
+	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
+	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	require.NoError(t, err)
+
+	publicServer := httptest.NewServer(gw.PublicHandler())
+	t.Cleanup(publicServer.Close)
+	forwardServer := httptest.NewServer(gw.ForwardHandler())
+	t.Cleanup(forwardServer.Close)
+	gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
+
+	startAgent := func(label string) {
+		mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(label + ":" + r.URL.Path))
+		}))
+		t.Cleanup(mcp.Close)
+
+		ag, err := agent.New(agent.Config{
+			GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
+			APIKey:         plaintext,
+			LocalMCPURL:    mcp.URL,
+			ServiceID:      label,
+			ServiceSlug:    label,
+			ServiceVersion: "0.1.0",
+			MaxBackoff:     200 * time.Millisecond,
+		}, logger)
+		require.NoError(t, err)
+		go func() { _ = ag.Run(ctx) }()
+	}
+	startAgent("agent-a")
+	startAgent("agent-b")
+
+	requireEventually(t, 5*time.Second, func() bool {
+		candidates, _ := routes.Candidates(ctx, tunnelID)
+		return len(candidates) == 1 && gw.ActiveSessions() == 2
+	})
+
+	first := forwardToGateway(t, ctx, forwardServer.URL, tunnelID, forwardToken, "auth:stable-client", "/mcp/initialize")
+	second := forwardToGateway(t, ctx, forwardServer.URL, tunnelID, forwardToken, "auth:stable-client", "/mcp/tools/list")
+
+	require.Equal(t, responseAgentLabel(first), responseAgentLabel(second))
+}
+
 func TestTunnelRevoke(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := t.Context()
@@ -175,8 +308,53 @@ func TestTunnelRevoke(t *testing.T) {
 	killed := gw.RevokeTunnel(ctx, tunnelID)
 	require.Equal(t, 1, killed)
 
-	_, ok, _ := routes.Lookup(ctx, tunnelID)
-	require.False(t, ok)
+	candidates, err := routes.Candidates(ctx, tunnelID)
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
+
+func forwardThroughRoute(t *testing.T, ctx context.Context, routes route.Store, tunnelID, forwardToken, path string) (int, string) {
+	t.Helper()
+
+	candidates, err := routes.Candidates(ctx, tunnelID)
+	require.NoError(t, err)
+	require.NotEmpty(t, candidates, "expected a live route for tunnel %q", tunnelID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+candidates[0]+path, nil)
+	require.NoError(t, err)
+	req.Header.Set(wire.HeaderTunnelID, tunnelID)
+	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return resp.StatusCode, string(body)
+}
+
+func forwardToGateway(t *testing.T, ctx context.Context, forwardURL, tunnelID, forwardToken, consumerSession, path string) string {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, forwardURL+path, nil)
+	require.NoError(t, err)
+	req.Header.Set(wire.HeaderTunnelID, tunnelID)
+	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
+	req.Header.Set(wire.HeaderTunnelConsumerSession, consumerSession)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	return string(body)
+}
+
+func responseAgentLabel(body string) string {
+	label, _, _ := strings.Cut(body, ":")
+	return label
 }
 
 func requireEventually(t *testing.T, d time.Duration, cond func() bool) {
@@ -195,24 +373,46 @@ type snapshotStore struct {
 	*route.RouteTable
 
 	mu        sync.Mutex
-	snapshots map[string][]route.Connection
+	snapshots map[string]map[string][]route.Connection
 }
 
 func newSnapshotStore() *snapshotStore {
 	return &snapshotStore{
 		RouteTable: route.NewRouteTable(),
 		mu:         sync.Mutex{},
-		snapshots:  make(map[string][]route.Connection),
+		snapshots:  make(map[string]map[string][]route.Connection),
 	}
 }
 
-func (s *snapshotStore) PublishConnections(_ context.Context, tunnelID string, connections []route.Connection, _ time.Duration) error {
+func (s *snapshotStore) PublishConnections(_ context.Context, tunnelID, owner string, connections []route.Connection, _ time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	copied := make([]route.Connection, len(connections))
 	copy(copied, connections)
-	s.snapshots[tunnelID] = copied
+	if s.snapshots[tunnelID] == nil {
+		s.snapshots[tunnelID] = make(map[string][]route.Connection)
+	}
+	s.snapshots[tunnelID][owner] = copied
+	return nil
+}
+
+func (s *snapshotStore) Connections(_ context.Context, tunnelID string) ([]route.Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	connections := s.copyConnectionsLocked(tunnelID)
+	return connections, nil
+}
+
+func (s *snapshotStore) DeleteConnectionOwner(_ context.Context, tunnelID, owner string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.snapshots[tunnelID], owner)
+	if len(s.snapshots[tunnelID]) == 0 {
+		delete(s.snapshots, tunnelID)
+	}
 	return nil
 }
 
@@ -227,8 +427,18 @@ func (s *snapshotStore) connections(tunnelID string) []route.Connection {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	copied := make([]route.Connection, len(s.snapshots[tunnelID]))
-	copy(copied, s.snapshots[tunnelID])
+	return s.copyConnectionsLocked(tunnelID)
+}
+
+func (s *snapshotStore) copyConnectionsLocked(tunnelID string) []route.Connection {
+	count := 0
+	for _, ownerConnections := range s.snapshots[tunnelID] {
+		count += len(ownerConnections)
+	}
+	copied := make([]route.Connection, 0, count)
+	for _, ownerConnections := range s.snapshots[tunnelID] {
+		copied = append(copied, ownerConnections...)
+	}
 	return copied
 }
 

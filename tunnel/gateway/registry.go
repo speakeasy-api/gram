@@ -7,11 +7,13 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 const consumerSessionTTL = 5 * time.Minute
 
-// Multiple agents may share a tunnel key; forwards round-robin across live sessions.
+// Multiple agents may share a tunnel key. Stable consumer keys stick to one live session;
+// requests without a consumer key round-robin across live sessions.
 type registry struct {
 	mu       sync.RWMutex
 	sessions map[string][]*sessEntry
@@ -98,15 +100,12 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 	if len(list) == 0 {
 		return nil, false
 	}
-	start := int(r.rr[tunnelID] % uint64(len(list)))
-	r.rr[tunnelID]++
-	for i := range list {
-		entry := list[(start+i)%len(list)]
+	reserve := func(entry *sessEntry) (*sessEntry, bool) {
 		if entry.session.IsClosed() {
-			continue
+			return nil, false
 		}
 		if maxStreamsPerSession > 0 && entry.activeSubstreams >= maxStreamsPerSession {
-			continue
+			return nil, false
 		}
 		entry.activeSubstreams++
 		if consumerSession != "" {
@@ -118,6 +117,30 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 		entry.connection.ActiveSubstreams = entry.activeSubstreams
 		entry.connection.ActiveConsumerSessions = pruneConsumerSessions(entry, now)
 		return entry, true
+	}
+
+	if consumerSession != "" {
+		entryByID := make(map[string]*sessEntry, len(list))
+		candidates := make([]string, 0, len(list))
+		for _, entry := range list {
+			entryByID[entry.id] = entry
+			candidates = append(candidates, entry.id)
+		}
+		for _, sessionID := range wire.RendezvousOrder(consumerSession, candidates) {
+			if entry, ok := reserve(entryByID[sessionID]); ok {
+				return entry, true
+			}
+		}
+		return nil, false
+	}
+
+	start := int(r.rr[tunnelID] % uint64(len(list)))
+	r.rr[tunnelID]++
+	for i := range list {
+		entry := list[(start+i)%len(list)]
+		if reserved, ok := reserve(entry); ok {
+			return reserved, true
+		}
 	}
 	return nil, false
 }
