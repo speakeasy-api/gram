@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // seedAssistant creates a minimal active assistant for the test project.
@@ -169,4 +171,135 @@ func TestSetupThread_NotCountedAsActiveRuntimeThread(t *testing.T) {
 	active, err = ar.CountActiveAssistantThreads(ctx, countParams)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), active, "a real runtime thread must still be counted")
+}
+
+// TestListChats_SourceKindFilter verifies the source_kind dimension on
+// chat.list?assistant_id=: for a single assistant that has BOTH a setup thread
+// and a runtime thread, source_kind='setup' returns only the setup chat and
+// exclude_source_kind='setup' returns only the runtime chat, while the
+// unfiltered listing returns both. This is what keeps onboarding history and
+// the runtime insights view from polluting each other.
+func TestListChats_SourceKindFilter(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	assistantID := seedAssistant(t, ctx, ti)
+
+	// A client-driven setup/onboarding thread (source_kind=setup).
+	setupChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "Setup Chat")
+	cr := repo.New(ti.conn)
+	_, err := cr.UpsertSetupAssistantThread(ctx, repo.UpsertSetupAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: setupChatID.String(),
+		ChatID:        setupChatID,
+	})
+	require.NoError(t, err)
+
+	// A runtime thread for the SAME assistant (source_kind=cron).
+	runtimeChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "Runtime Chat")
+	ar := assistantsrepo.New(ti.conn)
+	_, err = ar.UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: "runtime-" + uuid.NewString()[:8],
+		ChatID:        runtimeChatID,
+		SourceKind:    "cron",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	assistantIDStr := assistantID.String()
+
+	// No source_kind filter: both threads are listed under the assistant.
+	base := defaultPayload()
+	base.AssistantID = &assistantIDStr
+	result, err := ti.service.ListChats(ctx, base)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total, "unfiltered listing returns both setup and runtime chats")
+
+	// source_kind=setup: only the setup chat.
+	setupKind := "setup"
+	setupOnly := defaultPayload()
+	setupOnly.AssistantID = &assistantIDStr
+	setupOnly.SourceKind = &setupKind
+	result, err = ti.service.ListChats(ctx, setupOnly)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, setupChatID.String(), result.Chats[0].ID, "source_kind=setup lists only the setup thread")
+
+	// exclude_source_kind=setup: only the runtime chat.
+	excludeSetup := defaultPayload()
+	excludeSetup.AssistantID = &assistantIDStr
+	excludeSetup.ExcludeSourceKind = &setupKind
+	result, err = ti.service.ListChats(ctx, excludeSetup)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, runtimeChatID.String(), result.Chats[0].ID, "exclude_source_kind=setup drops the setup thread")
+}
+
+// TestLinkSetupAssistantThread_ForeignProjectAssistant_NoOps verifies the
+// project-scoped ownership gate: linking must NOT stamp an assistant_threads row
+// when the client-supplied assistant id belongs to a different project. Without
+// the gate the assistant_threads FK alone would be satisfied (the assistant
+// exists — just in another project) and a cross-project row would be created.
+func TestLinkSetupAssistantThread_ForeignProjectAssistant_NoOps(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A second project in the same org owns the assistant.
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           fmt.Sprintf("foreign-%s", uuid.NewString()[:8]),
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	foreignAssistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:      foreignProject.ID,
+		OrganizationID: ti.orgID,
+		Name:           "Foreign Assistant",
+		Model:          "anthropic/claude-opus-4.8",
+		Instructions:   "be helpful",
+		WarmTtlSeconds: 300,
+		MaxConcurrency: 1,
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	// A setup chat that lives in the CALLER's project.
+	setupChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "Setup Chat")
+
+	// Linking with the foreign assistant id must no-op (best-effort, no error).
+	ti.service.TestingLinkSetupAssistantThread(ctx, &ti.projectID, setupChatID, "assistant", foreignAssistant.ID.String())
+
+	// No thread row should have been created under the foreign assistant in the
+	// caller's project, so the chat is not listable under that assistant.
+	foreignIDStr := foreignAssistant.ID.String()
+	payload := defaultPayload()
+	payload.AssistantID = &foreignIDStr
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total, "foreign-project assistant id must not create a linkable thread")
+
+	// Sanity: linking a same-project assistant DOES create the row, proving the
+	// no-op above is the ownership gate rather than the link path being broken.
+	localAssistantID := seedAssistant(t, ctx, ti)
+	ti.service.TestingLinkSetupAssistantThread(ctx, &ti.projectID, setupChatID, "assistant", localAssistantID.String())
+
+	localIDStr := localAssistantID.String()
+	payload = defaultPayload()
+	payload.AssistantID = &localIDStr
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total, "a same-project assistant id links and becomes listable")
+	require.Equal(t, setupChatID.String(), result.Chats[0].ID)
 }

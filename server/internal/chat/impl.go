@@ -227,6 +227,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	search := conv.PtrValOr(payload.Search, "")
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
+	sourceKind := conv.PtrValOr(payload.SourceKind, "")
+	excludeSourceKind := conv.PtrValOr(payload.ExcludeSourceKind, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 	// -1 is the "no threshold" sentinel: the queries short-circuit to "show all"
 	// on a negative bound. A real bound N keeps chats with at least N findings
@@ -246,18 +248,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	baseParams := repo.CountChatsParams{
-		ProjectID:      *authCtx.ProjectID,
-		ExternalUserID: externalUserID,
-		UserID:         userID,
-		FromTime:       fromTime,
-		ToTime:         toTime,
-		Search:         search,
-		AssistantID:    assistantID,
-		HasRiskFilter:  hasRiskFilter,
-		MinRiskScore:   minRiskScore,
-		Pinned:         conv.PtrValOr(payload.Pinned, ""),
-		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
-		AccountType:    conv.PtrValOr(payload.AccountType, ""),
+		ProjectID:         *authCtx.ProjectID,
+		ExternalUserID:    externalUserID,
+		UserID:            userID,
+		FromTime:          fromTime,
+		ToTime:            toTime,
+		Search:            search,
+		AssistantID:       assistantID,
+		SourceKind:        sourceKind,
+		ExcludeSourceKind: excludeSourceKind,
+		HasRiskFilter:     hasRiskFilter,
+		MinRiskScore:      minRiskScore,
+		Pinned:            conv.PtrValOr(payload.Pinned, ""),
+		Sources:           parseSourceFilter(conv.PtrValOr(payload.Source, "")),
+		AccountType:       conv.PtrValOr(payload.AccountType, ""),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -266,22 +270,24 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
-		ProjectID:      baseParams.ProjectID,
-		ExternalUserID: baseParams.ExternalUserID,
-		UserID:         baseParams.UserID,
-		FromTime:       baseParams.FromTime,
-		ToTime:         baseParams.ToTime,
-		Search:         baseParams.Search,
-		AssistantID:    baseParams.AssistantID,
-		HasRiskFilter:  baseParams.HasRiskFilter,
-		MinRiskScore:   baseParams.MinRiskScore,
-		Pinned:         baseParams.Pinned,
-		Sources:        baseParams.Sources,
-		AccountType:    baseParams.AccountType,
-		SortBy:         payload.SortBy,
-		SortOrder:      payload.SortOrder,
-		PageLimit:      conv.SafeInt32(payload.Limit),
-		PageOffset:     conv.SafeInt32(payload.Offset),
+		ProjectID:         baseParams.ProjectID,
+		ExternalUserID:    baseParams.ExternalUserID,
+		UserID:            baseParams.UserID,
+		FromTime:          baseParams.FromTime,
+		ToTime:            baseParams.ToTime,
+		Search:            baseParams.Search,
+		AssistantID:       baseParams.AssistantID,
+		SourceKind:        baseParams.SourceKind,
+		ExcludeSourceKind: baseParams.ExcludeSourceKind,
+		HasRiskFilter:     baseParams.HasRiskFilter,
+		MinRiskScore:      baseParams.MinRiskScore,
+		Pinned:            baseParams.Pinned,
+		Sources:           baseParams.Sources,
+		AccountType:       baseParams.AccountType,
+		SortBy:            payload.SortBy,
+		SortOrder:         payload.SortOrder,
+		PageLimit:         conv.SafeInt32(payload.Limit),
+		PageOffset:        conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
@@ -939,6 +945,29 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 	if err != nil {
 		s.logger.WarnContext(ctx, "invalid assistant id header on setup completion; skipping thread link",
 			attr.SlogError(err))
+		return
+	}
+
+	// Resolve the assistant scoped to the caller's project before linking. The
+	// assistant id arrives on a client-trustable header, and the
+	// assistant_threads FK only proves the assistant exists *somewhere* — not
+	// that it belongs to this project. Skipping the link for a foreign (or
+	// not-yet-provisioned) assistant keeps us from stamping a cross-project
+	// assistant_threads row. Best-effort: any lookup failure just skips the link
+	// and never fails the user's turn.
+	exists, err := s.repo.AssistantExistsInProject(ctx, repo.AssistantExistsInProjectParams{
+		AssistantID: assistantID,
+		ProjectID:   *projectID,
+	})
+	if err != nil {
+		s.logger.DebugContext(ctx, "failed to verify assistant ownership for setup thread link; skipping",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogError(err))
+		return
+	}
+	if !exists {
+		s.logger.DebugContext(ctx, "assistant not found in caller project; skipping setup thread link",
+			attr.SlogChatID(chatID.String()))
 		return
 	}
 

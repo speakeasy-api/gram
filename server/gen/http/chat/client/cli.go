@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -47,6 +47,18 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+	var sourceKind *string
+	{
+		if chatListChatsSourceKind != "" {
+			sourceKind = &chatListChatsSourceKind
+		}
+	}
+	var excludeSourceKind *string
+	{
+		if chatListChatsExcludeSourceKind != "" {
+			excludeSourceKind = &chatListChatsExcludeSourceKind
 		}
 	}
 	var hasRisk *string
@@ -207,6 +219,8 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.ExternalUserID = externalUserID
 	v.Source = source
 	v.AssistantID = assistantID
+	v.SourceKind = sourceKind
+	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk
 	v.AccountType = accountType
 	v.Pinned = pinned
