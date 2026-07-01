@@ -13,15 +13,17 @@ import {
   ShadowMCPInventoryAccessRuleMatch$inboundSchema,
 } from "./shadowmcpinventoryaccessrulematch.js";
 
-export const Access = {
+export const ShadowMCPInventoryServerAccess = {
   None: "none",
   Allowed: "allowed",
   Denied: "denied",
 } as const;
-export type Access = ClosedEnum<typeof Access>;
+export type ShadowMCPInventoryServerAccess = ClosedEnum<
+  typeof ShadowMCPInventoryServerAccess
+>;
 
 export type ShadowMCPInventoryServer = {
-  access: Access;
+  access: ShadowMCPInventoryServerAccess;
   canonicalServerUrl: string;
   firstSeen: Date;
   lastCalled?: Date | undefined;
@@ -35,9 +37,9 @@ export type ShadowMCPInventoryServer = {
 };
 
 /** @internal */
-export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
-  Access,
-);
+export const ShadowMCPInventoryServerAccess$inboundSchema: z.ZodMiniEnum<
+  typeof ShadowMCPInventoryServerAccess
+> = z.enum(ShadowMCPInventoryServerAccess);
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
@@ -45,7 +47,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    access: Access$inboundSchema,
+    access: ShadowMCPInventoryServerAccess$inboundSchema,
     canonical_server_url: z.string(),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),

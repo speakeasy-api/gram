@@ -95,6 +95,7 @@ trackedFiles:
   docs/models/components/claudehookresult.md: {}
   docs/models/components/claudetoolusage.md: {}
   docs/models/components/claudeturnusage.md: {}
+  docs/models/components/clearshadowmcpinventoryserveraccessrequestbody.md: {}
   docs/models/components/cloneclientfromoauthproxyproviderform.md: {}
   docs/models/components/cloneclientfromoauthproxyproviderformtokenendpointauthmethod.md: {}
   docs/models/components/cloneenvironmentrequestbody.md: {}
@@ -593,7 +594,10 @@ trackedFiles:
   docs/models/components/shadowmcpinventoryaccessrulematchaccessscope.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematchdisposition.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematchmatchbreadth.md: {}
+  docs/models/components/shadowmcpinventoryaccessstate.md: {}
   docs/models/components/shadowmcpinventoryserver.md: {}
+  docs/models/components/shadowmcpinventoryserveraccess.md: {}
+  docs/models/components/shadowmcpinventoryserveraccessform.md: {}
   docs/models/components/shadowmcpinventoryuser.md: {}
   docs/models/components/skillbreakdownrow.md: {}
   docs/models/components/skillsummary.md: {}
@@ -779,6 +783,8 @@ trackedFiles:
   docs/models/operations/addoauthproxyserversecurityoption2.md: {}
   docs/models/operations/addpluginserverrequest.md: {}
   docs/models/operations/addpluginserversecurity.md: {}
+  docs/models/operations/allowshadowmcpinventoryserverrequest.md: {}
+  docs/models/operations/allowshadowmcpinventoryserversecurity.md: {}
   docs/models/operations/approveriskpolicybypassrequestrequest.md: {}
   docs/models/operations/approveriskpolicybypassrequestsecurity.md: {}
   docs/models/operations/approveriskpolicybypassrequestsecurityoption1.md: {}
@@ -795,6 +801,8 @@ trackedFiles:
   docs/models/operations/authcallbackresponse.md: {}
   docs/models/operations/authloginrequest.md: {}
   docs/models/operations/authloginresponse.md: {}
+  docs/models/operations/blockshadowmcpinventoryserverrequest.md: {}
+  docs/models/operations/blockshadowmcpinventoryserversecurity.md: {}
   docs/models/operations/captureeventrequest.md: {}
   docs/models/operations/captureeventsecurity.md: {}
   docs/models/operations/captureeventsecurityoption1.md: {}
@@ -812,6 +820,8 @@ trackedFiles:
   docs/models/operations/clearmcpregistrycachesecurity.md: {}
   docs/models/operations/clearmcpregistrycachesecurityoption1.md: {}
   docs/models/operations/clearmcpregistrycachesecurityoption2.md: {}
+  docs/models/operations/clearshadowmcpinventoryserveraccessrequest.md: {}
+  docs/models/operations/clearshadowmcpinventoryserveraccesssecurity.md: {}
   docs/models/operations/cliauthauthorizerequest.md: {}
   docs/models/operations/cliauthauthorizesecurity.md: {}
   docs/models/operations/cloneclientfromoauthproxyproviderrequest.md: {}
@@ -1964,7 +1974,10 @@ trackedFiles:
   jsr.json: {}
   package.json: {}
   src/core.ts: {}
+  src/funcs/accessAllowShadowMCPInventoryServer.ts: {}
   src/funcs/accessApproveShadowMCPApprovalRequest.ts: {}
+  src/funcs/accessBlockShadowMCPInventoryServer.ts: {}
+  src/funcs/accessClearShadowMCPInventoryServerAccess.ts: {}
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessCreateShadowMCPAccessRule.ts: {}
   src/funcs/accessCreateShadowMCPApprovalRequest.ts: {}
@@ -2391,6 +2404,7 @@ trackedFiles:
   src/models/components/claudehookresult.ts: {}
   src/models/components/claudetoolusage.ts: {}
   src/models/components/claudeturnusage.ts: {}
+  src/models/components/clearshadowmcpinventoryserveraccessrequestbody.ts: {}
   src/models/components/cloneclientfromoauthproxyproviderform.ts: {}
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
@@ -2802,7 +2816,9 @@ trackedFiles:
   src/models/components/shadowmcpapprovaldecisionresult.ts: {}
   src/models/components/shadowmcpapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryaccessrulematch.ts: {}
+  src/models/components/shadowmcpinventoryaccessstate.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
+  src/models/components/shadowmcpinventoryserveraccessform.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
@@ -2926,16 +2942,19 @@ trackedFiles:
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
+  src/models/operations/allowshadowmcpinventoryserver.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveshadowmcpapprovalrequest.ts: {}
   src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/blockshadowmcpinventoryserver.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
   src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
+  src/models/operations/clearshadowmcpinventoryserveraccess.ts: {}
   src/models/operations/cliauthauthorize.ts: {}
   src/models/operations/cloneclientfromoauthproxyprovider.ts: {}
   src/models/operations/cloneenvironment.ts: {}
@@ -3300,6 +3319,7 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
+  src/react-query/allowShadowMCPInventoryServer.ts: {}
   src/react-query/approveShadowMCPApprovalRequest.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantsCreate.ts: {}
@@ -3316,6 +3336,7 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/blockShadowMCPInventoryServer.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/challengeBuckets.core.ts: {}
@@ -3332,6 +3353,7 @@ trackedFiles:
   src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
+  src/react-query/clearShadowMCPInventoryServerAccess.ts: {}
   src/react-query/cliAuthAuthorize.ts: {}
   src/react-query/cliAuthRedeem.ts: {}
   src/react-query/cloneClientFromOAuthProxyProvider.ts: {}
@@ -3933,6 +3955,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  allowShadowMCPInventoryServer:
+    speakeasy-default-allow-shadow-MCP-inventory-server:
+      requestBody:
+        application/json: {"project_id": "91c97e27-bc09-4880-8efb-2207309657a3", "server_url": "https://musty-designation.info/"}
+      responses:
+        "200":
+          application/json: {"access": "none", "canonical_server_url": "https://likable-cutlet.name", "url_host": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   approveRiskPolicyBypassRequest:
     speakeasy-default-approve-risk-policy-bypass-request:
       requestBody:
@@ -4005,6 +4038,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  blockShadowMCPInventoryServer:
+    speakeasy-default-block-shadow-MCP-inventory-server:
+      requestBody:
+        application/json: {"project_id": "446d5683-43ea-4800-8767-001f86921785", "server_url": "https://fake-electronics.com"}
+      responses:
+        "200":
+          application/json: {"access": "allowed", "canonical_server_url": "https://which-partridge.biz/", "url_host": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   captureEvent:
     speakeasy-default-capture-event:
       requestBody:
@@ -4050,6 +4094,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  clearShadowMCPInventoryServerAccess:
+    speakeasy-default-clear-shadow-MCP-inventory-server-access:
+      requestBody:
+        application/json: {"project_id": "a11f0c57-0e1c-4895-867d-68447be2b227", "server_url": "https://dramatic-celsius.net"}
+      responses:
+        "200":
+          application/json: {"access": "allowed", "canonical_server_url": "https://empty-mouser.biz/", "url_host": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   cliAuthAuthorize:
     speakeasy-default-cli-auth-authorize:
       requestBody:

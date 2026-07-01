@@ -2728,6 +2728,270 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
+    /rpc/access.shadowMcp.inventory.allow:
+        post:
+            description: Allow a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.
+            operationId: allowShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ShadowMCPInventoryServerAccessForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryAccessState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: allowShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: allowShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: AllowShadowMCPInventoryServer
+                type: mutation
+    /rpc/access.shadowMcp.inventory.block:
+        post:
+            description: Block a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.
+            operationId: blockShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ShadowMCPInventoryServerAccessForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryAccessState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: blockShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: blockShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: BlockShadowMCPInventoryServer
+                type: mutation
+    /rpc/access.shadowMcp.inventory.clear:
+        post:
+            description: Clear the explicit project-scoped URL access rule for a Shadow MCP server URL.
+            operationId: clearShadowMCPInventoryServerAccess
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClearShadowMCPInventoryServerAccessRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryAccessState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: clearShadowMCPInventoryServerAccess access
+            tags:
+                - access
+            x-speakeasy-name-override: clearShadowMCPInventoryServerAccess
+            x-speakeasy-react-hook:
+                name: ClearShadowMCPInventoryServerAccess
+                type: mutation
     /rpc/access.shadowMcp.inventory.list:
         get:
             description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.
@@ -39619,6 +39883,19 @@ components:
                 - cost_micros
                 - models
                 - query_sources
+        ClearShadowMCPInventoryServerAccessRequestBody:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    format: uuid
+                reason:
+                    type: string
+                server_url:
+                    type: string
+            required:
+                - project_id
+                - server_url
         CloneClientFromOAuthProxyProviderForm:
             type: object
             properties:
@@ -50751,6 +51028,25 @@ components:
                 - match_breadth
                 - match_value
                 - display_name
+        ShadowMCPInventoryAccessState:
+            type: object
+            properties:
+                access:
+                    type: string
+                    enum:
+                        - none
+                        - allowed
+                        - denied
+                canonical_server_url:
+                    type: string
+                rule:
+                    $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
+                url_host:
+                    type: string
+            required:
+                - canonical_server_url
+                - url_host
+                - access
         ShadowMCPInventoryServer:
             type: object
             properties:
@@ -50796,6 +51092,21 @@ components:
                 - user_count
                 - top_users
                 - access
+        ShadowMCPInventoryServerAccessForm:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    format: uuid
+                reason:
+                    type: string
+                server_name:
+                    type: string
+                server_url:
+                    type: string
+            required:
+                - project_id
+                - server_url
         ShadowMCPInventoryUser:
             type: object
             properties:

@@ -3803,6 +3803,713 @@ func DecodeListShadowMCPInventoryUsersResponse(decoder func(*http.Response) goah
 	}
 }
 
+// BuildAllowShadowMCPInventoryServerRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "allowShadowMCPInventoryServer" endpoint
+func (c *Client) BuildAllowShadowMCPInventoryServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AllowShadowMCPInventoryServerAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "allowShadowMCPInventoryServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAllowShadowMCPInventoryServerRequest returns an encoder for requests
+// sent to the access allowShadowMCPInventoryServer server.
+func EncodeAllowShadowMCPInventoryServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.AllowShadowMCPInventoryServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "allowShadowMCPInventoryServer", "*access.AllowShadowMCPInventoryServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewAllowShadowMCPInventoryServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "allowShadowMCPInventoryServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAllowShadowMCPInventoryServerResponse returns a decoder for responses
+// returned by the access allowShadowMCPInventoryServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeAllowShadowMCPInventoryServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAllowShadowMCPInventoryServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AllowShadowMCPInventoryServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			res := NewAllowShadowMCPInventoryServerShadowMCPInventoryAccessStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AllowShadowMCPInventoryServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AllowShadowMCPInventoryServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AllowShadowMCPInventoryServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AllowShadowMCPInventoryServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AllowShadowMCPInventoryServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AllowShadowMCPInventoryServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AllowShadowMCPInventoryServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AllowShadowMCPInventoryServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+				}
+				err = ValidateAllowShadowMCPInventoryServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+				}
+				return nil, NewAllowShadowMCPInventoryServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AllowShadowMCPInventoryServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+				}
+				err = ValidateAllowShadowMCPInventoryServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+				}
+				return nil, NewAllowShadowMCPInventoryServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "allowShadowMCPInventoryServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AllowShadowMCPInventoryServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "allowShadowMCPInventoryServer", err)
+			}
+			err = ValidateAllowShadowMCPInventoryServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "allowShadowMCPInventoryServer", err)
+			}
+			return nil, NewAllowShadowMCPInventoryServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "allowShadowMCPInventoryServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildBlockShadowMCPInventoryServerRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "blockShadowMCPInventoryServer" endpoint
+func (c *Client) BuildBlockShadowMCPInventoryServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BlockShadowMCPInventoryServerAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "blockShadowMCPInventoryServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBlockShadowMCPInventoryServerRequest returns an encoder for requests
+// sent to the access blockShadowMCPInventoryServer server.
+func EncodeBlockShadowMCPInventoryServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.BlockShadowMCPInventoryServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "blockShadowMCPInventoryServer", "*access.BlockShadowMCPInventoryServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewBlockShadowMCPInventoryServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "blockShadowMCPInventoryServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBlockShadowMCPInventoryServerResponse returns a decoder for responses
+// returned by the access blockShadowMCPInventoryServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeBlockShadowMCPInventoryServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBlockShadowMCPInventoryServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BlockShadowMCPInventoryServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			res := NewBlockShadowMCPInventoryServerShadowMCPInventoryAccessStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BlockShadowMCPInventoryServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BlockShadowMCPInventoryServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BlockShadowMCPInventoryServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BlockShadowMCPInventoryServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BlockShadowMCPInventoryServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BlockShadowMCPInventoryServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BlockShadowMCPInventoryServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BlockShadowMCPInventoryServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+				}
+				err = ValidateBlockShadowMCPInventoryServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+				}
+				return nil, NewBlockShadowMCPInventoryServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BlockShadowMCPInventoryServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+				}
+				err = ValidateBlockShadowMCPInventoryServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+				}
+				return nil, NewBlockShadowMCPInventoryServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "blockShadowMCPInventoryServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BlockShadowMCPInventoryServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "blockShadowMCPInventoryServer", err)
+			}
+			err = ValidateBlockShadowMCPInventoryServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "blockShadowMCPInventoryServer", err)
+			}
+			return nil, NewBlockShadowMCPInventoryServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "blockShadowMCPInventoryServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildClearShadowMCPInventoryServerAccessRequest instantiates a HTTP request
+// object with method and path set to call the "access" service
+// "clearShadowMCPInventoryServerAccess" endpoint
+func (c *Client) BuildClearShadowMCPInventoryServerAccessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClearShadowMCPInventoryServerAccessAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "clearShadowMCPInventoryServerAccess", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClearShadowMCPInventoryServerAccessRequest returns an encoder for
+// requests sent to the access clearShadowMCPInventoryServerAccess server.
+func EncodeClearShadowMCPInventoryServerAccessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ClearShadowMCPInventoryServerAccessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "clearShadowMCPInventoryServerAccess", "*access.ClearShadowMCPInventoryServerAccessPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewClearShadowMCPInventoryServerAccessRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "clearShadowMCPInventoryServerAccess", err)
+		}
+		return nil
+	}
+}
+
+// DecodeClearShadowMCPInventoryServerAccessResponse returns a decoder for
+// responses returned by the access clearShadowMCPInventoryServerAccess
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeClearShadowMCPInventoryServerAccessResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeClearShadowMCPInventoryServerAccessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ClearShadowMCPInventoryServerAccessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			res := NewClearShadowMCPInventoryServerAccessShadowMCPInventoryAccessStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ClearShadowMCPInventoryServerAccessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ClearShadowMCPInventoryServerAccessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ClearShadowMCPInventoryServerAccessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ClearShadowMCPInventoryServerAccessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ClearShadowMCPInventoryServerAccessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ClearShadowMCPInventoryServerAccessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ClearShadowMCPInventoryServerAccessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ClearShadowMCPInventoryServerAccessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+				}
+				err = ValidateClearShadowMCPInventoryServerAccessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+				}
+				return nil, NewClearShadowMCPInventoryServerAccessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ClearShadowMCPInventoryServerAccessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+				}
+				err = ValidateClearShadowMCPInventoryServerAccessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+				}
+				return nil, NewClearShadowMCPInventoryServerAccessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "clearShadowMCPInventoryServerAccess", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ClearShadowMCPInventoryServerAccessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			err = ValidateClearShadowMCPInventoryServerAccessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "clearShadowMCPInventoryServerAccess", err)
+			}
+			return nil, NewClearShadowMCPInventoryServerAccessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "clearShadowMCPInventoryServerAccess", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateShadowMCPAccessRuleRequest instantiates a HTTP request object
 // with method and path set to call the "access" service
 // "createShadowMCPAccessRule" endpoint

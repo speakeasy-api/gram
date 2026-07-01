@@ -467,6 +467,77 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
+	Method("allowShadowMCPInventoryServer", func() {
+		Description("Allow a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ShadowMCPInventoryServerAccessForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryAccessStateResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.inventory.allow")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "allowShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "allowShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AllowShadowMCPInventoryServer", "type": "mutation"}`)
+	})
+
+	Method("blockShadowMCPInventoryServer", func() {
+		Description("Block a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ShadowMCPInventoryServerAccessForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryAccessStateResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.inventory.block")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "blockShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "blockShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BlockShadowMCPInventoryServer", "type": "mutation"}`)
+	})
+
+	Method("clearShadowMCPInventoryServerAccess", func() {
+		Description("Clear the explicit project-scoped URL access rule for a Shadow MCP server URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Required("project_id", "server_url")
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_url", String)
+			Attribute("reason", String)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryAccessStateResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.inventory.clear")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "clearShadowMCPInventoryServerAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "clearShadowMCPInventoryServerAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ClearShadowMCPInventoryServerAccess", "type": "mutation"}`)
+	})
+
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
 		Security(security.Session)
@@ -1065,6 +1136,17 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var ShadowMCPInventoryAccessStateResult = Type("ShadowMCPInventoryAccessState", func() {
+	Required("canonical_server_url", "url_host", "access")
+
+	Attribute("canonical_server_url", String)
+	Attribute("url_host", String)
+	Attribute("access", String, func() {
+		Enum("none", "allowed", "denied")
+	})
+	Attribute("rule", ShadowMCPInventoryAccessRuleMatchModel)
+})
+
 var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {
 	Required("request", "rules")
 	Attribute("request", ShadowMCPApprovalRequestModel)
@@ -1126,6 +1208,17 @@ var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", 
 var CreateShadowMCPAccessRuleForm = Type("CreateShadowMCPAccessRuleForm", func() {
 	Extend(ShadowMCPAccessRuleForm)
 	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty uses project_id for single-rule creation.")
+})
+
+var ShadowMCPInventoryServerAccessForm = Type("ShadowMCPInventoryServerAccessForm", func() {
+	Required("project_id", "server_url")
+
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("server_url", String)
+	Attribute("server_name", String)
+	Attribute("reason", String)
 })
 
 var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {
