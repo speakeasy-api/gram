@@ -320,6 +320,173 @@ gram_hooks_skill_name() {
   printf '%%s' "$skill"
 }
 
+gram_hooks_mcp_server_from_tool_name() {
+  local tool_name="$1"
+  local rest
+  case "$tool_name" in
+    mcp__*__*)
+      rest="${tool_name#mcp__}"
+      printf '%%s' "${rest%%%%__*}"
+      ;;
+  esac
+}
+
+gram_hooks_mcp_server_from_payload() {
+  local payload="$1"
+  local tool_name server
+  server="$(gram_hooks_first_string "$payload" "mcp_server_name" "server_name")"
+  if [ -n "$server" ]; then
+    printf '%%s' "$server"
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    server="$(printf '%%s' "$payload" | jq -r '(.tool_input.server // empty) | select(type == "string")' 2>/dev/null)" || true
+    if [ -n "$server" ]; then
+      printf '%%s' "$server"
+      return 0
+    fi
+  fi
+  tool_name="$(gram_hooks_json_string_value "$payload" "tool_name")"
+  gram_hooks_mcp_server_from_tool_name "$tool_name"
+}
+
+gram_hooks_codex_mcp_metadata() {
+  local server="$1"
+  [ "%s" = "codex" ] || return 0
+  [ -n "$server" ] || return 0
+  command -v codex >/dev/null 2>&1 || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  codex mcp list --json 2>/dev/null | jq -r --arg server "$server" '
+    def sanitize: gsub("[^A-Za-z0-9_]"; "_");
+    map(select(.name == $server or (.name | sanitize) == $server)) | .[0] as $m |
+    if $m == null then
+      empty
+    else
+      "url=\($m.transport.url // "")",
+      "command=\(if $m.transport.type == "stdio" then ([$m.transport.command, (($m.transport.args // [])[]?)] | map(select(. != null and . != "")) | join(" ")) else "" end)"
+    end
+  ' | head -n 2
+}
+
+gram_hooks_mcp_metadata_from_file() {
+  local file="$1"
+  local server="$2"
+  [ -f "$file" ] || return 0
+  [ -n "$server" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r --arg server "$server" '
+    (.mcpServers[$server] // empty) as $m |
+    if $m == null then
+      empty
+    else
+      "url=\($m.url // "")",
+      "command=\(if ($m.command // "") != "" then ([$m.command, (($m.args // [])[]?)] | map(select(. != null and . != "")) | join(" ")) else "" end)"
+    end
+  ' "$file" 2>/dev/null | head -n 2
+}
+
+gram_hooks_local_mcp_metadata() {
+  local server="$1"
+  local metadata
+  for file in ".mcp.json" ".cursor/mcp.json"; do
+    metadata="$(gram_hooks_mcp_metadata_from_file "$file" "$server")"
+    if [ -n "$metadata" ]; then
+      printf '%%s\n' "$metadata"
+      return 0
+    fi
+  done
+}
+
+gram_hooks_cursor_prompt_state_path() {
+  local session_id="$1"
+  local state_home state_dir safe_id
+  [ -n "$session_id" ] || return 1
+  state_home="${XDG_STATE_HOME:-${HOME}/.local/state}"
+  state_dir="${state_home}/gram/hooks/cursor-prompts"
+  mkdir -p "$state_dir" 2>/dev/null || return 1
+  chmod 700 "${state_home}/gram" "${state_home}/gram/hooks" "$state_dir" 2>/dev/null || true
+  safe_id="$(printf '%%s' "$session_id" | tr -c 'A-Za-z0-9_.-' '_')"
+  printf '%%s/%%s.seen' "$state_dir" "$safe_id"
+}
+
+gram_hooks_cursor_mark_prompt_submitted() {
+  local payload="$1"
+  local session_id state_path
+  session_id="$(gram_hooks_session_id "$payload")"
+  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id")" || return 0
+  printf 'seen\n' >"$state_path" 2>/dev/null || true
+}
+
+gram_hooks_base64_decode() {
+  if base64 --decode >/dev/null 2>&1 <<<'dGVzdA=='; then
+    base64 --decode
+    return
+  fi
+  base64 -D
+}
+
+gram_hooks_cursor_clean_transcript_prompt() {
+  awk '
+    NR == 1 && $0 == "<user_query>" { next }
+    $0 == "</user_query>" { next }
+    { print }
+  ' | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}'
+}
+
+gram_hooks_cursor_transcript_prompt() {
+  local payload="$1"
+  local transcript_path encoded
+  transcript_path="$(gram_hooks_json_string_value "$payload" "transcript_path")"
+  [ -n "$transcript_path" ] || transcript_path="${CURSOR_TRANSCRIPT_PATH:-}"
+  [ -n "$transcript_path" ] && [ -r "$transcript_path" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  command -v base64 >/dev/null 2>&1 || return 0
+
+  encoded="$(jq -r '
+    select(.role == "user")
+    | [.message.content[]? | select(.type == "text") | .text]
+    | join("\n")
+    | @base64
+  ' "$transcript_path" 2>/dev/null | sed -n '1p')" || true
+  [ -n "$encoded" ] || return 0
+  printf '%%s' "$encoded" | gram_hooks_base64_decode 2>/dev/null | gram_hooks_cursor_clean_transcript_prompt
+}
+
+gram_hooks_cursor_backfill_prompt_if_missing() {
+  local payload="$1"
+  local hostname="$2"
+  local server_url_arg="$3"
+  local project_slug_arg="$4"
+  local session_id state_path prompt prompt_payload prompt_members canonical_prompt http_code
+
+  session_id="$(gram_hooks_session_id "$payload")"
+  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id")" || return 0
+  [ ! -f "$state_path" ] || return 0
+
+  prompt="$(gram_hooks_cursor_transcript_prompt "$payload")"
+  [ -n "$prompt" ] || return 0
+
+  prompt_members=$(gram_hooks_join_members \
+    "$(gram_hooks_json_string_member "hook_event_name" "beforeSubmitPrompt")" \
+    "$(gram_hooks_json_string_member "prompt" "$prompt")" \
+    "$(gram_hooks_json_string_member "conversation_id" "$(gram_hooks_json_string_value "$payload" "conversation_id")")" \
+    "$(gram_hooks_json_string_member "generation_id" "$(gram_hooks_json_string_value "$payload" "generation_id")")" \
+    "$(gram_hooks_json_string_member "session_id" "$session_id")" \
+    "$(gram_hooks_json_string_member "cursor_version" "$(gram_hooks_json_string_value "$payload" "cursor_version")")" \
+    "$(gram_hooks_json_string_member "model" "$(gram_hooks_json_string_value "$payload" "model")")" \
+    "$(gram_hooks_json_string_member "transcript_path" "$(gram_hooks_json_string_value "$payload" "transcript_path")")")
+  prompt_payload="{$prompt_members}"
+  canonical_prompt="$(gram_hooks_build_canonical_payload "$prompt_payload" "$hostname")"
+
+  unset GRAM_IDEMPOTENCY_TOKEN
+  gram_hooks_post_authenticated "$server_url_arg" "$canonical_prompt" 10 "$project_slug_arg" 2
+  unset GRAM_IDEMPOTENCY_TOKEN
+  http_code="$GRAM_HTTP_CODE"
+  if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+    printf 'seen\n' >"$state_path" 2>/dev/null || true
+  fi
+}
+
 gram_hooks_build_canonical_payload() {
   local payload="$1"
   local hostname="$2"
@@ -422,11 +589,26 @@ gram_hooks_canonical_data_members() {
     tool_members=""
   fi
 
+  local mcp_server_name mcp_server_identity mcp_url mcp_command mcp_metadata
+  mcp_server_name="$(gram_hooks_mcp_server_from_payload "$payload")"
+  mcp_server_identity="$(gram_hooks_first_string "$payload" "server_identity" "mcp_server_name" "command")"
+  [ -n "$mcp_server_identity" ] || mcp_server_identity="$mcp_server_name"
+  mcp_url="$(gram_hooks_first_string "$payload" "url" "mcp_server_url")"
+  mcp_command="$(gram_hooks_json_string_value "$payload" "command")"
+  if [ -n "$mcp_server_name" ] && { [ -z "$mcp_url" ] || [ -z "$mcp_command" ]; }; then
+    mcp_metadata="$(gram_hooks_local_mcp_metadata "$mcp_server_name")"
+    [ -n "$mcp_metadata" ] || mcp_metadata="$(gram_hooks_codex_mcp_metadata "$mcp_server_name")"
+    if [ -n "$mcp_metadata" ]; then
+      [ -n "$mcp_url" ] || mcp_url="$(printf '%%s\n' "$mcp_metadata" | sed -n 's/^url=//p')"
+      [ -n "$mcp_command" ] || mcp_command="$(printf '%%s\n' "$mcp_metadata" | sed -n 's/^command=//p')"
+    fi
+  fi
+
   mcp_members=$(gram_hooks_join_members \
-    "$(gram_hooks_json_string_member "server_name" "$(gram_hooks_first_string "$payload" "mcp_server_name" "server_name")")" \
-    "$(gram_hooks_json_string_member "server_identity" "$(gram_hooks_first_string "$payload" "server_identity" "mcp_server_name" "command")")" \
-    "$(gram_hooks_json_string_member "url" "$(gram_hooks_first_string "$payload" "url" "mcp_server_url")")" \
-    "$(gram_hooks_json_string_member "command" "$(gram_hooks_json_string_value "$payload" "command")")" \
+    "$(gram_hooks_json_string_member "server_name" "$mcp_server_name")" \
+    "$(gram_hooks_json_string_member "server_identity" "$mcp_server_identity")" \
+    "$(gram_hooks_json_string_member "url" "$mcp_url")" \
+    "$(gram_hooks_json_string_member "command" "$mcp_command")" \
     "$(gram_hooks_json_string_member "result_json" "$(gram_hooks_json_string_value "$payload" "result_json")")")
   if [ -n "$mcp_members" ]; then
     mcp_members="\"mcp\":{$mcp_members}"
@@ -528,5 +710,5 @@ gram_hooks_provider_response() {
       ;;
   esac
 }
-`, spec.Platform, cases.String(), spec.Platform)
+`, spec.Platform, cases.String(), spec.Platform, spec.Platform)
 }

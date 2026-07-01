@@ -118,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "7"
+const pluginGeneratorVersion = "8"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1356,6 +1356,18 @@ fi
 
 hook_hostname=$(hostname 2>/dev/null || true)
 native_event="$(gram_hooks_native_event_name "$provider_payload")"
+if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
+  gram_hooks_cursor_backfill_prompt_if_missing "$provider_payload" "$hook_hostname" "$server_url" "$project_slug"
+fi
+if [ "%s" = "cursor" ] && [ "$native_event" = "preToolUse" ]; then
+  cursor_tool_name="$(gram_hooks_json_string_value "$provider_payload" "tool_name")"
+  case "$cursor_tool_name" in
+    MCP:*)
+      gram_hooks_provider_response "%s" "$native_event" '{"decision":"allow"}'
+      exit 0
+      ;;
+  esac
+fi
 payload="$(gram_hooks_build_canonical_payload "$provider_payload" "$hook_hostname")"
 
 # gram_http_post (http.sh) retries transient resets so a single reset no
@@ -1368,6 +1380,9 @@ body="$GRAM_HTTP_BODY"
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+  if [ "%s" = "cursor" ] && [ "$native_event" = "beforeSubmitPrompt" ]; then
+    gram_hooks_cursor_mark_prompt_submitted "$provider_payload"
+  fi
   gram_hooks_provider_response "%s" "$native_event" "$body"
   exit 0
 fi
@@ -1375,7 +1390,7 @@ fi
 reason="$(gram_hooks_json_string_value "$body" "message")"
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform)
+`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {
@@ -1406,7 +1421,7 @@ gram_hooks_enrich_claude_mcp_payload() {
   fi
 
   local event
-  event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || {
+  event=$(printf '%s' "$input" | jq -r '.hook_event_name // .event_name // .event // empty' 2>/dev/null) || {
     printf '%s' "$input"
     return
   }
@@ -1537,7 +1552,7 @@ gram_hooks_enrich_cursor_mcp_payload() {
   fi
 
   local event
-  event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || {
+  event=$(printf '%s' "$input" | jq -r '.hook_event_name // .event_name // .event // empty' 2>/dev/null) || {
     printf '%s' "$input"
     return
   }
@@ -1566,6 +1581,9 @@ gram_hooks_enrich_cursor_mcp_payload() {
   local roots=()
   if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
     roots+=("$(dirname "$CURSOR_PLUGIN_ROOT")")
+  fi
+  if [ -n "${script_dir:-}" ]; then
+    roots+=("$(dirname "$(dirname "$script_dir")")")
   fi
   roots+=("${HOME}/.cursor/plugins/local")
 

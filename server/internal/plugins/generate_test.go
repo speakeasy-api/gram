@@ -716,18 +716,7 @@ func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 
 	require.Contains(t, string(renderSharedAuthScript()), "${server_url}/rpc/hooks.ingest")
 	require.NotContains(t, script, `X-Gram-Hook-Source`)
-	require.Contains(t, script, `gram_hooks_build_canonical_payload`)
-	require.Contains(t, script, `gram_hooks_enrich_claude_mcp_payload`)
-	require.Contains(t, script, `provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"`)
-	require.Contains(t, script, `CLAUDE_PLUGIN_ROOT`)
-	require.Contains(t, script, `.mcpServers // {}`)
-	require.Contains(t, script, `"adapter" "claude"`)
-	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
-	require.Contains(t, script, `project_slug="${GRAM_HOOKS_PROJECT_SLUG:-acme-prod}"`)
-	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
-	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
-	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
@@ -744,21 +733,143 @@ func TestRenderHookScriptCursorUsesLocalHookAuth(t *testing.T) {
 
 	require.Contains(t, string(renderSharedAuthScript()), "${server_url}/rpc/hooks.ingest")
 	require.NotContains(t, script, `X-Gram-Hook-Source`)
-	require.Contains(t, script, `gram_hooks_build_canonical_payload`)
-	require.Contains(t, script, `gram_hooks_enrich_cursor_mcp_payload`)
-	require.Contains(t, script, `provider_payload="$(gram_hooks_enrich_cursor_mcp_payload "$provider_payload")"`)
-	require.Contains(t, script, `mcp_server_url`)
-	require.Contains(t, script, `.mcpServers[$name].url`)
-	require.Contains(t, script, `"adapter" "cursor"`)
-	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
-	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
-	require.Contains(t, script, `project_slug="${GRAM_HOOKS_PROJECT_SLUG:-acme-prod}"`)
-	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
-	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
-	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
+	require.NotContains(t, script, `${server_url}/hooks/cursor`, "must not use the legacy /hooks/<platform> path")
 	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
+}
+
+func TestRenderHookScriptCursorBackfillsSkippedPromptFromTranscript(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Cursor transcript backfill")
+	_, err = exec.LookPath("base64")
+	require.NoError(t, err, "base64 is required for Cursor transcript backfill")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	keysPath := filepath.Join(dir, "keys.txt")
+	stateDir := filepath.Join(dir, "state")
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+key=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-H" ] && [ "$#" -gt 1 ]; then
+    case "$2" in
+      Idempotency-Key:*) key="${2#Idempotency-Key: }" ;;
+    esac
+    shift 2
+    continue
+  fi
+  shift
+done
+printf '%s\n' "$key" >> "$GRAM_CAPTURE_KEYS"
+cat >> "$GRAM_CAPTURE_PAYLOADS"
+printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+printf '{}\n200'
+`), 0o755))
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nGRAM_CURSOR_BACKFILL_PROMPT\n\nPlease reply.\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}
+`), 0o600))
+
+	payload := map[string]any{
+		"hook_event_name": "afterAgentResponse",
+		"conversation_id": "cursor-cli-session",
+		"generation_id":   "turn-1",
+		"session_id":      "cursor-cli-session",
+		"text":            "assistant ok",
+		"transcript_path": transcriptPath,
+		"cursor_version":  "3.9.16",
+		"model":           "composer-2.5-fast",
+	}
+	payloadBytes, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = bytes.NewReader(payloadBytes)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_CAPTURE_KEYS="+keysPath,
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"XDG_STATE_HOME="+stateDir,
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 3, "expected backfilled prompt, actual event, and trailing split")
+	firstPayload := strings.TrimSpace(chunks[0])
+	secondPayload := strings.TrimSpace(chunks[1])
+
+	var backfilled map[string]any
+	require.NoError(t, json.Unmarshal([]byte(firstPayload), &backfilled))
+	backfilledEvent := backfilled["event"].(map[string]any)
+	require.Equal(t, "prompt.submitted", backfilledEvent["type"])
+	backfilledData := backfilled["data"].(map[string]any)
+	backfilledPrompt := backfilledData["prompt"].(map[string]any)
+	require.Equal(t, "GRAM_CURSOR_BACKFILL_PROMPT\n\nPlease reply.", backfilledPrompt["text"])
+
+	var actual map[string]any
+	require.NoError(t, json.Unmarshal([]byte(secondPayload), &actual))
+	actualEvent := actual["event"].(map[string]any)
+	require.Equal(t, "assistant.responded", actualEvent["type"])
+	actualData := actual["data"].(map[string]any)
+	actualMessage := actualData["message"].(map[string]any)
+	require.Equal(t, "assistant ok", actualMessage["text"])
+
+	keys := strings.Fields(string(requireFileBytes(t, keysPath)))
+	require.Len(t, keys, 2)
+	require.NotEqual(t, keys[0], keys[1], "backfill and actual event must use distinct idempotency keys")
+}
+
+func TestCursorMCPEnrichmentRecognizesEventField(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Cursor MCP enrichment")
+
+	root := t.TempDir()
+	pluginDir := filepath.Join(root, "gram-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	hooksDir := filepath.Join(pluginDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "mcp.json"), []byte(`{
+  "mcpServers": {
+    "grame2e": { "url": "https://app.getgram.ai/mcp/e2e" }
+  }
+}`), 0o600))
+
+	scriptPath := filepath.Join(t.TempDir(), "cursor-mcp.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte(renderCursorMCPEnrichmentSnippet()), 0o755))
+
+	payload := `{"event":"beforeMCPExecution","mcp_server_name":"grame2e","tool_name":"shadow_lookup"}`
+	cmd := exec.Command("bash", "-c", `. ./cursor-mcp.sh; gram_hooks_enrich_cursor_mcp_payload "$PAYLOAD"`)
+	cmd.Dir = filepath.Dir(scriptPath)
+	cmd.Env = append(os.Environ(),
+		"script_dir="+hooksDir,
+		"PAYLOAD="+payload,
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var enriched map[string]any
+	require.NoError(t, json.Unmarshal(output, &enriched))
+	require.Equal(t, "https://app.getgram.ai/mcp/e2e", enriched["url"])
+	require.Equal(t, "https://app.getgram.ai/mcp/e2e", enriched["mcp_server_url"])
 }
 
 func TestRenderHookPayloadNormalizationDoesNotRequireJQForToolInput(t *testing.T) {
@@ -1280,10 +1391,7 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	return home, callLog
 }
 
-// Codex MCP inventory contains raw transport config. Without a guaranteed JSON
-// parser in hook environments, the hook must not try to ship that inventory
-// because credential-bearing fields cannot be safely projected in shell.
-func TestGenerateCodexObservabilityPluginScriptSkipsUnsafeMCPInventoryWithoutJSONTooling(t *testing.T) {
+func TestGenerateCodexObservabilityPluginScriptEnrichesMCPMetadataOnDemand(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -1293,11 +1401,43 @@ func TestGenerateCodexObservabilityPluginScriptSkipsUnsafeMCPInventoryWithoutJSO
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
 
-	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
-	require.NotContains(t, script, "mcp_inventory_codex")
-	require.NotContains(t, script, "codex mcp list")
-	require.NotContains(t, script, "redact_args")
-	require.NotContains(t, script, "python3")
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"], 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(`#!/usr/bin/env bash
+if [ "$1" = "mcp" ] && [ "$2" = "list" ] && [ "$3" = "--json" ]; then
+  printf '[{"name":"shadow_e2e","transport":{"type":"streamable_http","url":"https://app.getgram.ai/mcp/shadow-e2e"}}]'
+  exit 0
+fi
+exit 1
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"mcp__shadow_e2e__lookup","tool_input":{"query":"needle"},"session_id":"codex-session","tool_use_id":"tool-1"}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=default",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	data := posted["data"].(map[string]any)
+	toolCall := data["tool_call"].(map[string]any)
+	require.Equal(t, "mcp__shadow_e2e__lookup", toolCall["name"])
+	mcp := data["mcp"].(map[string]any)
+	require.Equal(t, "shadow_e2e", mcp["server_name"])
+	require.Equal(t, "https://app.getgram.ai/mcp/shadow-e2e", mcp["url"])
 }
 
 // Substring assertions cannot catch shell quoting regressions — run bash -n

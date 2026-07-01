@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -210,6 +212,20 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			ToolInput:       toolInput,
 			RiskPolicyID:    policy.ID,
 		})
+		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+			Provider:       strings.TrimSpace(payload.Source.Adapter),
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			Reason:         auditReason,
+			ToolName:       toolName,
+			UserID:         authCtx.UserID,
+			RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}); bURL != "" {
+			userReason = appendBlockURL(userReason, bURL)
+		}
 		return auditReason, userReason
 	}
 	return "", ""
@@ -370,21 +386,6 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		return nil
 	}
 
-	var role, content string
-	switch strings.TrimSpace(payload.Event.Type) {
-	case "prompt.submitted":
-		role = "user"
-		content = canonicalPromptText(payload)
-	case "assistant.responded":
-		role = "assistant"
-		content = canonicalMessageText(payload)
-	default:
-		return nil
-	}
-	if strings.TrimSpace(content) == "" {
-		return nil
-	}
-
 	actorEmail := ""
 	if authCtx.Email != nil {
 		actorEmail = strings.TrimSpace(*authCtx.Email)
@@ -398,32 +399,113 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}
-	msg := chatRepo.CreateChatMessageParams{
-		ChatID:           sessionIDToUUID(sessionID),
-		ProjectID:        *authCtx.ProjectID,
-		Role:             role,
-		Content:          content,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(""),
-		UserID:           conv.ToPGTextEmpty(authCtx.UserID),
-		ExternalUserID:   conv.ToPGTextEmpty(actorEmail),
-		FinishReason:     conv.ToPGTextEmpty(""),
-		ToolCalls:        nil,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-		Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
-		ContentHash:      nil,
-		Generation:       canonicalGeneration(payload),
+	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
+		return chatRepo.CreateChatMessageParams{
+			ChatID:           sessionIDToUUID(sessionID),
+			ProjectID:        *authCtx.ProjectID,
+			Role:             role,
+			Content:          content,
+			ContentRaw:       nil,
+			ContentAssetUrl:  conv.ToPGTextEmpty(""),
+			StorageError:     conv.ToPGTextEmpty(""),
+			Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
+			MessageID:        conv.ToPGTextEmpty(""),
+			ToolCallID:       conv.ToPGTextEmpty(""),
+			UserID:           conv.ToPGTextEmpty(authCtx.UserID),
+			ExternalUserID:   conv.ToPGTextEmpty(actorEmail),
+			FinishReason:     conv.ToPGTextEmpty(""),
+			ToolCalls:        nil,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+			Origin:           conv.ToPGTextEmpty(""),
+			UserAgent:        conv.ToPGTextEmpty(""),
+			IpAddress:        conv.ToPGTextEmpty(""),
+			Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
+			ContentHash:      nil,
+			Generation:       0,
+		}
 	}
-	return s.insertMessageWithFallbackUpsert(ctx, &metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, content))
+
+	var msg chatRepo.CreateChatMessageParams
+	var titleContent string
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "prompt.submitted":
+		content := canonicalPromptText(payload)
+		if strings.TrimSpace(content) == "" {
+			return nil
+		}
+		msg = baseMsg("user", content)
+		titleContent = content
+	case "assistant.responded":
+		content := canonicalMessageText(payload)
+		if strings.TrimSpace(content) == "" {
+			return nil
+		}
+		msg = baseMsg("assistant", content)
+		titleContent = content
+	case "tool.requested":
+		toolName := canonicalToolName(payload)
+		if strings.TrimSpace(toolName) == "" {
+			return nil
+		}
+		toolCallsJSON, err := canonicalToolCallsJSON(payload)
+		if err != nil {
+			return err
+		}
+		msg = baseMsg("assistant", "")
+		msg.FinishReason = conv.ToPGText("tool_calls")
+		msg.ToolCalls = toolCallsJSON
+		titleContent = toolName
+	case "tool.completed", "tool.failed":
+		content := canonicalToolResultContent(payload)
+		if strings.TrimSpace(content) == "" {
+			return nil
+		}
+		msg = baseMsg("tool", content)
+		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
+		titleContent = content
+	default:
+		return nil
+	}
+
+	return s.insertMessageWithFallbackUpsert(ctx, &metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+}
+
+func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {
+	toolCalls := []map[string]any{{
+		"id":   canonicalChatToolCallID(payload),
+		"type": "function",
+		"function": map[string]any{
+			"name":      canonicalToolName(payload),
+			"arguments": marshalToJSON(canonicalToolInput(payload)),
+		},
+	}}
+	toolCallsJSON, err := json.Marshal(toolCalls)
+	if err != nil {
+		return nil, fmt.Errorf("marshal canonical tool_calls: %w", err)
+	}
+	return toolCallsJSON, nil
+}
+
+func canonicalChatToolCallID(payload *gen.IngestPayload) string {
+	if id := canonicalToolCallID(payload); id != "" {
+		return id
+	}
+	if name := canonicalToolName(payload); name != "" {
+		return name
+	}
+	return canonicalTraceID(payload)
+}
+
+func canonicalToolResultContent(payload *gen.IngestPayload) string {
+	if strings.TrimSpace(payload.Event.Type) == "tool.failed" {
+		return marshalToJSON(canonicalToolError(payload))
+	}
+	if mcp := canonicalMCPData(payload); mcp != nil && mcp.ResultJSON != nil {
+		return strings.TrimSpace(*mcp.ResultJSON)
+	}
+	return marshalToJSON(canonicalToolOutput(payload))
 }
 
 func canonicalAllowResult() *gen.IngestHookResult {
@@ -561,21 +643,6 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 		return strings.TrimSpace(payload.Data.Skill.Name)
 	}
 	return ""
-}
-
-func canonicalGeneration(payload *gen.IngestPayload) int32 {
-	if payload == nil || payload.Session == nil {
-		return 0
-	}
-	turnID := strings.TrimSpace(conv.PtrValOr(payload.Session.TurnID, ""))
-	if turnID == "" {
-		return 0
-	}
-	var hash uint32
-	for i := 0; i < len(turnID); i++ {
-		hash = hash*16777619 ^ uint32(turnID[i])
-	}
-	return int32(hash & 0x7fffffff)
 }
 
 func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
