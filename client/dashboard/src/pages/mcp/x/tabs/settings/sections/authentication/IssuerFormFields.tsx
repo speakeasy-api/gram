@@ -1,3 +1,4 @@
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -8,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import {
@@ -15,6 +17,42 @@ import {
   clientTypeHelp,
   type ClientType,
 } from "./issuerFormUtils";
+
+// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
+// every upstream OAuth provider, regardless of MCP server or slug (see
+// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
+// Manual clients need it registered on the upstream's app out-of-band; DCR
+// and CIMD clients send/publish it automatically, so this only surfaces
+// where the operator has to do that registration by hand.
+function remoteLoginCallbackURL(): string {
+  return `${getServerURL()}/mcp/remote_login_callback`;
+}
+
+// RedirectURICallout shows the redirect_uri operators must register on the
+// upstream provider's OAuth app before a Manual client's credentials will
+// work.
+function RedirectURICallout(): JSX.Element {
+  const redirectURI = remoteLoginCallbackURL();
+  return (
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">Redirect URI</Label>
+      <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <code className="break-all">{redirectURI}</code>
+          <CopyButton
+            size="inline"
+            text={redirectURI}
+            tooltip="Copy redirect URI"
+          />
+        </div>
+      </div>
+      <Type muted small>
+        Register this as the callback / redirect URI on the upstream provider's
+        OAuth app before pasting credentials below.
+      </Type>
+    </Stack>
+  );
+}
 
 // Shared form-field components used by both AttachRemoteIdentityProviderSheet
 // and ModifyRemoteIdentityProviderSheet. The state lives in the parent sheet;
@@ -423,15 +461,18 @@ export function ClientTypeFields({
       break;
     case "manual":
       credentials = (
-        <ClientCredentialsFields
-          showHeading={false}
-          clientId={clientId}
-          clientSecret={clientSecret}
-          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-          onClientIdChange={onClientIdChange}
-          onClientSecretChange={onClientSecretChange}
-          onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
-        />
+        <Stack gap={4}>
+          <RedirectURICallout />
+          <ClientCredentialsFields
+            showHeading={false}
+            clientId={clientId}
+            clientSecret={clientSecret}
+            tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+            onClientIdChange={onClientIdChange}
+            onClientSecretChange={onClientSecretChange}
+            onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
+          />
+        </Stack>
       );
   }
 
