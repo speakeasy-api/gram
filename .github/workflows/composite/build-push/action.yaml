@@ -2,6 +2,12 @@ name: "Build and Push image"
 description: "Composite action to generate registry images"
 
 inputs:
+  hub-username:
+    required: true
+    description: "Docker Hub username"
+  hub-token:
+    required: true
+    description: "Docker Hub token"
   registry:
     description: "Image registry to use"
     required: true
@@ -43,8 +49,8 @@ runs:
     - name: Log in to Docker Hub
       uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        username: ${{ inputs.hub-username }}
+        password: ${{ inputs.hub-token }}
 
     - name: Generate preview tag
       id: preview-tag
