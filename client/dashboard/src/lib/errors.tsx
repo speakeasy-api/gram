@@ -12,8 +12,22 @@ interface ErrorHandlerOptions {
   silent?: boolean;
 }
 
+export function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === "string") return new Error(error);
+  if (error == null) return new Error("Unknown error");
+  if (typeof error === "symbol" || typeof error === "bigint") {
+    return new Error(String(error));
+  }
+  try {
+    return new Error(JSON.stringify(error));
+  } catch {
+    return new Error("Unknown error");
+  }
+}
+
 export function handleError(
-  error: Error | string,
+  error: unknown,
   options: ErrorHandlerOptions = {},
 ): void {
   const {
@@ -23,7 +37,8 @@ export function handleError(
     silent = false,
   } = options;
 
-  const errorMessage = typeof error === "string" ? error : error.message;
+  const errorMessage =
+    typeof error === "string" ? error : toError(error).message;
 
   // Log error for debugging
   console.error("Error handled:", error);
