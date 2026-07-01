@@ -70,16 +70,22 @@ export default defineConfig(({ command }) => {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
+          // NOTE: trailing slashes (e.g. "node_modules/react/") are load-bearing
+          // — they stop `react` from also matching react-dom/react-router/etc.
+          // Don't drop them.
           manualChunks(id) {
             if (id.includes("node_modules/lucide-react")) return "lucide-react";
             if (id.includes("node_modules/@speakeasy-api/moonshine")) {
               return "moonshine";
             }
+            // Keep the whole three.js ecosystem together (three plus the
+            // packages reached only through @react-three/*: three-mesh-bvh,
+            // three-stdlib, troika-*) so it stays out of the main chunk.
             if (
-              id.includes("node_modules/@react-three/drei") ||
-              id.includes("node_modules/@react-three/fiber") ||
-              id.includes("node_modules/@react-three/postprocessing") ||
-              id.includes("node_modules/three/")
+              id.includes("node_modules/@react-three/") ||
+              id.includes("node_modules/three/") ||
+              id.includes("node_modules/three-") ||
+              id.includes("node_modules/troika-")
             ) {
               return "three";
             }
