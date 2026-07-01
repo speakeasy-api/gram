@@ -16,6 +16,8 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	adminrssrv "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/server"
 	orgissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/server"
 	issuerssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
@@ -58,6 +60,8 @@ var (
 	_ clientsgen.Auther     = (*Service)(nil)
 	_ sessionsgen.Service   = (*Service)(nil)
 	_ sessionsgen.Auther    = (*Service)(nil)
+	_ adminrsgen.Service    = (*Service)(nil)
+	_ adminrsgen.Auther     = (*Service)(nil)
 )
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore) *Service {
@@ -107,6 +111,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		sessionEndpoints.Use(m)
 	}
 	sessionssrv.Mount(mux, sessionssrv.New(sessionEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	adminEndpoints := adminrsgen.NewEndpoints(service)
+	for _, m := range mw {
+		adminEndpoints.Use(m)
+	}
+	adminrssrv.Mount(mux, adminrssrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

@@ -59,3 +59,47 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		UpdatedAt:               row.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
+
+// BuildGlobalRemoteSessionClientView renders a global remote_session_client,
+// serializing its NULL project_id/organization_id as empty strings (unlike
+// BuildRemoteSessionClientView, which treats a null project_id as invalid).
+func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.RemoteSessionClient {
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
+	// Empty for a genuine global client (organization_id NULL); read from the
+	// row anyway so the field is authoritative rather than assumed.
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
+
+	var issuedAt string
+	if row.ClientIDIssuedAt.Valid {
+		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+	}
+	var expiresAt *string
+	if row.ClientSecretExpiresAt.Valid {
+		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
+		expiresAt = &s
+	}
+
+	return &types.RemoteSessionClient{
+		ID:                      row.ID.String(),
+		ProjectID:               projectID,
+		OrganizationID:          organizationID,
+		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+		UserSessionIssuerIds:    []string{},
+		ClientID:                row.ClientID,
+		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientIDIssuedAt:        issuedAt,
+		ClientSecretExpiresAt:   expiresAt,
+		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		Scope:                   row.Scope,
+		Audience:                conv.FromPGText[string](row.Audience),
+		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:               row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}

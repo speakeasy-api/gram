@@ -880,3 +880,117 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- Global remote-session admin surface — issuers and clients shared across every
+-- organization (project_id NULL AND organization_id NULL). Curated by Speakeasy
+-- platform admins. Every query is scoped strictly to that global partition; the
+-- create paths reuse CreateRemoteSessionIssuer / CreateRemoteSessionClient with
+-- NULL project_id and NULL organization_id.
+
+-- name: ListGlobalRemoteSessionIssuers :many
+SELECT *
+FROM remote_session_issuers
+WHERE project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetGlobalRemoteSessionIssuerByID :one
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: UpdateGlobalRemoteSessionIssuer :one
+-- Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to the
+-- global partition (project_id NULL, organization_id NULL).
+UPDATE remote_session_issuers
+SET
+    slug = COALESCE(sqlc.narg('slug'), slug),
+    issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    authorization_endpoint = CASE
+        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
+    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    oidc = COALESCE(sqlc.narg('oidc'), oidc),
+    passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteGlobalRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListGlobalRemoteSessionClientsByIssuerID :many
+-- Global clients registered with a global issuer. Global clients carry no
+-- user_session_issuer attachments, so the view is built without the join-table
+-- array.
+SELECT *
+FROM remote_session_clients
+WHERE remote_session_issuer_id = @remote_session_issuer_id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetGlobalRemoteSessionClientByID :one
+SELECT *
+FROM remote_session_clients
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: UpdateGlobalRemoteSessionClient :one
+-- Patch a global client's non-issuer fields. The handler encrypts a rotated
+-- client_secret before passing it as client_secret_encrypted; an omitted narg
+-- keeps the existing secret.
+UPDATE remote_session_clients
+SET
+    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
+    token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
+    scope = COALESCE(sqlc.narg('scope')::text[], scope),
+    audience = CASE
+        WHEN sqlc.narg('audience')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('audience'), audience)
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteGlobalRemoteSessionClient :one
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;

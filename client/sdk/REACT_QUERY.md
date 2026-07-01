@@ -225,11 +225,11 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useListAssistantMemoriesInfinite } from "@gram/client/react-query/assistantMemoriesList.js";
+import { useGlobalRemoteSessionClientsInfinite } from "@gram/client/react-query/adminRemoteSessionsListGlobalClients.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useListAssistantMemoriesInfinite({
-    assistantId: "56bcc863-cc81-4d15-92ee-28eb89e8930f",
+  const { data, error, status, fetchNextPage, hasNextPage } = useGlobalRemoteSessionClientsInfinite({
+    remoteSessionIssuerId: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf",
   });
 
   return (

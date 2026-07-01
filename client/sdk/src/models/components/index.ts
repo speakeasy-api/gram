@@ -53,6 +53,7 @@ export * from "./createdeploymentrequestbody.js";
 export * from "./createdeploymentresult.js";
 export * from "./createdomainrequestbody.js";
 export * from "./createenvironmentform.js";
+export * from "./createglobalremotesessionclientform.js";
 export * from "./createissuerrequestbody.js";
 export * from "./createkeyform.js";
 export * from "./createmcpendpointform.js";

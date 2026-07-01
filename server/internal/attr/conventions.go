@@ -264,6 +264,9 @@ const (
 	ProjectNameKey                    = attribute.Key("gram.project.name")
 	ProjectSlugKey                    = attribute.Key("gram.project.slug")
 	RemoteSessionClientIDKey          = attribute.Key("gram.remote_session_client.id")
+	AuditActionKey                    = attribute.Key("gram.audit.action")
+	AuditSubjectKey                   = attribute.Key("gram.audit.subject")
+	AuditSubjectIDKey                 = attribute.Key("gram.audit.subject_id")
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
@@ -1178,6 +1181,15 @@ func RemoteSessionClientID(v string) attribute.KeyValue { return RemoteSessionCl
 func SlogRemoteSessionClientID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionClientIDKey), v)
 }
+
+func AuditAction(v string) attribute.KeyValue { return AuditActionKey.String(v) }
+func SlogAuditAction(v string) slog.Attr      { return slog.String(string(AuditActionKey), v) }
+
+func AuditSubject(v string) attribute.KeyValue { return AuditSubjectKey.String(v) }
+func SlogAuditSubject(v string) slog.Attr      { return slog.String(string(AuditSubjectKey), v) }
+
+func AuditSubjectID(v string) attribute.KeyValue { return AuditSubjectIDKey.String(v) }
+func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(AuditSubjectIDKey), v) }
 
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
