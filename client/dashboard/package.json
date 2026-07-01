@@ -56,7 +56,7 @@
     "@react-three/fiber": "^9.4.0",
     "@react-three/postprocessing": "^3.0.4",
     "@speakeasy-api/moonshine": "1.43.1",
-    "@tailwindcss/vite": "^4.3.1",
+    "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-virtual": "^3.14.3",
     "@xstate/react": "^6.1.0",
@@ -108,14 +108,14 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@types/three": "^0.181.0",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^20.5.5",
     "knip": "^6.19.0",
     "oxlint": "^1.67.0",
     "oxlint-tsgolint": "^0.23.0",
     "svix-react": "^1.13.9",
     "typescript": "catalog:",
-    "vite": "^7.3.5",
+    "vite": "catalog:",
     "vitest": "^4.1.9"
   }
 }

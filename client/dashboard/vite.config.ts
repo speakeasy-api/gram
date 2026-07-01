@@ -60,29 +60,40 @@ export default defineConfig(({ command }) => {
     build: {
       target: "es2022",
       sourcemap: true,
+      // Vite 8 defaults CSS minification to Lightning CSS, whose 1.32.0
+      // build (pulled transitively by @tailwindcss/vite) panics on our CSS
+      // (src/values/color.rs:441 SIGABRT). Pin CSS minification to esbuild —
+      // the Vite 7 default — until the upstream Lightning CSS bug is fixed.
+      cssMinify: "esbuild",
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
-            ],
+          manualChunks(id) {
+            if (id.includes("node_modules/lucide-react")) return "lucide-react";
+            if (id.includes("node_modules/@speakeasy-api/moonshine")) {
+              return "moonshine";
+            }
+            if (
+              id.includes("node_modules/@react-three/drei") ||
+              id.includes("node_modules/@react-three/fiber") ||
+              id.includes("node_modules/@react-three/postprocessing") ||
+              id.includes("node_modules/three/")
+            ) {
+              return "three";
+            }
+            if (
+              id.includes("node_modules/posthog-js") ||
+              id.includes("node_modules/react/") ||
+              id.includes("node_modules/react-dom/") ||
+              id.includes("node_modules/react-error-boundary") ||
+              id.includes("node_modules/react-router") ||
+              id.includes("node_modules/sonner") ||
+              id.includes("node_modules/zod")
+            ) {
+              return "externals";
+            }
           },
         },
       },
