@@ -22,6 +22,29 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
+// Agent lifecycle timing. Values here interact: keep yamux keepalive under the
+// gateway's session/idle timeouts, and keep the stable-session threshold above
+// the max backoff so flapping connections never reset to the minimum delay.
+const (
+	// defaultMinBackoff is the initial reconnect delay after a failed or short-lived session.
+	defaultMinBackoff = 500 * time.Millisecond
+	// defaultMaxBackoff caps exponential reconnect backoff.
+	defaultMaxBackoff = 30 * time.Second
+	// stableSessionThreshold resets backoff to the minimum once a session survives this long.
+	stableSessionThreshold = 30 * time.Second
+	// gatewayDialTimeout bounds the websocket dial and handshake to the gateway.
+	gatewayDialTimeout = 15 * time.Second
+	// yamuxKeepAliveInterval paces tunnel liveness pings; must stay under gateway idle timeouts.
+	yamuxKeepAliveInterval = 15 * time.Second
+	// substreamReadHeaderTimeout bounds header reads on gateway-opened substreams.
+	substreamReadHeaderTimeout = 30 * time.Second
+	// shutdownTimeout bounds graceful HTTP shutdown when the run context is cancelled.
+	shutdownTimeout = 10 * time.Second
+)
+
+// maxHelloFrameBytes bounds the control hello read; hello carries small JSON metadata, never MCP payloads.
+const maxHelloFrameBytes = 4 << 10
+
 type Config struct {
 	GatewayURL string
 	APIKey     string
@@ -54,10 +77,10 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		return nil, err
 	}
 	if cfg.MinBackoff <= 0 {
-		cfg.MinBackoff = 500 * time.Millisecond
+		cfg.MinBackoff = defaultMinBackoff
 	}
 	if cfg.MaxBackoff <= 0 {
-		cfg.MaxBackoff = 30 * time.Second
+		cfg.MaxBackoff = defaultMaxBackoff
 	}
 
 	a := &Agent{cfg: cfg, target: target, logger: logger}
@@ -76,7 +99,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.logger.WarnContext(ctx, "tunnel agent session ended", slog.Any("error", err))
 		}
 		// Reset backoff after a stable session; quick failures continue backing off.
-		if time.Since(start) > 30*time.Second {
+		if time.Since(start) > stableSessionThreshold {
 			backoff = a.cfg.MinBackoff
 		}
 		wait := fullJitter(backoff)
@@ -106,7 +129,7 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		header.Set(wire.HeaderTunnelServiceMetadata, string(metadata))
 	}
 
-	dialCtx, cancelDial := context.WithTimeout(ctx, 15*time.Second)
+	dialCtx, cancelDial := context.WithTimeout(ctx, gatewayDialTimeout)
 	ws, resp, err := websocket.Dial(dialCtx, a.cfg.GatewayURL, &websocket.DialOptions{
 		HTTPHeader: header,
 	})
@@ -122,7 +145,7 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	conn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
 	ycfg := yamux.DefaultConfig()
 	ycfg.EnableKeepAlive = true
-	ycfg.KeepAliveInterval = 15 * time.Second
+	ycfg.KeepAliveInterval = yamuxKeepAliveInterval
 	// Disable yamux stderr logging; reconnect storms otherwise serialize on noisy writes.
 	ycfg.LogOutput = io.Discard
 	// Agent is the yamux server because the gateway opens per-request substreams.
@@ -137,14 +160,14 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	// Each yamux substream carries one HTTP exchange.
 	srv := &http.Server{
 		Handler:           a.handler,
-		ReadHeaderTimeout: 30 * time.Second,
+		ReadHeaderTimeout: substreamReadHeaderTimeout,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 	done := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer cancel()
 			_ = srv.Shutdown(shutdownCtx)
 			_ = session.Close()
@@ -217,7 +240,7 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(wire.ControlHelloPath, func(w http.ResponseWriter, r *http.Request) {
 		var hello wire.HelloFrame
-		_ = json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&hello)
+		_ = json.NewDecoder(io.LimitReader(r.Body, maxHelloFrameBytes)).Decode(&hello)
 		a.logger.Info("tunnel hello received",
 			slog.String("tunnel_id", hello.TunnelID), slog.String("session_id", hello.SessionID))
 		w.WriteHeader(http.StatusOK)
