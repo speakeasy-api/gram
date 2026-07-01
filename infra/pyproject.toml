@@ -10,7 +10,7 @@ dependencies = [
   # with buf.gen.yaml when the plugin version changes.
   "protobuf>=7.35.0,<8",
   "google-cloud-pubsub>=2.31.0",
-  "anyio>=4.13.0",
+  "anyio>=4.14.0",
   "asyncer>=0.0.17",
   "structlog>=26.1.0",
   "opentelemetry-api>=1.42.1",
