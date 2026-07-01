@@ -8,7 +8,7 @@ import { Badge } from "@speakeasy-api/moonshine";
 
 // The per-account type marker. Personal reuses the shared amber badge; team is
 // shown explicitly (this is the detailed view, so every account is labeled).
-export function AccountTypePill({
+function AccountTypePill({
   accountType,
 }: {
   accountType: string;

@@ -9,7 +9,7 @@ export type EmployeeStatus = "enrolled" | "not_enrolled";
 
 // One linked AI account for an employee. Identity is (provider, email): the same
 // email on two providers is two distinct accounts, so provider is always shown.
-export type EmployeeAccount = {
+type EmployeeAccount = {
   email: string;
   provider: string;
   // "team" | "personal" | "" (unclassified).

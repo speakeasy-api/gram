@@ -1,12 +1,10 @@
 import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
 
-// The account types an AI session can resolve to on the backend `account_type`
-// telemetry dimension (team | personal). Only `personal` is surfaced as a
-// badge — team is the expected default, so anything that isn't personal
-// (team, unclassified, undefined) is implied to be team and renders nothing.
-export type AccountType = "personal" | "team";
-
+// The backend `account_type` telemetry dimension resolves to team | personal.
+// Only `personal` is surfaced as a badge — team is the expected default, so
+// anything that isn't personal (team, unclassified, undefined) is implied to
+// be team and renders nothing.
 type AccountTypeBadgeProps = {
   /**
    * The resolved account type. Accepts the raw backend value (which may be
