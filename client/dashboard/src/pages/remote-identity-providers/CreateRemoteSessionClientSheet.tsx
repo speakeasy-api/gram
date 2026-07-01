@@ -99,6 +99,12 @@ export function CreateRemoteSessionClientSheet({
   );
   const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
 
+  // For an organization-level issuer the client is either created at the
+  // organization level (no project, attachable by every project) or downscoped
+  // to a single project. Defaults to organization-level, the issuer's own scope.
+  const [scope, setScope] = useState<"organization" | "project">(
+    "organization",
+  );
   const [projectId, setProjectId] = useState<string>(UNSELECTED_PROJECT);
   const [clientType, setClientType] = useState<ClientType>(defaultClientType);
   const [clientId, setClientId] = useState("");
@@ -120,9 +126,11 @@ export function CreateRemoteSessionClientSheet({
     }> => {
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
-      // Project-specific issuers inherit their project (omit); org-level issuers
-      // are downscoped to the chosen project.
-      const projectIdForOrg = isOrganizational ? projectId : undefined;
+      // Project-specific issuers inherit their project (project_id omitted). For
+      // an org-level issuer, omitting project_id creates an organization-level
+      // client (no project); sending it downscopes to the chosen project.
+      const projectIdForOrg =
+        isOrganizational && scope === "project" ? projectId : undefined;
 
       // CIMD: the platform generates the client_id and hosts the metadata
       // document, so there are no credentials to collect.
@@ -218,6 +226,7 @@ export function CreateRemoteSessionClientSheet({
   // leaks into a new creation.
   useEffect(() => {
     if (!open) return;
+    setScope("organization");
     setProjectId(UNSELECTED_PROJECT);
     setClientId("");
     setClientSecret("");
@@ -228,7 +237,10 @@ export function CreateRemoteSessionClientSheet({
     resetCreateMutation();
   }, [open, defaultClientType, resetCreateMutation]);
 
-  const projectChosen = !isOrganizational || projectId !== UNSELECTED_PROJECT;
+  const projectChosen =
+    !isOrganizational ||
+    scope === "organization" ||
+    projectId !== UNSELECTED_PROJECT;
   // Manual requires a client_id; DCR mints one during proxy registration.
   const credentialsReady =
     clientType === "manual" ? clientId.trim().length > 0 : true;
@@ -252,24 +264,54 @@ export function CreateRemoteSessionClientSheet({
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
           <Stack gap={4}>
             {isOrganizational ? (
-              <Stack gap={2}>
-                <Label className="text-muted-foreground text-xs">Project</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
+              <Stack gap={4}>
+                <Stack gap={2}>
+                  <Label className="text-muted-foreground text-xs">Scope</Label>
+                  <Select
+                    value={scope}
+                    onValueChange={(value) =>
+                      setScope(value as "organization" | "project")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="organization">
+                        All projects (organization-level)
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Type muted small>
-                  This provider is organizational, so the client must be scoped
-                  to a project in the organization.
-                </Type>
+                      <SelectItem value="project">Specific project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Type muted small>
+                    An organization-level client has no project and can be
+                    attached by every project in the organization.
+                  </Type>
+                </Stack>
+
+                {scope === "project" && (
+                  <Stack gap={2}>
+                    <Label className="text-muted-foreground text-xs">
+                      Project
+                    </Label>
+                    <Select value={projectId} onValueChange={setProjectId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Type muted small>
+                      The client will be scoped to this project in the
+                      organization.
+                    </Type>
+                  </Stack>
+                )}
               </Stack>
             ) : (
               <Type muted small>

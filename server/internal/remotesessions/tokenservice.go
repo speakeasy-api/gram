@@ -153,10 +153,12 @@ func (m *ChallengeManager) ResolveAccessToken(
 // attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
 func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
-	projectID, userSessionIssuerID uuid.UUID,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]string, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}

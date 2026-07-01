@@ -203,7 +203,7 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		UserSessionIssuerID:   userIssuer,
 	}))
 
-	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 

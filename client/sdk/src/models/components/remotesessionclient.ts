@@ -51,7 +51,11 @@ export type RemoteSessionClient = {
    */
   id: string;
   /**
-   * The owning project id.
+   * The owning organization id. Empty for legacy rows not yet backfilled.
+   */
+  organizationId: string;
+  /**
+   * The owning project id. Empty for organization-level clients.
    */
   projectId: string;
   /**
@@ -99,6 +103,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
     scope: z.optional(z.array(z.string())),
@@ -118,6 +123,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",

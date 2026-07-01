@@ -4846,6 +4846,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 	res := &types.RemoteSessionClient{
 		ID:                      *v.ID,
 		ProjectID:               *v.ProjectID,
+		OrganizationID:          *v.OrganizationID,
 		RemoteSessionIssuerID:   *v.RemoteSessionIssuerID,
 		ClientID:                *v.ClientID,
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,

@@ -35,7 +35,7 @@ type TelemetryLogger interface {
 }
 
 const (
-	DefaultChatModel = "openai/gpt-5.4"
+	DefaultChatModel = "anthropic/claude-sonnet-5"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
