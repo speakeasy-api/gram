@@ -88,6 +88,14 @@ export type ListChatsRequest = {
    */
   assistantId?: string | undefined;
   /**
+   * When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.
+   */
+  sourceKind?: string | undefined;
+  /**
+   * When set with assistant_id, exclude that assistant's threads whose source_kind matches this value (e.g. 'setup' to hide onboarding threads from runtime views). Empty for no filter.
+   */
+  excludeSourceKind?: string | undefined;
+  /**
    * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
    */
   hasRisk?: HasRisk | undefined;
@@ -254,6 +262,8 @@ export type ListChatsRequest$Outbound = {
   external_user_id?: string | undefined;
   source?: string | undefined;
   assistant_id?: string | undefined;
+  source_kind?: string | undefined;
+  exclude_source_kind?: string | undefined;
   has_risk?: string | undefined;
   pinned?: string | undefined;
   min_risk_score?: number | undefined;
@@ -278,6 +288,8 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     externalUserId: z.optional(z.string()),
     source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
+    sourceKind: z.optional(z.string()),
+    excludeSourceKind: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
     pinned: z.optional(Pinned$outboundSchema),
     minRiskScore: z.optional(z.int()),
@@ -295,6 +307,8 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       externalUserId: "external_user_id",
       assistantId: "assistant_id",
+      sourceKind: "source_kind",
+      excludeSourceKind: "exclude_source_kind",
       hasRisk: "has_risk",
       minRiskScore: "min_risk_score",
       sortBy: "sort_by",

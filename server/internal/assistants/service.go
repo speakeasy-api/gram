@@ -51,7 +51,14 @@ const (
 	// sourceKindWarmup marks the event-less thread that eager-boots the
 	// runtime at assistant creation. It has no source adapter — adapters are
 	// only consulted while processing events, and this thread never has any.
-	sourceKindWarmup     = "warmup"
+	sourceKindWarmup = "warmup"
+	// sourceKindSetup marks a client-driven setup/onboarding chat linked to an
+	// assistant by the /chat/completions handler (see chat.linkSetupAssistantThread).
+	// Like warmup it carries no source adapter and enqueues no runtime events, so
+	// it must never be counted toward active/warm runtime concurrency — it is
+	// excluded from CountActiveAssistantThreads. It exists purely so the setup
+	// chat is listable and URL-addressable via chat.list?assistant_id=.
+	sourceKindSetup      = "setup"
 	warmupCorrelationID  = "runtime-warmup"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
@@ -1753,6 +1760,7 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		ProjectID:        assistant.ProjectID,
 		AssistantID:      assistant.ID,
 		WarmupSourceKind: sourceKindWarmup,
+		SetupSourceKind:  sourceKindSetup,
 		ActiveSince:      conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
 		PendingStatus:    eventStatusPending,
 	})
