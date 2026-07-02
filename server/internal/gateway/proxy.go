@@ -759,6 +759,7 @@ func (tp *ToolProxy) doHTTP(
 		ProjectSlug:               descriptor.ProjectSlug,
 		OrganizationID:            descriptor.OrganizationID,
 		OrganizationSlug:          descriptor.OrganizationSlug,
+		DisableKeepAlives:         false,
 	})
 }
 
