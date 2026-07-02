@@ -1214,6 +1214,136 @@ printf '{}\n200'
 	require.Contains(t, headers, "/rpc/hooks.cursor")
 }
 
+// TestCheckedInClaudeSenderUsesCachedBrowserAuth verifies the checked-in
+// Claude plugin's per-event sender attaches the credentials cached by the
+// browser login flow when no env key is set, so policy enforcement that needs
+// auth context is not silently skipped on the legacy path.
+func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	headersPath := filepath.Join(dir, "headers.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_HEADERS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_HEADERS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_browser_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_HEADERS="+headersPath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	headers := string(requireFileBytes(t, headersPath))
+	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
+	require.Contains(t, headers, "Gram-Project: acme-prod")
+	require.Contains(t, headers, "/rpc/hooks.claude")
+}
+
+// TestRenderHookPayloadNormalizationDecodesEscapedPromptWithoutJQ verifies
+// that prompts containing JSON escapes (newlines, quotes) survive extraction
+// on machines without jq — an empty prompt would silently bypass prompt
+// policy enforcement server-side.
+func TestRenderHookPayloadNormalizationDecodesEscapedPromptWithoutJQ(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	binDir := t.TempDir()
+	for _, name := range []string{"awk", "sed", "tr"} {
+		path, err := exec.LookPath(name)
+		require.NoError(t, err, "%s is required to run generated hook snippets", name)
+		require.NoError(t, os.Symlink(path, filepath.Join(binDir, name)))
+	}
+
+	scriptPath := filepath.Join(t.TempDir(), "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("claude") + `
+payload='{"hook_event_name":"UserPromptSubmit","session_id":"sess-esc","prompt":"line one\nsay \"hi\" \\ done"}'
+gram_hooks_build_canonical_payload "$payload" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+binDir)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(output, &parsed))
+	prompt := requireMapValue(t, requireMapValue(t, parsed, "data"), "prompt")
+	require.Equal(t, "line one\nsay \"hi\" \\ done", prompt["text"],
+		"escaped prompt must be decoded, not dropped, when jq is unavailable")
+}
+
+// TestRenderHookPayloadNormalizationSynthesizesToolID verifies that tool
+// events without a provider tool_use_id get a deterministic synthetic id so
+// before/after records correlate instead of collapsing into one identity.
+func TestRenderHookPayloadNormalizationSynthesizesToolID(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	scriptPath := filepath.Join(t.TempDir(), "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("cursor") + `
+before='{"event":"beforeMCPExecution","conversation_id":"sess-synth","generation_id":"gen-1","tool_name":"MCP:lookup","tool_input":{"q":"x"}}'
+after='{"event":"afterMCPExecution","conversation_id":"sess-synth","generation_id":"gen-1","tool_name":"MCP:lookup","tool_input":{"q":"x"},"result_json":"{}"}'
+gram_hooks_build_canonical_payload "$before" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$after" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(output), "\n---GRAM---\n")
+	require.Len(t, chunks, 2)
+
+	toolID := func(raw string) string {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed))
+		toolCall := requireMapValue(t, requireMapValue(t, parsed, "data"), "tool_call")
+		id, _ := toolCall["id"].(string)
+		return id
+	}
+	beforeID := toolID(chunks[0])
+	afterID := toolID(chunks[1])
+	require.NotEmpty(t, beforeID, "tool events without tool_use_id must get a synthetic id")
+	require.True(t, strings.HasPrefix(beforeID, "hook_synth_"), beforeID)
+	require.Equal(t, beforeID, afterID, "before/after events must derive the same synthetic id")
+}
+
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{

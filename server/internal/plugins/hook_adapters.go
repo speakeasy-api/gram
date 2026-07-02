@@ -98,7 +98,56 @@ gram_hooks_json_string_value() {
       return 0
     fi
   fi
-  printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p'
+  value="$(printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+  if [ -n "$value" ]; then
+    printf '%%s' "$value"
+    return 0
+  fi
+  # The fast sed path cannot represent strings containing escapes; fall back
+  # to the balanced extractor plus decoder so multiline or quoted values
+  # (e.g. prompts under policy enforcement) are not silently dropped when jq
+  # is unavailable.
+  value="$(gram_hooks_json_top_level_value "$input" "$key")"
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      printf '%%s' "${value%%\"}" | gram_hooks_json_decode_string
+      ;;
+  esac
+}
+
+# gram_hooks_json_decode_string decodes JSON string escapes from a token body
+# (surrounding quotes already stripped). Unicode \uXXXX escapes are passed
+# through literally rather than dropping the whole value.
+gram_hooks_json_decode_string() {
+  awk 'BEGIN { ORS = "" }
+       {
+         if (NR > 1) printf "\n"
+         s = $0
+         out = ""
+         n = length(s)
+         i = 1
+         while (i <= n) {
+           c = substr(s, i, 1)
+           if (c == "\\" && i < n) {
+             e = substr(s, i + 1, 1)
+             if (e == "n") out = out "\n"
+             else if (e == "t") out = out "\t"
+             else if (e == "r") out = out "\r"
+             else if (e == "b") out = out "\b"
+             else if (e == "f") out = out "\f"
+             else if (e == "\"") out = out "\""
+             else if (e == "\\") out = out "\\"
+             else if (e == "/") out = out "/"
+             else out = out c e
+             i += 2
+           } else {
+             out = out c
+             i++
+           }
+         }
+         printf "%%s", out
+       }'
 }
 
 gram_hooks_json_number_value() {
@@ -305,6 +354,35 @@ gram_hooks_tool_output_value() {
   [ -n "$output" ] || output="$(gram_hooks_json_value "$payload" "tool_response")"
   [ -n "$output" ] || output="$(gram_hooks_json_value "$payload" "result_json")"
   printf '%%s' "$output"
+}
+
+# gram_hooks_synth_tool_id derives a stable tool-call id when the provider
+# omits tool_use_id (common for Cursor MCP and some pre/post tool events) so
+# before/after records still correlate instead of collapsing into a
+# session-derived identity. Mirrors the legacy server-side derivation:
+# hash(conversation|generation|tool|input).
+gram_hooks_synth_tool_id() {
+  local payload="$1"
+  local tool_name="$2"
+  local tool_input="$3"
+  local conv_id gen_id material hash
+  conv_id="$(gram_hooks_json_string_value "$payload" "conversation_id")"
+  [ -n "$conv_id" ] || conv_id="$(gram_hooks_json_string_value "$payload" "session_id")"
+  gen_id="$(gram_hooks_json_string_value "$payload" "generation_id")"
+  tool_name="${tool_name#MCP:}"
+  if [ -z "$conv_id" ] && [ -z "$gen_id" ] && [ -z "$tool_name" ] && [ -z "$tool_input" ]; then
+    return 0
+  fi
+  material="${conv_id}|${gen_id}|${tool_name}|${tool_input}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    hash="$(printf '%%s' "$material" | sha256sum | cut -c1-16)"
+  elif command -v shasum >/dev/null 2>&1; then
+    hash="$(printf '%%s' "$material" | shasum -a 256 | cut -c1-16)"
+  else
+    return 0
+  fi
+  [ -n "$hash" ] || return 0
+  printf 'hook_synth_%%s' "$hash"
 }
 
 gram_hooks_skill_name() {
@@ -604,6 +682,9 @@ gram_hooks_canonical_data_members() {
   status="$(gram_hooks_json_string_value "$payload" "status")"
   if [ -n "$tool_name" ] || [ "$event_type" = "tool.requested" ] || [ "$event_type" = "tool.completed" ] || [ "$event_type" = "tool.failed" ]; then
     local tool_members tool_input_member="" tool_output_member="" tool_error_member=""
+    if [ -z "$tool_id" ]; then
+      tool_id="$(gram_hooks_synth_tool_id "$payload" "$tool_name" "$tool_input")"
+    fi
     if [ -n "$tool_input" ]; then
       tool_input_member="\"input\":$tool_input"
     fi
