@@ -335,9 +335,12 @@ gram_hooks_login() {
   fi
 
   local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback&key_scope=hooks"
-  if [ -n "$project_hint" ]; then
-    auth_url="${auth_url}&project=${project_hint}"
-  fi
+  # Project slugs are URL-safe by construction; anything else would need
+  # percent-encoding, so it is dropped rather than corrupt the query string.
+  case "$project_hint" in
+    "" | *[!A-Za-z0-9._-]*) ;;
+    *) auth_url="${auth_url}&project=${project_hint}" ;;
+  esac
   echo "Speakeasy hooks: opening your browser to connect observability hooks." >&2
   echo "If nothing opens, visit: $auth_url" >&2
   gram_hooks_open_browser "$auth_url" || true
@@ -407,6 +410,8 @@ gram_hooks_cleanup_auth_config() {
     rm -f "$auth_config"
   fi
 }
+# Installed at source time: scripts sourcing this library must not set their
+# own EXIT trap, or it would be overwritten here.
 trap 'gram_hooks_cleanup_auth_config; gram_hooks_cleanup_login' EXIT
 
 gram_hooks_prepare_auth() {
@@ -415,6 +420,22 @@ gram_hooks_prepare_auth() {
   local failure_exit="$3"
   local force="${4:-}"
   local api_key project email
+
+  # Refuse to send credentials over plaintext HTTP; only loopback hosts
+  # (local dev servers) are exempt. Same ratchet as auth failures: machines
+  # that never authenticated fail open (return 3 also skips the network
+  # entirely, so no key can leak), established machines fail closed.
+  case "$server_url" in
+    https://*) ;;
+    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | http://\[::1\] | http://\[::1\][:/]*) ;;
+    *)
+      echo "Speakeasy hooks refused insecure Gram server URL '$server_url'; use https:// (or an http://localhost dev server)." >&2
+      if gram_hooks_auth_established; then
+        exit "$failure_exit"
+      fi
+      return 3
+      ;;
+  esac
 
   api_key=""
   project=""

@@ -77,6 +77,8 @@ func renderHookPayloadNormalizationSnippet(platform string) string {
        {
          gsub(/\\/, "\\\\")
          gsub(/"/, "\\\"")
+         gsub(/\b/, "\\b")
+         gsub(/\f/, "\\f")
          gsub(/\r/, "\\r")
          gsub(/\t/, "\\t")
          if (!first) printf "\\n"
@@ -102,7 +104,7 @@ gram_hooks_json_string_value() {
 gram_hooks_json_number_value() {
   local input="$1"
   local key="$2"
-  printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*\([-0-9.][0-9.]*\).*/\1/p'
+  printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\).*/\1/p'
 }
 
 gram_hooks_json_bool_value() {
@@ -339,14 +341,20 @@ gram_hooks_mcp_server_from_payload() {
     printf '%%s' "$server"
     return 0
   fi
-  if command -v jq >/dev/null 2>&1; then
-    server="$(printf '%%s' "$payload" | jq -r '(.tool_input.server // empty) | select(type == "string")' 2>/dev/null)" || true
-    if [ -n "$server" ]; then
-      printf '%%s' "$server"
-      return 0
-    fi
-  fi
   tool_name="$(gram_hooks_json_string_value "$payload" "tool_name")"
+  # tool_input.server names an MCP server only for the MCP meta-tools;
+  # ordinary tools may take an unrelated "server" argument.
+  case "$tool_name" in
+    list_mcp_resources | list_mcp_resource_templates | read_mcp_resource | ListMcpResourcesTool | ReadMcpResourceTool)
+      if command -v jq >/dev/null 2>&1; then
+        server="$(printf '%%s' "$payload" | jq -r '(.tool_input.server // empty) | select(type == "string")' 2>/dev/null)" || true
+        if [ -n "$server" ]; then
+          printf '%%s' "$server"
+          return 0
+        fi
+      fi
+      ;;
+  esac
   gram_hooks_mcp_server_from_tool_name "$tool_name"
 }
 
@@ -615,7 +623,11 @@ gram_hooks_canonical_data_members() {
       "$(gram_hooks_number_member "duration_ms" "$duration_ms")" \
       "$(gram_hooks_json_string_member "status" "$status")")
     if [ -n "$is_interrupt" ]; then
-      tool_members="${tool_members},\"is_interrupt\":$is_interrupt"
+      if [ -n "$tool_members" ]; then
+        tool_members="${tool_members},\"is_interrupt\":$is_interrupt"
+      else
+        tool_members="\"is_interrupt\":$is_interrupt"
+      fi
     fi
     tool_members="\"tool_call\":{$tool_members}"
   else

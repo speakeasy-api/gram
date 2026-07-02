@@ -57,7 +57,10 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, timestamp)
 	if !s.isHookDuplicate(ctx) {
-		s.recordCanonicalHook(ctx, payload, authCtx, timestamp, blockReason)
+		// Detach from request cancellation: the idempotency token is already
+		// claimed, so a client disconnect here would otherwise drop the event
+		// for good — the retry gets marked duplicate and skips persistence.
+		s.recordCanonicalHook(context.WithoutCancel(ctx), payload, authCtx, timestamp, blockReason)
 	}
 	if blockReason != "" {
 		return canonicalDenyResult(userReason), nil

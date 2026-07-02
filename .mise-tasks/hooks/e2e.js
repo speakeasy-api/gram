@@ -1333,7 +1333,7 @@ async function deleteRiskPolicy(args) {
   }
   const url = new URL(`${args.serverURL}/rpc/risk.policies.delete`);
   url.searchParams.set("id", args.policyId);
-  await fetchOrFail(
+  const res = await fetchOrFail(
     url,
     {
       method: "DELETE",
@@ -1344,6 +1344,11 @@ async function deleteRiskPolicy(args) {
     },
     "delete Shadow MCP risk policy",
   );
+  if (!res.ok) {
+    fail(
+      `delete Shadow MCP policy ${args.policyId} failed: ${res.status} ${await res.text()}`,
+    );
+  }
 }
 async function createRiskPolicyBypassRequest(args) {
   const res = await fetchOrFail(
@@ -1969,9 +1974,12 @@ async function runCaptureSuite(args) {
   const checks = [];
   for (const provider of args.providers) {
     const skillName = provider === "claude" ? claudeSkillName : null;
+    // Cursor Agent headless does not reliably emit afterAgentResponse
+    // (featureChecks marks it SKIP), so don't burn the whole poll window
+    // waiting for it.
     const requiredEvents = [
       "prompt.submitted",
-      "assistant.responded",
+      ...(provider === "cursor" ? [] : ["assistant.responded"]),
       "tool.requested",
       "tool.completed",
     ];

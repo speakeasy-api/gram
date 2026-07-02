@@ -178,7 +178,9 @@ function selectCallbackProjectSlug(
     return preferredProject;
   }
 
-  return projects[0]?.slug ?? null;
+  // No validated selection: omit the project rather than guess one. Hook
+  // plugins fall back to their generated project slug on an empty callback.
+  return null;
 }
 
 async function transmitKey(

@@ -951,6 +951,135 @@ func TestRenderAuthPreflightScriptRatchet(t *testing.T) {
 	require.Equal(t, 2, exitErr.ExitCode(), brokenErr.String())
 }
 
+// TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
+// non-HTTPS, non-loopback server URL is refused before any credential leaves
+// the machine, with the same ratchet as auth failures: fail open before the
+// first successful auth, fail closed (exit 2) once established.
+func TestRenderHookScriptClaudeInsecureServerURLRatchet(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_HOOKS_SERVER_URL=http://gram.example.com",
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+
+	fresh := exec.Command("bash", hookPath)
+	fresh.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-insecure","prompt":"hi"}`)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	require.NoError(t, fresh.Run(), "never-authenticated machine must fail open on an insecure URL: %s", freshErr.String())
+	require.Contains(t, freshErr.String(), "refused insecure Gram server URL")
+
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	broken := exec.Command("bash", hookPath)
+	broken.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-insecure","prompt":"hi"}`)
+	broken.Env = env
+	var brokenErr bytes.Buffer
+	broken.Stderr = &brokenErr
+	err := broken.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "established machine must fail closed on an insecure URL")
+	require.Equal(t, 2, exitErr.ExitCode(), brokenErr.String())
+	require.Contains(t, brokenErr.String(), "refused insecure Gram server URL")
+}
+
+// TestRenderHookScriptClaudeToolInputServerGatedToMCPMetaTools verifies that
+// an ordinary tool taking an unrelated "server" argument is not classified as
+// an MCP call (which would subject it to Shadow MCP enforcement), while the
+// MCP meta-tools still surface tool_input.server as the MCP server name.
+func TestRenderHookScriptClaudeToolInputServerGatedToMCPMetaTools(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for tool_input.server extraction")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	ordinary := exec.Command("bash", hookPath)
+	ordinary.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-mcp-gate","tool_name":"deploy_service","tool_input":{"server":"prod-1"}}`)
+	ordinary.Env = env
+	output, err := ordinary.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	meta := exec.Command("bash", hookPath)
+	meta.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-mcp-gate","tool_name":"ListMcpResourcesTool","tool_input":{"server":"grame2e"}}`)
+	meta.Env = env
+	output, err = meta.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 3, "expected two captured ingest payloads")
+
+	var ordinaryPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &ordinaryPayload))
+	ordinaryData := requireMapValue(t, ordinaryPayload, "data")
+	require.NotContains(t, ordinaryData, "mcp", "a plain tool with a server argument must not be classified as MCP")
+	ordinaryTool := requireMapValue(t, ordinaryData, "tool_call")
+	require.Equal(t, "deploy_service", ordinaryTool["name"])
+
+	var metaPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[1])), &metaPayload))
+	metaData := requireMapValue(t, metaPayload, "data")
+	metaMCP := requireMapValue(t, metaData, "mcp")
+	require.Equal(t, "grame2e", metaMCP["server_name"])
+}
+
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
