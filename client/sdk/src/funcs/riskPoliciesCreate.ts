@@ -96,7 +96,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/risk.policies.create")();
+  const path = pathToFunc("/rpc/risk.createPolicy")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

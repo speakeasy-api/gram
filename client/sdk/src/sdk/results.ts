@@ -13,25 +13,6 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class Results extends ClientSDK {
   /**
-   * listRiskResultsByChat risk
-   *
-   * @remarks
-   * List risk results grouped by chat session for the current project.
-   */
-  async byChat(
-    request?: operations.ListRiskResultsByChatRequest | undefined,
-    security?: operations.ListRiskResultsByChatSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListRiskResultsByChatResult> {
-    return unwrapAsync(riskResultsByChat(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * listRiskResults risk
    *
    * @remarks
@@ -43,6 +24,25 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsResult> {
     return unwrapAsync(riskResultsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskResultsByChat risk
+   *
+   * @remarks
+   * List risk results grouped by chat session for the current project.
+   */
+  async byChat(
+    request?: operations.ListRiskResultsByChatRequest | undefined,
+    security?: operations.ListRiskResultsByChatSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListRiskResultsByChatResult> {
+    return unwrapAsync(riskResultsByChat(
       this,
       request,
       security,

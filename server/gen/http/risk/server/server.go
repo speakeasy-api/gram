@@ -90,7 +90,7 @@ func New(
 			{"ListRiskResults", "GET", "/rpc/risk.listResults"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.listResultsForAgent"},
 			{"UnmaskRiskResult", "POST", "/rpc/risk.unmaskResult"},
-			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
+			{"ListRiskResultsByChat", "GET", "/rpc/risk.listResultsByChat"},
 			{"GetRiskOverview", "GET", "/rpc/risk.getOverview"},
 			{"ListRiskCategories", "GET", "/rpc/risk.listCategories"},
 			{"CompileExpr", "GET", "/rpc/risk.compileCELExpression"},
@@ -674,7 +674,7 @@ func MountListRiskResultsByChatHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.results.byChat", f)
+	mux.Handle("GET", "/rpc/risk.listResultsByChat", f)
 }
 
 // NewListRiskResultsByChatHandler creates a HTTP handler which loads the HTTP

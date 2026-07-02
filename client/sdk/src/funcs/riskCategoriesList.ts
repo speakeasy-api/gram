@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.categories")();
+  const path = pathToFunc("/rpc/risk.listCategories")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",

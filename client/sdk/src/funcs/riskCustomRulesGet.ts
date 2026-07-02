@@ -94,7 +94,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.customRules.get")();
+  const path = pathToFunc("/rpc/risk.getCustomRule")();
 
   const query = encodeFormQuery({
     "id": payload.id,

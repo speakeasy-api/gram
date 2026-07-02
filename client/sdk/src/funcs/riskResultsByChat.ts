@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.results.byChat")();
+  const path = pathToFunc("/rpc/risk.listResultsByChat")();
 
   const query = encodeFormQuery({
     "cursor": payload?.cursor,

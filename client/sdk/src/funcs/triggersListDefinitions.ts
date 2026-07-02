@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/triggers.definitions.list")();
+  const path = pathToFunc("/rpc/triggers.listDefinitions")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",

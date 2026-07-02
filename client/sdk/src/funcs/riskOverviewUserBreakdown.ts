@@ -94,7 +94,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.overview.userBreakdown")();
+  const path = pathToFunc("/rpc/risk.getUserBreakdown")();
 
   const query = encodeFormQuery({
     "external_user_id": payload.external_user_id,
