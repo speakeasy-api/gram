@@ -80,14 +80,14 @@ func New(
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpdateMemberRoles", "PUT", "/rpc/access.updateMemberRoles"},
-			{"ListShadowMCPApprovalRequests", "GET", "/rpc/access.shadowMcp.requests.list"},
-			{"CreateShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.create"},
-			{"ApproveShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.approve"},
-			{"DenyShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.deny"},
-			{"ListShadowMCPAccessRules", "GET", "/rpc/access.shadowMcp.rules.list"},
-			{"CreateShadowMCPAccessRule", "POST", "/rpc/access.shadowMcp.rules.create"},
-			{"UpdateShadowMCPAccessRule", "PUT", "/rpc/access.shadowMcp.rules.update"},
-			{"DeleteShadowMCPAccessRule", "DELETE", "/rpc/access.shadowMcp.rules.delete"},
+			{"ListShadowMCPApprovalRequests", "GET", "/rpc/access.listShadowMcpRequests"},
+			{"CreateShadowMCPApprovalRequest", "POST", "/rpc/access.createShadowMcpRequest"},
+			{"ApproveShadowMCPApprovalRequest", "POST", "/rpc/access.approveShadowMcpRequest"},
+			{"DenyShadowMCPApprovalRequest", "POST", "/rpc/access.denyShadowMcpRequest"},
+			{"ListShadowMCPAccessRules", "GET", "/rpc/access.listShadowMcpRules"},
+			{"CreateShadowMCPAccessRule", "POST", "/rpc/access.createShadowMcpRule"},
+			{"UpdateShadowMCPAccessRule", "PUT", "/rpc/access.updateShadowMcpRule"},
+			{"DeleteShadowMCPAccessRule", "DELETE", "/rpc/access.deleteShadowMcpRule"},
 			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
 			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
 			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
@@ -672,7 +672,7 @@ func MountListShadowMCPApprovalRequestsHandler(mux goahttp.Muxer, h http.Handler
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.shadowMcp.requests.list", f)
+	mux.Handle("GET", "/rpc/access.listShadowMcpRequests", f)
 }
 
 // NewListShadowMCPApprovalRequestsHandler creates a HTTP handler which loads
@@ -726,7 +726,7 @@ func MountCreateShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handle
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.requests.create", f)
+	mux.Handle("POST", "/rpc/access.createShadowMcpRequest", f)
 }
 
 // NewCreateShadowMCPApprovalRequestHandler creates a HTTP handler which loads
@@ -780,7 +780,7 @@ func MountApproveShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handl
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.requests.approve", f)
+	mux.Handle("POST", "/rpc/access.approveShadowMcpRequest", f)
 }
 
 // NewApproveShadowMCPApprovalRequestHandler creates a HTTP handler which loads
@@ -834,7 +834,7 @@ func MountDenyShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handler)
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.requests.deny", f)
+	mux.Handle("POST", "/rpc/access.denyShadowMcpRequest", f)
 }
 
 // NewDenyShadowMCPApprovalRequestHandler creates a HTTP handler which loads
@@ -888,7 +888,7 @@ func MountListShadowMCPAccessRulesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.shadowMcp.rules.list", f)
+	mux.Handle("GET", "/rpc/access.listShadowMcpRules", f)
 }
 
 // NewListShadowMCPAccessRulesHandler creates a HTTP handler which loads the
@@ -942,7 +942,7 @@ func MountCreateShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.rules.create", f)
+	mux.Handle("POST", "/rpc/access.createShadowMcpRule", f)
 }
 
 // NewCreateShadowMCPAccessRuleHandler creates a HTTP handler which loads the
@@ -996,7 +996,7 @@ func MountUpdateShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("PUT", "/rpc/access.shadowMcp.rules.update", f)
+	mux.Handle("PUT", "/rpc/access.updateShadowMcpRule", f)
 }
 
 // NewUpdateShadowMCPAccessRuleHandler creates a HTTP handler which loads the
@@ -1050,7 +1050,7 @@ func MountDeleteShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/access.shadowMcp.rules.delete", f)
+	mux.Handle("DELETE", "/rpc/access.deleteShadowMcpRule", f)
 }
 
 // NewDeleteShadowMCPAccessRuleHandler creates a HTTP handler which loads the

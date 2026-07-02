@@ -99,7 +99,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/access.shadowMcp.requests.approve")();
+  const path = pathToFunc("/rpc/access.approveShadowMcpRequest")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
