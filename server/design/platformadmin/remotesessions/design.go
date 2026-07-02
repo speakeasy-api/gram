@@ -259,6 +259,29 @@ var _ = Service("adminRemoteSessions", func() {
 	})
 })
 
+// scopePattern / audiencePattern and the scopeAttribute / audienceAttribute
+// helpers mirror the project-scoped remoteSessionClients design so the
+// global-admin create path enforces the same boundary validation on values that
+// are later sent to upstream OAuth endpoints. Keep in sync with
+// design/remotesessionclients.
+const (
+	scopePattern    = `^[!#-[\]-~]+$`
+	audiencePattern = `^[!-~]+$`
+)
+
+func scopeAttribute(description string) {
+	Description(description)
+	Elem(func() {
+		Pattern(scopePattern)
+		MaxLength(128)
+	})
+}
+
+func audienceAttribute() {
+	Pattern(audiencePattern)
+	MaxLength(512)
+}
+
 // CreateGlobalRemoteSessionClientForm is the global-client create form: like
 // CreateRemoteSessionClientForm but without user_session_issuer attachments.
 var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientForm", func() {
@@ -272,8 +295,10 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})
-	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.")
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
 })

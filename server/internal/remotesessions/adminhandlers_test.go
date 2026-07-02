@@ -1,7 +1,6 @@
 package remotesessions_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,9 +9,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// createGlobalIssuer seeds a global remote_session_issuer through the admin
-// surface and returns its view. The caller supplies an admin context.
-func createGlobalIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) *adminrsgen.CreateGlobalIssuerPayload {
+// createGlobalIssuer builds a CreateGlobalIssuer payload for the given slug. The
+// caller passes it to CreateGlobalIssuer under an admin context.
+func createGlobalIssuer(t *testing.T, slug string) *adminrsgen.CreateGlobalIssuerPayload {
 	t.Helper()
 	payload := &adminrsgen.CreateGlobalIssuerPayload{
 		SessionToken:                      nil,
@@ -40,7 +39,7 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_Success(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "hubspot"))
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "hubspot"))
 	require.NoError(t, err)
 	require.NotEmpty(t, issuer.ID)
 	require.Equal(t, "hubspot", issuer.Slug)
@@ -54,7 +53,7 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_RequiresAdmin(t *testing.T) {
 	ctx, ti := newTestService(t)
 	// Default (non-admin) context.
 
-	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "hubspot"))
+	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "hubspot"))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -63,10 +62,10 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_SlugConflict(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "dupe"))
+	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "dupe"))
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "dupe"))
+	_, err = ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "dupe"))
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
@@ -75,7 +74,7 @@ func TestAdminRemoteSessions_ListAndGetGlobalIssuers(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "google-workspace"))
+	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "google-workspace"))
 	require.NoError(t, err)
 
 	list, err := ti.service.ListGlobalIssuers(ctx, &adminrsgen.ListGlobalIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
@@ -102,7 +101,7 @@ func TestAdminRemoteSessions_UpdateGlobalIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "rename-me"))
+	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "rename-me"))
 	require.NoError(t, err)
 
 	newSlug := "renamed"
@@ -134,7 +133,7 @@ func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "client-host"))
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "client-host"))
 	require.NoError(t, err)
 
 	secret := "s3cr3t"
