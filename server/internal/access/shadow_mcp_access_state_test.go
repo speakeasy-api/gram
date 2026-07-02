@@ -130,7 +130,7 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 			wantAccess: shadowMCPInventoryAccessNone,
 		},
 		{
-			name: "deny wins over matching allow",
+			name: "host rule does not override matching full url allow",
 			rules: func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string) {
 				t.Helper()
 
