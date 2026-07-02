@@ -168,7 +168,7 @@ func (s *Service) createShadowMCPInventoryServerAccessRule(ctx context.Context, 
 	if errors.Is(err, accesscontrol.ErrConflict) {
 		existingRule, getErr := s.accessStore.GetRuleByMatch(ctx, rule.OrganizationID, rule.ResourceType, rule.AccessScope, rule.ProjectID, rule.MatchKind, rule.MatchValue)
 		if getErr != nil {
-			return shadowMCPInventoryServerAccessRuleSetResult{}, shadowMCPStoreErrWithConflict(ctx, s, err, "create shadow mcp inventory access rule", "shadow mcp access rule already exists")
+			return shadowMCPInventoryServerAccessRuleSetResult{}, shadowMCPStoreErrWithConflict(ctx, s, getErr, "create shadow mcp inventory access rule", "shadow mcp access rule already exists")
 		}
 		if existingRule.Disposition == rule.Disposition {
 			return shadowMCPInventoryServerAccessRuleSetResult{Rule: existingRule, Created: false, UpdatedFrom: nil}, nil

@@ -3,10 +3,12 @@ package access
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -150,6 +152,38 @@ func TestService_AllowShadowMCPInventoryServer_RejectsInvalidURL(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestService_CreateShadowMCPInventoryServerAccessRule_ReportsLookupFailureAfterConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ti.service.accessStore = shadowMCPInventoryConflictLookupFailStore{
+		Store:     ti.service.accessStore,
+		lookupErr: accesscontrol.ErrNotFound,
+	}
+
+	_, err := ti.service.createShadowMCPInventoryServerAccessRule(ctx, accesscontrol.AccessRule{
+		ID:              "",
+		OrganizationID:  "org-1",
+		ProjectID:       "project-1",
+		AccessScope:     accesscontrol.AccessScopeProject,
+		ResourceType:    accesscontrol.ResourceTypeShadowMCP,
+		Disposition:     accesscontrol.DispositionAllowed,
+		MatchKind:       accesscontrol.MatchKindFullURL,
+		MatchValue:      "https://example.com/mcp",
+		DisplayName:     "Example MCP",
+		ObservedSummary: accesscontrol.ObservedSummary{},
+		SourceRequestID: "",
+		CreatedBy:       "user-1",
+		UpdatedBy:       "user-1",
+		Reason:          "",
+		CreatedAt:       time.Time{},
+		UpdatedAt:       time.Time{},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
 func TestService_ShadowMCPInventoryServerAccess_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
@@ -201,4 +235,17 @@ func TestService_ShadowMCPInventoryServerAccess_ForbiddenWithoutOrgAdminGrant(t 
 			require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 		})
 	}
+}
+
+type shadowMCPInventoryConflictLookupFailStore struct {
+	accesscontrol.Store
+	lookupErr error
+}
+
+func (s shadowMCPInventoryConflictLookupFailStore) GetOrCreateRules(context.Context, []accesscontrol.AccessRule) ([]accesscontrol.RuleUpsertResult, error) {
+	return nil, accesscontrol.ErrConflict
+}
+
+func (s shadowMCPInventoryConflictLookupFailStore) GetRuleByMatch(context.Context, string, string, string, string, string, string) (accesscontrol.AccessRule, error) {
+	return accesscontrol.AccessRule{}, s.lookupErr
 }
