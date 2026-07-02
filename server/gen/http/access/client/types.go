@@ -4997,20 +4997,17 @@ type ShadowMCPAccessRuleResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL *string                                          `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
-	URLHost            *string                                          `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
-	ServerName         *string                                          `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          *string                                          `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
-	LastSeen           *string                                          `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
-	LastCalled         *string                                          `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   *int                                             `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
-	UserCount          *int                                             `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
-	TopUsers           []string                                         `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
-	ExplicitAccess     *string                                          `form:"explicit_access,omitempty" json:"explicit_access,omitempty" xml:"explicit_access,omitempty"`
-	EffectiveAccess    *string                                          `form:"effective_access,omitempty" json:"effective_access,omitempty" xml:"effective_access,omitempty"`
-	ExplicitRule       *ShadowMCPInventoryAccessRuleMatchResponseBody   `form:"explicit_rule,omitempty" json:"explicit_rule,omitempty" xml:"explicit_rule,omitempty"`
-	EffectiveRule      *ShadowMCPInventoryAccessRuleMatchResponseBody   `form:"effective_rule,omitempty" json:"effective_rule,omitempty" xml:"effective_rule,omitempty"`
-	ExplanatoryRules   []*ShadowMCPInventoryAccessRuleMatchResponseBody `form:"explanatory_rules,omitempty" json:"explanatory_rules,omitempty" xml:"explanatory_rules,omitempty"`
+	CanonicalServerURL *string                                        `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
+	URLHost            *string                                        `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
+	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          *string                                        `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
+	LastSeen           *string                                        `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   *int                                           `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
+	UserCount          *int                                           `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
+	TopUsers           []string                                       `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	Access             *string                                        `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
+	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
 }
 
 // ShadowMCPInventoryAccessRuleMatchResponseBody is used to define fields on
@@ -16067,14 +16064,8 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	if body.TopUsers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
 	}
-	if body.ExplicitAccess == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("explicit_access", "body"))
-	}
-	if body.EffectiveAccess == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("effective_access", "body"))
-	}
-	if body.ExplanatoryRules == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("explanatory_rules", "body"))
+	if body.Access == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
 	}
 	if body.FirstSeen != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
@@ -16085,31 +16076,14 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	if body.LastCalled != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
 	}
-	if body.ExplicitAccess != nil {
-		if !(*body.ExplicitAccess == "none" || *body.ExplicitAccess == "allowed" || *body.ExplicitAccess == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.explicit_access", *body.ExplicitAccess, []any{"none", "allowed", "denied"}))
+	if body.Access != nil {
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "denied"}))
 		}
 	}
-	if body.EffectiveAccess != nil {
-		if !(*body.EffectiveAccess == "none" || *body.EffectiveAccess == "allowed" || *body.EffectiveAccess == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effective_access", *body.EffectiveAccess, []any{"none", "allowed", "denied"}))
-		}
-	}
-	if body.ExplicitRule != nil {
-		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.ExplicitRule); err2 != nil {
+	if body.Rule != nil {
+		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.Rule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.EffectiveRule != nil {
-		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.EffectiveRule); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.ExplanatoryRules {
-		if e != nil {
-			if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
 		}
 	}
 	return

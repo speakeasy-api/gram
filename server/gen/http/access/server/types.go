@@ -4971,20 +4971,17 @@ type ShadowMCPAccessRuleResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                           `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	URLHost            string                                           `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                          `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                           `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                           `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                          `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                              `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                              `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                         `form:"top_users" json:"top_users" xml:"top_users"`
-	ExplicitAccess     string                                           `form:"explicit_access" json:"explicit_access" xml:"explicit_access"`
-	EffectiveAccess    string                                           `form:"effective_access" json:"effective_access" xml:"effective_access"`
-	ExplicitRule       *ShadowMCPInventoryAccessRuleMatchResponseBody   `form:"explicit_rule,omitempty" json:"explicit_rule,omitempty" xml:"explicit_rule,omitempty"`
-	EffectiveRule      *ShadowMCPInventoryAccessRuleMatchResponseBody   `form:"effective_rule,omitempty" json:"effective_rule,omitempty" xml:"effective_rule,omitempty"`
-	ExplanatoryRules   []*ShadowMCPInventoryAccessRuleMatchResponseBody `form:"explanatory_rules" json:"explanatory_rules" xml:"explanatory_rules"`
+	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
+	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
+	Access             string                                         `form:"access" json:"access" xml:"access"`
+	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
 }
 
 // ShadowMCPInventoryAccessRuleMatchResponseBody is used to define fields on

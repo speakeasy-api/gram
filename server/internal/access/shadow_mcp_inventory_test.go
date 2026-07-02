@@ -132,12 +132,9 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndAccessState(t *
 	require.Equal(t, 3, speakeasy.ObservedUseCount)
 	require.Equal(t, 2, speakeasy.UserCount)
 	require.Equal(t, []string{"alex@example.com", "sam@example.com"}, speakeasy.TopUsers)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, speakeasy.ExplicitAccess)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, speakeasy.EffectiveAccess)
-	require.NotNil(t, speakeasy.ExplicitRule)
-	require.Equal(t, "Speakeasy Allow", speakeasy.ExplicitRule.DisplayName)
-	require.NotNil(t, speakeasy.EffectiveRule)
-	require.Equal(t, "Speakeasy Allow", speakeasy.EffectiveRule.DisplayName)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, speakeasy.Access)
+	require.NotNil(t, speakeasy.Rule)
+	require.Equal(t, "Speakeasy Allow", speakeasy.Rule.DisplayName)
 
 	github := shadowMCPInventoryServerByURL(result.Servers, "https://github.example.com/mcp")
 	require.NotNil(t, github)
@@ -147,10 +144,8 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndAccessState(t *
 	require.Equal(t, 0, github.ObservedUseCount)
 	require.Equal(t, 0, github.UserCount)
 	require.Empty(t, github.TopUsers)
-	require.Equal(t, shadowMCPInventoryAccessNone, github.ExplicitAccess)
-	require.Equal(t, shadowMCPInventoryAccessDenied, github.EffectiveAccess)
-	require.NotNil(t, github.EffectiveRule)
-	require.Equal(t, "GitHub Deny", github.EffectiveRule.DisplayName)
+	require.Equal(t, shadowMCPInventoryAccessNone, github.Access)
+	require.Nil(t, github.Rule)
 }
 
 func TestService_ListShadowMCPInventory_CursorPagination(t *testing.T) {

@@ -37,6 +37,7 @@ trackedFiles:
   RUNTIMES.md: {}
   USAGE.md: {}
   docs/lib/utils/retryconfig.md: {}
+  docs/models/components/access.md: {}
   docs/models/components/accessmember.md: {}
   docs/models/components/accessscope.md: {}
   docs/models/components/action.md: {}
@@ -177,7 +178,6 @@ trackedFiles:
   docs/models/components/discoverprotectedresourcemetadatarequestbody.md: {}
   docs/models/components/discoverremotesessionissuerrequestbody.md: {}
   docs/models/components/disposition.md: {}
-  docs/models/components/effectiveaccess.md: {}
   docs/models/components/employeedataflowedge.md: {}
   docs/models/components/employeedataflownode.md: {}
   docs/models/components/engine.md: {}
@@ -188,7 +188,6 @@ trackedFiles:
   docs/models/components/evolveform.md: {}
   docs/models/components/evolveresult.md: {}
   docs/models/components/exclusionscope.md: {}
-  docs/models/components/explicitaccess.md: {}
   docs/models/components/exportmcpmetadatarequestbody.md: {}
   docs/models/components/exprcompileresult.md: {}
   docs/models/components/externalmcpheaderdefinition.md: {}

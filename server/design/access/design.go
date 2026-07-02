@@ -980,7 +980,7 @@ var ShadowMCPInventoryAccessRuleMatchModel = Type("ShadowMCPInventoryAccessRuleM
 })
 
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
-	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "explicit_access", "effective_access", "explanatory_rules")
+	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access")
 
 	Attribute("canonical_server_url", String)
 	Attribute("url_host", String)
@@ -997,15 +997,10 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("observed_use_count", Int)
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
-	Attribute("explicit_access", String, func() {
+	Attribute("access", String, func() {
 		Enum("none", "allowed", "denied")
 	})
-	Attribute("effective_access", String, func() {
-		Enum("none", "allowed", "denied")
-	})
-	Attribute("explicit_rule", ShadowMCPInventoryAccessRuleMatchModel)
-	Attribute("effective_rule", ShadowMCPInventoryAccessRuleMatchModel)
-	Attribute("explanatory_rules", ArrayOf(ShadowMCPInventoryAccessRuleMatchModel))
+	Attribute("rule", ShadowMCPInventoryAccessRuleMatchModel)
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
