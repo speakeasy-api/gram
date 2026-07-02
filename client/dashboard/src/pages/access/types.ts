@@ -5,7 +5,7 @@ import type {
 } from "@gram/client/models/components/selector.js";
 
 export { Scope };
-export type { Selector, SelectorDisposition as Disposition };
+export type { Selector };
 
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
 export function toRoleSlug(name: string): string {
