@@ -30,6 +30,9 @@ var _ = Service("chat", func() {
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
+			Attribute("account_type", String, "Filter by AI account type: 'team', 'personal', or empty for no filter.", func() {
+				Enum("", "team", "personal")
+			})
 			Attribute("pinned", String, "Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
@@ -70,6 +73,7 @@ var _ = Service("chat", func() {
 			Param("source")
 			Param("assistant_id")
 			Param("has_risk")
+			Param("account_type")
 			Param("pinned")
 			Param("min_risk_score")
 			Param("from")
@@ -343,6 +347,7 @@ var ChatOverview = Type("ChatOverview", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
+	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })

@@ -34,6 +34,19 @@ export const HasRisk = {
 export type HasRisk = ClosedEnum<typeof HasRisk>;
 
 /**
+ * Filter by AI account type: 'team', 'personal', or empty for no filter.
+ */
+export const AccountType = {
+  Unknown: "",
+  Team: "team",
+  Personal: "personal",
+} as const;
+/**
+ * Filter by AI account type: 'team', 'personal', or empty for no filter.
+ */
+export type AccountType = ClosedEnum<typeof AccountType>;
+
+/**
  * Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.
  */
 export const Pinned = {
@@ -91,6 +104,10 @@ export type ListChatsRequest = {
    * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
    */
   hasRisk?: HasRisk | undefined;
+  /**
+   * Filter by AI account type: 'team', 'personal', or empty for no filter.
+   */
+  accountType?: AccountType | undefined;
   /**
    * Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.
    */
@@ -234,6 +251,10 @@ export const HasRisk$outboundSchema: z.ZodMiniEnum<typeof HasRisk> = z.enum(
 );
 
 /** @internal */
+export const AccountType$outboundSchema: z.ZodMiniEnum<typeof AccountType> = z
+  .enum(AccountType);
+
+/** @internal */
 export const Pinned$outboundSchema: z.ZodMiniEnum<typeof Pinned> = z.enum(
   Pinned,
 );
@@ -255,6 +276,7 @@ export type ListChatsRequest$Outbound = {
   source?: string | undefined;
   assistant_id?: string | undefined;
   has_risk?: string | undefined;
+  account_type?: string | undefined;
   pinned?: string | undefined;
   min_risk_score?: number | undefined;
   from?: string | undefined;
@@ -279,6 +301,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
+    accountType: z.optional(AccountType$outboundSchema),
     pinned: z.optional(Pinned$outboundSchema),
     minRiskScore: z.optional(z.int()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
@@ -296,6 +319,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
       externalUserId: "external_user_id",
       assistantId: "assistant_id",
       hasRisk: "has_risk",
+      accountType: "account_type",
       minRiskScore: "min_risk_score",
       sortBy: "sort_by",
       sortOrder: "sort_order",

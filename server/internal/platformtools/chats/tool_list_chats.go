@@ -99,6 +99,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		AssistantID:       input.AssistantID,
 		HasRisk:           input.HasRisk,
 		Pinned:            input.Pinned,
+		AccountType:       nil,
 		MinRiskScore:      nil,
 		From:              input.From,
 		To:                input.To,

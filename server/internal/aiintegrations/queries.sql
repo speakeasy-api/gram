@@ -39,6 +39,7 @@ INSERT INTO ai_integration_configs (
   , external_organization_id
   , api_key_encrypted
   , enabled
+  , billing_mode
 ) VALUES (
     @organization_id
   , @provider
@@ -46,6 +47,7 @@ INSERT INTO ai_integration_configs (
   , @external_organization_id
   , @api_key_encrypted
   , @enabled
+  , @billing_mode
 )
 RETURNING *;
 
@@ -54,6 +56,7 @@ UPDATE ai_integration_configs
 SET project_id = @project_id,
     external_organization_id = @external_organization_id,
     enabled = @enabled,
+    billing_mode = @billing_mode,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND provider = @provider

@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ChatOverview = {
   /**
+   * Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+   */
+  accountType?: string | undefined;
+  /**
    * When the chat was created.
    */
   createdAt: Date;
@@ -71,6 +75,7 @@ export type ChatOverview = {
 export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
   z.pipe(
     z.object({
+      account_type: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -97,6 +102,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "account_type": "accountType",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",

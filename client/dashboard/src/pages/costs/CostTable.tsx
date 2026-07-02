@@ -18,6 +18,11 @@ import {
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
+import {
+  costMeasureLabel,
+  ESTIMATED_COST_TOOLTIP,
+  isMeteredBilling,
+} from "@/components/estimated-cost-utils";
 import { isAttributionDim } from "./taxonomy";
 
 function formatCost(value: number): string {
@@ -212,6 +217,9 @@ export type CostTableProps = {
   // Per-group daily cost series for the trend sparkline, keyed by group value.
   seriesByGroup: Map<string, number[]>;
   isLoading: boolean;
+  // The view's resolved billing mode; "metered" shows real cost rather than the
+  // API-rate estimate on the cost headers.
+  billingMode?: string;
 };
 
 export function CostTable({
@@ -222,9 +230,12 @@ export function CostTable({
   onDrill,
   seriesByGroup,
   isLoading,
+  billingMode,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
   const [page, setPage] = useState(0);
+  // A confidently metered view shows real cost, so the estimate caveat is hidden.
+  const showCostEstimate = !isMeteredBilling(billingMode);
 
   const onSort = (key: SortKey) => {
     setPage(0);
@@ -302,13 +313,14 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex">
+        <span className="flex items-center gap-1">
           <HeaderButton
-            label="Total Cost"
+            label={costMeasureLabel(billingMode)}
             sortKey="cost"
             sort={sort}
             onSort={onSort}
           />
+          {showCostEstimate && <InfoTooltip text={ESTIMATED_COST_TOOLTIP} />}
         </span>
         <span className="flex items-center gap-1">
           <HeaderButton
@@ -321,13 +333,14 @@ export function CostTable({
             text={`Share of total cost across all ${groupLabel.toLowerCase()}s in this view.`}
           />
         </span>
-        <span className="flex">
+        <span className="flex items-center gap-1">
           <HeaderButton
-            label="Cost / session"
+            label={costMeasureLabel(billingMode) + " / session"}
             sortKey="perSession"
             sort={sort}
             onSort={onSort}
           />
+          {showCostEstimate && <InfoTooltip text={ESTIMATED_COST_TOOLTIP} />}
         </span>
         <span className="flex">
           <HeaderButton

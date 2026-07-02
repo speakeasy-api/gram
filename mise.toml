@@ -7,7 +7,7 @@
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.24.0"
-"github:speakeasy-api/speakeasy" = "1.761.5"
+"github:speakeasy-api/speakeasy" = "1.788.0"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.20"
 flyctl = "0.4.62"

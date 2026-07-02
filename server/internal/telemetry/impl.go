@@ -383,12 +383,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	filter := payload.Filter
 	if filter == nil {
 		filter = &telem_gen.SearchUsersFilter{
-			From:         "",
-			To:           "",
-			DeploymentID: nil,
-			UserIds:      nil,
-			EventSource:  nil,
-			HookSource:   nil,
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
 		}
 	}
 
@@ -411,6 +413,8 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		GramDeploymentID: deploymentID,
 		EventSource:      conv.PtrValOr(filter.EventSource, ""),
 		HookSource:       conv.PtrValOr(filter.HookSource, ""),
+		AccountType:      conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
 		GroupBy:          groupBy,
 		UserIDs:          filter.UserIds,
 		SortOrder:        params.sortOrder,
@@ -471,6 +475,17 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 			ToolCallFailure:          int64(item.ToolCallFailure),
 			Tools:                    tools,
 			HookSources:              hookSources,
+			AccountTypes:             item.AccountTypes,
+			Accounts:                 nil,
+		}
+	}
+
+	// Attach each user's linked AI accounts (team + personal, across providers)
+	// from the user_accounts directory. Only meaningful when grouping by internal
+	// user_id — external ids don't map to a directory owner.
+	if payload.UserType != "external" {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users)
 		}
 	}
 
@@ -479,6 +494,57 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		Roles:      nil,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// attachUserAccounts populates UserSummary.Accounts from the user_accounts
+// directory for the given internal user ids. Best-effort: a lookup failure
+// leaves accounts empty rather than failing the listing.
+func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary) {
+	userIDs := make([]string, 0, len(users))
+	for _, u := range users {
+		if u.UserID != "" {
+			userIDs = append(userIDs, u.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	rows, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
+		OrganizationID: orgID,
+		UserIds:        userIDs,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load user accounts for employees list", attr.SlogError(err))
+		return
+	}
+
+	byUser := make(map[string][]*telem_gen.UserAccount, len(rows))
+	for _, row := range rows {
+		if !row.UserID.Valid || row.UserID.String == "" {
+			continue
+		}
+		var lastSeen *string
+		if row.LastSeenAt.Valid {
+			ns := strconv.FormatInt(row.LastSeenAt.Time.UnixNano(), 10)
+			lastSeen = &ns
+		}
+		idStr := row.ID.String()
+		byUser[row.UserID.String] = append(byUser[row.UserID.String], &telem_gen.UserAccount{
+			ID:               &idStr,
+			Provider:         row.Provider,
+			Email:            conv.FromPGText[string](row.Email),
+			AccountType:      conv.FromPGText[string](row.AccountType),
+			ExternalOrgID:    conv.FromPGText[string](row.ExternalOrgID),
+			LastSeenUnixNano: lastSeen,
+		})
+	}
+
+	for _, u := range users {
+		if accts, ok := byUser[u.UserID]; ok {
+			u.Accounts = accts
+		}
+	}
 }
 
 // searchUsersByRole fetches all per-user costs from ClickHouse, joins with role
@@ -490,12 +556,14 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	filter := payload.Filter
 	if filter == nil {
 		filter = &telem_gen.SearchUsersFilter{
-			From:         "",
-			To:           "",
-			DeploymentID: nil,
-			UserIds:      nil,
-			EventSource:  nil,
-			HookSource:   nil,
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
 		}
 	}
 
@@ -521,6 +589,8 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			GramDeploymentID: deploymentID,
 			EventSource:      conv.PtrValOr(filter.EventSource, ""),
 			HookSource:       conv.PtrValOr(filter.HookSource, ""),
+			AccountType:      conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
 			GroupBy:          "user_id",
 			UserIDs:          filter.UserIds,
 			SortOrder:        "desc",
@@ -766,6 +836,8 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
@@ -817,6 +889,8 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		UserID:         userID,
 		ExternalUserID: externalUserID,
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving employee data flow graph")
@@ -1283,6 +1357,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
+	accountType := conv.PtrValOr(payload.AccountType, "")
+	externalOrgID := conv.PtrValOr(payload.ExternalOrgID, "")
 
 	if userID != "" && externalUserID != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
@@ -1309,6 +1385,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -1326,6 +1404,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -1346,6 +1426,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			MCPServerID:       mcpServerID,
 			EventSource:       eventSource,
 			HookSource:        hookSource,
+			AccountType:       accountType,
+			ExternalOrgID:     externalOrgID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -1364,6 +1446,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 		Limit:             10,
 		SortBy:            "count",
 	})
@@ -1383,6 +1467,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 		Limit:             10,
 		SortBy:            "failure_rate",
 	})
@@ -1498,6 +1584,8 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			MCPServerID:       "",
 			EventSource:       "",
 			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving tool call metrics")
@@ -1515,6 +1603,8 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			MCPServerID:       "",
 			EventSource:       "",
 			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison tool call metrics")
@@ -2386,6 +2476,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		TargetLimit:        25,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
@@ -2453,6 +2544,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
 		SortOrder:          params.sortOrder,
@@ -2583,6 +2675,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			HTTPStatusCode:    row.HTTPStatusCode,
 			HookStatus:        row.HookStatus,
 			BlockReason:       row.BlockReason,
+			AccountType:       row.AccountType,
 		}
 		traces = append(traces, trace)
 	}

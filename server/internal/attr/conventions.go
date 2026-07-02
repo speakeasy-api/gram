@@ -116,6 +116,7 @@ const (
 	ProviderKey                    = attribute.Key("gram.provider")
 	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
 	AccountTypeKey                 = attribute.Key("gram.account_type")
+	BillingModeKey                 = attribute.Key("gram.billing_mode")
 	DeviceIDKey                    = attribute.Key("gram.device_id")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")

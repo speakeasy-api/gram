@@ -2,6 +2,7 @@ import type { Dimension } from "@gram/client/models/components";
 import type { Measures } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
+import { EstimatedCostIndicator } from "@/components/estimated-cost";
 
 const BRAND = "#6366f1"; // indigo-500 — neutral headline accent
 const NEUTRAL = "#64748b"; // slate-500 — KPI sparklines
@@ -124,7 +125,7 @@ function Card({
   range,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   // Optional muted date-range suffix, e.g. "Total cost (June 15–19)".
   range?: string;
   children: React.ReactNode;
@@ -150,27 +151,34 @@ function TrendCard({
   prevTotal,
   range,
   loading,
+  billingMode,
 }: {
   values: number[];
   total: number;
   prevTotal: number;
   range: string;
   loading: boolean;
+  billingMode?: string;
 }): JSX.Element {
   const delta = relDelta(total, prevTotal);
   let deltaColor: string | undefined;
   if (delta !== null && Math.abs(delta) >= 1)
     deltaColor = delta > 0 ? UP : DOWN;
+  const title = (
+    <>
+      Total cost <EstimatedCostIndicator billingMode={billingMode} />
+    </>
+  );
   if (loading) {
     return (
-      <Card title="Total cost" range={range}>
+      <Card title={title} range={range}>
         <Skeleton className="mt-1 h-8 w-28" />
         <Skeleton className="mt-3 h-20 w-full" />
       </Card>
     );
   }
   return (
-    <Card title="Total cost" range={range}>
+    <Card title={title} range={range}>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">
           {formatCost(total)}
@@ -541,6 +549,7 @@ export function CostWidgets({
   onDrill,
   onOpenSession,
   loading,
+  billingMode,
 }: {
   series: WidgetSeries;
   totals: Measures;
@@ -557,6 +566,8 @@ export function CostWidgets({
   onOpenSession?: (id: string) => void;
   // True while the main slice is still loading (trend + KPI skeletons).
   loading: boolean;
+  // The view's resolved billing mode; "metered" hides the cost-estimate caveat.
+  billingMode?: string;
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
@@ -567,6 +578,7 @@ export function CostWidgets({
           prevTotal={prevTotals.cost}
           range={rangeLabel}
           loading={loading}
+          billingMode={billingMode}
         />
         {cards.map((c) => (
           <CardItem

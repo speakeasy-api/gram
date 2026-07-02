@@ -15,6 +15,7 @@ var Config = Type("AIIntegrationConfig", func() {
 	Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
 	Attribute("project_id", String, "Project used as the telemetry write target. Omitted when no config is set.")
 	Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.")
+	Attribute("billing_mode", String, "How the provider org is billed: 'metered' (pay-per-token; dashboard cost is real spend), 'flat_rate' (subscription seats; cost is an estimate), or 'unknown'. Empty/omitted when not declared.")
 	Attribute("enabled", Boolean, "Whether the provider integration is active.")
 	Attribute("has_api_key", Boolean, "Whether an API key is currently stored. The key itself is never returned.")
 	Attribute("last_polled_at", String, "ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.", func() {
@@ -88,6 +89,7 @@ var _ = Service("aiIntegrations", func() {
 			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
 			Attribute("api_key", String, "Provider API key. Stored encrypted at rest; never returned on reads.")
 			Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance.")
+			Attribute("billing_mode", String, "How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.")
 			Attribute("enabled", Boolean, "Whether the integration should be active.")
 			Required("provider", "api_key", "enabled")
 			Meta("openapi:typename", "UpsertAIIntegrationConfigRequest")
