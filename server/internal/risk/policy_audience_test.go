@@ -185,6 +185,7 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -228,6 +229,7 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -275,6 +277,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)

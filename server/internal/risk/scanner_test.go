@@ -176,6 +176,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -211,6 +212,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -247,6 +249,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -317,6 +320,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
@@ -345,6 +349,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)

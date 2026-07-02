@@ -12,7 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -114,6 +116,7 @@ var _ RiskScanner = (*Scanner)(nil)
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
 	logger     *slog.Logger
+	tracer     trace.Tracer
 	db         *pgxpool.Pool
 	repo       *repo.Queries
 	gitleaks   *ra.GitleaksScanner        // pre-created, reused & serialized across scans
@@ -132,7 +135,7 @@ type Scanner struct {
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider, celEng *celenv.Engine) (*Scanner, error) {
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, celEng *celenv.Engine) (*Scanner, error) {
 	gitleaksScanner, err := ra.NewGitleaksScanner()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
@@ -144,6 +147,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 
 	return &Scanner{
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 		db:         db,
 		repo:       repo.New(db),
 		gitleaks:   gitleaksScanner,
@@ -164,13 +168,28 @@ func (s *Scanner) ScanForEnforcement(
 	text string,
 	messageType message.Type,
 	toolName string,
-) (*ScanResult, error) {
+) (result *ScanResult, retErr error) {
 	// An empty body is only a no-op when there is also no tool attribution: a
 	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
 	// a tool-scoped prompt policy can match, so let those events through.
 	if text == "" && toolName == "" {
 		return nil, nil
 	}
+
+	// Root span for the scan as a unit of work: gitleaks/presidio/judge spans
+	// spawned downstream (through gctx) attribute under this span and its
+	// per-policy children instead of dangling as siblings of the RPC span.
+	ctx, span := s.tracer.Start(ctx, "risk.scanForEnforcement", trace.WithAttributes(
+		attr.OrganizationID(organizationID),
+		attr.ProjectID(projectID.String()),
+		attr.RiskMessageType(string(messageType)),
+	))
+	defer func() {
+		if retErr != nil {
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
 
 	start := time.Now()
 
@@ -179,6 +198,7 @@ func (s *Scanner) ScanForEnforcement(
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("list enforcing policies: %w", err)
 	}
+	span.SetAttributes(attr.RiskPolicyCount(len(policies)))
 	if len(policies) == 0 {
 		// No enforcing policies, fast path. Record as "skipped" to track volume.
 		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
@@ -354,7 +374,22 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (result *ScanResult, retErr error) {
+	// Per-policy child span so an individual gitleaks/presidio/judge span
+	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
+	// here, so this span parents under risk.scanForEnforcement).
+	ctx, span := s.tracer.Start(ctx, "risk.scanPolicy", trace.WithAttributes(
+		attr.RiskPolicyID(policy.ID.String()),
+		attr.RiskPolicyName(policy.Name),
+		attr.RiskPolicyType(policy.PolicyType),
+	))
+	defer func() {
+		if retErr != nil {
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
 	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
