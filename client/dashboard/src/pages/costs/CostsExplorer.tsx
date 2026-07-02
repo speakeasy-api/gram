@@ -847,7 +847,13 @@ export function CostsExplorer(): JSX.Element {
     title: "Most costly sessions",
     rows: (topSessionsData?.sessions ?? []).map((s) => ({
       id: s.gramChatId,
-      label: s.userEmail?.length ? s.userEmail : s.gramChatId.slice(0, 8),
+      label: s.title?.length ? s.title : s.gramChatId.slice(0, 8),
+      sublabel:
+        groupBy !== Dimension.Email &&
+        currentEntity?.dim !== Dimension.Email &&
+        s.userEmail?.length
+          ? s.userEmail
+          : undefined,
       cost: s.totalCost,
     })),
     loading: topSessionsFetching && !topSessionsData,

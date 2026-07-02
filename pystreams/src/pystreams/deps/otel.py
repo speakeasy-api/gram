@@ -34,7 +34,7 @@ cancellation so a Ctrl-C still drains buffered spans/metrics.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -90,7 +90,7 @@ class OTelOptions:
 @asynccontextmanager
 async def otel_sdk(
     options: OTelOptions, *, logger: structlog.stdlib.BoundLogger
-) -> AsyncIterator[None]:
+) -> AsyncGenerator[None]:
     """Install the OTel SDK for the duration of the ``async with`` block.
 
     Sets the global propagator and, depending on ``options``, the SDK tracer

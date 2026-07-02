@@ -30,13 +30,13 @@ dev = [
   # blocking guard is enforced across the test suite (see tests/conftest.py), but
   # never shipped — runtime activation is the consuming app's job (e.g. pystreams).
   "aiocop>=1.1.4",
-  "pyrefly>=1.0.0",
+  "pyrefly>=1.1.1",
   "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",
   # Pulls in trio so the backend-agnostic tests can exercise the library under
   # anyio's trio backend, not just asyncio.
   "anyio[trio]>=4.14.0",
-  "ty>=0.0.48",
+  "ty>=0.0.53",
   "types-protobuf>=7.34.1.20260518",
 ]
 

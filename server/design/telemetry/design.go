@@ -1301,9 +1301,9 @@ var queryDimensions = []any{
 	"cost_center_name",
 	"email",
 	"model",
-	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
-	"account_type",
-	"provider",
+	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type", // AI account classification (team | personal | unclassified)
+	"provider",     // AI provider for the account (anthropic | openai | cursor)
 	"query_source",
 	"skill_name",
 	"agent_name",
