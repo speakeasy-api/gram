@@ -233,3 +233,36 @@ func TestAuditService_ListFacets_MasksSpeakeasyOrgActors(t *testing.T) {
 	require.Equal(t, "Speakeasy Team", byValue[staffUserID])
 	require.Equal(t, "customer@example.com", byValue["customer-user"])
 }
+
+// Facets for non-user actors are never masked, even if their id happens to
+// collide with a Speakeasy member's user id.
+func TestAuditService_ListFacets_MaskSkipsNonUserActors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	staffUserID := uuid.NewString()
+	seedSpeakeasyMember(t, ctx, ti, staffUserID)
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          staffUserID,
+		actorType:        "service_account",
+		actorDisplayName: new("automation"),
+		action:           "project:update",
+		subjectID:        "project-1",
+		subjectType:      "project",
+	})
+
+	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		ProjectSlug:  nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Actors, 1)
+	require.Equal(t, staffUserID, result.Actors[0].Value)
+	require.Equal(t, "automation", result.Actors[0].DisplayName)
+}

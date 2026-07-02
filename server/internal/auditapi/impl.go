@@ -218,10 +218,13 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	actors := toAuditActorFacetOptions(actorRows)
 
 	// Facet values are actor IDs, so mask their display names the same way the
-	// log feed does.
-	actorIDs := make([]string, 0, len(actors))
-	for _, actor := range actors {
-		actorIDs = append(actorIDs, actor.Value)
+	// log feed does. Only user actors are candidates — other actor types keep
+	// their labels even if their id collides with a staff user id.
+	actorIDs := make([]string, 0, len(actorRows))
+	for _, row := range actorRows {
+		if row.IsUserActor {
+			actorIDs = append(actorIDs, row.Value)
+		}
 	}
 	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
 	if err != nil {
