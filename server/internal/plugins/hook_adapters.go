@@ -368,25 +368,61 @@ gram_hooks_tool_output_value() {
   printf '%%s' "$output"
 }
 
+# gram_hooks_codex_synth_state_path stores the in-flight synthetic tool id
+# for one (session, tool) pair. Codex runs one tool call at a time per
+# session, so a single remembered id is enough to hand the request's id to
+# its completion.
+gram_hooks_codex_synth_state_path() {
+  local session_id="$1"
+  local tool_name="$2"
+  local state_home state_dir safe_id
+  [ -n "$session_id" ] || return 1
+  state_home="${XDG_STATE_HOME:-${HOME}/.local/state}"
+  state_dir="${state_home}/gram/hooks/codex-tools"
+  mkdir -p "$state_dir" 2>/dev/null || return 1
+  chmod 700 "${state_home}/gram" "${state_home}/gram/hooks" "$state_dir" 2>/dev/null || true
+  safe_id="$(printf '%%s' "${session_id}__${tool_name}" | tr -c 'A-Za-z0-9_.-' '_')"
+  printf '%%s/%%s.id' "$state_dir" "$safe_id"
+}
+
 # gram_hooks_synth_tool_id derives a stable tool-call id when the provider
 # omits tool_use_id (common for Cursor MCP and some pre/post tool events) so
 # before/after records still correlate instead of collapsing into a
 # session-derived identity. Mirrors the legacy server-side derivation:
 # hash(conversation|generation|tool|input).
+#
+# Codex carries no generation id and omits tool_input on PostToolUse, so
+# neither hashing with input (request/result ids diverge) nor without it
+# (same-tool requests collide) works from payload content alone: the request
+# id is remembered locally and replayed on the matching completion.
 gram_hooks_synth_tool_id() {
   local payload="$1"
   local tool_name="$2"
   local tool_input="$3"
-  local conv_id gen_id material hash
+  local event_type="$4"
+  local conv_id gen_id material hash state_path=""
   conv_id="$(gram_hooks_json_string_value "$payload" "conversation_id")"
   [ -n "$conv_id" ] || conv_id="$(gram_hooks_json_string_value "$payload" "session_id")"
   gen_id="$(gram_hooks_json_string_value "$payload" "generation_id")"
   tool_name="${tool_name#MCP:}"
-  # Codex omits tool_input on PostToolUse (it is PreToolUse-only there), so
-  # keying the id on input would give a request and its result different
-  # synthetic ids and break correlation.
   if [ "%s" = "codex" ]; then
-    tool_input=""
+    state_path="$(gram_hooks_codex_synth_state_path "${conv_id}|${gen_id}" "$tool_name")" || state_path=""
+    case "$event_type" in
+      tool.completed | tool.failed)
+        if [ -n "$state_path" ] && [ -r "$state_path" ]; then
+          hash="$(cat "$state_path" 2>/dev/null)"
+          rm -f "$state_path" 2>/dev/null || true
+          if [ -n "$hash" ]; then
+            printf '%%s' "$hash"
+            return 0
+          fi
+        fi
+        # No remembered request id (state unavailable or request never seen):
+        # fall back to the input-less hash rather than diverging on input the
+        # completion does not carry.
+        tool_input=""
+        ;;
+    esac
   fi
   if [ -z "$conv_id" ] && [ -z "$gen_id" ] && [ -z "$tool_name" ] && [ -z "$tool_input" ]; then
     return 0
@@ -400,6 +436,9 @@ gram_hooks_synth_tool_id() {
     return 0
   fi
   [ -n "$hash" ] || return 0
+  if [ -n "$state_path" ] && [ "$event_type" = "tool.requested" ]; then
+    printf 'hook_synth_%%s' "$hash" >"$state_path" 2>/dev/null || true
+  fi
   printf 'hook_synth_%%s' "$hash"
 }
 
@@ -785,7 +824,7 @@ gram_hooks_canonical_data_members() {
   if [ -n "$tool_name" ] || [ "$event_type" = "tool.requested" ] || [ "$event_type" = "tool.completed" ] || [ "$event_type" = "tool.failed" ]; then
     local tool_members tool_input_member="" tool_output_member="" tool_error_member=""
     if [ -z "$tool_id" ]; then
-      tool_id="$(gram_hooks_synth_tool_id "$payload" "$tool_name" "$tool_input")"
+      tool_id="$(gram_hooks_synth_tool_id "$payload" "$tool_name" "$tool_input" "$event_type")"
     fi
     if [ -n "$tool_input" ]; then
       tool_input_member="\"input\":$tool_input"

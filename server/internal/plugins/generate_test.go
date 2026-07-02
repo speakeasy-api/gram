@@ -2209,6 +2209,54 @@ gram_hooks_build_canonical_payload "$after" "test-host"
 	require.Equal(t, beforeID, afterID, "before/after events must derive the same synthetic id")
 }
 
+// TestRenderHookPayloadNormalizationCodexSynthIDs verifies Codex synthetic
+// tool ids satisfy both constraints its payloads make hard: a request and its
+// PostToolUse result (which omits tool_input) share one id via the local
+// in-flight ledger, while two same-tool requests with different inputs stay
+// distinct.
+func TestRenderHookPayloadNormalizationCodexSynthIDs(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("codex") + `
+req_a='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"ls"}}'
+res_a='{"hook_event_name":"PostToolUse","session_id":"sess-codex","tool_name":"shell","tool_output":{"stdout":"ok"}}'
+req_b='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"whoami"}}'
+gram_hooks_build_canonical_payload "$req_a" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$res_a" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$req_b" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = append(os.Environ(), "XDG_STATE_HOME="+filepath.Join(dir, "state"))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(output), "\n---GRAM---\n")
+	require.Len(t, chunks, 3)
+
+	toolID := func(raw string) string {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed))
+		toolCall := requireMapValue(t, requireMapValue(t, parsed, "data"), "tool_call")
+		id, _ := toolCall["id"].(string)
+		return id
+	}
+	reqAID := toolID(chunks[0])
+	resAID := toolID(chunks[1])
+	reqBID := toolID(chunks[2])
+	require.NotEmpty(t, reqAID)
+	require.Equal(t, reqAID, resAID, "a codex result must reuse its request's synthetic id")
+	require.NotEqual(t, reqAID, reqBID, "distinct same-tool codex requests must not collide")
+}
+
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
