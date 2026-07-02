@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -32,6 +33,9 @@ import (
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
 const MaxClaudePromptCorrelationEditDistanceBytes = 65536
+
+// ErrInvalidShadowMCPInventoryURLCursor marks malformed shadow MCP inventory URL list cursors.
+var ErrInvalidShadowMCPInventoryURLCursor = errors.New("invalid shadow mcp inventory url cursor")
 
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
@@ -385,18 +389,18 @@ func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, er
 func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCursor, error) {
 	data, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return shadowMCPInventoryURLCursor{}, fmt.Errorf("decoding shadow mcp inventory url cursor: %w", err)
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
 	}
 
 	var payload shadowMCPInventoryURLCursor
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return shadowMCPInventoryURLCursor{}, fmt.Errorf("parsing shadow mcp inventory url cursor: %w", err)
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
 	}
 	if payload.CanonicalServerURL == "" {
-		return shadowMCPInventoryURLCursor{}, fmt.Errorf("shadow mcp inventory url cursor canonical server url is required")
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: canonical server url is required", ErrInvalidShadowMCPInventoryURLCursor)
 	}
 	if payload.LastSeenUnixNano == 0 {
-		return shadowMCPInventoryURLCursor{}, fmt.Errorf("shadow mcp inventory url cursor last seen is required")
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last seen is required", ErrInvalidShadowMCPInventoryURLCursor)
 	}
 
 	return payload, nil
