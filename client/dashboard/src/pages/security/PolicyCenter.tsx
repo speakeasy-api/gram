@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Switch } from "@/components/ui/switch";
+import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Sheet,
@@ -629,6 +630,7 @@ function PolicyCenterContent() {
   );
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+  const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
   const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
     "policies",
@@ -651,7 +653,10 @@ function PolicyCenterContent() {
   });
 
   const deleteMutation = useRiskPoliciesDeleteMutation({
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setPolicyToDelete(null);
+      invalidate();
+    },
   });
 
   // Redirect a deep-linked policy to its detail page once its data has loaded.
@@ -668,7 +673,12 @@ function PolicyCenterContent() {
   }, [policyParam, isLoading, data, routes]);
 
   const handleDelete = (row: PolicyRow) => {
-    deleteMutation.mutate({ request: { id: row.policy.id } });
+    setPolicyToDelete(row);
+  };
+
+  const confirmDelete = () => {
+    if (!policyToDelete) return;
+    deleteMutation.mutate({ request: { id: policyToDelete.policy.id } });
   };
 
   // Empty state for the Policies tab only. It must NOT short-circuit the whole
@@ -884,7 +894,9 @@ function PolicyCenterContent() {
               )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(row)}
+                onSelect={() => {
+                  setTimeout(() => handleDelete(row), 0);
+                }}
               >
                 Delete
               </DropdownMenuItem>
@@ -995,6 +1007,44 @@ function PolicyCenterContent() {
             {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
+
+        {/* Delete Policy Confirmation */}
+        <Dialog
+          open={!!policyToDelete}
+          onOpenChange={(open) => {
+            if (!open) setPolicyToDelete(null);
+          }}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete Policy</Dialog.Title>
+            </Dialog.Header>
+            <div className="space-y-4 py-4">
+              <Type variant="body">
+                <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+                  {policyToDelete?.policy.name}
+                </code>{" "}
+                policy will be permanently deleted. Any flags or blocks it
+                applies will stop immediately.
+              </Type>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setPolicyToDelete(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  onClick={confirmDelete}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete Policy
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );
