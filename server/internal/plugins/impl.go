@@ -1964,6 +1964,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	cfg := GenerateConfig{
 		OrgName:     orgSlug,
 		OrgEmail:    "",
+		OrgID:       orgID,
 		ServerURL:   s.serverURL,
 		APIKey:      "",
 		HooksAPIKey: "",

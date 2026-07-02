@@ -373,6 +373,14 @@ gram_hooks_login() {
     "" | *[!A-Za-z0-9._-]*) ;;
     *) auth_url="${auth_url}&project=${project_hint}" ;;
   esac
+  # Pin the mint to the plugin's organization (callers set gram_hooks_org_hint
+  # from the generated config): in a multi-org browser session the dashboard
+  # refuses to mint a key when the active org differs, instead of silently
+  # binding this machine's telemetry to whichever org happens to be active.
+  case "${gram_hooks_org_hint:-}" in
+    "" | *[!A-Za-z0-9._-]*) ;;
+    *) auth_url="${auth_url}&organization_id=${gram_hooks_org_hint}" ;;
+  esac
   echo "Speakeasy hooks: opening your browser to connect observability hooks." >&2
   echo "If nothing opens, visit: $auth_url" >&2
   # Hand the opener a 0600 file:// redirect instead of the URL itself:

@@ -1481,6 +1481,23 @@ printf '{}\n200'
 		"stdio MCP identity must be pinned to the launch command, not the alias")
 }
 
+// TestRenderLoginScriptsPinOrganization verifies the interactive login entry
+// points embed the generating org's id and the shared login flow forwards it
+// to the dashboard, which refuses to mint a key when a multi-org browser
+// session has a different org active.
+func TestRenderLoginScriptsPinOrganization(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+		OrgID:       "org_12345",
+	}
+	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint="org_12345"`)
+	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint="org_12345"`)
+	require.Contains(t, string(renderSharedAuthScript()), "organization_id=${gram_hooks_org_hint}")
+}
+
 // TestRenderHookScriptClaudeEnrichesURLFromSiblingPluginConfig verifies the
 // Claude MCP URL enrichment scans sibling feature plugins' .mcp.json: in a
 // generated marketplace the observability plugin runs the hook while the

@@ -47,6 +47,10 @@ type PluginInfo struct {
 type GenerateConfig struct {
 	OrgName  string
 	OrgEmail string
+	// OrgID pins the browser login flow to the generating organization: the
+	// dashboard refuses to mint a hooks key when the active session org
+	// differs, so a plugin from org A cannot cache a key for org B.
+	OrgID string
 	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
 	// APIKey is the plaintext consumer-scoped Gram API key to inject into
@@ -975,6 +979,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
+gram_hooks_org_hint="%s"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -991,7 +996,7 @@ export GRAM_HOOKS_INTERACTIVE=%s
 # the session start; observability mode passes 0 so nothing ever blocks).
 gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, failureExit, interactive, failureExit)
+`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID, failureExit, interactive, failureExit)
 }
 
 // renderLoginScript emits hooks/login.sh: the standalone interactive login
@@ -1011,6 +1016,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
+gram_hooks_org_hint="%s"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -1041,7 +1047,7 @@ fi
 
 echo "Speakeasy hooks authenticated (project ${GRAM_HOOKS_CACHED_PROJECT:-unset})."
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug)
+`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID)
 }
 
 // renderSharedAuthScript emits hooks/auth.sh: local device authentication for
@@ -1423,6 +1429,14 @@ gram_hooks_login() {
   case "$project_hint" in
     "" | *[!A-Za-z0-9._-]*) ;;
     *) auth_url="${auth_url}&project=${project_hint}" ;;
+  esac
+  # Pin the mint to the plugin's organization (callers set gram_hooks_org_hint
+  # from the generated config): in a multi-org browser session the dashboard
+  # refuses to mint a key when the active org differs, instead of silently
+  # binding this machine's telemetry to whichever org happens to be active.
+  case "${gram_hooks_org_hint:-}" in
+    "" | *[!A-Za-z0-9._-]*) ;;
+    *) auth_url="${auth_url}&organization_id=${gram_hooks_org_hint}" ;;
   esac
   echo "Speakeasy hooks: opening your browser to connect observability hooks." >&2
   echo "If nothing opens, visit: $auth_url" >&2

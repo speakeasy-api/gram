@@ -7,6 +7,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
+gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! . "$script_dir/auth.sh"; then

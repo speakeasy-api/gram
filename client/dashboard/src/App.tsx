@@ -140,6 +140,7 @@ function AppContent() {
         keyScope={cliFlow.keyScope}
         localCallbackUrl={cliFlow.cliCallbackUrl}
         projectSlug={cliFlow.projectSlug}
+        organizationId={cliFlow.organizationId}
       />
     );
   }
@@ -428,6 +429,7 @@ type LocalAuthFlow = {
   cliCallbackUrl: string;
   keyScope: "producer" | "hooks";
   projectSlug: string | null;
+  organizationId: string | null;
 };
 
 function useCliAuthFlow(): LocalAuthFlow | null {
@@ -438,12 +440,14 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const cliCallbackUrl = searchParams.get("cli_callback_url");
   const keyScope = searchParams.get("key_scope");
   const projectSlug = searchParams.get("project");
+  const organizationId = searchParams.get("organization_id");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return {
       cliCallbackUrl,
       keyScope: keyScope === "hooks" ? "hooks" : "producer",
       projectSlug,
+      organizationId,
     };
   }
 

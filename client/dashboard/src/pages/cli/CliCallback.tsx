@@ -6,6 +6,7 @@ interface CliCallbackProps {
   keyScope?: "producer" | "hooks";
   localCallbackUrl: string;
   projectSlug?: string | null;
+  organizationId?: string | null;
 }
 
 /**
@@ -14,7 +15,12 @@ interface CliCallbackProps {
  * it to the localhost callback URL as query parameters.
  */
 export default function CliCallback(props: CliCallbackProps): JSX.Element {
-  const { keyScope = "producer", localCallbackUrl, projectSlug } = props;
+  const {
+    keyScope = "producer",
+    localCallbackUrl,
+    projectSlug,
+    organizationId,
+  } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey } = useCreateAPIKeyMutation();
@@ -45,6 +51,15 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
       return;
     }
 
+    // The requesting plugin was generated for a specific organization; a key
+    // minted in whichever org this browser session happens to have active
+    // would silently route that machine's telemetry and policy checks to the
+    // wrong org.
+    if (organizationId && session.activeOrganizationId !== organizationId) {
+      setError(errWrongOrganization);
+      return;
+    }
+
     hasCreatedKey.current = true;
 
     const selectedProjectSlug = selectCallbackProjectSlug(
@@ -71,6 +86,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     keyScope,
     localCallbackUrl,
     projectSlug,
+    organizationId,
     session,
     validCallback,
   ]);
@@ -119,6 +135,8 @@ function generateHooksKeyName(): string {
 }
 
 const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
+const errWrongOrganization =
+  "This connection link belongs to a different organization. Switch to that organization in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
 function isCallbackLocal(callbackUrl: string): boolean {
