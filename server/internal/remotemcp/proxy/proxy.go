@@ -723,6 +723,20 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		resp.Body = &cancellingBody{ReadCloser: resp.Body, cancel: forwardCancel, timer: phaseTimer}
 	}
 
+	// Upstream auth rejections are the primary diagnostic when a stored or
+	// forwarded token is refused (e.g. audience mismatch, upstream-side
+	// revocation). The upstream's RFC 6750 challenge carries the
+	// machine-readable reason and — for issuer-gated endpoints — is
+	// replaced before relay, so this log line is its only surface.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		p.Logger.WarnContext(ctx, "remote mcp server rejected upstream credentials",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogHTTPResponseHeaderWWWAuthenticate(resp.Header.Get("WWW-Authenticate")),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
+	}
+
 	return upstreamReq, resp, nil
 }
 
