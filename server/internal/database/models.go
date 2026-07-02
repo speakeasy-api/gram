@@ -1516,6 +1516,21 @@ type RiskPolicyChallenge struct {
 	Deleted        bool
 }
 
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type RiskResult struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
