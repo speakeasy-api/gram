@@ -18,6 +18,7 @@ import {
   Building2,
   FileSearch,
   FolderSync,
+  Globe,
   KeyRound,
   Loader2,
   Mail,
@@ -492,9 +493,27 @@ function OrgInfoSection(): ReactElement {
   );
 }
 
+function GlobalIdpsSection({
+  onManage,
+}: {
+  onManage: () => void;
+}): ReactElement {
+  return (
+    <Section
+      icon={Globe}
+      title="Global Remote IdPs"
+      description="Manage global remote session providers — issuer + client pairs with no owning project, available org-wide."
+    >
+      <div className="flex items-center justify-end">
+        <ActionButton onClick={onManage}>Manage providers</ActionButton>
+      </div>
+    </Section>
+  );
+}
+
 // The panels below back the Platform Admin tabs in the Developer Toolkit, one
-// per tab: Info (org info + override), Features (RBAC + product features), and
-// Onboarding (enterprise admin email).
+// per tab: Info (org info + override), Features (RBAC + product features),
+// Onboarding (enterprise admin email), and Global (global remote IdPs).
 
 export function PlatformAdminInfoPanel(): ReactElement {
   return (
@@ -511,4 +530,16 @@ export function PlatformAdminFeaturesPanel(): ReactElement {
 
 export function PlatformAdminOnboardingPanel(): ReactElement {
   return <OnboardingSection />;
+}
+
+export function PlatformAdminGlobalPanel({
+  onManage,
+}: {
+  onManage: () => void;
+}): ReactElement {
+  return (
+    <div className="space-y-2">
+      <GlobalIdpsSection onManage={onManage} />
+    </div>
+  );
 }
