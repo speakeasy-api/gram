@@ -1961,7 +1961,6 @@ jobs:
     if: always()
     needs:
       - changes
-      - preview-image-tags
       - format-check
       - server-build-lint
       - server-test
