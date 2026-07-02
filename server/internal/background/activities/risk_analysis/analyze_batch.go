@@ -42,6 +42,7 @@ type AnalyzeBatch struct {
 	flags           feature.Provider
 	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
+	customRulesPub  gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	celEng          *celenv.Engine
 }
 
@@ -58,6 +59,7 @@ func NewAnalyzeBatch(
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	celEng *celenv.Engine,
 ) *AnalyzeBatch {
 	if piiScanner == nil {
@@ -80,6 +82,7 @@ func NewAnalyzeBatch(
 		flags:           flags,
 		presidioPub:     presidioPub,
 		gitleaksPub:     gitleaksPub,
+		customRulesPub:  customRulesPub,
 		celEng:          celEng,
 	}
 }

@@ -67,9 +67,15 @@ func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	return pub
 }
 
+func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.CustomRulesAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), mustCELEngine(t))
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCELEngine(t))
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -125,6 +131,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
 		mustCELEngine(t),
 	)
 
@@ -216,6 +223,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
 		mustCELEngine(t),
 	)
 
@@ -319,6 +327,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
 		mustCELEngine(t),
 	)
 
@@ -402,6 +411,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
 		mustCELEngine(t),
 	)
 
@@ -860,6 +870,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
 		mustCELEngine(t),
 	)
 
