@@ -58,7 +58,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.create")
+			POST("/rpc/risk.createPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -83,7 +83,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskPoliciesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.list")
+			GET("/rpc/risk.listPolicies")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -112,7 +112,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.get")
+			GET("/rpc/risk.getPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -167,7 +167,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			PUT("/rpc/risk.policies.update")
+			PUT("/rpc/risk.updatePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -193,7 +193,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/risk.policies.delete")
+			DELETE("/rpc/risk.deletePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -239,7 +239,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.list")
+			GET("/rpc/risk.listResults")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -295,7 +295,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsForAgentResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.listForAgent")
+			GET("/rpc/risk.listResultsForAgent")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -318,6 +318,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsForAgent"}`)
 	})
 
+	Method("unmaskRiskResult", func() {
+		Description("Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The risk result ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskUnmaskResultResult)
+
+		HTTP(func() {
+			// POST, not GET: unmasking has a side effect (an audit log write
+			// per reveal), so it isn't a safe/idempotent request — a GET here
+			// would be cacheable/prefetchable by browsers and proxies.
+			POST("/rpc/risk.unmaskResult")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmaskRiskResult")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmask")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmaskResult", "type": "mutation"}`)
+	})
+
 	Method("listRiskResultsByChat", func() {
 		Description("List risk results grouped by chat session for the current project.")
 
@@ -335,7 +368,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsByChatResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.byChat")
+			GET("/rpc/risk.listResultsByChat")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -368,7 +401,7 @@ var _ = Service("risk", func() {
 		Result(RiskOverviewResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.get")
+			GET("/rpc/risk.getOverview")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -395,7 +428,7 @@ var _ = Service("risk", func() {
 		Result(RiskCategoriesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.categories")
+			GET("/rpc/risk.listCategories")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -423,7 +456,7 @@ var _ = Service("risk", func() {
 		Result(ExprCompileResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.compileExpr")
+			GET("/rpc/risk.compileCELExpression")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -457,7 +490,7 @@ var _ = Service("risk", func() {
 		Result(RiskUserBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.userBreakdown")
+			GET("/rpc/risk.getUserBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -493,7 +526,7 @@ var _ = Service("risk", func() {
 		Result(RiskRuleBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.rules")
+			GET("/rpc/risk.getRuleBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -525,7 +558,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicyStatus)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.status")
+			GET("/rpc/risk.getPolicyStatus")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -760,7 +793,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.trigger")
+			POST("/rpc/risk.triggerPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -794,7 +827,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.create")
+			POST("/rpc/risk.createCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -819,7 +852,7 @@ var _ = Service("risk", func() {
 		Result(ListCustomDetectionRulesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.list")
+			GET("/rpc/risk.listCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -848,7 +881,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.get")
+			GET("/rpc/risk.getCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -885,7 +918,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.update")
+			POST("/rpc/risk.updateCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -912,7 +945,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.delete")
+			POST("/rpc/risk.deleteCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1088,7 +1121,7 @@ var _ = Service("risk", func() {
 		Result(SuggestCustomDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.suggest")
+			POST("/rpc/risk.suggestCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1123,7 +1156,7 @@ var _ = Service("risk", func() {
 		Result(TestDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.rules.test")
+			POST("/rpc/risk.testRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1188,6 +1221,14 @@ var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
+})
+
+var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
+	Attribute("id", String, "The risk result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
+	Required("id", "match")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {

@@ -40,7 +40,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -121,7 +121,7 @@ jobs:
           git tag -f "$tag"
           echo "Created local tag $tag"
       - name: goreleaser
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser-pro
           version: "~> v2.14"

@@ -38,6 +38,26 @@ func orgDisplayName(name *string, url string) string {
 	return url
 }
 
+// clientUpstreamResource derives the RFC 8707 resource for a client's
+// sessions from its attached MCP servers. Exactly one distinct upstream URL
+// binds the audience; zero or multiple return "" so the parameter is omitted
+// (matching pre-resource behavior — an ambiguous multi-upstream client can't
+// be bound to a single audience). Url is empty for non-remote backends.
+func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
+	resource := ""
+	for _, row := range rows {
+		url := strings.TrimRight(row.Url, "/")
+		if url == "" {
+			continue
+		}
+		if resource != "" && resource != url {
+			return ""
+		}
+		resource = url
+	}
+	return resource
+}
+
 // CreateIssuer creates an issuer in the caller's organization. With no
 // project_id the issuer is organization-level (project_id NULL); with a
 // project_id (validated to belong to the org) it is project-specific. Gated on
@@ -919,13 +939,16 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgissuersgen.Creat
 }
 
 // resolveOrganizationClientProject determines the owning project for an
-// org-admin-created standalone remote_session_client. A remote_session_client
-// must be project-scoped, so a project-specific issuer's client inherits its
-// project while an organization-level issuer requires the caller to name one. A
-// supplied project_id (validated to belong to the org) downscopes a client
-// under an organization-level issuer; for a project-specific issuer it must
-// match the issuer's own project so the client stays reachable from it. Must
-// run inside the create transaction. Shared by CreateClient and CreateCimdClient.
+// org-admin-created standalone remote_session_client, mirroring how createIssuer
+// scopes an issuer: a supplied project_id (validated to belong to the org)
+// scopes the client to that project, an omitted project_id inherits a
+// project-specific issuer's own project, and an omitted project_id under an
+// organization-level issuer yields an invalid NullUUID that persists as a NULL
+// project_id — an organization-level client every project in the org can attach.
+// For a project-specific issuer a supplied project_id must match the issuer's
+// own project so the client stays reachable from it. An organization-level
+// client can therefore only arise from an organization-level issuer. Must run
+// inside the create transaction. Shared by CreateClient and CreateCimdClient.
 func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, issuer repo.RemoteSessionIssuer, payloadProjectID *string, organizationID string) (uuid.NullUUID, error) {
 	clientProjectID := issuer.ProjectID
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
@@ -946,9 +969,6 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 			return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
 		}
 		clientProjectID = conv.ToNullUUID(pid)
-	}
-	if !clientProjectID.Valid {
-		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id is required when the issuer is organization-level").LogError(ctx, logger)
 	}
 	return clientProjectID, nil
 }
@@ -1018,6 +1038,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgissuersgen.C
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
+		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
 		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
@@ -1405,8 +1426,15 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgissuersgen.Ref
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 
+	// Recover the session's RFC 8707 audience binding from the client's
+	// attached MCP servers so the refreshed token keeps it.
+	mcpRows, err := repo.New(s.db).ListOrganizationMcpServersForClient(ctx, row.RemoteSession.RemoteSessionClientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
+	}
+
 	// Refresh on the pool — the upstream token POST must not run inside a tx.
-	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession)
+	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, clientUpstreamResource(mcpRows))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.

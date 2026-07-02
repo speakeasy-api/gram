@@ -202,6 +202,7 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.NotEmpty(t, rec.Header().Get("ETag"))
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -322,7 +323,7 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
 
 	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
-	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 
@@ -387,7 +388,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	subject := urn.NewUserSubject("cimd-refresh-subject")
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, uuid.MustParse(created.ID))
 
-	tok, err := mgr.ResolveAccessToken(ctx, uuid.MustParse(created.ID), subject)
+	tok, err := mgr.ResolveAccessToken(ctx, uuid.MustParse(created.ID), subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -457,14 +458,20 @@ func TestCreateCimdClient_OrganizationalIssuerDownscope(t *testing.T) {
 	require.NotNil(t, created.ClientIDMetadataURI)
 }
 
-func TestCreateCimdClient_OrganizationalIssuerRequiresProject(t *testing.T) {
+func TestCreateCimdClient_OrganizationalIssuerNoProjectCreatesOrgLevel(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
 	issuerID := createOrgLevelCIMDIssuer(t, ctx, ti, "admin-cimd-orglevel-noproj")
 
-	_, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
 	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.NoError(t, err)
+	require.Empty(t, created.ProjectID, "organization-level client has no project")
+	require.Equal(t, authCtx.ActiveOrganizationID, created.OrganizationID)
+	require.NotNil(t, created.ClientIDMetadataURI)
 }

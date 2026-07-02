@@ -275,7 +275,7 @@ export function PlatformAdminToolbar(): ReactElement | null {
 function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
-  const [activeTab, setActiveTab] = useState("rbac");
+  const [activeTab, setActiveTab] = useState("info");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
   const [platformAdmin, setPlatformAdmin] = useState(
     () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
@@ -552,6 +552,14 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             <div className="flex overflow-x-auto border-b border-inherit px-2">
               <button
                 type="button"
+                onClick={() => setActiveTab("info")}
+                className={tabClass(activeTab === "info")}
+              >
+                <Info className="h-3 w-3" />
+                Info
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab("rbac")}
                 className={tabClass(activeTab === "rbac")}
               >
@@ -562,14 +570,6 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                     {activeCount}/{SCOPE_DEFS.length}
                   </span>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("info")}
-                className={tabClass(activeTab === "info")}
-              >
-                <Info className="h-3 w-3" />
-                Info
               </button>
               <button
                 type="button"

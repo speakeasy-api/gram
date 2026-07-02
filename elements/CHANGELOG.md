@@ -1,5 +1,17 @@
 # @gram-ai/elements
 
+## 1.40.1
+
+### Patch Changes
+
+- 7ce4d76: Hide the assistant message copy button on tool-only turns. A message made up solely of tool calls (and/or reasoning) has no copyable text, so the lone Copy button no longer hangs beneath it.
+
+## 1.40.0
+
+### Minor Changes
+
+- 5c825a9: Default to Claude Sonnet 5 (`anthropic/claude-sonnet-5`) for in-app model usage and newly created assistants. The model is added to the allowlist and all model pickers (playground, elements, onboarding). The backend `DefaultChatModel`, the platform-managed assistant, the onboarding assistant default, and the playground/MCP chat surfaces now select Sonnet 5. Specialized models (risk/PromptIntel judges, chat segmentation, embeddings, follow-on suggestions) are unchanged.
+
 ## 1.39.0
 
 ### Minor Changes

@@ -253,7 +253,7 @@ func remoteSessionClientOrganizationID(t *testing.T, ctx context.Context, conn *
 
 	row, err := repo.New(conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ID:        clientID,
-		ProjectID: conv.ToNullUUID(projectID),
+		ProjectID: projectID,
 	})
 	require.NoError(t, err)
 
@@ -329,6 +329,31 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+// seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
+// organization_id set) remote_session_client referencing remoteIssuerID and
+// attaches it to each userSessionIssuerID through the join table. Org-level
+// clients carry no project; any project in the org can bind one to its own
+// user_session_issuer.
+func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := repo.New(conn)
+	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{},
+		OrganizationID:        conv.ToPGText(organizationID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              clientID,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	for _, usi := range userSessionIssuerIDs {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: created.ID,
+			UserSessionIssuerID:   usi,
+		}))
+	}
+	return created.ID
 }
 
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP

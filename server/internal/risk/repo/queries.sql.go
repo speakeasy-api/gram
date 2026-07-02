@@ -402,6 +402,30 @@ func (q *Queries) CountRiskResultsByPolicyID(ctx context.Context, arg CountRiskR
 	return column_1, err
 }
 
+const countRiskResultsByProjectAndPolicy = `-- name: CountRiskResultsByProjectAndPolicy :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+WHERE rr.project_id = $1
+  AND rr.risk_policy_id = $2
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+`
+
+type CountRiskResultsByProjectAndPolicyParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
+// disabled policy still counts its historical findings, only deleted policies
+// are excluded.
+func (q *Queries) CountRiskResultsByProjectAndPolicy(ctx context.Context, arg CountRiskResultsByProjectAndPolicyParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countTotalMessages = `-- name: CountTotalMessages :one
 SELECT COUNT(*)::BIGINT
 FROM chat_messages cm
@@ -1225,6 +1249,46 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const getRiskResultByID = `-- name: GetRiskResultByID :one
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = $1
+  AND rr.project_id = $2
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskResultByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetRiskResultByIDRow struct {
+	ID     uuid.UUID
+	Match  pgtype.Text
+	Source string
+	ChatID uuid.UUID
+}
+
+// Single-row lookup backing risk.results.unmask: fetch a result's raw match
+// plus its owning chat_id so the caller can authorize a chat:read check
+// before returning the plaintext. Applies the same found/excluded/
+// false-positive filters as every other risk_results read so a stale result
+// id (excluded or swept as noise since it was listed) can't be unmasked.
+func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDParams) (GetRiskResultByIDRow, error) {
+	row := q.db.QueryRow(ctx, getRiskResultByID, arg.ID, arg.ProjectID)
+	var i GetRiskResultByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Match,
+		&i.Source,
+		&i.ChatID,
+	)
+	return i, err
 }
 
 const getToolCallBlock = `-- name: GetToolCallBlock :one
@@ -2170,7 +2234,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -2227,6 +2291,11 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	BlockID             uuid.UUID
 }
 
+// Unlike the other list queries, this does NOT require the policy to be
+// enabled. When the user explicitly filters to a specific policy we surface its
+// historical findings even after it has been turned off, so disabled policies
+// still show the matches they produced while active. Deleted policies remain
+// excluded. The frontend flags the inactive policy as historical data.
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
@@ -2871,6 +2940,28 @@ func (q *Queries) ReverseExclusionFlagsBatch(ctx context.Context, arg ReverseExc
 		return nil, err
 	}
 	return items, nil
+}
+
+const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultExcludedForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultExcludedForTest, id)
+	return err
+}
+
+const setRiskResultFalsePositiveForTest = `-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
+	return err
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one

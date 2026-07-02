@@ -35,6 +35,7 @@ const (
 	subjectTypeVariation                subjectType = "variation"
 	subjectTypeRiskPolicy               subjectType = "risk_policy"
 	subjectTypeRiskExclusion            subjectType = "risk_exclusion"
+	subjectTypeRiskResult               subjectType = "risk_result"
 	subjectTypeShadowMCPAccessRule      subjectType = "shadow_mcp_access_rule"
 	subjectTypeShadowMCPApprovalRequest subjectType = "shadow_mcp_approval_request"
 	subjectTypeAccessChallenge          subjectType = "access_challenge"

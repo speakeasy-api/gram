@@ -1,11 +1,15 @@
 import { GramLogo } from "@/components/gram-logo/index";
+import { toError } from "@/lib/errors";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 
 interface FullPageErrorProps {
-  error: Error;
+  error: unknown;
 }
 
-export function FullPageError({ error }: FullPageErrorProps): JSX.Element {
+export function FullPageError({
+  error: rawError,
+}: FullPageErrorProps): JSX.Element {
+  const error = toError(rawError);
   return (
     <main className="bg-background flex min-h-screen items-center justify-center p-8">
       <Stack gap={6} align="center" className="max-w-md text-center">

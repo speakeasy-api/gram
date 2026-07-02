@@ -114,6 +114,11 @@ linters:
         linters:
           - glint
         text: enforceo11yconventions
+      # sloglint's constant key linter does not recognise the use of constants with type `attribute.Key` from `go.opentelemetry.io/otel/attribute`.
+      - path: internal/attr/conventions\.go
+        linters:
+          - sloglint
+        text: key should be a constant
       # This is forwarding log events from within pgx library that we have no control over.
       - path: internal/o11y/slog\.go
         linters:
@@ -191,6 +196,8 @@ linters:
               # are migrated to `.LogWarn` / `.LogInfo`. An empty list reports
               # nothing, so the rule stays silent until a code is enabled here.
               codes: []
+            rpc-endpoint-format:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -403,6 +410,7 @@ linters:
         - "fmt.Errorf("
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
+        - "(*golang.org/x/sync/singleflight.Group).Do("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithCause("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
@@ -417,6 +425,7 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("

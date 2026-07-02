@@ -92,6 +92,7 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
   return {
     id,
     projectId: "project-1",
+    organizationId: "org-1",
     remoteSessionIssuerId: "rsi-1",
     userSessionIssuerIds: ["usi-1"],
     clientId: "client-id",

@@ -825,9 +825,14 @@ export function InsightsProvider({
       // History, the conversation list, and titles come from the chat service
       // via Elements' thread-list adapter, scoped to this assistant's chats. The
       // assistant mints chat ids server-side, so defer client-side id minting.
+      // Exclude source_kind=setup so client-driven onboarding threads for this
+      // (managed) assistant never surface in the runtime AI Insights history.
       history: {
         enabled: true,
-        threadListFilters: { assistant_id: managedAssistantId },
+        threadListFilters: {
+          assistant_id: managedAssistantId,
+          exclude_source_kind: "setup",
+        },
         deferThreadIdMinting: true,
         // The runtime persists each turn with a backend `<message-context>`
         // framing block (needed for replay, noise for display). Strip it — and

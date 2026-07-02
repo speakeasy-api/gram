@@ -1,11 +1,11 @@
 # Standalone Functions
 
 > [!NOTE]
-> This section is useful if you are using a bundler and targetting browsers and
+> This section is useful if you are using a bundler and targeting browsers and
 > runtimes where the size of an application affects performance and load times. 
 
 Every method in this SDK is also available as a standalone function. This
-alternative API is suitable when targetting the browser or serverless runtimes
+alternative API is suitable when targeting the browser or serverless runtimes
 and using a bundler to build your application since all unused functionality
 will be tree-shaken away. This includes code for unused methods, Zod schemas,
 encoding helpers and response handlers. The result is dramatically smaller
@@ -20,29 +20,27 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { accessCreateRole } from "@gram/client/funcs/accessCreateRole.js";
+import { accessApproveShadowMCPApprovalRequest } from "@gram/client/funcs/accessApproveShadowMCPApprovalRequest.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await accessCreateRole(gram, {
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
+  const res = await accessApproveShadowMCPApprovalRequest(gram, {
+    approveShadowMCPApprovalRequestForm: {
+      accessScope: "organization",
+      displayName: "Danny75",
+      id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+      matchBreadth: "full_url",
+      matchValue: "<value>",
     },
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("accessCreateRole failed:", res.error);
+    console.log("accessApproveShadowMCPApprovalRequest failed:", res.error);
   }
 }
 

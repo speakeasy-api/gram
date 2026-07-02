@@ -1,4 +1,4 @@
-FROM rust:1.96-bookworm@sha256:19817ead3289c8c631c73df281e18b59b172f6a31f4f563290f69cddd06c30e9 AS runner-builder
+FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
@@ -30,7 +30,7 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim@sha256:96e378d7e6531ac9a15ad505478fcc2e69f371b10f5cdf87857c4b8188404716 AS lightpanda
+FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
@@ -47,7 +47,7 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim@sha256:96e378d7e6531ac9a15ad505478fcc2e69f371b10f5cdf87857c4b8188404716
+FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

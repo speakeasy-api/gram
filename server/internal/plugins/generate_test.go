@@ -107,6 +107,57 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	}
 }
 
+func TestGenerateClaudePluginEmitsHumanDisplayName(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "MoonPay MCP Servers",
+			Slug:        "moonpay-mcp-servers",
+			Description: "MoonPay MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm-tools", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:     "MoonPay",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "hooks-key", // triggers the synthesized observability plugin
+	})
+	require.NoError(t, err)
+
+	// plugin.json: name stays the kebab slug (used for namespacing/lookup);
+	// displayName carries the human-friendly, correctly-cased name Claude shows.
+	var pluginMeta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["moonpay-mcp-servers/.claude-plugin/plugin.json"], &pluginMeta))
+	require.Equal(t, "moonpay-mcp-servers", pluginMeta.Name)
+	require.Equal(t, "MoonPay MCP Servers", pluginMeta.DisplayName)
+
+	// marketplace.json entry mirrors the same contract.
+	var manifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &manifest))
+
+	entries := make(map[string]marketplaceEntry, len(manifest.Plugins))
+	for _, e := range manifest.Plugins {
+		entries[e.Name] = e
+	}
+
+	feature, ok := entries["moonpay-mcp-servers"]
+	require.True(t, ok, "feature plugin missing from marketplace.json")
+	require.Equal(t, "MoonPay MCP Servers", feature.DisplayName)
+
+	// The synthesized observability plugin gets a human display name too.
+	obs, ok := entries["moonpay-observability"]
+	require.True(t, ok, "observability plugin missing from marketplace.json")
+	require.Equal(t, "MoonPay Observability", obs.DisplayName)
+
+	var obsMeta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["moonpay-observability/.claude-plugin/plugin.json"], &obsMeta))
+	require.Equal(t, "moonpay-observability", obsMeta.Name)
+	require.Equal(t, "MoonPay Observability", obsMeta.DisplayName)
+}
+
 func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{

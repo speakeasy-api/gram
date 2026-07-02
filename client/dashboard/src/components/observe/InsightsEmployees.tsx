@@ -1,3 +1,9 @@
+import { AccountRow } from "@/components/observe/account-display";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
@@ -18,6 +24,7 @@ import {
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import {
   defineFilters,
   useFilterState,
@@ -73,6 +80,12 @@ const EMPLOYEE_FILTERS = defineFilters([
     defaultPreset: "30d",
   },
   { id: "status", label: "Enrollment status", kind: "multiselect" },
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
   { id: "role", label: "Role", kind: "select" },
   { id: "user", label: "User", kind: "select" },
 ]);
@@ -170,6 +183,7 @@ export function InsightsEmployeesContent(): JSX.Element {
   // also holds when the view changes through the URL, e.g. back/forward nav.
   const effectiveRoleId = isUnattributedView ? null : selectedRoleId;
   const selectedUserId = values.user;
+  const selectedAccountType = values.account_type;
 
   const handleViewChange = useCallback(
     (next: EmployeeView) => {
@@ -254,6 +268,15 @@ export function InsightsEmployeesContent(): JSX.Element {
         return false;
       if (selectedUserId && item.id !== selectedUserId) return false;
       if (effectiveRoleId && item.role !== roleName) return false;
+      // Each filter matches employees holding at least one account of that type;
+      // an employee with both a team and a personal account shows under either.
+      if (selectedAccountType === "personal" && !item.hasPersonalAccount)
+        return false;
+      if (
+        selectedAccountType === "team" &&
+        !item.accounts.some((a) => a.accountType === "team")
+      )
+        return false;
       return true;
     });
   }, [
@@ -261,6 +284,7 @@ export function InsightsEmployeesContent(): JSX.Element {
     selectedStatuses,
     selectedUserId,
     effectiveRoleId,
+    selectedAccountType,
     roleNameById,
   ]);
 
@@ -279,6 +303,7 @@ export function InsightsEmployeesContent(): JSX.Element {
   const optionsById = useMemo<OptionsById>(
     () => ({
       status: STATUS_OPTIONS,
+      account_type: ACCOUNT_TYPE_OPTIONS,
       role: roles.map((role) => ({ value: role.id, label: role.name })),
       user: viewEmployees.map((item) => ({ value: item.id, label: item.name })),
     }),
@@ -517,6 +542,18 @@ function EmployeeTable({
         render: (item) => <StatusPill status={item.status} />,
       },
       {
+        key: "accounts",
+        header: "Accounts",
+        sortable: true,
+        sortLabel: "Accounts",
+        // Personal-holders first (ascending), then more accounts before fewer,
+        // so the rows worth a second look group at the top.
+        sortValue: (item) =>
+          (item.hasPersonalAccount ? 0 : 1_000_000) - item.accounts.length,
+        width: "1fr",
+        render: (item) => <AccountsCell employee={item} />,
+      },
+      {
         key: "tokenCount",
         header: "Token Count",
         sortable: true,
@@ -736,6 +773,49 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
     <Badge variant={meta.variant}>
       <Badge.Text>{meta.label}</Badge.Text>
     </Badge>
+  );
+}
+
+// Per-employee accounts cell: a clickable trigger summarizing the linked
+// accounts (count), opening a popover that lists every account with its email,
+// provider, and type. Robust to any number of accounts across providers.
+function AccountsCell({ employee }: { employee: Employee }) {
+  const { accounts } = employee;
+  if (accounts.length === 0) {
+    return <span className="text-muted-foreground/50 text-sm">—</span>;
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          // Don't let the row's navigate handler fire when opening the popover.
+          onClick={(e) => e.stopPropagation()}
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+        >
+          <span className="text-muted-foreground text-xs">
+            {accounts.length} account{accounts.length === 1 ? "" : "s"}
+          </span>
+          <Icon
+            name="chevron-down"
+            className="text-muted-foreground/60 size-3"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-xs font-medium">Linked accounts</p>
+        </div>
+        <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
+          {accounts.map((a, i) => (
+            <li key={`${a.provider}:${a.email}:${i}`} className="px-3 py-2">
+              <AccountRow account={a} />
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

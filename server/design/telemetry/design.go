@@ -919,6 +919,8 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code').")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id (the per-account discriminator); scopes results to that one account.")
 
 	Required("from", "to")
 })
@@ -1018,6 +1020,17 @@ var UserSummaryType = Type("UserSummary", func() {
 	Attribute("tools", ArrayOf(ToolUsage), "Per-tool usage breakdown")
 	Attribute("hook_sources", ArrayOf(HookSourceUsage), "Per-hook-source usage breakdown")
 
+	// Distinct AI account types observed for this user in the window ('team',
+	// 'personal'). Lets the employees list flag who is also driving
+	// personal-account usage. Empty for older telemetry without the dimension.
+	Attribute("account_types", ArrayOf(String), "Distinct account types observed for this user ('team', 'personal')")
+
+	// Registered AI accounts for this user from the user_accounts directory
+	// (identity, not windowed telemetry). Each (provider, email) is a distinct
+	// account, so a user can hold several across providers. Drives the per-user
+	// accounts breakdown on the employees list.
+	Attribute("accounts", ArrayOf(UserAccountType), "Linked AI accounts for this user (team and personal, across providers)")
+
 	Required(
 		"user_id",
 		"user_email",
@@ -1097,6 +1110,19 @@ var HookSourceUsage = Type("HookSourceUsage", func() {
 	Attribute("event_count", Int64, "Total hook events for this source")
 
 	Required("source", "event_count")
+})
+
+var UserAccountType = Type("UserAccount", func() {
+	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
+
+	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
+	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
+	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
+	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
+	Attribute("external_org_id", String, "Provider org id for this account; the per-account discriminator used to scope telemetry to this one account")
+	Attribute("last_seen_unix_nano", String, "Latest activity timestamp for this account in Unix nanoseconds")
+
+	Required("provider")
 })
 
 var ProjectSummaryType = Type("ProjectSummary", func() {
@@ -1218,6 +1244,8 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 	Attribute("external_user_id", String, "External user ID to get metrics for (mutually exclusive with user_id)")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes metrics to that one account")
 
 	Required("from", "to")
 })
@@ -1245,6 +1273,8 @@ var GetEmployeeDataFlowGraphPayload = Type("GetEmployeeDataFlowGraphPayload", fu
 	})
 	Attribute("user_id", String, "User ID to get the graph for (mutually exclusive with external_user_id)")
 	Attribute("external_user_id", String, "External user ID to get the graph for (mutually exclusive with user_id)")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the graph to that one account")
 
 	Required("from", "to")
 })
@@ -1301,7 +1331,15 @@ var queryDimensions = []any{
 	"cost_center_name",
 	"email",
 	"model",
-	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
+	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type", // AI account classification (team | personal | unclassified)
+	"provider",     // AI provider for the account (anthropic | openai | cursor)
+	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",
@@ -1448,6 +1486,8 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the overview to that one account")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -1808,6 +1848,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
 
 	Required("from", "to")
 })
@@ -1842,6 +1883,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")
@@ -1891,6 +1933,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 		Enum("success", "failure", "blocked", "pending")
 	})
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
+	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 
 	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
 })

@@ -4884,11 +4884,13 @@ func unmarshalChatSummaryResponseBodyToTelemetryChatSummary(v *ChatSummaryRespon
 // *telemetry.SearchUsersFilter.
 func marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(v *telemetry.SearchUsersFilter) *SearchUsersFilterRequestBody {
 	res := &SearchUsersFilterRequestBody{
-		From:         v.From,
-		To:           v.To,
-		DeploymentID: v.DeploymentID,
-		EventSource:  v.EventSource,
-		HookSource:   v.HookSource,
+		From:          v.From,
+		To:            v.To,
+		DeploymentID:  v.DeploymentID,
+		EventSource:   v.EventSource,
+		HookSource:    v.HookSource,
+		AccountType:   v.AccountType,
+		ExternalOrgID: v.ExternalOrgID,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))
@@ -4905,11 +4907,13 @@ func marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(v *telemetr
 // *SearchUsersFilterRequestBody.
 func marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUsersFilterRequestBody) *telemetry.SearchUsersFilter {
 	res := &telemetry.SearchUsersFilter{
-		From:         v.From,
-		To:           v.To,
-		DeploymentID: v.DeploymentID,
-		EventSource:  v.EventSource,
-		HookSource:   v.HookSource,
+		From:          v.From,
+		To:            v.To,
+		DeploymentID:  v.DeploymentID,
+		EventSource:   v.EventSource,
+		HookSource:    v.HookSource,
+		AccountType:   v.AccountType,
+		ExternalOrgID: v.ExternalOrgID,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))
@@ -4958,6 +4962,22 @@ func unmarshalUserSummaryResponseBodyToTelemetryUserSummary(v *UserSummaryRespon
 		}
 		res.HookSources[i] = unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage(val)
 	}
+	if v.AccountTypes != nil {
+		res.AccountTypes = make([]string, len(v.AccountTypes))
+		for i, val := range v.AccountTypes {
+			res.AccountTypes[i] = val
+		}
+	}
+	if v.Accounts != nil {
+		res.Accounts = make([]*telemetry.UserAccount, len(v.Accounts))
+		for i, val := range v.Accounts {
+			if val == nil {
+				res.Accounts[i] = nil
+				continue
+			}
+			res.Accounts[i] = unmarshalUserAccountResponseBodyToTelemetryUserAccount(val)
+		}
+	}
 
 	return res
 }
@@ -4982,6 +5002,24 @@ func unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage(v *HookSourc
 	res := &telemetry.HookSourceUsage{
 		Source:     *v.Source,
 		EventCount: *v.EventCount,
+	}
+
+	return res
+}
+
+// unmarshalUserAccountResponseBodyToTelemetryUserAccount builds a value of
+// type *telemetry.UserAccount from a value of type *UserAccountResponseBody.
+func unmarshalUserAccountResponseBodyToTelemetryUserAccount(v *UserAccountResponseBody) *telemetry.UserAccount {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.UserAccount{
+		ID:               v.ID,
+		Provider:         *v.Provider,
+		Email:            v.Email,
+		AccountType:      v.AccountType,
+		ExternalOrgID:    v.ExternalOrgID,
+		LastSeenUnixNano: v.LastSeenUnixNano,
 	}
 
 	return res
@@ -5668,6 +5706,7 @@ func unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary(
 		HTTPStatusCode:    v.HTTPStatusCode,
 		HookStatus:        v.HookStatus,
 		BlockReason:       v.BlockReason,
+		AccountType:       v.AccountType,
 	}
 	res.LogGroup = unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGroup(v.LogGroup)
 

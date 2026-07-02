@@ -227,6 +227,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	search := conv.PtrValOr(payload.Search, "")
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
+	sourceKind := conv.PtrValOr(payload.SourceKind, "")
+	excludeSourceKind := conv.PtrValOr(payload.ExcludeSourceKind, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 	// -1 is the "no threshold" sentinel: the queries short-circuit to "show all"
 	// on a negative bound. A real bound N keeps chats with at least N findings
@@ -246,17 +248,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	baseParams := repo.CountChatsParams{
-		ProjectID:      *authCtx.ProjectID,
-		ExternalUserID: externalUserID,
-		UserID:         userID,
-		FromTime:       fromTime,
-		ToTime:         toTime,
-		Search:         search,
-		AssistantID:    assistantID,
-		HasRiskFilter:  hasRiskFilter,
-		MinRiskScore:   minRiskScore,
-		Pinned:         conv.PtrValOr(payload.Pinned, ""),
-		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
+		ProjectID:         *authCtx.ProjectID,
+		ExternalUserID:    externalUserID,
+		UserID:            userID,
+		FromTime:          fromTime,
+		ToTime:            toTime,
+		Search:            search,
+		AssistantID:       assistantID,
+		SourceKind:        sourceKind,
+		ExcludeSourceKind: excludeSourceKind,
+		HasRiskFilter:     hasRiskFilter,
+		MinRiskScore:      minRiskScore,
+		Pinned:            conv.PtrValOr(payload.Pinned, ""),
+		Sources:           parseSourceFilter(conv.PtrValOr(payload.Source, "")),
+		AccountType:       conv.PtrValOr(payload.AccountType, ""),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -265,21 +270,24 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
-		ProjectID:      baseParams.ProjectID,
-		ExternalUserID: baseParams.ExternalUserID,
-		UserID:         baseParams.UserID,
-		FromTime:       baseParams.FromTime,
-		ToTime:         baseParams.ToTime,
-		Search:         baseParams.Search,
-		AssistantID:    baseParams.AssistantID,
-		HasRiskFilter:  baseParams.HasRiskFilter,
-		MinRiskScore:   baseParams.MinRiskScore,
-		Pinned:         baseParams.Pinned,
-		Sources:        baseParams.Sources,
-		SortBy:         payload.SortBy,
-		SortOrder:      payload.SortOrder,
-		PageLimit:      conv.SafeInt32(payload.Limit),
-		PageOffset:     conv.SafeInt32(payload.Offset),
+		ProjectID:         baseParams.ProjectID,
+		ExternalUserID:    baseParams.ExternalUserID,
+		UserID:            baseParams.UserID,
+		FromTime:          baseParams.FromTime,
+		ToTime:            baseParams.ToTime,
+		Search:            baseParams.Search,
+		AssistantID:       baseParams.AssistantID,
+		SourceKind:        baseParams.SourceKind,
+		ExcludeSourceKind: baseParams.ExcludeSourceKind,
+		HasRiskFilter:     baseParams.HasRiskFilter,
+		MinRiskScore:      baseParams.MinRiskScore,
+		Pinned:            baseParams.Pinned,
+		Sources:           baseParams.Sources,
+		AccountType:       baseParams.AccountType,
+		SortBy:            payload.SortBy,
+		SortOrder:         payload.SortOrder,
+		PageLimit:         conv.SafeInt32(payload.Limit),
+		PageOffset:        conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
@@ -303,6 +311,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
 			RiskFindingsCount:    &riskCount,
+			AccountType:          conv.PtrEmpty(row.AccountType),
 			TotalInputTokens:     nil,
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
@@ -320,7 +329,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 // logChatAccess records an audit entry that a dashboard user opened a chat
 // session transcript. It is written with the pool directly (no surrounding
 // transaction) because it describes a read, not a mutation.
-func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.Chat) error {
+func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
 	if err := s.audit.LogChatSessionAccess(ctx, s.db, audit.LogChatSessionAccessEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        chat.ProjectID,
@@ -359,18 +368,20 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
 	}
 
-	sources := make([]string, 0, len(rows))
+	raws := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if row.Valid {
-			sources = append(sources, row.String)
+			raws = append(raws, row.String)
 		}
 	}
 
-	return &gen.ListSourcesResult{Sources: sources}, nil
+	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
 // parseSourceFilter splits the comma-separated `source` filter into the list of
-// exact source strings matched against each chat's inferred source. It always
+// source strings matched against each chat's inferred source. Selected values
+// are canonical (as returned by ListSources), so each is expanded back into its
+// raw aliases to also match sessions recorded under a legacy value. It always
 // returns a non-nil slice so the no-filter case sends an empty text[]
 // (cardinality 0 disables the filter) rather than SQL NULL, which would drop
 // every row.
@@ -388,7 +399,7 @@ func parseSourceFilter(source string) []string {
 		seen[s] = struct{}{}
 		sources = append(sources, s)
 	}
-	return sources
+	return expandSourceAliases(sources)
 }
 
 // chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
@@ -449,6 +460,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// A Speakeasy admin impersonating an org via the dev-tools override holds
+	// every scope (see authz.Engine), so RBAC cannot stop them — block
+	// transcript access explicitly before any session data is read.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
 	}
 
 	chatID, err := uuid.Parse(payload.ID)
@@ -771,6 +789,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
+		AccountType:          conv.PtrEmpty(chat.AccountType),
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
@@ -903,6 +922,70 @@ func (s *Service) classifyCompletionError(ctx context.Context, label string, err
 	}
 }
 
+// linkSetupAssistantThread links a client-driven setup/onboarding chat to its
+// assistant by upserting an assistant_threads row, so the chat becomes listable
+// via chat.list?assistant_id= and URL-addressable like runtime assistant
+// threads. It only fires for the assistant source once an assistant id is
+// present (the assistant may not exist yet on the first onboarding turns, in
+// which case the header is empty and this is a no-op). The row uses
+// source_kind="setup" and correlation_id=chat id; the assistant_threads FK on
+// assistant_id means this only succeeds once the assistant exists.
+//
+// Best-effort: linking is idempotent and independent of the completion, so any
+// failure is logged and swallowed rather than failing the user's turn. The
+// chats row itself is owner-stamped (user_id) by the capture strategy's
+// UpsertChat, so the linked thread surfaces under the owning user's scope in
+// chat.list.
+func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.UUID, chatID uuid.UUID, source, assistantIDHeader string) {
+	if source != "assistant" || assistantIDHeader == "" || chatID == uuid.Nil || projectID == nil {
+		return
+	}
+
+	assistantID, err := uuid.Parse(assistantIDHeader)
+	if err != nil {
+		s.logger.WarnContext(ctx, "invalid assistant id header on setup completion; skipping thread link",
+			attr.SlogError(err))
+		return
+	}
+
+	// Resolve the assistant scoped to the caller's project before linking. The
+	// assistant id arrives on a client-trustable header, and the
+	// assistant_threads FK only proves the assistant exists *somewhere* — not
+	// that it belongs to this project. Skipping the link for a foreign (or
+	// not-yet-provisioned) assistant keeps us from stamping a cross-project
+	// assistant_threads row. Best-effort: any lookup failure just skips the link
+	// and never fails the user's turn.
+	exists, err := s.repo.AssistantExistsInProject(ctx, repo.AssistantExistsInProjectParams{
+		AssistantID: assistantID,
+		ProjectID:   *projectID,
+	})
+	if err != nil {
+		s.logger.DebugContext(ctx, "failed to verify assistant ownership for setup thread link; skipping",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogError(err))
+		return
+	}
+	if !exists {
+		s.logger.DebugContext(ctx, "assistant not found in caller project; skipping setup thread link",
+			attr.SlogChatID(chatID.String()))
+		return
+	}
+
+	if _, err := s.repo.UpsertSetupAssistantThread(ctx, repo.UpsertSetupAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     *projectID,
+		CorrelationID: chatID.String(),
+		ChatID:        chatID,
+	}); err != nil {
+		// A missing assistant (FK violation) is expected until the assistant is
+		// provisioned; log at debug so it doesn't spam. Everything else is a
+		// warning. Either way the completion proceeds.
+		s.logger.DebugContext(ctx, "failed to link setup assistant thread",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogError(err))
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
@@ -1010,6 +1093,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// Setup/onboarding chats come from the dashboard with X-Gram-Source:
+	// assistant + Gram-Chat-ID and, once the assistant exists, a
+	// Gram-Assistant-ID. We link the chat to the assistant AFTER the completion
+	// runs (see linkSetupAssistantThread calls below), because the capture
+	// strategy's UpsertChat — which creates the chats row that
+	// assistant_threads.chat_id FK-references — runs inside the completion. The
+	// linking is idempotent (safe to fire on every completion for the chat) and
+	// best-effort (a failure must not fail the user's turn).
+	assistantIDHeader := r.Header.Get(constants.HeaderAssistantID)
+
 	// Non-streaming: Use UnifiedClient
 	temp := float64(chatRequest.Temperature)
 
@@ -1105,6 +1198,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 
+		// The chats row now exists (capture strategy upserted it), so linking is
+		// safe. Runs on the request context after the response is fully streamed.
+		s.linkSetupAssistantThread(ctx, authCtx.ProjectID, chatID, metadata.Source, assistantIDHeader)
+
 		eventProperties["success"] = true
 		return nil
 	}
@@ -1146,6 +1243,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if err := json.NewEncoder(w).Encode(openAIResp); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode response").LogError(ctx, s.logger)
 	}
+
+	// The chats row now exists (capture strategy upserted it during the
+	// completion), so the assistant_threads.chat_id FK is satisfied.
+	s.linkSetupAssistantThread(ctx, authCtx.ProjectID, chatID, metadata.Source, assistantIDHeader)
 
 	eventProperties["success"] = true
 	return nil

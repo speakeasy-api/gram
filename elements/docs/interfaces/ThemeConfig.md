@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -25,7 +25,7 @@ const config: ElementsConfig = {
 
 ### colorScheme?
 
-> `optional` **colorScheme**: `"system"` \| `"light"` \| `"dark"`
+> `optional` **colorScheme?**: `"system"` \| `"light"` \| `"dark"`
 
 The color scheme to use for the UI.
 
@@ -39,7 +39,7 @@ The color scheme to use for the UI.
 
 ### density?
 
-> `optional` **density**: `"compact"` \| `"normal"` \| `"spacious"`
+> `optional` **density?**: `"compact"` \| `"normal"` \| `"spacious"`
 
 Determines the overall spacing of the UI.
 - `compact`: Reduced padding and margins for dense layouts
@@ -56,7 +56,7 @@ Determines the overall spacing of the UI.
 
 ### radius?
 
-> `optional` **radius**: `"round"` \| `"soft"` \| `"sharp"`
+> `optional` **radius?**: `"round"` \| `"soft"` \| `"sharp"`
 
 Determines the overall roundness of the UI.
 - `round`: Large border radius
@@ -73,7 +73,7 @@ Determines the overall roundness of the UI.
 
 ### customCss?
 
-> `optional` **customCss**: `string`
+> `optional` **customCss?**: `string`
 
 Extra CSS injected into the Elements shadow root after the built-in
 stylesheet. Elements renders inside a shadow DOM, so host-page styles

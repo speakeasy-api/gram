@@ -109,8 +109,9 @@ type CreateClientRequestBody struct {
 	// organization.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -136,8 +137,9 @@ type CreateCimdClientRequestBody struct {
 	// organization and advertise client_id_metadata_document_supported.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
@@ -393,8 +395,10 @@ type ListClientsResponseBody struct {
 type GetClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -455,8 +459,10 @@ type ListClientSessionsResponseBody struct {
 type CreateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -491,8 +497,10 @@ type CreateClientResponseBody struct {
 type CreateCimdClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -527,8 +535,10 @@ type CreateCimdClientResponseBody struct {
 type UpdateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -4467,8 +4477,10 @@ type OrganizationRemoteSessionClientResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -4805,6 +4817,7 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 	body := &GetClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -4899,6 +4912,7 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 	body := &CreateClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -4933,6 +4947,7 @@ func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimd
 	body := &CreateCimdClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -4967,6 +4982,7 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 	body := &UpdateClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,

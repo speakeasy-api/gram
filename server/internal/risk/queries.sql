@@ -341,6 +341,17 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
 
+-- name: CountRiskResultsByProjectAndPolicy :one
+-- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
+-- disabled policy still counts its historical findings, only deleted policies
+-- are excluded.
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+WHERE rr.project_id = @project_id
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+
 -- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
@@ -706,6 +717,21 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
+-- name: GetRiskResultByID :one
+-- Single-row lookup backing risk.results.unmask: fetch a result's raw match
+-- plus its owning chat_id so the caller can authorize a chat:read check
+-- before returning the plaintext. Applies the same found/excluded/
+-- false-positive filters as every other risk_results read so a stale result
+-- id (excluded or swept as noise since it was listed) can't be unmasked.
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = @id
+  AND rr.project_id = @project_id
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL;
+
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
 -- rr.created_at (the scan time). The background drain workflow analyzes
@@ -818,11 +844,16 @@ ORDER BY sub.message_created_at DESC, sub.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
+-- Unlike the other list queries, this does NOT require the policy to be
+-- enabled. When the user explicitly filters to a specific policy we surface its
+-- historical findings even after it has been turned off, so disabled policies
+-- still show the matches they produced while active. Deleted policies remain
+-- excluded. The frontend flags the inactive policy as historical data.
 SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -1180,3 +1211,13 @@ RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.rea
   tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
+
+-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = @id;

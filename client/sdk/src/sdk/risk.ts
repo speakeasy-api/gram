@@ -22,14 +22,14 @@ export class Risk extends ClientSDK {
     ));
   }
 
-  private _categories?: Categories;
-  get categories(): Categories {
-    return (this._categories ??= new Categories(this._options));
-  }
-
   private _expr?: Expr;
   get expr(): Expr {
     return (this._expr ??= new Expr(this._options));
+  }
+
+  private _customRules?: CustomRules;
+  get customRules(): CustomRules {
+    return (this._customRules ??= new CustomRules(this._options));
   }
 
   private _exclusions?: Exclusions;
@@ -37,9 +37,9 @@ export class Risk extends ClientSDK {
     return (this._exclusions ??= new Exclusions(this._options));
   }
 
-  private _customRules?: CustomRules;
-  get customRules(): CustomRules {
-    return (this._customRules ??= new CustomRules(this._options));
+  private _policies?: Policies;
+  get policies(): Policies {
+    return (this._policies ??= new Policies(this._options));
   }
 
   private _blocks?: Blocks;
@@ -52,9 +52,9 @@ export class Risk extends ClientSDK {
     return (this._overview ??= new Overview(this._options));
   }
 
-  private _policies?: Policies;
-  get policies(): Policies {
-    return (this._policies ??= new Policies(this._options));
+  private _categories?: Categories;
+  get categories(): Categories {
+    return (this._categories ??= new Categories(this._options));
   }
 
   private _results?: Results;

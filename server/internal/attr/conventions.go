@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 )
 
 type Key = attribute.Key
@@ -108,8 +108,16 @@ const (
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
 	SubscriberBatchSizeKey   = attribute.Key("gram.subscriber.batch_size")
 
-	AssetIDKey                     = attribute.Key("gram.asset.id")
-	AssetURLKey                    = attribute.Key("gram.asset.url")
+	AssetIDKey  = attribute.Key("gram.asset.id")
+	AssetURLKey = attribute.Key("gram.asset.url")
+	// Personal-account tracking. These are stamped by hook/OTEL ingest and
+	// materialized into ClickHouse columns of the same suffix (provider,
+	// external_org_id, account_type) for org-level usage dashboards.
+	ProviderKey                    = attribute.Key("gram.provider")
+	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
+	AccountTypeKey                 = attribute.Key("gram.account_type")
+	BillingModeKey                 = attribute.Key("gram.billing_mode")
+	DeviceIDKey                    = attribute.Key("gram.device_id")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
@@ -205,10 +213,13 @@ const (
 	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
 	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
 	// as a metric dimension on oauth.flow.failed and in failure logs.
-	OAuthFlowStageKey                 = attribute.Key("gram.oauth.flow_stage")
-	OAuthGrantKey                     = attribute.Key("gram.oauth.grant")
-	OAuthIssuerKey                    = attribute.Key("gram.oauth.issuer")
-	OAuthPresentedAuthMethodKey       = attribute.Key("gram.oauth.presented_auth_method")
+	OAuthFlowStageKey           = attribute.Key("gram.oauth.flow_stage")
+	OAuthGrantKey               = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey              = attribute.Key("gram.oauth.issuer")
+	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
+	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
+	// upstream authorization server during the remote-session dance.
+	OAuthResourceKey                  = attribute.Key("gram.oauth.resource")
 	OAuthProviderKey                  = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURICountKey          = attribute.Key("gram.oauth.redirect_uri.count")
 	OAuthRedirectURIFullKey           = attribute.Key("gram.oauth.redirect_uri.full")
@@ -269,6 +280,8 @@ const (
 	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                   = attribute.Key("gram.risk.policy_id")
 	RiskPolicyNameKey                 = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey                 = attribute.Key("gram.risk.policy_type")
+	RiskMessageTypeKey                = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                     = attribute.Key("gram.risk.rule_id")
 	RiskSourceKey                     = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey                = attribute.Key("gram.risk.scan.attempt")
@@ -909,6 +922,9 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
 
+func OAuthResource(v string) attribute.KeyValue { return OAuthResourceKey.String(v) }
+func SlogOAuthResource(v string) slog.Attr      { return slog.String(string(OAuthResourceKey), v) }
+
 func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
 func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }
 
@@ -1234,6 +1250,12 @@ func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskP
 
 func RiskPolicyName(v string) attribute.KeyValue { return RiskPolicyNameKey.String(v) }
 func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(RiskPolicyNameKey), v) }
+
+func RiskPolicyType(v string) attribute.KeyValue { return RiskPolicyTypeKey.String(v) }
+func SlogRiskPolicyType(v string) slog.Attr      { return slog.String(string(RiskPolicyTypeKey), v) }
+
+func RiskMessageType(v string) attribute.KeyValue { return RiskMessageTypeKey.String(v) }
+func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(RiskMessageTypeKey), v) }
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }

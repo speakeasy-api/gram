@@ -178,7 +178,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretPost(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, externalCID := setupRefreshFixture(t, "client_secret_post", clientSecret, &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject)
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -194,7 +194,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, _ := setupRefreshFixture(t, "client_secret_basic", "basic-secret", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject)
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

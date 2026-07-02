@@ -238,6 +238,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		OrganizationID: metadata.GramOrgID,
 		UserID:         conv.ToPGTextEmpty(metadata.UserID),
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(defaultTitle),
 	})
 	if upsertErr != nil {

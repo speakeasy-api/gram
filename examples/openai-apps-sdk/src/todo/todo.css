@@ -352,8 +352,8 @@ h2.react-datepicker__current-month {
   cursor: pointer;
 }
 .react-datepicker__week-number.react-datepicker__week-number--clickable:not(
-    .react-datepicker__week-number--selected
-  ):hover {
+  .react-datepicker__week-number--selected
+):hover {
   border-radius: 0.3rem;
   background-color: #f0f0f0;
 }
@@ -493,18 +493,18 @@ h2.react-datepicker__current-month {
 .react-datepicker__day--in-range:not([aria-disabled="true"]):hover,
 .react-datepicker__month-text--selected:not([aria-disabled="true"]):hover,
 .react-datepicker__month-text--in-selecting-range:not(
-    [aria-disabled="true"]
-  ):hover,
+  [aria-disabled="true"]
+):hover,
 .react-datepicker__month-text--in-range:not([aria-disabled="true"]):hover,
 .react-datepicker__quarter-text--selected:not([aria-disabled="true"]):hover,
 .react-datepicker__quarter-text--in-selecting-range:not(
-    [aria-disabled="true"]
-  ):hover,
+  [aria-disabled="true"]
+):hover,
 .react-datepicker__quarter-text--in-range:not([aria-disabled="true"]):hover,
 .react-datepicker__year-text--selected:not([aria-disabled="true"]):hover,
 .react-datepicker__year-text--in-selecting-range:not(
-    [aria-disabled="true"]
-  ):hover,
+  [aria-disabled="true"]
+):hover,
 .react-datepicker__year-text--in-range:not([aria-disabled="true"]):hover {
   background-color: rgb(28.75, 93.2196969697, 143.75);
 }
@@ -518,14 +518,14 @@ h2.react-datepicker__current-month {
 }
 .react-datepicker__day--keyboard-selected:not([aria-disabled="true"]):hover,
 .react-datepicker__month-text--keyboard-selected:not(
-    [aria-disabled="true"]
-  ):hover,
+  [aria-disabled="true"]
+):hover,
 .react-datepicker__quarter-text--keyboard-selected:not(
-    [aria-disabled="true"]
-  ):hover,
+  [aria-disabled="true"]
+):hover,
 .react-datepicker__year-text--keyboard-selected:not(
-    [aria-disabled="true"]
-  ):hover {
+  [aria-disabled="true"]
+):hover {
   background-color: rgb(28.75, 93.2196969697, 143.75);
 }
 .react-datepicker__day--in-selecting-range:not(

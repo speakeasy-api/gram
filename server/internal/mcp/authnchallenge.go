@@ -334,7 +334,7 @@ func (s *Service) ApplyIssuerGate(
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
 	var upstreamTokens map[uuid.UUID]string
 	if subject != nil {
-		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
 			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")

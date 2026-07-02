@@ -902,21 +902,26 @@ func TestCreateClient_ProjectSpecificIssuerInheritsProject(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-// TestCreateClient_OrganizationalIssuerRequiresProject rejects a standalone
-// client under an organization-level issuer when no project is named: a
-// remote_session_client must be project-scoped, and there is no project to
-// inherit.
-func TestCreateClient_OrganizationalIssuerRequiresProject(t *testing.T) {
+// TestCreateClient_OrganizationalIssuerNoProjectCreatesOrgLevel creates an
+// organization-level client (no project, attachable by every project in the
+// org) when no project is named under an organization-level issuer, mirroring
+// how an omitted project_id makes createIssuer organization-level.
+func TestCreateClient_OrganizationalIssuerNoProjectCreatesOrgLevel(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
 	orgIssuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-cc-org-issuer", nil))
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateClient(ctx, newCreateClientPayload(orgIssuer.ID, nil, nil))
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeBadRequest)
+	created, err := ti.service.CreateClient(ctx, newCreateClientPayload(orgIssuer.ID, nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, created.ProjectID, "organization-level client has no project")
+	require.Equal(t, authCtx.ActiveOrganizationID, created.OrganizationID)
+	require.Equal(t, orgIssuer.ID, created.RemoteSessionIssuerID)
 }
 
 // TestCreateClient_OrganizationalIssuerDownscope creates a standalone client

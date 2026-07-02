@@ -305,9 +305,22 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ServiceName: "Codex",
 		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
 		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+		Provider:    providerOpenAI,
+		// Account-scope attribution (external org/account identity, account
+		// type, billing mode) is wired only for Anthropic sessions today. The
+		// Codex payload carries no account identity for attributeSession to
+		// key on, and ai_integration_configs has no "openai" provider to
+		// declare an org-level billing mode, so these fields stay empty and
+		// cost surfaces treat Codex spend as unclassified (an estimate).
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
 
 	if metadata.SessionID != "" {
@@ -378,6 +391,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
+		attr.ProviderKey:       providerOpenAI,
 	}
 
 	if payload.Model != nil && *payload.Model != "" {

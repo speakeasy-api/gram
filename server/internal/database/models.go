@@ -35,6 +35,7 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
 }
@@ -244,6 +245,26 @@ type AuthzChallengeResolution struct {
 	// URN of the admin who resolved the challenge.
 	ResolvedBy string
 	CreatedAt  pgtype.Timestamptz
+}
+
+type AwsIamCredential struct {
+	ExternalCredentialID        uuid.UUID
+	ExternalCredentialsProvider string
+	AssumeRoleArn               pgtype.Text
+	ExternalID                  pgtype.Text
+	OidcAudience                pgtype.Text
+	OidcSubject                 pgtype.Text
+	StsRegion                   pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
+type AwsKmsKey struct {
+	ExternalKeyID        uuid.UUID
+	ExternalKeysProvider string
+	KeyArn               string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type BillingMetadatum struct {
@@ -521,6 +542,33 @@ type EnvironmentEntry struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type ExternalCredential struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	Provider       string
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type ExternalKey struct {
+	ID                     uuid.UUID
+	OrganizationID         pgtype.Text
+	ProjectID              uuid.NullUUID
+	ExternalCredentialID   uuid.UUID
+	Provider               string
+	Algorithm              string
+	Name                   string
+	CustomerGrantReference pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type ExternalMcpAttachment struct {
 	ID                                  uuid.UUID
 	DeploymentID                        uuid.UUID
@@ -666,6 +714,25 @@ type FunctionsAccess struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type GcpIamCredential struct {
+	ExternalCredentialID        uuid.UUID
+	ExternalCredentialsProvider string
+	ImpersonateServiceAccount   pgtype.Text
+	WifPoolID                   pgtype.Text
+	WifProviderID               pgtype.Text
+	WifProjectNumber            pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
+type GcpKmsKey struct {
+	ExternalKeyID        uuid.UUID
+	ExternalKeysProvider string
+	ResourceName         string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type GlobalRole struct {
@@ -1420,6 +1487,16 @@ type RiskResult struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
+type SessionCaptureExclusion struct {
+	ID             int64
+	OrganizationID string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -1678,6 +1755,8 @@ type UserAccount struct {
 	ExternalAccountID   pgtype.Text
 	Email               pgtype.Text
 	AccountType         pgtype.Text
+	BillingMode         pgtype.Text
+	PlanType            pgtype.Text
 	FirstSeenAt         pgtype.Timestamptz
 	LastSeenAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz

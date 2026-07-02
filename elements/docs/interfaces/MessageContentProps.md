@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -19,7 +19,7 @@ Raw assistant message content (markdown text optionally containing
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Optional className applied to the root container.
 
@@ -27,7 +27,7 @@ Optional className applied to the root container.
 
 ### markdown?
 
-> `optional` **markdown**: `boolean`
+> `optional` **markdown?**: `boolean`
 
 Render plain-text segments as markdown (matching `<MarkdownText />`)
 instead of preformatted text. Fenced `chart`/`ui` blocks still render as

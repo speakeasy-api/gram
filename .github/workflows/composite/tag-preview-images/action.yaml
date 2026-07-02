@@ -1,0 +1,105 @@
+name: "Tag preview image"
+description: >
+  Gives one unchanged component its preview image tag. Preview environments
+  deploy images tagged pr-<number>-<8-char head sha>; components with changes
+  get that tag from their docker build jobs, and this action covers the rest
+  by aliasing the image of the newest main commit whose watched paths (from
+  .github/filters.yaml) match the PR merge commit. Must run after a
+  full-history checkout (fetch-depth: 0).
+
+inputs:
+  registry:
+    description: "Image registry, e.g. gcr.io/linen-analyst-344721"
+    required: true
+  image-owner:
+    description: "Image repository owner, e.g. speakeasy-api"
+    required: true
+  username:
+    description: "Username for the image registry"
+    required: true
+  password:
+    description: "Password for the image registry"
+    required: true
+  component:
+    description: "Image name to tag, e.g. gram"
+    required: true
+  filters:
+    description: "Space-separated .github/filters.yaml keys whose paths gate this component's builds"
+    required: true
+  preview-tag:
+    description: "Preview tag to create, e.g. pr-123-abcdef12"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Login to registry
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+      run: |
+        max_attempts=3
+        for ((i=1; i<=max_attempts; i++)); do
+          echo "Docker login attempt $i/$max_attempts..."
+          if docker login -u "$REGISTRY_USERNAME" --password-stdin "$REGISTRY" <<< "$REGISTRY_PASSWORD"; then
+            echo "Login successful"
+            exit 0
+          fi
+          if [ $i -lt $max_attempts ]; then
+            echo "Login failed, waiting 5s before retry..."
+            sleep 5
+          fi
+        done
+        echo "All login attempts failed"
+        exit 1
+
+    - name: Tag preview image
+      shell: bash
+      env:
+        REF: ${{ inputs.registry }}/${{ inputs.image-owner }}/${{ inputs.component }}
+        FILTERS: ${{ inputs.filters }}
+        PREVIEW_TAG: ${{ inputs.preview-tag }}
+      run: |
+        set -euo pipefail
+
+        image_exists() {
+          docker buildx imagetools inspect "$1" >/dev/null 2>&1
+        }
+
+        if image_exists "${REF}:${PREVIEW_TAG}"; then
+          echo "${REF}:${PREVIEW_TAG} already exists, nothing to do"
+          exit 0
+        fi
+
+        pathspecs=()
+        for filter in $FILTERS; do
+          while IFS= read -r path; do
+            pathspecs+=(":(glob)${path}")
+          done < <(yq -r ".${filter}[]" .github/filters.yaml)
+        done
+        # An empty pathspec list would make git diff compare the full tree and
+        # silently skip every candidate (e.g. yq missing or a bad filter key).
+        if [ "${#pathspecs[@]}" -eq 0 ]; then
+          echo "::error::No watched paths resolved from .github/filters.yaml for filters: ${FILTERS}"
+          exit 1
+        fi
+
+        # HEAD is the PR merge commit, so a main commit that only differs from
+        # it in unwatched paths produced a byte-identical component build.
+        for candidate in $(git rev-list --first-parent -n 50 origin/main); do
+          if ! git diff --quiet "$candidate" HEAD -- "${pathspecs[@]}"; then
+            continue
+          fi
+          if ! image_exists "${REF}:sha-${candidate}"; then
+            echo "No image for matching commit ${candidate}, trying older commits"
+            continue
+          fi
+          echo "Tagging ${REF}:sha-${candidate} as ${PREVIEW_TAG}"
+          docker buildx imagetools create --tag "${REF}:${PREVIEW_TAG}" "${REF}:sha-${candidate}"
+          exit 0
+        done
+
+        echo "::error::No matching image found on the last 50 main commits. Preview environments will not start for ${PREVIEW_TAG}. Re-run this job once main CI has pushed images, or push with the ci:full label to force a build."
+        exit 1

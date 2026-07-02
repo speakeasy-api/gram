@@ -260,12 +260,14 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        claudeObservability,
+			DisplayName: cfg.OrgName + " Observability",
 			Source:      "./" + claudeObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
+			DisplayName: "", // Cursor carries the display name in its own plugin.json.
 			Source:      cursorObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
@@ -295,11 +297,13 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		}
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
+			DisplayName: p.Name,
 			Source:      "./" + p.Slug,
 			Description: p.Description,
 		})
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        p.Slug + "-cursor",
+			DisplayName: "", // Cursor carries the display name in its own plugin.json.
 			Source:      p.Slug + "-cursor",
 			Description: p.Description,
 		})
@@ -588,6 +592,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
+		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
@@ -2315,6 +2320,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        p.Slug,
+		DisplayName: p.Name,
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
@@ -2431,6 +2437,7 @@ type marketplaceOwner struct {
 
 type marketplaceEntry struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
 	Source      string `json:"source"`
 	Description string `json:"description"`
 }
@@ -2442,6 +2449,7 @@ type pluginAuthor struct {
 
 type claudePluginMeta struct {
 	Name        string                     `json:"name"`
+	DisplayName string                     `json:"displayName,omitempty"`
 	Description string                     `json:"description"`
 	Version     string                     `json:"version"`
 	Author      pluginAuthor               `json:"author"`
