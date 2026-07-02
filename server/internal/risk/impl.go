@@ -968,16 +968,18 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 
 	pageSize := resolvePageSize(payload.Limit)
 
-	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
-	if err != nil {
-		totalCount = 0
-	}
-
 	if payload.ChatID != nil && *payload.ChatID != "" {
+		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+		if err != nil {
+			totalCount = 0
+		}
 		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
 	}
+	// The by-policy listing includes disabled policies (historical findings),
+	// so its count is computed inside listResultsByPolicy with the same
+	// semantics rather than from the enabled-only project aggregate.
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
+		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize)
 	}
 
 	category := ""
@@ -1003,6 +1005,10 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	toTime, err := parseOptionalTimestamptz(payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
+	}
+	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+	if err != nil {
+		totalCount = 0
 	}
 	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, userID, uniqueMatch, fromTime, toTime)
 }
@@ -1456,10 +1462,17 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor *riskResultsCursor, pageSize int) (*gen.ListRiskResultsResult, error) {
 	policyID, err := uuid.Parse(rawPolicyID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
+	}
+	totalCount, err := s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
+		ProjectID:    projectID,
+		RiskPolicyID: policyID,
+	})
+	if err != nil {
+		totalCount = 0
 	}
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
