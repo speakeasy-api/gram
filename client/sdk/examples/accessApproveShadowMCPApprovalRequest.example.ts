@@ -8,7 +8,7 @@ dotenv.config();
  * Example usage of the @gram/client SDK
  *
  * To run this example from the examples directory:
- * npm run build && npx tsx accessCreateRole.example.ts
+ * npm run build && npx tsx accessApproveShadowMCPApprovalRequest.example.ts
  */
 
 import { Gram } from "@gram/client";
@@ -16,15 +16,13 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function main() {
-  const result = await gram.access.createRole({
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
+  const result = await gram.access.approveShadowMCPApprovalRequest({
+    approveShadowMCPApprovalRequestForm: {
+      accessScope: "organization",
+      displayName: "Danny75",
+      id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+      matchBreadth: "full_url",
+      matchValue: "<value>",
     },
   });
 

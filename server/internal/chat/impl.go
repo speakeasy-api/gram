@@ -362,18 +362,20 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
 	}
 
-	sources := make([]string, 0, len(rows))
+	raws := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if row.Valid {
-			sources = append(sources, row.String)
+			raws = append(raws, row.String)
 		}
 	}
 
-	return &gen.ListSourcesResult{Sources: sources}, nil
+	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
 // parseSourceFilter splits the comma-separated `source` filter into the list of
-// exact source strings matched against each chat's inferred source. It always
+// source strings matched against each chat's inferred source. Selected values
+// are canonical (as returned by ListSources), so each is expanded back into its
+// raw aliases to also match sessions recorded under a legacy value. It always
 // returns a non-nil slice so the no-filter case sends an empty text[]
 // (cardinality 0 disables the filter) rather than SQL NULL, which would drop
 // every row.
@@ -391,7 +393,7 @@ func parseSourceFilter(source string) []string {
 		seen[s] = struct{}{}
 		sources = append(sources, s)
 	}
-	return sources
+	return expandSourceAliases(sources)
 }
 
 // chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by

@@ -1334,6 +1334,11 @@ var queryDimensions = []any{
 	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
 	"account_type", // AI account classification (team | personal | unclassified)
 	"provider",     // AI provider for the account (anthropic | openai | cursor)
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",

@@ -123,7 +123,7 @@ var Definitions = []Definition{
 	{
 		Category:    CategoryGovernmentIDs,
 		Label:       "Government Identifiers",
-		Description: "SSNs, passport numbers, driver's licenses, tax IDs",
+		Description: "SSNs, passport numbers, national IDs, tax IDs",
 		Icon:        "landmark",
 		RuleIDs: []string{
 			"pii.us_ssn",

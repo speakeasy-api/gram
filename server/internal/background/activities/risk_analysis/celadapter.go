@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -20,17 +19,6 @@ func celMessage(view MessageView) celenv.Message {
 	return celenv.Message{Content: view.Content, Type: view.Type, Tools: tools}
 }
 
-// effectiveDetectionExpr returns the stored CEL predicate or a legacy regex fallback.
-func effectiveDetectionExpr(rule customrules.Rule) string {
-	if expr := strings.TrimSpace(rule.DetectionExpr); expr != "" {
-		return expr
-	}
-	if pattern := strings.TrimSpace(rule.Regex); pattern != "" {
-		return "content.matchRegex(" + strconv.Quote(pattern) + ")"
-	}
-	return ""
-}
-
 // CompiledCELRule is a custom rule whose detection predicate is compiled once.
 type CompiledCELRule struct {
 	rule customrules.Rule
@@ -44,7 +32,7 @@ func CompileCELRules(eng *celenv.Engine, rules []customrules.Rule) ([]CompiledCE
 	}
 	out := make([]CompiledCELRule, 0, len(rules))
 	for _, rule := range rules {
-		expr := effectiveDetectionExpr(rule)
+		expr := rule.EffectiveDetectionExpr()
 		if expr == "" {
 			continue
 		}
@@ -73,7 +61,7 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 		for _, s := range spans {
 			findings = append(findings, Finding{
 				RuleID:              r.rule.RuleID,
-				Description:         celRuleDescription(r.rule),
+				Description:         r.rule.DisplayDescription(),
 				Match:               s.Value,
 				StartPos:            s.Start,
 				EndPos:              s.End,
@@ -89,16 +77,6 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 		}
 	}
 	return findings, nil
-}
-
-func celRuleDescription(rule customrules.Rule) string {
-	if strings.TrimSpace(rule.Description) != "" {
-		return rule.Description
-	}
-	if strings.TrimSpace(rule.Title) != "" {
-		return rule.Title
-	}
-	return rule.RuleID
 }
 
 // CompiledScope is a policy's compiled scope predicates.

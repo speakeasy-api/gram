@@ -30,8 +30,10 @@ report.md
 /risk-pi-report
 /server/risk_accuracy_metrics.json
 # Goa generates OpenAPI specs with non-deterministic examples. Nothing consumes them.
+# openapi3.json is a single-line duplicate of openapi3.yaml; everything reads the yaml.
 /server/gen/http/openapi.yaml
 /server/gen/http/openapi.json
+/server/gen/http/openapi3.json
 /dev-idp/gen/http/openapi.json
 /dev-idp/gen/http/openapi.yaml
 /dev-idp/gen/http/openapi3.json

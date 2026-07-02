@@ -23,12 +23,16 @@ export function isSessionsAxis(
 export type DimMeta = { dim: Dimension; label: string };
 // One ancestor selection in the drill path; becomes an ANDed query filter.
 export type Crumb = { dim: Dimension; value: string };
-// The four headline measures, summed over an entity's children.
+// The headline measures, summed over an entity's children. `cacheCreation` is
+// the cache-creation input tokens — the context weight an attribution cut (MCP
+// server/tool, skill, subagent) writes to the prompt cache, surfaced in place of
+// tool calls on those breakdowns.
 export type Measures = {
   cost: number;
   sessions: number;
   tools: number;
   tokens: number;
+  cacheCreation: number;
 };
 
 // The suggested top-down chain an admin walks. "User" is email; "Agent" is
@@ -40,7 +44,9 @@ const CHAIN: DimMeta[] = [
   { dim: Dimension.HookSource, label: "Agent" },
 ];
 
-// Every axis the user can pivot to at any level (dynamic taxonomy).
+// Every axis the user can pivot to at any level (dynamic taxonomy). The Claude
+// attribution cuts (MCP Server/Tool, Skill, Subagent) are appended last so they
+// never preempt the org-hierarchy default at the root (see defaultGroupBy).
 export const PIVOTS: DimMeta[] = [
   ...CHAIN,
   { dim: Dimension.JobTitle, label: "Job Title" },
@@ -50,12 +56,31 @@ export const PIVOTS: DimMeta[] = [
   { dim: Dimension.AccountType, label: "Account Type" },
   { dim: Dimension.Provider, label: "Provider" },
   { dim: Dimension.Role, label: "Role" },
+  { dim: Dimension.McpServerName, label: "MCP Server" },
+  { dim: Dimension.McpToolName, label: "MCP Tool" },
+  { dim: Dimension.SkillName, label: "Skill" },
+  // agent_name is the Claude subagent (e.g. generalPurpose); "Agent" is already
+  // taken by hook_source (the consuming surface), so label this "Subagent".
+  { dim: Dimension.AgentName, label: "Subagent" },
 ];
 
 export const LABELS: Record<string, string> = {
   ...Object.fromEntries(PIVOTS.map((p) => [p.dim, p.label])),
   [SESSIONS_AXIS]: "Sessions",
 };
+
+// Plural labels for the "collection" hero shown at the root when the breakdown
+// axis is an attribution cut (e.g. the root grouped by MCP Server presents as
+// "MCP Servers" rather than the project). Only attribution dims get one.
+const COLLECTION_LABELS: Partial<Record<Dimension, string>> = {
+  [Dimension.McpServerName]: "MCP Servers",
+  [Dimension.McpToolName]: "MCP Tools",
+  [Dimension.SkillName]: "Skills",
+  [Dimension.AgentName]: "Subagents",
+};
+export function collectionLabel(dim: Dimension): string | null {
+  return COLLECTION_LABELS[dim] ?? null;
+}
 
 // The most granular grouping axes — an Agent or a Model is an endpoint, not
 // something you break down further. Drilling a row here jumps straight to that
@@ -64,9 +89,42 @@ export const LABELS: Record<string, string> = {
 const SESSION_LEAF_DIMS = new Set<Dimension>([
   Dimension.HookSource,
   Dimension.Model,
+  // Claude attribution leaves: an MCP *tool* or a *skill* is an endpoint —
+  // drilling one lists the sessions that touched it. Their parents (MCP Server,
+  // Subagent) are NOT leaves: they drill one level deeper first (Server → Tool,
+  // Subagent → Skill) before bottoming out at sessions (see nextDimension).
+  Dimension.McpToolName,
+  Dimension.SkillName,
 ]);
 export function isSessionLeaf(dim: Dimension): boolean {
   return SESSION_LEAF_DIMS.has(dim);
+}
+
+// The Claude api_request attribution cuts. On these dims an empty "" group is
+// spend where the attribute is *not applicable* (a turn with no skill/subagent/
+// MCP call), not missing data — so breakdowns drop it instead of rendering an
+// "(unset)" row (see CostsExplorer). Two independent drill trees live here:
+// MCP Server → MCP Tool and Subagent → Skill.
+const ATTRIBUTION_DIMS = new Set<Dimension>([
+  Dimension.McpServerName,
+  Dimension.McpToolName,
+  Dimension.SkillName,
+  Dimension.AgentName,
+]);
+export function isAttributionDim(dim: Dimension): boolean {
+  return ATTRIBUTION_DIMS.has(dim);
+}
+
+// A nested attribution cut and the parent it must sit under. MCP Tool only makes
+// sense scoped to an MCP Server (a tool call always belongs to a server), so it
+// is offered as a breakdown axis only once its parent is pinned in the drill
+// path. Skill, by contrast, is a valid root cut ("skills run outside a
+// subagent") so it has no required parent.
+const PIVOT_PARENT: Partial<Record<Dimension, Dimension>> = {
+  [Dimension.McpToolName]: Dimension.McpServerName,
+};
+export function pivotParent(dim: Dimension): Dimension | null {
+  return PIVOT_PARENT[dim] ?? null;
 }
 
 // Levels that surface the "Most costly sessions" widget: the org root and the
@@ -87,6 +145,11 @@ function nextDimension(dim: Dimension): Dimension | null {
   const i = CHAIN.findIndex((c) => c.dim === dim);
   if (i >= 0 && i < CHAIN.length - 1) return CHAIN[i + 1]!.dim;
   if (dim === Dimension.HookSource) return null;
+  // Attribution trees: each parent drills into its child cut; the leaves
+  // (MCP Tool, Skill) bottom out at sessions (isSessionLeaf), so no child here.
+  if (dim === Dimension.McpServerName) return Dimension.McpToolName;
+  if (dim === Dimension.AgentName) return Dimension.SkillName;
+  if (dim === Dimension.McpToolName || dim === Dimension.SkillName) return null;
   if (dim === Dimension.Email) return Dimension.HookSource;
   return Dimension.Email;
 }
@@ -153,6 +216,14 @@ const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.HookSource]: "gram.hook.source",
   [Dimension.AccountType]: "gram.account_type",
   [Dimension.Provider]: "gram.provider",
+  // Claude attribution keys are stamped at the top level of `attributes` on
+  // api_request rows (see attribute_metrics_summaries_mv), so JSONAllPaths emits
+  // them verbatim. Present only when the org has Claude attribution data, so the
+  // pivots auto-hide otherwise.
+  [Dimension.McpServerName]: "mcp_server.name",
+  [Dimension.McpToolName]: "mcp_tool.name",
+  [Dimension.SkillName]: "skill.name",
+  [Dimension.AgentName]: "agent.name",
 };
 
 // Build the set of dimensions that actually have data from the attribute keys.

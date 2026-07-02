@@ -100,6 +100,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 	ctx context.Context,
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
+	resource string,
 ) (string, error) {
 	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
@@ -112,7 +113,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 		return "", fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	tok, err := m.validateAndRefresh(ctx, sess)
+	tok, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		return "", nil
 	}
@@ -157,6 +158,7 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
+	resource string,
 ) (map[uuid.UUID]string, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
@@ -183,7 +185,7 @@ func (m *ChallengeManager) ResolveAccessTokens(
 
 	tokens := make(map[uuid.UUID]string, len(clients))
 	for _, c := range clients {
-		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject)
+		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject, resource)
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
@@ -217,6 +219,7 @@ const defaultNoExpiryRefreshInterval = time.Hour
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (string, error) {
 	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
 
@@ -244,7 +247,7 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !hasRefresh {
 		return "", ErrNoValidToken
 	}
-	return m.refreshAccessToken(ctx, sess)
+	return m.refreshAccessToken(ctx, sess, resource)
 }
 
 // refreshAccessToken is the lazy-path wrapper: it runs the shared refresh and
@@ -252,8 +255,9 @@ func (m *ChallengeManager) validateAndRefresh(
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (string, error) {
-	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess)
+	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess, resource)
 	if err != nil {
 		return "", err
 	}
@@ -279,6 +283,7 @@ func refreshSessionTokens(
 	enc *encryption.Client,
 	policy *guardian.Policy,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (remotesessions_repo.RemoteSession, string, error) {
 	var zero remotesessions_repo.RemoteSession
 
@@ -311,6 +316,9 @@ func refreshSessionTokens(
 	form.Set("client_id", client.ExternalClientID)
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
+	}
+	if resource != "" {
+		form.Set("resource", resource)
 	}
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)

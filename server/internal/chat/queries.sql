@@ -288,6 +288,7 @@ candidate_chats AS (
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
           AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
       ) = ANY (@sources::text[])
@@ -390,6 +391,7 @@ candidate_chats AS (
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
           AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
       ) = ANY (@sources::text[])
@@ -430,7 +432,7 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
     fc.risk_findings_count,
     fc.account_type
@@ -473,6 +475,7 @@ WITH latest_sources AS (
     AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
     AND (@user_id::text = '' OR c.user_id = @user_id::text)
     AND cm.source IS NOT NULL
+    AND cm.source <> ''
   ORDER BY cm.chat_id, cm.created_at DESC
 )
 SELECT DISTINCT source

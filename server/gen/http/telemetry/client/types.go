@@ -14732,8 +14732,8 @@ func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
 	if body.Values == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
 	}
-	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "account_type", "provider", "role", "group", "project_id"}))
+	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "account_type", "provider", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
 	}
 	if len(body.Values) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
