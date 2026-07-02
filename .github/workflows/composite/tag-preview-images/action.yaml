@@ -1,11 +1,11 @@
-name: "Tag preview images"
+name: "Tag preview image"
 description: >
-  Composite action that gives unchanged components a preview image tag.
-  Preview environments deploy images tagged pr-<number>-<8-char head sha>;
-  components with changes get that tag from their docker build jobs, and this
-  action covers the rest by aliasing the image of the newest main commit whose
-  watched paths (from .github/filters.yaml) match the PR merge commit. Must
-  run after a full-history checkout (fetch-depth: 0).
+  Gives one unchanged component its preview image tag. Preview environments
+  deploy images tagged pr-<number>-<8-char head sha>; components with changes
+  get that tag from their docker build jobs, and this action covers the rest
+  by aliasing the image of the newest main commit whose watched paths (from
+  .github/filters.yaml) match the PR merge commit. Must run after a
+  full-history checkout (fetch-depth: 0).
 
 inputs:
   registry:
@@ -20,24 +20,15 @@ inputs:
   password:
     description: "Password for the image registry"
     required: true
-  pr-number:
-    description: "Pull request number"
+  component:
+    description: "Image name to tag, e.g. gram"
     required: true
-  head-sha:
-    description: "Head commit SHA of the pull request"
+  filters:
+    description: "Space-separated .github/filters.yaml keys whose paths gate this component's builds"
     required: true
-  server-changed:
-    description: "Whether the changes job decided server builds run ('true' to skip retagging gram and gram-dashboard)"
-    required: false
-    default: ""
-  client-changed:
-    description: "Whether the changes job decided client builds run ('true' to skip retagging gram-dashboard)"
-    required: false
-    default: ""
-  pystreams-changed:
-    description: "Whether the changes job decided pystreams builds run ('true' to skip retagging gram-pystreams)"
-    required: false
-    default: ""
+  preview-tag:
+    description: "Preview tag to create, e.g. pr-123-abcdef12"
+    required: true
 
 runs:
   using: "composite"
@@ -64,14 +55,45 @@ runs:
         echo "All login attempts failed"
         exit 1
 
-    - name: Tag preview images for unchanged components
+    - name: Tag preview image
       shell: bash
       env:
-        REGISTRY: ${{ inputs.registry }}
-        DOCKER_REPOSITORY_OWNER: ${{ inputs.image-owner }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        HEAD_SHA: ${{ inputs.head-sha }}
-        SERVER_CHANGED: ${{ inputs.server-changed }}
-        CLIENT_CHANGED: ${{ inputs.client-changed }}
-        PYSTREAMS_CHANGED: ${{ inputs.pystreams-changed }}
-      run: bash "${{ github.action_path }}/tag-preview-images.sh"
+        REF: ${{ inputs.registry }}/${{ inputs.image-owner }}/${{ inputs.component }}
+        FILTERS: ${{ inputs.filters }}
+        PREVIEW_TAG: ${{ inputs.preview-tag }}
+      run: |
+        set -euo pipefail
+
+        image_exists() {
+          docker buildx imagetools inspect "$1" >/dev/null 2>&1
+        }
+
+        if image_exists "${REF}:${PREVIEW_TAG}"; then
+          echo "${REF}:${PREVIEW_TAG} already exists, nothing to do"
+          exit 0
+        fi
+
+        pathspecs=()
+        for filter in $FILTERS; do
+          while IFS= read -r path; do
+            pathspecs+=(":(glob)${path}")
+          done < <(yq -r ".${filter}[]" .github/filters.yaml)
+        done
+
+        # HEAD is the PR merge commit, so a main commit that only differs from
+        # it in unwatched paths produced a byte-identical component build.
+        for candidate in $(git rev-list --first-parent -n 50 origin/main); do
+          if ! git diff --quiet "$candidate" HEAD -- "${pathspecs[@]}"; then
+            continue
+          fi
+          if ! image_exists "${REF}:sha-${candidate}"; then
+            echo "No image for matching commit ${candidate}, trying older commits"
+            continue
+          fi
+          echo "Tagging ${REF}:sha-${candidate} as ${PREVIEW_TAG}"
+          docker buildx imagetools create --tag "${REF}:${PREVIEW_TAG}" "${REF}:sha-${candidate}"
+          exit 0
+        done
+
+        echo "::error::No matching image found on the last 50 main commits. Preview environments will not start for ${PREVIEW_TAG}. Re-run this job once main CI has pushed images, or push with the ci:full label to force a build."
+        exit 1
