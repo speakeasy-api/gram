@@ -50,19 +50,18 @@ import (
 // identify via the Authorization header, everyone else (client_secret_post and
 // public clients) via the body. Double-sending client_id is rejected by some
 // upstreams (e.g. Pylon) as ambiguous client identification.
+//
+// method must come from ResolveTokenEndpointAuthMethod, which guarantees a
+// Basic or Post client carries a non-empty secret and a secret-less client is
+// public.
 func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
-	// A client with no secret is public regardless of the resolved method:
-	// ResolveTokenEndpointAuthMethod maps unknown stored values to Basic, and
-	// CIMD clients never carry a secret (enforced by the remote_session_clients
-	// client_id_metadata_uri CHECK constraint), so it is the absent secret,
-	// not method=none, that keeps public clients off Basic auth.
-	if clientSecret == "" {
-		method = TokenEndpointAuthMethodNone
-	}
-
 	switch method {
 	case TokenEndpointAuthMethodBasic:
-		// body carries no credentials; Authorization header set below once req exists
+		// Credentials ride the Authorization header only, set below once req
+		// exists. Strip any body copies so a caller-seeded client_id cannot
+		// reintroduce the double-send this function exists to prevent.
+		form.Del("client_id")
+		form.Del("client_secret")
 	case TokenEndpointAuthMethodPost:
 		form.Set("client_id", clientID)
 		form.Set("client_secret", clientSecret)
@@ -309,7 +308,10 @@ func refreshSessionTokens(
 		}
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
+	if err != nil {
+		return zero, "", newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+	}
 
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")

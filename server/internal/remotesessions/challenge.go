@@ -434,7 +434,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		clientSecret = decoded
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
+	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
