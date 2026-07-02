@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -284,6 +285,19 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID)
 	resolved.RouteBase = mcpRouteBase
+	if mcpServer.RemoteMcpServerID.Valid {
+		remote, rerr := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+			ID:        mcpServer.RemoteMcpServerID.UUID,
+			ProjectID: mcpEndpoint.ProjectID,
+		})
+		switch {
+		case errors.Is(rerr, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeNotFound, rerr, "remote mcp server not found")
+		case rerr != nil:
+			return nil, oops.E(oops.CodeUnexpected, rerr, "load remote mcp server").LogError(ctx, logger)
+		}
+		resolved.UpstreamResource = strings.TrimRight(remote.Url, "/")
+	}
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
 		return nil, fmt.Errorf("require user session issuer: %w", err)
 	}

@@ -1407,7 +1407,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgissuersgen.Ref
 	}
 
 	// Refresh on the pool — the upstream token POST must not run inside a tx.
-	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession)
+	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, "")
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.

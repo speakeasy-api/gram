@@ -77,6 +77,9 @@ type ParentChallenge struct {
 	McpSlug             string
 	RouteBase           string
 	FinalRedirectURI    string
+	// Resource is the RFC 8707 resource indicator sent on the authorize
+	// redirect and code exchange. Empty omits the parameter.
+	Resource string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -95,6 +98,7 @@ type RemoteLoginState struct {
 	TokenEndpoint         string              `json:"token_endpoint"`
 	RedirectURI           string              `json:"redirect_uri"`
 	CodeVerifier          string              `json:"code_verifier"`
+	Resource              string              `json:"resource,omitempty"`
 	Subject               *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug               string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
@@ -328,6 +332,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		TokenEndpoint:         client.TokenEndpoint,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
+		Resource:              parent.Resource,
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
 		RouteBase:             parent.RouteBase,
@@ -350,6 +355,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
+	}
+	if parent.Resource != "" {
+		q.Set("resource", parent.Resource)
 	}
 	for _, ic := range m.authorizeInterceptors {
 		if ic.Match(client.IssuerURL) {
@@ -552,6 +560,9 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("code_verifier", state.CodeVerifier)
 	if audience != "" {
 		form.Set("audience", audience)
+	}
+	if state.Resource != "" {
+		form.Set("resource", state.Resource)
 	}
 
 	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
