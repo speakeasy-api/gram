@@ -476,6 +476,7 @@ func (s *Service) buildRemoteSessionCards(
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
 		FinalRedirectURI:    "",
+		Resource:            endpoint.UpstreamResource,
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))
