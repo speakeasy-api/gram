@@ -35,6 +35,7 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
 }
@@ -1420,6 +1421,16 @@ type RiskResult struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
+type SessionCaptureExclusion struct {
+	ID             int64
+	OrganizationID string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -1678,6 +1689,8 @@ type UserAccount struct {
 	ExternalAccountID   pgtype.Text
 	Email               pgtype.Text
 	AccountType         pgtype.Text
+	BillingMode         pgtype.Text
+	PlanType            pgtype.Text
 	FirstSeenAt         pgtype.Timestamptz
 	LastSeenAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz

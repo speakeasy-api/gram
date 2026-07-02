@@ -331,6 +331,13 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Personal-account tracking data: employees with team + personal accounts,
+    // the device bridge, and account-linked chats. Runs after observability so
+    // its blanket chat delete doesn't wipe these account-linked chats.
+    await seedPersonalAccounts({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
   }
 
   // Set enterprise account type last so RBAC enforcement doesn't block seeding.
@@ -1787,6 +1794,330 @@ async function seedRiskFindings(init: {
     const err = e as { stderr?: string; stdout?: string; message?: string };
     log.warn(
       `Failed to seed risk findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
+// seedPersonalAccounts populates the personal-account-tracking tables for the
+// Speakeasy org: a handful of employees, each with a team (enterprise Claude)
+// account and — for most — a personal account, linked to the employee through
+// the device bridge (device_owners). It then seeds messaging data (chats +
+// messages) for both account types in the given project so dashboards have
+// team-vs-personal data to render. The majority of personal accounts are Claude
+// (anthropic), the primary tracked provider.
+async function seedPersonalAccounts(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+  log.info(
+    "Seeding personal-account data (user_accounts + device bridge + chats)...",
+  );
+
+  // Speakeasy's shared enterprise Claude org (Claude organization.id). Every
+  // team account sits under it, so it reads as the enterprise org (many
+  // employees) — the classification heuristic's "shared org" signal.
+  const ENTERPRISE_CLAUDE_ORG = "b4a85ab1-50cb-42d7-8dc8-e57acf2518cf";
+
+  type Personal = { email: string; provider: "anthropic" | "openai" };
+  type Employee = { name: string; work: string; personal?: Personal };
+
+  // 5 personal accounts, 4 of them Claude (80%); one OpenAI for provider
+  // variety. Sam is team-only.
+  const EMPLOYEES: Employee[] = [
+    {
+      name: "Mira Chen",
+      work: "mira.chen@speakeasy.com",
+      personal: { email: "mira.chen.dev@gmail.com", provider: "anthropic" },
+    },
+    {
+      name: "Omar Farouk",
+      work: "omar.farouk@speakeasy.com",
+      personal: { email: "ofarouk.codes@gmail.com", provider: "anthropic" },
+    },
+    {
+      name: "Lena Petrova",
+      work: "lena.petrova@speakeasy.com",
+      personal: { email: "lena.builds@gmail.com", provider: "anthropic" },
+    },
+    {
+      name: "Raj Patel",
+      work: "raj.patel@speakeasy.com",
+      personal: { email: "raj.patel.ai@gmail.com", provider: "anthropic" },
+    },
+    {
+      name: "Tess Nguyen",
+      work: "tess.nguyen@speakeasy.com",
+      personal: { email: "tess.nguyen.gpt@gmail.com", provider: "openai" },
+    },
+    { name: "Sam Rivera", work: "sam.rivera@speakeasy.com" },
+  ];
+
+  const MODELS: Record<Personal["provider"], string[]> = {
+    anthropic: ["claude-opus-4-8", "claude-sonnet-4-6"],
+    openai: ["gpt-5.4", "gpt-4o"],
+  };
+  const USER_PROMPTS = [
+    "Refactor the checkout handler to validate the cart total",
+    "Why is the orders endpoint returning 500 on large payloads?",
+    "Add pagination to the products list query",
+    "Write a unit test for the discount calculator",
+    "Explain how the inventory reservation flow works",
+  ];
+  const ASSISTANT_REPLIES = [
+    "Here's a refactor that validates the cart total before charging the card.",
+    "The 500 comes from an unbounded JSON decode — stream and cap the body instead.",
+    "Added keyset pagination on (created_at, id) with an opaque cursor.",
+    "Here's a table-driven test covering the discount edge cases.",
+    "Reservation places a hold row, then confirms it on successful payment.",
+  ];
+
+  const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
+  const sha = (s: string) => crypto.createHash("sha1").update(s).digest("hex");
+  const userId = (email: string) => `usr_seed_${sha(email).slice(0, 16)}`;
+  const workosId = (email: string) => `seed_workos_${sha(email).slice(0, 16)}`;
+  const deviceId = (email: string) =>
+    crypto.createHash("sha256").update(`pat-device:${email}`).digest("hex"); // 64-hex, like Claude user.id
+  const accountId = (email: string) => `user_${sha(email).slice(0, 22)}`; // tagged id, like user.account_id
+  const seedUUID = (key: string) => {
+    const h = crypto.createHash("sha1").update(`pat-seed:${key}`).digest();
+    h[6] = (h[6] & 0x0f) | 0x50;
+    h[8] = (h[8] & 0x3f) | 0x80;
+    const x = h.toString("hex").slice(0, 32);
+    return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+  };
+
+  const usersValues: string[] = [];
+  const orgRelValues: string[] = [];
+  const deviceValues: string[] = [];
+  const accountValues: string[] = [];
+  // One account = (id, email, provider, account_type, externalOrgId, ownerUserId,
+  // device). device + externalOrgId + ownerUserId are also stamped onto the
+  // ClickHouse usage telemetry below.
+  const accounts: {
+    id: string;
+    email: string;
+    provider: string;
+    type: "team" | "personal";
+    ownerUserId: string;
+    externalOrgId: string;
+    device: string;
+  }[] = [];
+
+  for (const emp of EMPLOYEES) {
+    const uid = userId(emp.work);
+    const wid = workosId(emp.work);
+    const dev = deviceId(emp.work);
+    usersValues.push(
+      `(${sqlStr(uid)}, ${sqlStr(emp.work)}, ${sqlStr(emp.name)}, NULL, ${sqlStr(wid)})`,
+    );
+    orgRelValues.push(
+      `(${sqlStr(organizationId)}, ${sqlStr(uid)}, ${sqlStr(wid)}, ${sqlStr(`seed_mem_${uid}`)})`,
+    );
+    // Device bridge: this machine is owned by the employee (learned from their
+    // team session). Their personal account on the same device resolves to them.
+    deviceValues.push(
+      `(${sqlStr(organizationId)}, 'anthropic', ${sqlStr(dev)}, ${sqlStr(uid)})`,
+    );
+
+    // Team (enterprise Claude) account.
+    const teamAcctId = seedUUID(`team:${emp.work}`);
+    accountValues.push(
+      `(${sqlStr(teamAcctId)}, ${sqlStr(organizationId)}, ${sqlStr(uid)}, 'anthropic', ${sqlStr(ENTERPRISE_CLAUDE_ORG)}, ${sqlStr(seedUUID(`team-uuid:${emp.work}`))}, ${sqlStr(accountId(emp.work))}, ${sqlStr(emp.work)}, 'team')`,
+    );
+    accounts.push({
+      id: teamAcctId,
+      email: emp.work,
+      provider: "anthropic",
+      type: "team",
+      ownerUserId: uid,
+      externalOrgId: ENTERPRISE_CLAUDE_ORG,
+      device: dev,
+    });
+
+    // Personal account (most are Claude). External org id is unique per personal
+    // account (each personal Max org is its own org).
+    if (emp.personal) {
+      const persOrg = seedUUID(`personal-org:${emp.personal.email}`);
+      const persAcctId = seedUUID(`personal:${emp.personal.email}`);
+      accountValues.push(
+        `(${sqlStr(persAcctId)}, ${sqlStr(organizationId)}, ${sqlStr(uid)}, ${sqlStr(emp.personal.provider)}, ${sqlStr(persOrg)}, ${sqlStr(seedUUID(`personal-uuid:${emp.personal.email}`))}, ${sqlStr(accountId(emp.personal.email))}, ${sqlStr(emp.personal.email)}, 'personal')`,
+      );
+      accounts.push({
+        id: persAcctId,
+        email: emp.personal.email,
+        provider: emp.personal.provider,
+        type: "personal",
+        ownerUserId: uid,
+        externalOrgId: persOrg,
+        device: dev,
+      });
+    }
+  }
+
+  // Chats + messages for every account, in this project.
+  const now = Date.now();
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const CHATS_PER_ACCOUNT = 3;
+
+  const chatIds: string[] = [];
+  const chatValues: string[] = [];
+  const messageValues: string[] = [];
+
+  accounts.forEach((acct, acctIdx) => {
+    const models =
+      MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
+    for (let c = 0; c < CHATS_PER_ACCOUNT; c++) {
+      const chatId = seedUUID(`chat:${acct.id}:${c}`);
+      chatIds.push(chatId);
+      const model = models[c % models.length];
+      const promptIdx = (acctIdx + c) % USER_PROMPTS.length;
+      const title = USER_PROMPTS[promptIdx];
+      const daysAgo = (acctIdx * CHATS_PER_ACCOUNT + c) % 30;
+      const start = new Date(now - daysAgo * msPerDay - c * 3600 * 1000);
+      const end = new Date(start.getTime() + 5 * 60 * 1000);
+
+      chatValues.push(
+        `(${sqlStr(chatId)}, ${sqlStr(projectId)}, ${sqlStr(organizationId)}, ${sqlStr(acct.ownerUserId)}, ${sqlStr(acct.email)}, ${sqlStr(acct.id)}, ${sqlStr(title)}, ${sqlStr(start.toISOString())}, ${sqlStr(end.toISOString())})`,
+      );
+
+      // 2 user + 2 assistant turns.
+      let t = start.getTime();
+      for (let turn = 0; turn < 2; turn++) {
+        const idx = (promptIdx + turn) % USER_PROMPTS.length;
+        t += 20 * 1000;
+        messageValues.push(
+          `(${sqlStr(chatId)}, ${sqlStr(projectId)}, 'user', ${sqlStr(USER_PROMPTS[idx])}, ${sqlStr(model)}, ${sqlStr(new Date(t).toISOString())})`,
+        );
+        t += 25 * 1000;
+        messageValues.push(
+          `(${sqlStr(chatId)}, ${sqlStr(projectId)}, 'assistant', ${sqlStr(ASSISTANT_REPLIES[idx])}, ${sqlStr(model)}, ${sqlStr(new Date(t).toISOString())})`,
+        );
+      }
+    }
+  });
+
+  const chatIdList = chatIds.map(sqlStr).join(", ");
+  const pgSQL = `
+    BEGIN;
+    INSERT INTO users (id, email, display_name, photo_url, workos_id) VALUES
+    ${usersValues.join(",\n")}
+    ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, workos_id = EXCLUDED.workos_id;
+
+    INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES
+    ${orgRelValues.join(",\n")}
+    ON CONFLICT (organization_id, user_id) DO NOTHING;
+
+    INSERT INTO device_owners (organization_id, provider, device_id, linked_user_id) VALUES
+    ${deviceValues.join(",\n")}
+    ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
+    DO UPDATE SET linked_user_id = EXCLUDED.linked_user_id, last_seen_at = clock_timestamp();
+
+    INSERT INTO user_accounts (id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type) VALUES
+    ${accountValues.join(",\n")}
+    ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+    DO UPDATE SET user_id = EXCLUDED.user_id, account_type = EXCLUDED.account_type, email = EXCLUDED.email, external_org_id = EXCLUDED.external_org_id, last_seen_at = clock_timestamp();
+
+    DELETE FROM chat_messages WHERE chat_id IN (${chatIdList});
+    DELETE FROM chats WHERE id IN (${chatIdList});
+    INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, user_account_id, title, created_at, updated_at) VALUES
+    ${chatValues.join(",\n")};
+    INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
+    ${messageValues.join(",\n")};
+    COMMIT;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const tmpFile = path.join(process.cwd(), ".seed-personal-accounts.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-personal-accounts.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-personal-accounts.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    const personalCount = accounts.filter((a) => a.type === "personal").length;
+    const claudePersonal = accounts.filter(
+      (a) => a.type === "personal" && a.provider === "anthropic",
+    ).length;
+    log.info(
+      `Seeded ${accounts.length} AI accounts (${personalCount} personal, ${claudePersonal} of them Claude) across ${EMPLOYEES.length} employees, plus ${chatValues.length} chats.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed personal-account data: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  // ClickHouse usage telemetry: token-usage rows per account, stamped with the
+  // gram.{provider,account_type,external_org_id,device_id} attributes that
+  // materialize into the like-named columns, so usage dashboards can split team
+  // vs personal. user.id is the owning employee (matching the identity
+  // enrichment), so personal usage rolls up under the employee. Idempotent via
+  // the targeted DELETE on the usage URNs (which observability seeding, running
+  // first, doesn't use).
+  const USAGE_URN: Record<string, string> = {
+    anthropic: "claude-code:usage:metrics",
+    openai: "codex:usage:metrics",
+  };
+  const SERVICE: Record<string, string> = {
+    anthropic: "claude-code",
+    openai: "codex",
+  };
+  const EVENTS_PER_ACCOUNT = 8;
+  const chRows: string[] = [];
+  accounts.forEach((acct, acctIdx) => {
+    const models =
+      MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
+    const urn = USAGE_URN[acct.provider] ?? USAGE_URN.anthropic;
+    const svc = SERVICE[acct.provider] ?? SERVICE.anthropic;
+    for (let k = 0; k < EVENTS_PER_ACCOUNT; k++) {
+      const model = models[k % models.length];
+      const daysAgo = (acctIdx + k * 3) % 30;
+      const eventTime = new Date(now - daysAgo * msPerDay - k * 1800 * 1000);
+      const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const sessionId = seedUUID(`sess:${acct.id}:${k}`);
+      const inputTokens = 1200 + ((acctIdx * 7 + k * 53) % 5000);
+      const outputTokens = 300 + ((acctIdx * 11 + k * 29) % 1800);
+      const totalTokens = inputTokens + outputTokens;
+      const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(
+        6,
+      );
+      const attrs = `{"gram.provider": "${acct.provider}", "gram.account_type": "${acct.type}", "gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", "gen_ai.conversation.id": "${sessionId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${acct.provider}", "gram.resource.urn": "${urn}", "gram.project.id": "${projectId}", "user.id": "${acct.ownerUserId}", "gram.hook.source": "${svc}"}`;
+      chRows.push(
+        `(${timeNano}, ${timeNano}, 'INFO', '${acct.type} account usage', '${traceId}', '${attrs}', '{"service.name": "${svc}"}', '${projectId}', '${urn}', '${svc}', '${sessionId}')`,
+      );
+    }
+  });
+
+  const chSQL = `
+    SET mutations_sync = 1;
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN ('claude-code:usage:metrics', 'codex:usage:metrics');
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    ${chRows.join(",\n")};
+  `;
+
+  try {
+    const tmpFile = path.join(process.cwd(), ".seed-personal-accounts-ch.sql");
+    await fs.writeFile(tmpFile, chSQL, "utf-8");
+    try {
+      await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed-personal-accounts-ch.sql`.quiet();
+      await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed-personal-accounts-ch.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    log.info(
+      `Seeded ${chRows.length} personal/team usage telemetry rows into ClickHouse.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed personal-account ClickHouse telemetry: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
 }

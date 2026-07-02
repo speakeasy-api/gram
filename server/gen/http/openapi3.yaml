@@ -44202,6 +44202,8 @@ components:
                         - email
                         - model
                         - hook_source
+                        - account_type
+                        - provider
                         - role
                         - group
                         - project_id
@@ -44290,6 +44292,8 @@ components:
                         - email
                         - model
                         - hook_source
+                        - account_type
+                        - provider
                         - role
                         - group
                         - project_id

@@ -197,12 +197,16 @@ type MixRow = { label: string; cost: number };
 // hover) when `onSelect` is supplied, so the user can drill straight into it.
 function MixRowItem({
   label,
+  sublabel,
+  clampTitle,
   cost,
   barPct,
   barColor,
   onSelect,
 }: {
   label: string;
+  sublabel?: string;
+  clampTitle?: boolean;
   cost: number;
   barPct: number;
   barColor: string;
@@ -210,9 +214,22 @@ function MixRowItem({
 }): JSX.Element {
   const inner = (
     <>
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="truncate">{label || "(unset)"}</span>
-        <span className="text-muted-foreground tabular-nums">
+      <div className="flex items-start justify-between gap-2 text-sm">
+        <span className="min-w-0">
+          <span
+            className={
+              clampTitle ? "line-clamp-2 text-[13px]" : "block truncate"
+            }
+          >
+            {label || "(unset)"}
+          </span>
+          {sublabel ? (
+            <span className="text-muted-foreground block truncate text-xs">
+              {sublabel}
+            </span>
+          ) : null}
+        </span>
+        <span className="text-muted-foreground shrink-0 tabular-nums">
           {formatCost(cost)}
         </span>
       </div>
@@ -347,6 +364,8 @@ function SessionsCard({
               <MixRowItem
                 key={r.id}
                 label={r.label}
+                sublabel={r.sublabel}
+                clampTitle
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
@@ -453,7 +472,12 @@ type StatCardSpec = {
   caption?: string;
   loading: boolean;
 };
-type SessionRow = { id: string; label: string; cost: number };
+type SessionRow = {
+  id: string;
+  label: string;
+  sublabel?: string;
+  cost: number;
+};
 type SessionsCardSpec = {
   kind: "sessions";
   title: string;

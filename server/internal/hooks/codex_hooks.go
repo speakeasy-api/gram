@@ -301,13 +301,19 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
 	metadata := &SessionMetadata{
-		SessionID:   conv.PtrValOr(payload.SessionID, ""),
-		ServiceName: "Codex",
-		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+		SessionID:           conv.PtrValOr(payload.SessionID, ""),
+		ServiceName:         "Codex",
+		UserEmail:           strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserID:              "",
+		Provider:            providerOpenAI,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		UserAccountID:       "",
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
 
 	if metadata.SessionID != "" {
@@ -378,6 +384,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
+		attr.ProviderKey:       providerOpenAI,
 	}
 
 	if payload.Model != nil && *payload.Model != "" {

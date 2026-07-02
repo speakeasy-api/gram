@@ -45,13 +45,13 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
 
 	metadata := &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: wantSource,
-		UserEmail:   wantUserEmail,
-		UserID:      wantUserID,
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   wantSource,
+		UserEmail:     wantUserEmail,
+		UserID:        wantUserID,
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}
 
 	toolUseID := "toolu_consistency_" + uuid.NewString()
@@ -137,13 +137,13 @@ func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
 
 	metadata := &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   wantUserEmail,
-		UserID:      wantUserID,
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     wantUserEmail,
+		UserID:        wantUserID,
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}
 	prompt := "hello"
 
@@ -185,13 +185,13 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
 
 	metadata := &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   wantUserEmail,
-		UserID:      wantUserID,
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     wantUserEmail,
+		UserID:        wantUserID,
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}
 	prompt := "hello"
 	lastAssistantMessage := "ok"

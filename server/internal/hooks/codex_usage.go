@@ -171,6 +171,7 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    codexUsageMetricsURN,
 			attr.HookSourceKey:     "codex",
+			attr.ProviderKey:       providerOpenAI,
 		}
 
 		// Only include non-zero values, matching the Claude usage writer.
