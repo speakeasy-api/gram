@@ -19,12 +19,6 @@
 export const ESTIMATED_COST_TOOLTIP =
   "Estimated from token usage at standard API rates. Flat-fee plans (Claude Max/Pro/Team) include usage in the subscription, so real spend may be lower.";
 
-// Known billing modes. Deliberately a widening string, not a closed enum, so new
-// modes can be added without a breaking type change (mirrors the backend, which
-// stores billing_mode as free-form text). Current well-known values: "metered",
-// "flat_rate", "unknown".
-export type BillingMode = "metered" | "flat_rate" | "unknown" | (string & {});
-
 /**
  * Whether a scope is confidently billed per token. Only then is the cost figure
  * real spend; every other value (flat_rate, unknown, or absent) means we fall
