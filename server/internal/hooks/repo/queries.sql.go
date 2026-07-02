@@ -395,6 +395,62 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 	return items, nil
 }
 
+const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC
+`
+
+type ListUserAccountsByUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListUserAccountsByUsersRow struct {
+	ID            uuid.UUID
+	UserID        pgtype.Text
+	Provider      string
+	Email         pgtype.Text
+	AccountType   pgtype.Text
+	ExternalOrgID pgtype.Text
+	LastSeenAt    pgtype.Timestamptz
+}
+
+// Returns the linked AI accounts for a set of users within an org. Each
+// (provider, email) row is a distinct account, so a user may have several across
+// providers. Used to attach a per-user accounts breakdown to usage summaries on
+// the employees list. Ordered team-first, then by provider for stable display.
+func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccountsByUsersParams) ([]ListUserAccountsByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUserAccountsByUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserAccountsByUsersRow
+	for rows.Next() {
+		var i ListUserAccountsByUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Email,
+			&i.AccountType,
+			&i.ExternalOrgID,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `

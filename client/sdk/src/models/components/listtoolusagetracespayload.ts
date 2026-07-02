@@ -51,6 +51,10 @@ export type ListToolUsageTracesPayloadTargetTypes = ClosedEnum<
  */
 export type ListToolUsageTracesPayload = {
   /**
+   * Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+   */
+  accountType?: string | undefined;
+  /**
    * Cursor for pagination
    */
   cursor?: string | undefined;
@@ -113,6 +117,7 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
 
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
+  account_type?: string | undefined;
   cursor?: string | undefined;
   filters?: Array<LogFilter$Outbound> | undefined;
   from: string;
@@ -133,6 +138,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   ListToolUsageTracesPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(LogFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -150,6 +156,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
       shadowServerNames: "shadow_server_names",

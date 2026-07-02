@@ -1,3 +1,4 @@
+import { AccountTypeBadge } from "@/components/account-type-badge";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -331,6 +332,37 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
+  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
+  // filters on the materialized gram.account_type column via the raw-logs path.
+  // "team" is expressed as "not personal" so unclassified rows count as team
+  // (matching the badge semantics elsewhere).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountType = ((): string => {
+    const v = searchParams.get("account_type");
+    return v === "team" || v === "personal" ? v : "";
+  })();
+  const setAccountType = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  // account_type is sent as a first-class payload filter (below), not an
+  // attribute filter, so it stays on the fast trace_summaries path rather than
+  // forcing the raw-logs scan.
+  const queryFilters = attributeSdkFilters;
+
   const {
     data: tracesData,
     error,
@@ -352,7 +384,8 @@ export function LogsTools(): JSX.Element {
         userFilters,
         hookSources,
         attributeSearchQuery,
-        attributeSdkFilters,
+        queryFilters,
+        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -367,11 +400,9 @@ export function LogsTools(): JSX.Element {
               targetTypes,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
+              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
-              filters:
-                attributeSdkFilters.length > 0
-                  ? attributeSdkFilters
-                  : undefined,
+              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -509,6 +540,8 @@ export function LogsTools(): JSX.Element {
             onAttributeSearchSubmit={updateAttributeSearchQuery}
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
+            accountType={accountType}
+            onAccountTypeChange={setAccountType}
             from={from}
             to={to}
           />
@@ -561,6 +594,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit,
   onAttributeFiltersChange,
   onAddFilterFromLog,
+  accountType,
+  onAccountTypeChange,
   from,
   to,
 }: {
@@ -608,6 +643,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit: (query: string) => void;
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
 }) {
@@ -659,6 +696,8 @@ function LogsToolsContent({
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
+            accountType={accountType}
+            onAccountTypeChange={onAccountTypeChange}
             attributeSearchControl={
               <div className="min-w-[260px] flex-[1.2]">
                 <LogFilterBar
@@ -712,6 +751,7 @@ function LogsToolsContent({
                       selectedTypes.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
+                      accountType !== "" ||
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
@@ -965,8 +1005,11 @@ function LogsToolsTraceRow({
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
-          {userLabel || "—"}
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <span className="text-muted-foreground min-w-0 truncate">
+            {userLabel || "—"}
+          </span>
+          <AccountTypeBadge accountType={trace.accountType} noTooltip />
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

@@ -13,6 +13,10 @@ import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
 
 export type Chat = {
+  /**
+   * Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+   */
+  accountType?: string | undefined;
   agentUsage?: AgentUsage | undefined;
   /**
    * When the chat was created.
@@ -107,6 +111,7 @@ export type Chat = {
 /** @internal */
 export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   z.object({
+    account_type: z.optional(z.string()),
     agent_usage: z.optional(AgentUsage$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -142,6 +147,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "account_type": "accountType",
       "agent_usage": "agentUsage",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",

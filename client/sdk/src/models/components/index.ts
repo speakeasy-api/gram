@@ -521,6 +521,7 @@ export * from "./upsertglobaltoolvariationform.js";
 export * from "./upsertglobaltoolvariationresult.js";
 export * from "./upsertrequestbody.js";
 export * from "./usagetiers.js";
+export * from "./useraccount.js";
 export * from "./usersession.js";
 export * from "./usersessionclient.js";
 export * from "./usersessionconsent.js";

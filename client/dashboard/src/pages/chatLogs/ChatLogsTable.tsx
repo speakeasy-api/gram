@@ -1,3 +1,4 @@
+import { AccountTypeBadge } from "@/components/account-type-badge";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -253,6 +254,7 @@ export function ChatLogsTable({
                         {ownerLabel(chat, user)}
                       </span>
                     </span>
+                    <AccountTypeBadge accountType={chat.accountType} />
                     {source && (
                       <span className="flex items-center gap-1.5">
                         <HookSourceIcon source={source} className="size-4" />

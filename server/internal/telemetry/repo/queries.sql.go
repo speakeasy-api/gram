@@ -631,6 +631,8 @@ type GetTimeSeriesMetricsParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -698,6 +700,12 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
+	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
 	// FROM/TO use aligned nanosecond boundaries; TO is exclusive so we add one step.
@@ -746,6 +754,8 @@ type GetToolMetricsBreakdownParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -792,6 +802,12 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -845,6 +861,8 @@ type GetOverviewSummaryParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -853,7 +871,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -974,6 +992,12 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	return sb
@@ -1389,6 +1413,8 @@ type SearchUsersParams struct {
 	GramDeploymentID string // optional
 	EventSource      string // optional; e.g. "hook"
 	HookSource       string // optional; e.g. "cursor"
+	AccountType      string // optional; e.g. "personal"
+	ExternalOrgID    string // optional; scopes to a single account by provider org id
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1445,6 +1471,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Hook source breakdowns (maps of hook source -> count)
 		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
+
+		// Distinct account types observed (powers the employees personal-account indicator)
+		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1461,6 +1490,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where("account_type = ?", arg.AccountType)
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
 	if len(arg.UserIDs) > 0 {
 		if arg.GroupBy == "external_user_id" {
@@ -1519,6 +1554,8 @@ type GetUserMetricsSummaryParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 	EventSource    string // Optional filter - filters by event_source
 	HookSource     string // Optional filter - filters by hook_source
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -1589,6 +1626,12 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1679,6 +1722,8 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeEnd        int64
 	UserID         string // user_id (mutually exclusive with ExternalUserID)
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -1777,6 +1822,12 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
@@ -1981,6 +2032,7 @@ type GetToolUsageSummaryParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string // Optional filter - filters by account_type (team|personal)
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -1999,6 +2051,7 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2039,6 +2092,7 @@ type ToolUsageTraceSummary struct {
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
+	AccountType       *string `ch:"account_type"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -2210,6 +2264,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
 		HookSources:        nil,
+		AccountType:        "", // filter options enumerate all values, never scoped
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2270,6 +2325,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"http_status_code",
 		"hook_status",
 		"block_reason",
+		"account_type",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -2295,6 +2351,19 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 	if len(arg.HookSources) > 0 {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
+	// account_type is carried on trace_summaries (fast path) and materialized on
+	// telemetry_logs (raw path), so this filters on the projected column either
+	// way. "team" includes unclassified traces (matches the /logs behavior);
+	// "personal" is an exact match.
+	switch arg.AccountType {
+	case "personal":
+		sb = sb.Where(squirrel.Eq{"account_type": "personal"})
+	case "team":
+		// ifNull so unclassified (NULL) traces count as team — `!= 'personal'`
+		// alone would drop NULLs.
+		sb = sb.Where("ifNull(account_type, '') != ?", "personal")
 	}
 
 	if len(arg.UserFilters) > 0 {
@@ -2846,6 +2915,11 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
 	}
 
+	// account_type is carried on trace_summaries and projected through the CTE.
+	if arg.AccountType != "" {
+		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
+	}
+
 	return sb, nil
 }
 
@@ -2904,6 +2978,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		// than max()-ing each boolean independently.
 		"max(hook_status_rank) AS g_hook_status_rank",
 		"max(block_reason) AS g_block_reason",
+		"max(account_type) AS g_account_type",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3020,7 +3095,8 @@ SELECT
 	g_event_source AS event_source,
 	g_http_status_code AS http_status_code,
 	%s AS hook_status,
-	nullIf(g_block_reason, '') AS block_reason
+	nullIf(g_block_reason, '') AS block_reason,
+	nullIf(g_account_type, '') AS account_type
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -3074,6 +3150,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		"account_type",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -3239,7 +3316,8 @@ SELECT
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
-	nullIf(block_reason, '') AS block_reason
+	nullIf(block_reason, '') AS block_reason,
+	account_type
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
@@ -3277,7 +3355,8 @@ normalized_traces AS (
 			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
-		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason
+		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
+		nullIf(any(account_type), '') AS account_type
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
@@ -3316,6 +3395,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		"max(account_type) AS g_account_type",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3339,6 +3419,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(hook_source) AS g_hook_source",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
+		"max(account_type) AS g_account_type",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3365,7 +3446,8 @@ SELECT
 	%s AS user_kind,
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
 	toUInt8(g_http_status_code >= 400) AS failure,
-	'' AS hook_source
+	'' AS hook_source,
+	g_account_type AS account_type
 FROM (%s)`,
 		ToolUsageTargetTypeHostedMCP,
 		toolUsageTargetKindServer,
@@ -3453,7 +3535,8 @@ SELECT
 	%s AS user_kind,
 	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
 	toUInt8(g_has_error = 1) AS failure,
-	g_hook_source AS hook_source
+	g_hook_source AS hook_source,
+	g_account_type AS account_type
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))

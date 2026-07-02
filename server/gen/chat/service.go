@@ -144,6 +144,9 @@ type Chat struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Account type that produced the chat ('team', 'personal', or empty), resolved
+	// from the linked AI account.
+	AccountType *string
 }
 
 type ChatMessage struct {
@@ -215,6 +218,9 @@ type ChatOverview struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Account type that produced the chat ('team', 'personal', or empty), resolved
+	// from the linked AI account.
+	AccountType *string
 }
 
 // Trace-entry counts across the entire returned generation, independent of
@@ -347,6 +353,8 @@ type ListChatsPayload struct {
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
+	// Filter by AI account type: 'team', 'personal', or empty for no filter.
+	AccountType *string
 	// Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or
 	// empty for no filter.
 	Pinned *string
