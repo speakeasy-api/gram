@@ -361,12 +361,17 @@ WHERE project_id = @project_id
 -- thread is excluded too: it holds the VM warm but never occupies a
 -- runner slot, and counting it would block max_concurrency=1 assistants
 -- from admitting their first real turn until the window lapses.
+-- Client-driven setup/onboarding threads are excluded for the same reason:
+-- they carry no runtime events and never occupy a runner slot, so counting
+-- them would wrongly consume max_concurrency / warm headroom against real
+-- turns even though the setup chat runs entirely client-side.
 SELECT COUNT(*)::BIGINT AS active_threads
 FROM assistant_threads t
 WHERE t.project_id = @project_id
   AND t.assistant_id = @assistant_id
   AND t.deleted IS FALSE
   AND t.source_kind <> @warmup_source_kind
+  AND t.source_kind <> @setup_source_kind
   AND t.last_event_at > @active_since
   AND NOT EXISTS (
     SELECT 1
