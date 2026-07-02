@@ -150,7 +150,11 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	// preserve the existing value (settings-only updates and key rotations must
 	// not wipe a declared mode).
 	billingMode := payload.BillingMode
-	if billingMode == nil && beforeRow != nil {
+	if billingMode != nil {
+		trimmed := strings.TrimSpace(*billingMode)
+		billingMode = conv.PtrEmpty(trimmed)
+	}
+	if payload.BillingMode == nil && beforeRow != nil {
 		billingMode = conv.PtrEmpty(before.BillingMode)
 	}
 

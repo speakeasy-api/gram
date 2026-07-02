@@ -301,11 +301,17 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
 	metadata := &SessionMetadata{
-		SessionID:           conv.PtrValOr(payload.SessionID, ""),
-		ServiceName:         "Codex",
-		UserEmail:           strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-		UserID:              "",
-		Provider:            providerOpenAI,
+		SessionID:   conv.PtrValOr(payload.SessionID, ""),
+		ServiceName: "Codex",
+		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserID:      "",
+		Provider:    providerOpenAI,
+		// Account-scope attribution (external org/account identity, account
+		// type, billing mode) is wired only for Anthropic sessions today. The
+		// Codex payload carries no account identity for attributeSession to
+		// key on, and ai_integration_configs has no "openai" provider to
+		// declare an org-level billing mode, so these fields stay empty and
+		// cost surfaces treat Codex spend as unclassified (an estimate).
 		ExternalOrgID:       "",
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
