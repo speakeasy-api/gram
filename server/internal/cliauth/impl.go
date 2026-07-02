@@ -1,6 +1,5 @@
 // Package cliauth implements the cliAuth Goa service: the device agent's
-// interactive enrollment via a PKCE one-time-code exchange (DNO-388,
-// ADR-0011 Path A).
+// interactive enrollment via a PKCE one-time-code exchange (DNO-388).
 //
 //   - Authorize runs under a dashboard session (member-available, org:read —
 //     NOT org-admin). It mints a short-lived opaque code bound to a PKCE

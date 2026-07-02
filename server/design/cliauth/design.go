@@ -8,7 +8,7 @@ import (
 )
 
 // The cliAuth service backs the Speakeasy device agent's interactive
-// enrollment (DNO-388, ADR-0011 Path A). It is a PKCE one-time-code exchange:
+// enrollment (DNO-388). It is a PKCE one-time-code exchange:
 //
 //  1. The dashboard, on behalf of the signed-in user, calls authorize with a
 //     PKCE code_challenge and receives a short-lived opaque code.
