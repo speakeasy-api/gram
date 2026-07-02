@@ -377,12 +377,27 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 }
 
 func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	// Filter is required by the Goa design, but direct callers (e.g. platform
+	// tools) bypass transport validation and may pass a nil filter. Normalize to
+	// an empty filter to avoid a nil pointer dereference.
+	filter := payload.Filter
+	if filter == nil {
+		filter = &telem_gen.SearchUsersFilter{
+			From:         "",
+			To:           "",
+			DeploymentID: nil,
+			UserIds:      nil,
+			EventSource:  nil,
+			HookSource:   nil,
+		}
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
 
 	groupBy := "user_id"
 	if payload.UserType == "external" {
@@ -394,10 +409,10 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+		EventSource:      conv.PtrValOr(filter.EventSource, ""),
+		HookSource:       conv.PtrValOr(filter.HookSource, ""),
 		GroupBy:          groupBy,
-		UserIDs:          payload.Filter.UserIds,
+		UserIDs:          filter.UserIds,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -469,12 +484,27 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 // searchUsersByRole fetches all per-user costs from ClickHouse, joins with role
 // assignments from Postgres, and returns aggregates grouped by role.
 func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	// Filter is required by the Goa design, but direct callers (e.g. platform
+	// tools) bypass transport validation and may pass a nil filter. Normalize to
+	// an empty filter to avoid a nil pointer dereference.
+	filter := payload.Filter
+	if filter == nil {
+		filter = &telem_gen.SearchUsersFilter{
+			From:         "",
+			To:           "",
+			DeploymentID: nil,
+			UserIds:      nil,
+			EventSource:  nil,
+			HookSource:   nil,
+		}
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
 
 	// Fetch per-user costs from ClickHouse and role assignments from Postgres
 	// concurrently — the two queries are independent.
@@ -489,10 +519,10 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			TimeStart:        params.timeStart,
 			TimeEnd:          params.timeEnd,
 			GramDeploymentID: deploymentID,
-			EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
-			HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+			EventSource:      conv.PtrValOr(filter.EventSource, ""),
+			HookSource:       conv.PtrValOr(filter.HookSource, ""),
 			GroupBy:          "user_id",
-			UserIDs:          payload.Filter.UserIds,
+			UserIDs:          filter.UserIds,
 			SortOrder:        "desc",
 			Cursor:           "",
 			Limit:            10001, // Upper bound; orgs rarely have >10k users
