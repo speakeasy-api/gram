@@ -421,6 +421,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		attr.SlogToolsetMCPSlug(mcpSlug),
 		attr.SlogProjectID(state.ProjectID.String()),
 	)
+	if state.Resource != "" {
+		logger = logger.With(attr.SlogOAuthResource(state.Resource))
+	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
 	// missing/zero Subject fails fast — otherwise we burn the single-use
