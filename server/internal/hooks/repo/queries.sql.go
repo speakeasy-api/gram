@@ -193,6 +193,45 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 	return i, err
 }
 
+const getProviderOrgBillingMode = `-- name: GetProviderOrgBillingMode :one
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = $1
+  AND provider = $2
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+  AND (
+    external_organization_id IS NULL
+    OR external_organization_id = ''
+    OR external_organization_id = $3
+  )
+ORDER BY (external_organization_id = $3) DESC NULLS LAST
+LIMIT 1
+`
+
+type GetProviderOrgBillingModeParams struct {
+	OrganizationID string
+	Provider       string
+	ExternalOrgID  pgtype.Text
+}
+
+// Resolves the org-level admin-declared billing mode for a provider org from the
+// org's AI integration config (the org-level tier of the billing-mode cascade).
+// A config scoped to a specific external_organization_id must match the session's
+// provider org; a config with none applies provider-wide. Exact-org matches are
+// preferred over provider-wide (NULLS LAST because the comparison is NULL for a
+// NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
+// Only one live config per (org, provider) can exist today, so the ordering is
+// defensive. Only configs with a non-null billing_mode are considered, so an
+// undeclared org returns no rows (treated as unknown upstream).
+func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	var billing_mode pgtype.Text
+	err := row.Scan(&billing_mode)
+	return billing_mode, err
+}
+
 const getUserAccount = `-- name: GetUserAccount :one
 SELECT id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type, billing_mode, plan_type, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM user_accounts
 WHERE organization_id = $1
@@ -395,6 +434,62 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 	return items, nil
 }
 
+const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC
+`
+
+type ListUserAccountsByUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListUserAccountsByUsersRow struct {
+	ID            uuid.UUID
+	UserID        pgtype.Text
+	Provider      string
+	Email         pgtype.Text
+	AccountType   pgtype.Text
+	ExternalOrgID pgtype.Text
+	LastSeenAt    pgtype.Timestamptz
+}
+
+// Returns the linked AI accounts for a set of users within an org. Each
+// (provider, email) row is a distinct account, so a user may have several across
+// providers. Used to attach a per-user accounts breakdown to usage summaries on
+// the employees list. Ordered team-first, then by provider for stable display.
+func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccountsByUsersParams) ([]ListUserAccountsByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUserAccountsByUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserAccountsByUsersRow
+	for rows.Next() {
+		var i ListUserAccountsByUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Email,
+			&i.AccountType,
+			&i.ExternalOrgID,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `
@@ -563,7 +658,7 @@ DO UPDATE SET
   , account_type        = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
   , last_seen_at        = clock_timestamp()
   , updated_at          = clock_timestamp()
-RETURNING id
+RETURNING id, billing_mode
 `
 
 type UpsertUserAccountParams struct {
@@ -577,12 +672,20 @@ type UpsertUserAccountParams struct {
 	AccountType         pgtype.Text
 }
 
+type UpsertUserAccountRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
 // Records the external AI provider account observed for a session, keyed by the
 // provider's stable per-account id. COALESCE on conflict keeps a previously
 // learned owner/email/account_id rather than clobbering it with a null from a
 // later session that lacked that field. The conflict target carries the partial
 // index predicate so it matches user_accounts_org_provider_external_account_uuid_key.
-func (q *Queries) UpsertUserAccount(ctx context.Context, arg UpsertUserAccountParams) (uuid.UUID, error) {
+// billing_mode is intentionally not written here: it is an admin/out-of-band
+// override, never set by ingest. Returning it lets attribution resolve the
+// account-level tier of the billing-mode cascade without a second round trip.
+func (q *Queries) UpsertUserAccount(ctx context.Context, arg UpsertUserAccountParams) (UpsertUserAccountRow, error) {
 	row := q.db.QueryRow(ctx, upsertUserAccount,
 		arg.OrganizationID,
 		arg.Provider,
@@ -593,7 +696,7 @@ func (q *Queries) UpsertUserAccount(ctx context.Context, arg UpsertUserAccountPa
 		arg.Email,
 		arg.AccountType,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertUserAccountRow
+	err := row.Scan(&i.ID, &i.BillingMode)
+	return i, err
 }

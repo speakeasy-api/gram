@@ -155,6 +155,29 @@ async def test_all_false_positives_yields_no_detections():
     assert await _scanner(analyzer).scan(content, None, 0.75) == []
 
 
+async def test_us_driver_license_is_dropped():
+    # Regression for AIS-158: an unpinned scan runs Presidio's full default set,
+    # which includes US_DRIVER_LICENSE. It is dropped at the scanner regardless
+    # of scoping; other matches — including PERSON, whose unpinned detection is
+    # intended — survive.
+    content = "D1234567 Jane Roe a@b.com"
+    analyzer = FakeAnalyzer(
+        {
+            content: [
+                _Result("US_DRIVER_LICENSE", start=0, end=8, score=0.9),
+                _Result("PERSON", start=9, end=17, score=0.85),
+                _Result("EMAIL_ADDRESS", start=18, end=25, score=0.9),
+            ]
+        }
+    )
+
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
+
+    entity_types = {d.entity_type for d in detections}
+    assert "US_DRIVER_LICENSE" not in entity_types
+    assert entity_types == {"PERSON", "EMAIL_ADDRESS"}
+
+
 async def test_nothing_recognized_yields_no_detections():
     analyzer = FakeAnalyzer()  # recognizes nothing
 

@@ -195,7 +195,7 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// presidioEntityBlacklist is the set of Presidio entity types we refuse to
+// presidioEntityBlocklist is the set of Presidio entity types we refuse to
 // scan for regardless of what's stored on the policy.
 //
 //   - PERSON: Presidio's NER-backed person detection trips on common
@@ -208,23 +208,49 @@ type presidioResult struct {
 //     and any text containing "lic" via substring context boosting (e.g.
 //     "public", "duplicate"). See microsoft/presidio#1063 — open since 2023.
 //     Re-enable once the upstream regex is tightened.
-var presidioEntityBlacklist = map[string]struct{}{
+var presidioEntityBlocklist = map[string]struct{}{
 	"PERSON":            {},
 	"US_DRIVER_LICENSE": {},
 }
 
-// filterEntities removes blacklisted entity types from the caller's list.
+// findingLevelDropEntities is the subset of the blocklist that must never
+// surface even when a policy pins no entities. filterEntities trims the full
+// blocklist from a caller-pinned list, but a policy that pins nothing makes
+// Presidio scan its full default set, so those types have to be dropped after
+// the scan too (see convertPresidioFindings) or the blocklist is silently
+// bypassed for every default scan.
+//
+// Only US_DRIVER_LICENSE is here — its recognizer is pure noise
+// (microsoft/presidio#1063). PERSON is deliberately excluded: person-name
+// detection on unpinned scans is intended behaviour (see
+// TestPresidio_DetectsPersonName), so it is only trimmed from pinned lists.
+var findingLevelDropEntities = map[string]struct{}{
+	"US_DRIVER_LICENSE": {},
+}
+
+// isFindingLevelDropped reports whether a finding of this Presidio entity type
+// must be dropped regardless of how the scan was scoped.
+func isFindingLevelDropped(entityType string) bool {
+	_, drop := findingLevelDropEntities[entityType]
+	return drop
+}
+
+// filterEntities removes blocklisted entity types from the caller's list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the
-// caller pinned a list and every entry was blacklisted, so AnalyzeBatch can
+// caller pinned a list and every entry was blocklisted, so AnalyzeBatch can
 // short-circuit instead of falling back to the unbounded default scan.
+//
+// This only bounds what Presidio scans for; the finding-level
+// isFindingLevelDropped gate in convertPresidioFindings is what guarantees
+// US_DRIVER_LICENSE never surfaces even from an unpinned (default) scan.
 func filterEntities(entities []string) []string {
 	if entities == nil {
 		return nil
 	}
 	out := make([]string, 0, len(entities))
 	for _, e := range entities {
-		if _, blocked := presidioEntityBlacklist[e]; blocked {
+		if _, blocked := presidioEntityBlocklist[e]; blocked {
 			continue
 		}
 		out = append(out, e)
@@ -372,11 +398,11 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		return make([][]Finding, n), nil
 	}
 
-	// Apply the entity blacklist at the lowest level so every caller (hook
+	// Apply the entity blocklist at the lowest level so every caller (hook
 	// scanner + Temporal drain activity) inherits the same policy.
 	filtered := filterEntities(entities)
 	if len(entities) > 0 && len(filtered) == 0 {
-		// Caller pinned only blacklisted entities; nothing to scan for.
+		// Caller pinned only blocklisted entities; nothing to scan for.
 		return make([][]Finding, n), nil
 	}
 	entities = filtered
@@ -631,6 +657,14 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		end := max(start, min(r.End, len(runes)))
 
 		match := string(runes[start:end])
+
+		// Drop US_DRIVER_LICENSE regardless of how the scan was scoped.
+		// filterEntities only trims a caller-pinned list; an unpinned policy
+		// scans Presidio's full default set, so without this gate its noisy
+		// license-number findings surface (AIS-158).
+		if isFindingLevelDropped(r.EntityType) {
+			continue
+		}
 
 		if isPresidioFalsePositive(r.EntityType, match) {
 			continue

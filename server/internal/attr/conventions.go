@@ -116,6 +116,7 @@ const (
 	ProviderKey                    = attribute.Key("gram.provider")
 	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
 	AccountTypeKey                 = attribute.Key("gram.account_type")
+	BillingModeKey                 = attribute.Key("gram.billing_mode")
 	DeviceIDKey                    = attribute.Key("gram.device_id")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
@@ -212,10 +213,13 @@ const (
 	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
 	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
 	// as a metric dimension on oauth.flow.failed and in failure logs.
-	OAuthFlowStageKey                 = attribute.Key("gram.oauth.flow_stage")
-	OAuthGrantKey                     = attribute.Key("gram.oauth.grant")
-	OAuthIssuerKey                    = attribute.Key("gram.oauth.issuer")
-	OAuthPresentedAuthMethodKey       = attribute.Key("gram.oauth.presented_auth_method")
+	OAuthFlowStageKey           = attribute.Key("gram.oauth.flow_stage")
+	OAuthGrantKey               = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey              = attribute.Key("gram.oauth.issuer")
+	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
+	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
+	// upstream authorization server during the remote-session dance.
+	OAuthResourceKey                  = attribute.Key("gram.oauth.resource")
 	OAuthProviderKey                  = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURICountKey          = attribute.Key("gram.oauth.redirect_uri.count")
 	OAuthRedirectURIFullKey           = attribute.Key("gram.oauth.redirect_uri.full")
@@ -915,6 +919,9 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
+
+func OAuthResource(v string) attribute.KeyValue { return OAuthResourceKey.String(v) }
+func SlogOAuthResource(v string) slog.Attr      { return slog.String(string(OAuthResourceKey), v) }
 
 func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
 func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }

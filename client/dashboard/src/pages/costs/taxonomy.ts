@@ -1,4 +1,5 @@
 import { Dimension } from "@gram/client/models/components";
+import { providerLabel } from "@/components/observe/account-display-utils";
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
 // controller and the EntityProfile view. Kept in a non-component module so the
@@ -52,6 +53,8 @@ export const PIVOTS: DimMeta[] = [
   { dim: Dimension.EmployeeType, label: "Employment Type" },
   { dim: Dimension.CostCenterName, label: "Cost Center" },
   { dim: Dimension.Model, label: "Model" },
+  { dim: Dimension.AccountType, label: "Account Type" },
+  { dim: Dimension.Provider, label: "Provider" },
   { dim: Dimension.Role, label: "Role" },
   { dim: Dimension.McpServerName, label: "MCP Server" },
   { dim: Dimension.McpToolName, label: "MCP Tool" },
@@ -211,6 +214,8 @@ const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.Role]: "user.roles",
   [Dimension.Model]: "gen_ai.response.model",
   [Dimension.HookSource]: "gram.hook.source",
+  [Dimension.AccountType]: "gram.account_type",
+  [Dimension.Provider]: "gram.provider",
   // Claude attribution keys are stamped at the top level of `attributes` on
   // api_request rows (see attribute_metrics_summaries_mv), so JSONAllPaths emits
   // them verbatim. Present only when the org has Claude attribution data, so the
@@ -273,6 +278,10 @@ export function defaultGroupBy(
 // otherwise. Shared by the profile header and the breadcrumb substitutions.
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return "(unset)";
+  if (dim === Dimension.Provider) return providerLabel(value);
+  if (dim === Dimension.AccountType) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
   if (dim === Dimension.Email && value.includes("@")) {
     const local = value.split("@")[0] ?? value;
     return local

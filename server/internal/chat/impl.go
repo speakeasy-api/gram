@@ -257,6 +257,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		MinRiskScore:   minRiskScore,
 		Pinned:         conv.PtrValOr(payload.Pinned, ""),
 		Sources:        parseSourceFilter(conv.PtrValOr(payload.Source, "")),
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -276,6 +277,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		MinRiskScore:   baseParams.MinRiskScore,
 		Pinned:         baseParams.Pinned,
 		Sources:        baseParams.Sources,
+		AccountType:    baseParams.AccountType,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -303,6 +305,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
 			RiskFindingsCount:    &riskCount,
+			AccountType:          conv.PtrEmpty(row.AccountType),
 			TotalInputTokens:     nil,
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
@@ -320,7 +323,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 // logChatAccess records an audit entry that a dashboard user opened a chat
 // session transcript. It is written with the pool directly (no surrounding
 // transaction) because it describes a read, not a mutation.
-func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.Chat) error {
+func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
 	if err := s.audit.LogChatSessionAccess(ctx, s.db, audit.LogChatSessionAccessEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        chat.ProjectID,
@@ -359,18 +362,20 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
 	}
 
-	sources := make([]string, 0, len(rows))
+	raws := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if row.Valid {
-			sources = append(sources, row.String)
+			raws = append(raws, row.String)
 		}
 	}
 
-	return &gen.ListSourcesResult{Sources: sources}, nil
+	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
 // parseSourceFilter splits the comma-separated `source` filter into the list of
-// exact source strings matched against each chat's inferred source. It always
+// source strings matched against each chat's inferred source. Selected values
+// are canonical (as returned by ListSources), so each is expanded back into its
+// raw aliases to also match sessions recorded under a legacy value. It always
 // returns a non-nil slice so the no-filter case sends an empty text[]
 // (cardinality 0 disables the filter) rather than SQL NULL, which would drop
 // every row.
@@ -388,7 +393,7 @@ func parseSourceFilter(source string) []string {
 		seen[s] = struct{}{}
 		sources = append(sources, s)
 	}
-	return sources
+	return expandSourceAliases(sources)
 }
 
 // chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
@@ -771,6 +776,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
+		AccountType:          conv.PtrEmpty(chat.AccountType),
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),

@@ -4661,11 +4661,13 @@ func marshalTelemetryChatSummaryToChatSummaryResponseBody(v *telemetry.ChatSumma
 // *SearchUsersFilterRequestBody.
 func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUsersFilterRequestBody) *telemetry.SearchUsersFilter {
 	res := &telemetry.SearchUsersFilter{
-		From:         *v.From,
-		To:           *v.To,
-		DeploymentID: v.DeploymentID,
-		EventSource:  v.EventSource,
-		HookSource:   v.HookSource,
+		From:          *v.From,
+		To:            *v.To,
+		DeploymentID:  v.DeploymentID,
+		EventSource:   v.EventSource,
+		HookSource:    v.HookSource,
+		AccountType:   v.AccountType,
+		ExternalOrgID: v.ExternalOrgID,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))
@@ -4722,6 +4724,22 @@ func marshalTelemetryUserSummaryToUserSummaryResponseBody(v *telemetry.UserSumma
 	} else {
 		res.HookSources = []*HookSourceUsageResponseBody{}
 	}
+	if v.AccountTypes != nil {
+		res.AccountTypes = make([]string, len(v.AccountTypes))
+		for i, val := range v.AccountTypes {
+			res.AccountTypes[i] = val
+		}
+	}
+	if v.Accounts != nil {
+		res.Accounts = make([]*UserAccountResponseBody, len(v.Accounts))
+		for i, val := range v.Accounts {
+			if val == nil {
+				res.Accounts[i] = nil
+				continue
+			}
+			res.Accounts[i] = marshalTelemetryUserAccountToUserAccountResponseBody(val)
+		}
+	}
 
 	return res
 }
@@ -4746,6 +4764,24 @@ func marshalTelemetryHookSourceUsageToHookSourceUsageResponseBody(v *telemetry.H
 	res := &HookSourceUsageResponseBody{
 		Source:     v.Source,
 		EventCount: v.EventCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryUserAccountToUserAccountResponseBody builds a value of type
+// *UserAccountResponseBody from a value of type *telemetry.UserAccount.
+func marshalTelemetryUserAccountToUserAccountResponseBody(v *telemetry.UserAccount) *UserAccountResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &UserAccountResponseBody{
+		ID:               v.ID,
+		Provider:         v.Provider,
+		Email:            v.Email,
+		AccountType:      v.AccountType,
+		ExternalOrgID:    v.ExternalOrgID,
+		LastSeenUnixNano: v.LastSeenUnixNano,
 	}
 
 	return res
@@ -5422,6 +5458,7 @@ func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v 
 		HTTPStatusCode:    v.HTTPStatusCode,
 		HookStatus:        v.HookStatus,
 		BlockReason:       v.BlockReason,
+		AccountType:       v.AccountType,
 	}
 	if v.LogGroup != nil {
 		res.LogGroup = marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(v.LogGroup)

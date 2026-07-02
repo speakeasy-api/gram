@@ -67,6 +67,7 @@ candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -97,19 +98,30 @@ candidate_chats AS (
       OR ($9::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $10::int < 0
-      OR COALESCE(rc.cnt, 0) >= $10::int
+      $10::text = ''
+      OR ua.account_type = $10::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        $10::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
     )
     AND (
-      coalesce(cardinality($11::text[]), 0) = 0
+      $11::int < 0
+      OR COALESCE(rc.cnt, 0) >= $11::int
+    )
+    AND (
+      coalesce(cardinality($12::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
           AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($11::text[])
+      ) = ANY ($12::text[])
     )
 ),
 chat_activity AS (
@@ -136,6 +148,7 @@ type CountChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	AccountType    string
 	MinRiskScore   int32
 	Sources        []string
 }
@@ -154,6 +167,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.AccountType,
 		arg.MinRiskScore,
 		arg.Sources,
 	)
@@ -517,12 +531,36 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, external_chat_id, title, title_manually_set, pinned_at, user_account_id, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
-func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
+type GetChatRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+	AccountType      string
+}
+
+// Loads a chat plus the team/personal classification of the AI account that
+// produced it (chats.user_account_id has no FK), scoped by organization. Returns
+// ” for account_type when the chat has no linked account or it is unclassified.
+func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error) {
 	row := q.db.QueryRow(ctx, getChat, id)
-	var i Chat
+	var i GetChatRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -538,6 +576,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.AccountType,
 	)
 	return i, err
 }
@@ -1472,6 +1511,7 @@ WITH latest_sources AS (
     AND ($2::text = '' OR c.external_user_id = $2::text)
     AND ($3::text = '' OR c.user_id = $3::text)
     AND cm.source IS NOT NULL
+    AND cm.source <> ''
   ORDER BY cm.chat_id, cm.created_at DESC
 )
 SELECT DISTINCT source
@@ -1533,9 +1573,13 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
-    COALESCE(rc.cnt, 0) AS risk_findings_count
+    COALESCE(rc.cnt, 0) AS risk_findings_count,
+    COALESCE(ua.account_type, '')::text AS account_type
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
+  -- matching chats.user_id) to expose its team/personal classification.
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
@@ -1566,19 +1610,30 @@ candidate_chats AS (
       OR ($7::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $8::int < 0
-      OR COALESCE(rc.cnt, 0) >= $8::int
+      $8::text = ''
+      OR ua.account_type = $8::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        $8::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
     )
     AND (
-      coalesce(cardinality($9::text[]), 0) = 0
+      $9::int < 0
+      OR COALESCE(rc.cnt, 0) >= $9::int
+    )
+    AND (
+      coalesce(cardinality($10::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
           AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($9::text[])
+      ) = ANY ($10::text[])
     )
 ),
 chat_stats AS (
@@ -1600,11 +1655,12 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    cc.risk_findings_count
+    cc.risk_findings_count,
+    cc.account_type
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($10::timestamptz IS NULL OR cs.last_message_timestamp >= $10)
-    AND ($11::timestamptz IS NULL OR cs.last_message_timestamp <= $11)
+  WHERE ($11::timestamptz IS NULL OR cs.last_message_timestamp >= $11)
+    AND ($12::timestamptz IS NULL OR cs.last_message_timestamp <= $12)
 ),
 limited_chats AS (
   SELECT
@@ -1615,19 +1671,20 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
-    fc.risk_findings_count
+    fc.risk_findings_count,
+    fc.account_type
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $12 = 'num_messages' AND $13 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $12 = 'num_messages' AND $13 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $13 = 'last_message_timestamp' AND $14 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $13 = 'last_message_timestamp' AND $14 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $13 = 'num_messages' AND $14 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $13 = 'num_messages' AND $14 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $15
-  OFFSET $14
+  LIMIT $16
+  OFFSET $15
 )
 SELECT
   lc.id,
@@ -1639,7 +1696,8 @@ SELECT
   lc.updated_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  lc.risk_findings_count
+  lc.risk_findings_count,
+  lc.account_type
 FROM limited_chats lc
 `
 
@@ -1651,6 +1709,7 @@ type ListChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	AccountType    string
 	MinRiskScore   int32
 	Sources        []string
 	FromTime       pgtype.Timestamptz
@@ -1672,6 +1731,7 @@ type ListChatsRow struct {
 	NumMessages          int32
 	LastMessageTimestamp pgtype.Timestamptz
 	RiskFindingsCount    int32
+	AccountType          string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -1687,6 +1747,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.AccountType,
 		arg.MinRiskScore,
 		arg.Sources,
 		arg.FromTime,
@@ -1714,6 +1775,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.NumMessages,
 			&i.LastMessageTimestamp,
 			&i.RiskFindingsCount,
+			&i.AccountType,
 		); err != nil {
 			return nil, err
 		}

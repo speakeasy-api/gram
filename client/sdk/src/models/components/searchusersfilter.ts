@@ -10,6 +10,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type SearchUsersFilter = {
   /**
+   * Optional account type filter ('team' or 'personal').
+   */
+  accountType?: string | undefined;
+  /**
    * Deployment ID filter
    */
   deploymentId?: string | undefined;
@@ -17,6 +21,10 @@ export type SearchUsersFilter = {
    * Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
    */
   eventSource?: string | undefined;
+  /**
+   * Optional filter to a single AI account by its provider org id (the per-account discriminator); scopes results to that one account.
+   */
+  externalOrgId?: string | undefined;
   /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
@@ -37,8 +45,10 @@ export type SearchUsersFilter = {
 
 /** @internal */
 export type SearchUsersFilter$Outbound = {
+  account_type?: string | undefined;
   deployment_id?: string | undefined;
   event_source?: string | undefined;
+  external_org_id?: string | undefined;
   from: string;
   hook_source?: string | undefined;
   to: string;
@@ -51,8 +61,10 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
   SearchUsersFilter
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     deploymentId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    externalOrgId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -60,8 +72,10 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
       deploymentId: "deployment_id",
       eventSource: "event_source",
+      externalOrgId: "external_org_id",
       hookSource: "hook_source",
       userIds: "user_ids",
     });

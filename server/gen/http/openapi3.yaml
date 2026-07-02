@@ -6855,6 +6855,17 @@ paths:
                         - "false"
                     type: string
                 - allowEmptyValue: true
+                  description: 'Filter by AI account type: ''team'', ''personal'', or empty for no filter.'
+                  in: query
+                  name: account_type
+                  schema:
+                    description: 'Filter by AI account type: ''team'', ''personal'', or empty for no filter.'
+                    enum:
+                        - ""
+                        - team
+                        - personal
+                    type: string
+                - allowEmptyValue: true
                   description: 'Filter by pinned state: ''true'' for pinned chats, ''false'' for unpinned, or empty for no filter.'
                   in: query
                   name: pinned
@@ -35095,6 +35106,9 @@ components:
         AIIntegrationConfig:
             type: object
             properties:
+                billing_mode:
+                    type: string
+                    description: 'How the provider org is billed: ''metered'' (pay-per-token; dashboard cost is real spend), ''flat_rate'' (subscription seats; cost is an estimate), or ''unknown''. Empty/omitted when not declared.'
                 created_at:
                     type: string
                     description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
@@ -36412,6 +36426,9 @@ components:
         Chat:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
                 agent_usage:
                     $ref: '#/components/schemas/AgentUsage'
                 created_at:
@@ -36565,6 +36582,9 @@ components:
         ChatOverview:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
                 created_at:
                     type: string
                     description: When the chat was created.
@@ -39849,6 +39869,12 @@ components:
         GetEmployeeDataFlowGraphPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal')
+                external_org_id:
+                    type: string
+                    description: Optional filter to a single AI account by its provider org id; scopes the graph to that one account
                 external_user_id:
                     type: string
                     description: External user ID to get the graph for (mutually exclusive with user_id)
@@ -40079,12 +40105,18 @@ components:
         GetObservabilityOverviewPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal')
                 api_key_id:
                     type: string
                     description: Optional API key ID filter
                 event_source:
                     type: string
                     description: Optional event source filter (e.g. 'hook')
+                external_org_id:
+                    type: string
+                    description: Optional filter to a single AI account by its provider org id; scopes the overview to that one account
                 external_user_id:
                     type: string
                     description: Optional external user ID filter
@@ -40358,6 +40390,9 @@ components:
         GetToolUsageSummaryPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal').
                 from:
                     type: string
                     description: Start time in ISO 8601 format
@@ -40450,9 +40485,15 @@ components:
         GetUserMetricsSummaryPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal')
                 event_source:
                     type: string
                     description: Optional event source filter (e.g. 'hook')
+                external_org_id:
+                    type: string
+                    description: Optional filter to a single AI account by its provider org id; scopes metrics to that one account
                 external_user_id:
                     type: string
                     description: External user ID to get metrics for (mutually exclusive with user_id)
@@ -42156,6 +42197,9 @@ components:
         ListToolUsageTracesPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
                 cursor:
                     type: string
                     description: Cursor for pagination
@@ -44575,6 +44619,7 @@ components:
                         - hook_source
                         - account_type
                         - provider
+                        - billing_mode
                         - query_source
                         - skill_name
                         - agent_name
@@ -44670,6 +44715,7 @@ components:
                         - hook_source
                         - account_type
                         - provider
+                        - billing_mode
                         - query_source
                         - skill_name
                         - agent_name
@@ -46690,6 +46736,9 @@ components:
         SearchUsersFilter:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal').
                 deployment_id:
                     type: string
                     description: Deployment ID filter
@@ -46697,6 +46746,9 @@ components:
                 event_source:
                     type: string
                     description: Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
+                external_org_id:
+                    type: string
+                    description: Optional filter to a single AI account by its provider org id (the per-account discriminator); scopes results to that one account.
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -48561,6 +48613,9 @@ components:
         ToolUsageTraceSummary:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: AI account classification ('team' or 'personal'); empty/absent when unclassified
                 block_reason:
                     type: string
                     description: Hook block reason when hook_status is blocked
@@ -50513,6 +50568,9 @@ components:
                 api_key:
                     type: string
                     description: Provider API key. Stored encrypted at rest; never returned on reads.
+                billing_mode:
+                    type: string
+                    description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
                 enabled:
                     type: boolean
                     description: Whether the integration should be active.
@@ -50653,6 +50711,30 @@ components:
                 - free
                 - pro
                 - enterprise
+        UserAccount:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: '''team'' (enterprise) or ''personal'' (individual); empty when not yet classified'
+                email:
+                    type: string
+                    description: Email associated with the account; may differ from the user's work email for personal accounts
+                external_org_id:
+                    type: string
+                    description: Provider org id for this account; the per-account discriminator used to scope telemetry to this one account
+                id:
+                    type: string
+                    description: Account record id (user_accounts.id); used to scope chat/session views to this account
+                last_seen_unix_nano:
+                    type: string
+                    description: Latest activity timestamp for this account in Unix nanoseconds
+                provider:
+                    type: string
+                    description: AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+            description: 'A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.'
+            required:
+                - provider
         UserSession:
             type: object
             properties:
@@ -50848,6 +50930,16 @@ components:
         UserSummary:
             type: object
             properties:
+                account_types:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct account types observed for this user ('team', 'personal')
+                accounts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserAccount'
+                    description: Linked AI accounts for this user (team and personal, across providers)
                 avg_tokens_per_request:
                     type: number
                     description: Average tokens per chat request

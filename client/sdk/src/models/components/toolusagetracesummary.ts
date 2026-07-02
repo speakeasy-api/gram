@@ -81,6 +81,10 @@ export type ToolUsageTraceSummaryUserKind = ClosedEnum<
  */
 export type ToolUsageTraceSummary = {
   /**
+   * AI account classification ('team' or 'personal'); empty/absent when unclassified
+   */
+  accountType?: string | undefined;
+  /**
    * Hook block reason when hook_status is blocked
    */
   blockReason?: string | undefined;
@@ -184,6 +188,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    account_type: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
@@ -206,6 +211,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "account_type": "accountType",
       "block_reason": "blockReason",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
