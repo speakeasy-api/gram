@@ -19,6 +19,7 @@ export * from "./allowedorigin.js";
 export * from "./approveshadowmcpapprovalrequestform.js";
 export * from "./asset.js";
 export * from "./assistant.js";
+export * from "./assistantmcpserverref.js";
 export * from "./assistantmemory.js";
 export * from "./assistanttoolsetref.js";
 export * from "./attachserverrequestbody.js";

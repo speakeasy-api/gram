@@ -125,6 +125,7 @@ type assistantRecord struct {
 	Model           string
 	Instructions    string
 	Toolsets        []assistantToolsetRow
+	MCPServers      []assistantMCPServerRow
 	WarmTTLSeconds  int
 	MaxConcurrency  int
 	Status          string
@@ -188,6 +189,19 @@ type assistantToolsetRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
+// assistantMCPServerRow is the hydrated view of a row in assistant_mcp_servers
+// joined with mcp_servers + its Gram-hosted endpoint + environments. Like
+// assistantToolsetRow, everything dispatch needs to build the MCP server URL
+// comes from one read; ServerSlug is the display/runtime ID and EndpointSlug is
+// the public /mcp/{slug} path segment the runner connects to.
+type assistantMCPServerRow struct {
+	MCPServerID     uuid.UUID
+	ServerSlug      pgtype.Text
+	EndpointSlug    string
+	EnvironmentID   uuid.NullUUID
+	EnvironmentSlug pgtype.Text
+}
+
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
 		ID:              row.ID,
@@ -198,6 +212,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -217,6 +232,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -236,6 +252,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -255,6 +272,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -274,6 +292,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -706,6 +725,105 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	return out, nil
 }
 
+// resolvedMcpServerInsert captures the FK values we need to write one row in
+// assistant_mcp_servers for a single (mcp_server_slug, environment_slug?) ref.
+type resolvedMcpServerInsert struct {
+	MCPServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+}
+
+// resolveMcpServerRefsForWrite validates that every user-supplied mcp server
+// slug exists within the project and returns the FK ids to persist, mirroring
+// resolveToolsetRefsForWrite. Failing fast turns silent dispatch-time errors
+// ("unknown mcp server") into 400s at create/update time.
+func (s *ServiceCore) resolveMcpServerRefsForWrite(
+	ctx context.Context,
+	projectID uuid.UUID,
+	refs []*types.AssistantMCPServerRef,
+) ([]resolvedMcpServerInsert, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	serverSlugs := make([]string, 0, len(refs))
+	envSlugs := make([]string, 0, len(refs))
+	seenServerSlug := map[string]struct{}{}
+	seenEnvSlug := map[string]struct{}{}
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		if _, ok := seenServerSlug[ref.McpServerSlug]; !ok {
+			seenServerSlug[ref.McpServerSlug] = struct{}{}
+			serverSlugs = append(serverSlugs, ref.McpServerSlug)
+		}
+		if ref.EnvironmentSlug != nil && *ref.EnvironmentSlug != "" {
+			if _, ok := seenEnvSlug[*ref.EnvironmentSlug]; !ok {
+				seenEnvSlug[*ref.EnvironmentSlug] = struct{}{}
+				envSlugs = append(envSlugs, *ref.EnvironmentSlug)
+			}
+		}
+	}
+
+	queries := assistantrepo.New(s.db)
+	serverIDs := map[string]uuid.UUID{}
+	serverRows, err := queries.ResolveMcpServersForWrite(ctx, assistantrepo.ResolveMcpServersForWriteParams{
+		ProjectID: projectID,
+		Slugs:     serverSlugs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
+	}
+	for _, row := range serverRows {
+		if row.Slug.Valid {
+			serverIDs[row.Slug.String] = row.ID
+		}
+	}
+	for _, slug := range serverSlugs {
+		if _, ok := serverIDs[slug]; !ok {
+			return nil, assistantValidationError("mcp server %q not found in project", slug)
+		}
+	}
+
+	envIDs := map[string]uuid.UUID{}
+	if len(envSlugs) > 0 {
+		envRows, err := queries.ResolveEnvironmentsForWrite(ctx, assistantrepo.ResolveEnvironmentsForWriteParams{
+			ProjectID: projectID,
+			Slugs:     envSlugs,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve environment slugs: %w", err)
+		}
+		for _, row := range envRows {
+			envIDs[row.Slug] = row.ID
+		}
+		for _, slug := range envSlugs {
+			if _, ok := envIDs[slug]; !ok {
+				return nil, assistantValidationError("environment %q not found in project", slug)
+			}
+		}
+	}
+
+	out := make([]resolvedMcpServerInsert, 0, len(refs))
+	seen := map[uuid.UUID]struct{}{}
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		serverID := serverIDs[ref.McpServerSlug]
+		if _, dup := seen[serverID]; dup {
+			return nil, assistantValidationError("mcp server %q listed more than once", ref.McpServerSlug)
+		}
+		seen[serverID] = struct{}{}
+		var envID uuid.NullUUID
+		if ref.EnvironmentSlug != nil && *ref.EnvironmentSlug != "" {
+			envID = uuid.NullUUID{UUID: envIDs[*ref.EnvironmentSlug], Valid: true}
+		}
+		out = append(out, resolvedMcpServerInsert{MCPServerID: serverID, EnvironmentID: envID})
+	}
+	return out, nil
+}
+
 // loadAssistantToolsets pulls the hydrated toolset rows for one or more
 // assistants in a single query so callers can attach them without N+1.
 func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantToolsetRow, error) {
@@ -732,6 +850,56 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.
 		})
 	}
 	return out, nil
+}
+
+// loadAssistantMcpServers pulls the hydrated mcp_servers attachments for one or
+// more assistants in a single query, mirroring loadAssistantToolsets. Rows
+// whose server has no Gram-hosted endpoint (empty EndpointSlug) are dropped
+// here so dispatch never builds a slugless MCP URL.
+func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
+	out := map[uuid.UUID][]assistantMCPServerRow{}
+	if len(assistantIDs) == 0 {
+		return out, nil
+	}
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
+		AssistantIds: assistantIDs,
+		ProjectID:    projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load assistant mcp servers: %w", err)
+	}
+	for _, row := range rows {
+		if row.EndpointSlug == "" {
+			continue
+		}
+		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
+			MCPServerID:     row.McpServerID,
+			ServerSlug:      row.ServerSlug,
+			EndpointSlug:    row.EndpointSlug,
+			EnvironmentID:   row.EnvironmentID,
+			EnvironmentSlug: row.EnvironmentSlug,
+		})
+	}
+	return out, nil
+}
+
+// hydrateAssistantToolSources loads both attachment kinds — toolsets and
+// directly-attached mcp_servers — onto a single assistant record. Every read
+// that feeds the runtime (dispatch, bootstrap, reconcile) and every API read
+// goes through here so record.Toolsets and record.MCPServers stay in lockstep.
+func (s *ServiceCore) hydrateAssistantToolSources(ctx context.Context, projectID uuid.UUID, record *assistantRecord) error {
+	toolsets, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
+	if err != nil {
+		return err
+	}
+	record.Toolsets = toolsets[record.ID]
+
+	mcpServers, err := s.loadAssistantMcpServers(ctx, projectID, []uuid.UUID{record.ID})
+	if err != nil {
+		return err
+	}
+	record.MCPServers = mcpServers[record.ID]
+	return nil
 }
 
 // writeAssistantToolsets replaces the assistant's toolset membership with
@@ -780,6 +948,41 @@ func writeAssistantToolsets(
 	return nil
 }
 
+// writeAssistantMcpServers replaces the assistant's directly-attached mcp
+// server set. Caller-supplied tx so it shares the same atomic boundary as the
+// assistant row and toolset writes. Unlike toolsets there is no MCP-enable
+// step: a remote/tunnelled mcp_server is already reachable at its own endpoint.
+func writeAssistantMcpServers(
+	ctx context.Context,
+	tx pgx.Tx,
+	assistantID, projectID uuid.UUID,
+	resolved []resolvedMcpServerInsert,
+) error {
+	queries := assistantrepo.New(tx)
+	if err := queries.ClearAssistantMcpServers(ctx, assistantrepo.ClearAssistantMcpServersParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("clear assistant mcp servers: %w", err)
+	}
+	if len(resolved) == 0 {
+		return nil
+	}
+	rows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(resolved))
+	for _, r := range resolved {
+		rows = append(rows, assistantrepo.AddAssistantMcpServersParams{
+			AssistantID:   assistantID,
+			McpServerID:   r.MCPServerID,
+			EnvironmentID: r.EnvironmentID,
+			ProjectID:     projectID,
+		})
+	}
+	if _, err := queries.AddAssistantMcpServers(ctx, rows); err != nil {
+		return fmt.Errorf("insert assistant mcp servers: %w", err)
+	}
+	return nil
+}
+
 func deterministicChatID(assistantID uuid.UUID, correlationID string) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("assistant-thread:"+assistantID.String()+":"+correlationID))
 }
@@ -797,6 +1000,18 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		}
 		toolsets = append(toolsets, ref)
 	}
+	mcpServers := make([]*types.AssistantMCPServerRef, 0, len(record.MCPServers))
+	for _, row := range record.MCPServers {
+		ref := &types.AssistantMCPServerRef{
+			McpServerSlug:   row.ServerSlug.String,
+			EnvironmentSlug: nil,
+		}
+		if row.EnvironmentSlug.Valid {
+			envSlug := row.EnvironmentSlug.String
+			ref.EnvironmentSlug = &envSlug
+		}
+		mcpServers = append(mcpServers, ref)
+	}
 	return &types.Assistant{
 		ID:              record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
@@ -805,6 +1020,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		Model:           record.Model,
 		Instructions:    record.Instructions,
 		Toolsets:        toolsets,
+		McpServers:      mcpServers,
 		WarmTTLSeconds:  record.WarmTTLSeconds,
 		MaxConcurrency:  record.MaxConcurrency,
 		Status:          record.Status,
@@ -822,6 +1038,7 @@ func (s *ServiceCore) CreateAssistant(
 	model string,
 	instructions string,
 	toolsets []*types.AssistantToolsetRef,
+	mcpServers []*types.AssistantMCPServerRef,
 	warmTTLSeconds int,
 	maxConcurrency int,
 	status string,
@@ -831,6 +1048,10 @@ func (s *ServiceCore) CreateAssistant(
 	}
 
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
+	if err != nil {
+		return assistantRecord{}, err
+	}
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -861,16 +1082,17 @@ func (s *ServiceCore) CreateAssistant(
 	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
+		return assistantRecord{}, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 
@@ -892,8 +1114,13 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	mcpRefs, err := s.loadAssistantMcpServers(ctx, projectID, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].Toolsets = refs[out[i].ID]
+		out[i].MCPServers = mcpRefs[out[i].ID]
 	}
 	return out, nil
 }
@@ -907,11 +1134,9 @@ func (s *ServiceCore) GetAssistant(ctx context.Context, projectID uuid.UUID, ass
 		return assistantRecord{}, fmt.Errorf("select assistant: %w", err)
 	}
 	record := assistantRecordFromGetRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 
@@ -921,11 +1146,9 @@ func (s *ServiceCore) getAssistantForDispatch(ctx context.Context, assistantID u
 		return assistantRecord{}, fmt.Errorf("select assistant for dispatch: %w", err)
 	}
 	record := assistantRecordFromDispatchRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, record.ProjectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, record.ProjectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 
@@ -937,6 +1160,7 @@ func (s *ServiceCore) UpdateAssistant(
 	model *string,
 	instructions *string,
 	toolsets []*types.AssistantToolsetRef,
+	mcpServers []*types.AssistantMCPServerRef,
 	warmTTLSeconds *int,
 	maxConcurrency *int,
 	status *string,
@@ -948,6 +1172,14 @@ func (s *ServiceCore) UpdateAssistant(
 			return assistantRecord{}, err
 		}
 		resolved = r
+	}
+	var resolvedMcpServers []resolvedMcpServerInsert
+	if mcpServers != nil {
+		r, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
+		if err != nil {
+			return assistantRecord{}, err
+		}
+		resolvedMcpServers = r
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -977,16 +1209,19 @@ func (s *ServiceCore) UpdateAssistant(
 			return assistantRecord{}, err
 		}
 	}
+	if mcpServers != nil {
+		if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
+			return assistantRecord{}, err
+		}
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 
@@ -2293,7 +2528,7 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 		)
 		return nil
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, platformSlugs)
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 }
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
@@ -2440,6 +2675,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -2447,11 +2683,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
-	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
-	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").LogError(ctx, s.logger, logAttrs...)
+	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
 	}
-	assistant.Toolsets = toolsets[assistant.ID]
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
@@ -2470,7 +2704,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// best-effort URLs rather than aborting the whole bootstrap. The runner
 	// will discover the failure when it tries to list tools and the
 	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, platformSlugs)
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
@@ -2549,8 +2783,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, platformToolsets []string) []runtimeMCPServer {
-	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(mcpServers)+len(platformToolsets))
 	for _, t := range toolsets {
 		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
 		// problem, not a server fault. Skip the broken toolset and let
@@ -2580,6 +2814,35 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		servers = append(servers, runtimeMCPServer{
 			ID:      t.ToolsetSlug,
 			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
+			Headers: headers,
+		})
+	}
+
+	// MCP servers attached directly to the assistant (assistant_mcp_servers) —
+	// remote- or tunnelled-backed servers that have no toolsets row, so they
+	// can't ride the toolset branch above. The runner treats every entry
+	// uniformly as an MCP endpoint to connect to, so these need only the same
+	// {ID, URL, Headers} shape: the public /mcp/{endpoint} path that
+	// serveRemoteBackend already proxies, plus an optional bound environment.
+	// loadAssistantMcpServers already dropped rows without a Gram-hosted
+	// endpoint. ServerSlug is the runtime ID (agentkit namespaces tool names by
+	// it, 64-char cap); it shares a slug space with toolsets only by
+	// coincidence, which the attach path is responsible for keeping distinct.
+	for _, m := range mcpServers {
+		if m.EndpointSlug == "" {
+			continue
+		}
+		headers := map[string]string{}
+		if m.EnvironmentSlug.Valid && m.EnvironmentSlug.String != "" {
+			headers["Gram-Environment"] = m.EnvironmentSlug.String
+		}
+		id := m.EndpointSlug
+		if m.ServerSlug.Valid && m.ServerSlug.String != "" {
+			id = m.ServerSlug.String
+		}
+		servers = append(servers, runtimeMCPServer{
+			ID:      id,
+			URL:     serverURL.JoinPath("mcp", m.EndpointSlug).String(),
 			Headers: headers,
 		})
 	}
@@ -2712,6 +2975,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -2729,11 +2993,9 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		State:               row.State,
 		WarmUntil:           row.WarmUntil,
 	}
-	refs, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, err
 	}
-	assistant.Toolsets = refs[assistant.ID]
 	return thread, assistant, runtime, nil
 }
 

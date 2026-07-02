@@ -329,6 +329,11 @@ type AttachToolsetArgs = {
   environment_slug?: string;
 };
 type DetachToolsetArgs = { toolset_slug: string };
+type AttachMCPServerArgs = {
+  mcp_server_slug: string;
+  environment_slug?: string;
+};
+type DetachMCPServerArgs = { mcp_server_slug: string };
 type CreateToolsetArgs = {
   name: string;
   description?: string;
@@ -408,27 +413,35 @@ function buildAssistantTools(deps: ToolDeps) {
     toolsetSlug: string;
     environmentSlug?: string | undefined;
   };
+  type LiveMCPServer = {
+    mcpServerSlug: string;
+    environmentSlug?: string | undefined;
+  };
   const live: {
     id: string | null;
     name: string | undefined;
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
+    mcpServers: ReadonlyArray<LiveMCPServer>;
   } = {
     id: draft.assistantId,
     name: draft.assistant?.name,
     instructions: draft.assistant?.instructions ?? "",
     toolsets: draft.assistant?.toolsets ?? [],
+    mcpServers: draft.assistant?.mcpServers ?? [],
   };
   const trackLive = (a: {
     id: string;
     name: string;
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
+    mcpServers?: ReadonlyArray<LiveMCPServer> | undefined;
   }) => {
     live.id = a.id;
     live.name = a.name;
     live.instructions = a.instructions;
     live.toolsets = a.toolsets;
+    live.mcpServers = a.mcpServers ?? [];
   };
 
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
@@ -841,6 +854,113 @@ function buildAssistantTools(deps: ToolDeps) {
         }),
     },
     "detach_toolset",
+  );
+
+  const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
+    {
+      description:
+        "Attach an MCP server registered in this project (a remote external-SaaS MCP or a tunnelled MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+      parameters: z.object({
+        mcp_server_slug: z.string(),
+        environment_slug: z
+          .string()
+          .optional()
+          .describe(
+            "Bind a specific environment for this server. Omit for remote servers that authenticate through their own connection.",
+          ),
+      }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { mcp_server_slug, environment_slug } =
+            args as AttachMCPServerArgs;
+          try {
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
+            const next = (a.mcpServers ?? [])
+              .filter((m) => m.mcpServerSlug !== mcp_server_slug)
+              .concat([
+                {
+                  mcpServerSlug: mcp_server_slug,
+                  environmentSlug: environment_slug,
+                },
+              ]);
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: a.id, mcpServers: next },
+            });
+            draft.setAssistant(updated);
+            trackLive(updated);
+            draft.invalidateAll();
+            return okResult({
+              mcp_servers: updated.mcpServers,
+              ...(environment_slug ? { environment_slug } : {}),
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "attach failed");
+          }
+        }),
+    },
+    "attach_mcp_server",
+  );
+
+  const detach_mcp_server = defineFrontendTool<DetachMCPServerArgs, ToolResult>(
+    {
+      description:
+        "Remove an MCP server from the assistant. Does not delete the server itself.",
+      parameters: z.object({ mcp_server_slug: z.string() }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { mcp_server_slug } = args as DetachMCPServerArgs;
+          try {
+            if (!live.id) {
+              return errResult("No assistant exists yet. Create one first.");
+            }
+            const next = live.mcpServers.filter(
+              (m) => m.mcpServerSlug !== mcp_server_slug,
+            );
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: live.id, mcpServers: next },
+            });
+            draft.setAssistant(updated);
+            trackLive(updated);
+            draft.invalidateAll();
+            return okResult({ mcp_servers: updated.mcpServers });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "detach failed");
+          }
+        }),
+    },
+    "detach_mcp_server",
+  );
+
+  const list_mcp_servers = defineFrontendTool<
+    Record<string, never>,
+    ToolResult
+  >(
+    {
+      description:
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset.",
+      parameters: z.object({}),
+      execute: async () => {
+        try {
+          const result = await sdk.mcpServers.list();
+          return okResult({
+            mcp_servers: result.mcpServers.map((m) => ({
+              slug: m.slug,
+              name: m.name,
+              backend: m.remoteMcpServerId
+                ? "remote"
+                : m.toolsetId
+                  ? "toolset"
+                  : "tunnelled",
+              visibility: m.visibility,
+            })),
+          });
+        } catch (e) {
+          return errResult(e instanceof Error ? e.message : "list failed");
+        }
+      },
+    },
+    "list_mcp_servers",
   );
 
   const list_toolsets = defineFrontendTool<Record<string, never>, ToolResult>(
@@ -1924,6 +2044,9 @@ function buildAssistantTools(deps: ToolDeps) {
     set_tasks,
     attach_toolset,
     detach_toolset,
+    attach_mcp_server,
+    detach_mcp_server,
+    list_mcp_servers,
     list_toolsets,
     create_toolset,
     add_tools_to_toolset,

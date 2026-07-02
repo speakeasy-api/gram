@@ -24,6 +24,8 @@ type CreateAssistantRequestBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Optional maximum active warm runtimes.
@@ -45,6 +47,8 @@ type UpdateAssistantRequestBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes.
@@ -92,6 +96,8 @@ type GetAssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -121,6 +127,8 @@ type CreateAssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -150,6 +158,8 @@ type UpdateAssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -191,6 +201,8 @@ type GetManagedAssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -220,6 +232,8 @@ type EnsureManagedAssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -1734,6 +1748,8 @@ type AssistantResponseBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
@@ -1755,12 +1771,32 @@ type AssistantToolsetRefResponseBody struct {
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
+// AssistantMCPServerRefResponseBody is used to define fields on response body
+// types.
+type AssistantMCPServerRefResponseBody struct {
+	// The MCP server slug exposed to the assistant. Covers remote- and
+	// tunnelled-backed MCP servers, which have no toolset to attach.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// Optional environment slug used when connecting to the MCP server.
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
+
 // AssistantToolsetRefRequestBody is used to define fields on request body
 // types.
 type AssistantToolsetRefRequestBody struct {
 	// The toolset slug exposed to the assistant.
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// Optional environment slug used when invoking the toolset.
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
+
+// AssistantMCPServerRefRequestBody is used to define fields on request body
+// types.
+type AssistantMCPServerRefRequestBody struct {
+	// The MCP server slug exposed to the assistant. Covers remote- and
+	// tunnelled-backed MCP servers, which have no toolset to attach.
+	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
+	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
@@ -1787,6 +1823,16 @@ func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *Create
 	} else {
 		body.Toolsets = []*AssistantToolsetRefRequestBody{}
 	}
+	if p.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefRequestBody, len(p.McpServers))
+		for i, val := range p.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(val)
+		}
+	}
 	return body
 }
 
@@ -1810,6 +1856,16 @@ func NewUpdateAssistantRequestBody(p *assistants.UpdateAssistantPayload) *Update
 				continue
 			}
 			body.Toolsets[i] = marshalTypesAssistantToolsetRefToAssistantToolsetRefRequestBody(val)
+		}
+	}
+	if p.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefRequestBody, len(p.McpServers))
+		for i, val := range p.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(val)
 		}
 	}
 	return body
@@ -2017,6 +2073,14 @@ func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
 	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
+	}
 
 	return v
 }
@@ -2195,6 +2259,14 @@ func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Ass
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
 	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
+	}
 
 	return v
 }
@@ -2372,6 +2444,14 @@ func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Ass
 			continue
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
+	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
 	}
 
 	return v
@@ -2863,6 +2943,14 @@ func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *t
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
 	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
+	}
 
 	return v
 }
@@ -3040,6 +3128,14 @@ func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBo
 			continue
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
+	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
 	}
 
 	return v
@@ -3232,6 +3328,9 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -3256,6 +3355,13 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3295,6 +3401,9 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -3319,6 +3428,13 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3358,6 +3474,9 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -3382,6 +3501,13 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3439,6 +3565,9 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -3463,6 +3592,13 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3502,6 +3638,9 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -3526,6 +3665,13 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5486,6 +5632,9 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	if body.WarmTTLSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
 	}
@@ -5514,6 +5663,13 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "active" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -5533,6 +5689,15 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 func ValidateAssistantToolsetRefResponseBody(body *AssistantToolsetRefResponseBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	return
+}
+
+// ValidateAssistantMCPServerRefResponseBody runs the validations defined on
+// AssistantMCPServerRefResponseBody
+func ValidateAssistantMCPServerRefResponseBody(body *AssistantMCPServerRefResponseBody) (err error) {
+	if body.McpServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
 	}
 	return
 }

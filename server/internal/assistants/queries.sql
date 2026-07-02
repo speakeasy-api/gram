@@ -159,6 +159,60 @@ WHERE id = ANY(@toolset_ids::UUID[])
   AND mcp_slug IS NOT NULL
   AND deleted IS FALSE;
 
+-- name: LoadAssistantMcpServers :many
+-- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
+-- Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+-- environment. Soft-deleted servers are skipped so the runtime never targets a
+-- dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+-- endpoint_slug and is filtered out in Go. Mirrors LoadAssistantToolsets: one
+-- read supplies everything dispatch needs to build the MCP URL.
+SELECT
+  ams.assistant_id,
+  ams.mcp_server_id,
+  ms.slug AS server_slug,
+  COALESCE((
+    SELECT me.slug
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+    ORDER BY me.created_at
+    LIMIT 1
+  ), '')::text AS endpoint_slug,
+  ams.environment_id,
+  e.slug AS environment_slug
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN environments e ON e.id = ams.environment_id
+WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
+  AND ams.project_id = @project_id
+ORDER BY ams.created_at;
+
+-- name: ResolveMcpServersForWrite :many
+SELECT id, slug
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND slug = ANY(@slugs::TEXT[])
+  AND deleted IS FALSE;
+
+-- name: ClearAssistantMcpServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id;
+
+-- name: AddAssistantMcpServers :copyfrom
+INSERT INTO assistant_mcp_servers (
+  assistant_id,
+  mcp_server_id,
+  environment_id,
+  project_id
+) VALUES (
+  @assistant_id,
+  @mcp_server_id,
+  @environment_id,
+  @project_id
+);
+
 -- name: CreateAssistant :one
 INSERT INTO assistants (
   project_id,

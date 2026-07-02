@@ -36900,6 +36900,11 @@ components:
           type: integer
           description: Maximum active warm runtimes for the assistant.
           format: int64
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMCPServerRef'
+          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -36936,11 +36941,23 @@ components:
         - model
         - instructions
         - toolsets
+        - mcp_servers
         - warm_ttl_seconds
         - max_concurrency
         - status
         - created_at
         - updated_at
+    AssistantMCPServerRef:
+      type: object
+      properties:
+        environment_slug:
+          type: string
+          description: Optional environment slug used when connecting to the MCP server.
+        mcp_server_slug:
+          type: string
+          description: The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.
+      required:
+        - mcp_server_slug
     AssistantMemory:
       type: object
       properties:
@@ -38242,6 +38259,11 @@ components:
           type: integer
           description: Optional maximum active warm runtimes.
           format: int64
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMCPServerRef'
+          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -50937,6 +50959,11 @@ components:
           type: integer
           description: Maximum active warm runtimes.
           format: int64
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMCPServerRef'
+          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
         model:
           type: string
           description: The model identifier used by the assistant.

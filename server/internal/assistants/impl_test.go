@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,8 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -267,6 +271,89 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, reloaded.McpEnabled, "updating assistant toolsets must enable MCP on newly attached toolsets")
+}
+
+// A remote-backed MCP server (no toolset) can be attached to an assistant and
+// round-trips through the API and the dispatch resolver, which points the
+// runner at the server's Gram-hosted endpoint.
+func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectWrite,
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
+	})
+
+	// Seed a remote-backed mcp_server with a Gram-hosted endpoint, mirroring
+	// how the dashboard registers an external "Remote MCP" server.
+	remote, err := remotemcpRepo.New(conn).CreateServer(t.Context(), remotemcpRepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		Name:          pgtype.Text{String: "External SaaS", Valid: true},
+		Slug:          pgtype.Text{String: "external-remote-src", Valid: true},
+		TransportType: "streamable-http",
+		Url:           "https://mcp.example.com/v1/mcp",
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         projectID,
+		Name:              pgtype.Text{String: "General - External SaaS", Valid: true},
+		Slug:              pgtype.Text{String: "external-remote-mcp-xyz", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: server.ID,
+		Slug:        "team-remote-mcp",
+	})
+	require.NoError(t, err)
+
+	created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             "Assistant",
+		Model:            "openai/gpt-4o-mini",
+		Instructions:     "",
+		Toolsets:         nil,
+		McpServers: []*types.AssistantMCPServerRef{
+			{McpServerSlug: server.Slug.String, EnvironmentSlug: nil},
+		},
+		WarmTTLSeconds: nil,
+		MaxConcurrency: nil,
+		Status:         nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, created.McpServers, 1)
+	require.Equal(t, server.Slug.String, created.McpServers[0].McpServerSlug)
+
+	// Round-trips through a fresh read.
+	got, err := svc.GetAssistant(ctx, &gen.GetAssistantPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.McpServers, 1)
+	require.Equal(t, server.Slug.String, got.McpServers[0].McpServerSlug)
+
+	// The dispatch resolver turns the attachment into the runner's MCP URL,
+	// pointed at the server's Gram-hosted endpoint slug (not the internal slug).
+	assistantID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	rows, err := svc.core.loadAssistantMcpServers(t.Context(), projectID, []uuid.UUID{assistantID})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+	resolved := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, nil, rows[assistantID], nil)
+	require.Len(t, resolved, 1)
+	require.Equal(t, "external-remote-mcp-xyz", resolved[0].ID)
+	require.Equal(t, "https://gram.test/mcp/team-remote-mcp", resolved[0].URL)
 }
 
 func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {

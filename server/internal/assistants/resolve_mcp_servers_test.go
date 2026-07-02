@@ -18,7 +18,7 @@ func TestResolveAssistantMCPServers_EmptyUserToolsetsStillGetsPlatformServer(t *
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 1)
 
 	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
@@ -44,7 +44,7 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
@@ -86,7 +86,7 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
@@ -105,7 +105,7 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, nil, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
 		platformtools.ManagedAssistantPlatformToolsetSlug,
 	})
@@ -116,4 +116,83 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 		"https://gram.test/platform/mcp/"+platformtools.ManagedAssistantPlatformToolsetSlug,
 		servers[1].URL,
 	)
+}
+
+// A directly-attached mcp_server (remote- or tunnelled-backed) is exposed to
+// the runner as its public /mcp/{endpoint} URL, identified by the server slug,
+// carrying the bound environment. Ordering is toolsets, then mcp servers, then
+// platform servers.
+func TestResolveAssistantMCPServers_AttachedMCPServerAfterToolsetsBeforePlatform(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	toolsets := []assistantToolsetRow{
+		{
+			ToolsetSlug: "billing",
+			McpEnabled:  true,
+			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+		},
+	}
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug:      pgtype.Text{String: "remote-saas-a1b2", Valid: true},
+			EndpointSlug:    "team-remote-saas",
+			EnvironmentSlug: pgtype.Text{String: "prod", Valid: true},
+		},
+	}
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, toolsets, mcpServers, []string{platformtools.AssistantsPlatformToolsetSlug})
+	require.Len(t, servers, 3)
+
+	require.Equal(t, "billing", servers[0].ID)
+
+	require.Equal(t, "remote-saas-a1b2", servers[1].ID)
+	require.Equal(t, "https://gram.test/mcp/team-remote-saas", servers[1].URL)
+	require.Equal(t, "prod", servers[1].Headers["Gram-Environment"])
+
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[2].ID)
+}
+
+// With no bound environment the entry carries no Gram-Environment header, and a
+// server whose slug is unset falls back to the endpoint slug as the runtime ID.
+func TestResolveAssistantMCPServers_AttachedMCPServerDefaults(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug:   pgtype.Text{Valid: false},
+			EndpointSlug: "team-remote-saas",
+		},
+	}
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	require.Len(t, servers, 1)
+	require.Equal(t, "team-remote-saas", servers[0].ID)
+	require.Equal(t, "https://gram.test/mcp/team-remote-saas", servers[0].URL)
+	require.Empty(t, servers[0].Headers)
+}
+
+// Defensive: a row that reached the resolver without a Gram-hosted endpoint
+// (loadAssistantMcpServers already filters these) is skipped rather than
+// producing a slugless /mcp/ URL.
+func TestResolveAssistantMCPServers_AttachedMCPServerWithoutEndpointOmitted(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug:   pgtype.Text{String: "no-endpoint", Valid: true},
+			EndpointSlug: "",
+		},
+	}
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	require.Empty(t, servers)
 }

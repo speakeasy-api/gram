@@ -283,6 +283,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
