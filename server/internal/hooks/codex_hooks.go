@@ -319,14 +319,15 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
-	s.upsertShadowMCPInventoryURLs(ctx, projectID, *payload.SessionID, entries)
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(*payload.SessionID),
 		)
+		return
 	}
+	s.upsertShadowMCPInventoryURLs(ctx, projectID, *payload.SessionID, entries)
 }
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {

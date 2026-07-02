@@ -184,6 +184,11 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
 			if err == nil {
 				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
+			} else {
+				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
+					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
+					attr.SlogError(err),
+				)
 			}
 		}
 
