@@ -951,6 +951,86 @@ func TestRenderAuthPreflightScriptRatchet(t *testing.T) {
 	require.Equal(t, 2, exitErr.ExitCode(), brokenErr.String())
 }
 
+// TestRenderHookScriptClaudeRejectedEnvKeyFailsClosed verifies that a 401 on
+// explicitly configured credentials (GRAM_HOOKS_API_KEY) blocks the hook even
+// on a machine that never completed browser login: the never-authenticated
+// pass-through only covers machines with no credentials at all, and the
+// cache-relogin retry must not fire (or wipe the cache) for env credentials a
+// re-login could never replace.
+func TestRenderHookScriptClaudeRejectedEnvKeyFailsClosed(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_HOOKS_API_KEY=gram_revoked_env_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	fresh := exec.Command("bash", hookPath)
+	fresh.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-env-reject","tool_name":"Bash"}`)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	err := fresh.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block even before first browser login")
+	require.Equal(t, 2, exitErr.ExitCode(), freshErr.String())
+	require.Contains(t, freshErr.String(), "401")
+	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Equal(t, 1, posts, "rejected env credentials must not trigger the cache-relogin retry")
+
+	// A rejected env key must also leave any cached browser login untouched.
+	require.NoError(t, os.WriteFile(authFile, []byte("GRAM_HOOKS_CACHED_API_KEY=gram_cached_key\nGRAM_HOOKS_CACHED_PROJECT=acme-prod\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	cached := exec.Command("bash", hookPath)
+	cached.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-env-reject","tool_name":"Bash"}`)
+	cached.Env = env
+	var cachedErr bytes.Buffer
+	cached.Stderr = &cachedErr
+	err = cached.Run()
+	require.ErrorAs(t, err, &exitErr, cachedErr.String())
+	require.Equal(t, 2, exitErr.ExitCode(), cachedErr.String())
+	require.FileExists(t, authFile, "env credential rejection must not wipe the cached browser login")
+}
+
 // TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
 // non-HTTPS, non-loopback server URL is refused before any credential leaves
 // the machine, with the same ratchet as auth failures: fail open before the

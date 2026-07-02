@@ -516,7 +516,15 @@ gram_hooks_post_authenticated() {
     "$@" \
     ${auth_config_arg[@]+"${auth_config_arg[@]}"}
   local first_status="$GRAM_HTTP_CODE"
-  if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
+  # Retry through the browser-login cache only when the rejected credentials
+  # came from it. Explicit GRAM_HOOKS_API_KEY/GRAM_API_KEY values take
+  # precedence over the cache on every send, so a re-login can never replace
+  # them: a rejected configured key must fall through to the caller's non-2xx
+  # handling (fail closed) rather than wipe the cache and downgrade to the
+  # never-authenticated pass-through.
+  if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
+    && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
+    && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
       GRAM_HTTP_CODE="$first_status"
