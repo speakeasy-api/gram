@@ -383,12 +383,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	filter := payload.Filter
 	if filter == nil {
 		filter = &telem_gen.SearchUsersFilter{
-			From:         "",
-			To:           "",
-			DeploymentID: nil,
-			UserIds:      nil,
-			EventSource:  nil,
-			HookSource:   nil,
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
 		}
 	}
 
@@ -554,12 +556,14 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	filter := payload.Filter
 	if filter == nil {
 		filter = &telem_gen.SearchUsersFilter{
-			From:         "",
-			To:           "",
-			DeploymentID: nil,
-			UserIds:      nil,
-			EventSource:  nil,
-			HookSource:   nil,
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
 		}
 	}
 
