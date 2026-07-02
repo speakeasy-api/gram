@@ -125,6 +125,9 @@ type CreateClientRequestBody struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
 // CreateCimdClientRequestBody is the type of the
@@ -145,6 +148,9 @@ type CreateCimdClientRequestBody struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
 // UpdateClientRequestBody is the type of the
@@ -162,6 +168,8 @@ type UpdateClientRequestBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Replace the upstream OAuth audience sent for this client.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Replace the RFC 8707 resource indicator sent for this client.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
 // RemoveClientFromMcpServerRequestBody is the type of the
@@ -420,7 +428,10 @@ type GetClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -484,7 +495,10 @@ type CreateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -522,7 +536,10 @@ type CreateCimdClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -560,7 +577,10 @@ type UpdateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -4502,7 +4522,10 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -4666,6 +4689,7 @@ func NewCreateClientRequestBody(p *organizationremotesessionissuers.CreateClient
 		ClientSecret:            p.ClientSecret,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 		Audience:                p.Audience,
+		Resource:                p.Resource,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -4684,6 +4708,7 @@ func NewCreateCimdClientRequestBody(p *organizationremotesessionissuers.CreateCi
 		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
 		ProjectID:             p.ProjectID,
 		Audience:              p.Audience,
+		Resource:              p.Resource,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -4703,6 +4728,7 @@ func NewUpdateClientRequestBody(p *organizationremotesessionissuers.UpdateClient
 		ClientSecret:            p.ClientSecret,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 		Audience:                p.Audience,
+		Resource:                p.Resource,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -6231,6 +6257,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
 	}
@@ -6929,6 +6956,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
 	}
@@ -7111,6 +7139,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
 	}
@@ -7295,6 +7324,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
 	}

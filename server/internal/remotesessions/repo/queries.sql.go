@@ -91,6 +91,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_method,
     scope,
     audience,
+    resource,
     legacy_callback_url
 )
 VALUES (
@@ -104,7 +105,8 @@ VALUES (
     $8,
     $9::text[],
     $10,
-    $11
+    $11,
+    $12
 )
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, resource, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
@@ -120,6 +122,7 @@ type CreateRemoteSessionClientParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	Resource                pgtype.Text
 	LegacyCallbackUrl       bool
 }
 
@@ -135,6 +138,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
 		arg.Audience,
+		arg.Resource,
 		arg.LegacyCallbackUrl,
 	)
 	var i RemoteSessionClient
@@ -172,7 +176,8 @@ INSERT INTO remote_session_clients (
     client_id_issued_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    resource
 )
 VALUES (
     $1,
@@ -184,7 +189,8 @@ VALUES (
     $6,
     'none',
     $7::text[],
-    $8
+    $8,
+    $9
 )
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, resource, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
@@ -198,6 +204,7 @@ type CreateRemoteSessionClientCIMDParams struct {
 	ClientIDIssuedAt      pgtype.Timestamptz
 	Scope                 []string
 	Audience              pgtype.Text
+	Resource              pgtype.Text
 }
 
 // Create a client directly in Client ID Metadata Document (CIMD) mode. The
@@ -215,6 +222,7 @@ func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateR
 		arg.ClientIDIssuedAt,
 		arg.Scope,
 		arg.Audience,
+		arg.Resource,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -924,6 +932,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.resource                             AS client_resource,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -947,6 +956,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	ClientResource          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	IssuerSlug              string
@@ -974,6 +984,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.TokenEndpointAuthMethod,
 		&i.ClientScope,
 		&i.ClientAudience,
+		&i.ClientResource,
 		&i.LegacyCallbackUrl,
 		&i.RemoteSessionIssuerID,
 		&i.IssuerSlug,
@@ -1689,6 +1700,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.resource                             AS client_resource,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -1724,6 +1736,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	ClientResource          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	IssuerSlug              string
@@ -1757,6 +1770,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,
+			&i.ClientResource,
 			&i.LegacyCallbackUrl,
 			&i.RemoteSessionIssuerID,
 			&i.IssuerSlug,
@@ -2283,11 +2297,15 @@ SET
         WHEN $4::text = '' THEN NULL
         ELSE COALESCE($4, c.audience)
     END,
+    resource = CASE
+        WHEN $5::text = '' THEN NULL
+        ELSE COALESCE($5, c.resource)
+    END,
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i
-WHERE c.id = $5
+WHERE c.id = $6
   AND c.remote_session_issuer_id = i.id
-  AND i.organization_id = $6
+  AND i.organization_id = $7
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.resource, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
@@ -2298,6 +2316,7 @@ type UpdateOrganizationRemoteSessionClientParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	Resource                pgtype.Text
 	ID                      uuid.UUID
 	OrganizationID          pgtype.Text
 }
@@ -2311,6 +2330,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
 		arg.Audience,
+		arg.Resource,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -2454,8 +2474,9 @@ SET
     token_endpoint_auth_method = COALESCE($3, token_endpoint_auth_method),
     scope = COALESCE($4::text[], scope),
     audience = COALESCE($5, audience),
+    resource = COALESCE($6, resource),
     updated_at = clock_timestamp()
-WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
+WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, resource, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -2465,6 +2486,7 @@ type UpdateRemoteSessionClientParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	Resource                pgtype.Text
 	ID                      uuid.UUID
 	ProjectID               uuid.NullUUID
 }
@@ -2476,6 +2498,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
 		arg.Audience,
+		arg.Resource,
 		arg.ID,
 		arg.ProjectID,
 	)

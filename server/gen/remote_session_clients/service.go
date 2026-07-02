@@ -111,6 +111,9 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange for the cloned client.
 	Audience *string
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant for the cloned client.
+	Resource *string
 }
 
 // CreateCimdPayload is the payload type of the remoteSessionClients service
@@ -131,6 +134,9 @@ type CreateCimdPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant. Use the MCP server's canonical resource URI.
+	Resource *string
 }
 
 // CreateRemoteSessionClientPayload is the payload type of the
@@ -157,6 +163,9 @@ type CreateRemoteSessionClientPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant. Use the MCP server's canonical resource URI.
+	Resource *string
 }
 
 // DeleteRemoteSessionClientPayload is the payload type of the
@@ -233,6 +242,9 @@ type UpdateRemoteSessionClientPayload struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string
+	// Replace the RFC 8707 resource indicator sent for this client. Omit to leave
+	// unchanged.
+	Resource *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

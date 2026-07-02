@@ -172,7 +172,11 @@ type Client struct {
 	ClientScope           []string
 	IssuerScopesSupported []string
 	Audience              string
-	Passthrough           bool
+	// Resource, when non-empty, is sent as the RFC 8707 resource parameter
+	// on the authorize redirect and code exchange so the upstream AS
+	// audience-binds the issued tokens to the MCP server.
+	Resource    string
+	Passthrough bool
 	// LegacyCallbackUrl flips BuildAuthorizationUrl onto the
 	// /oauth/callback redirect_uri (with a JSON state carrying
 	// remote_sessions=true) so a client registered against the old
@@ -213,6 +217,7 @@ func (m *ChallengeManager) ListClients(
 			ClientScope:           r.ClientScope,
 			IssuerScopesSupported: r.ScopesSupported,
 			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
+			Resource:              conv.FromPGTextOrEmpty[string](r.ClientResource),
 			Passthrough:           r.Passthrough,
 			LegacyCallbackUrl:     r.LegacyCallbackUrl,
 		})
@@ -351,6 +356,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
 	}
+	if client.Resource != "" {
+		q.Set("resource", client.Resource)
+	}
 	for _, ic := range m.authorizeInterceptors {
 		if ic.Match(client.IssuerURL) {
 			ic.ModifyAuthorize(ctx, q)
@@ -444,7 +452,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
-	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
+	resource := conv.FromPGTextOrEmpty[string](client.Resource)
+	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, resource, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
@@ -542,6 +551,7 @@ func (m *ChallengeManager) exchangeCode(
 	clientSecret string,
 	authMethod TokenEndpointAuthMethod,
 	audience string,
+	resource string,
 	code string,
 ) (tokenResponse, error) {
 	form := url.Values{}
@@ -552,6 +562,12 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("code_verifier", state.CodeVerifier)
 	if audience != "" {
 		form.Set("audience", audience)
+	}
+	// RFC 8707: the resource indicator must be repeated on the token
+	// request so the AS binds the issued token to the same audience it
+	// authorized. Must match the value sent by BuildAuthorizationUrl.
+	if resource != "" {
+		form.Set("resource", resource)
 	}
 
 	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)

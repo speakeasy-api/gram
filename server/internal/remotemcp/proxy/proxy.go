@@ -468,6 +468,21 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
+	// Upstream auth rejections are the primary signal when a stored or
+	// forwarded token is refused (e.g. audience mismatch when the token was
+	// minted without an RFC 8707 resource indicator). The RFC 6750
+	// WWW-Authenticate challenge carries the machine-readable reason
+	// (error, error_description), so surface it in logs — the relayed
+	// response is otherwise only visible to the client.
+	if upstreamStatus == http.StatusUnauthorized || upstreamStatus == http.StatusForbidden {
+		p.Logger.WarnContext(ctx, "remote mcp server rejected upstream credentials",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(upstreamStatus),
+			attr.SlogHTTPResponseHeaderWWWAuthenticate(upstreamResp.Header.Get("WWW-Authenticate")),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
+	}
+
 	// When upstream returns Content-Type: text/event-stream (per MCP spec
 	// § Sending Messages to the Server, step 5), dispatch through the
 	// SSE-aware relay where RemoteMessageInterceptors fire per parseable

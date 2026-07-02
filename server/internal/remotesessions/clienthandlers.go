@@ -161,6 +161,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		Resource:                conv.PtrToPGText(payload.Resource),
 		LegacyCallbackUrl:       false,
 	})
 	if err != nil {
@@ -234,6 +235,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		Resource:              conv.PtrToPGText(payload.Resource),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -465,6 +467,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		Resource:                conv.PtrToPGText(payload.Resource),
 		// The cloned client_id is already registered upstream against the
 		// oauth_proxy_servers /oauth/callback URL; the authorize leg has to
 		// keep using that redirect_uri or the upstream's strict-match check
@@ -640,6 +643,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		Resource:                conv.PtrToPGText(payload.Resource),
 		ID:                      clientID,
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 	})

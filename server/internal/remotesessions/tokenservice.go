@@ -312,6 +312,11 @@ func refreshSessionTokens(
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
 	}
+	// RFC 8707: repeat the resource indicator on refresh so rotated access
+	// tokens keep the same audience binding as the original grant.
+	if resource := conv.FromPGTextOrEmpty[string](client.ClientResource); resource != "" {
+		form.Set("resource", resource)
+	}
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {

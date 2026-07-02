@@ -39,7 +39,10 @@ type RemoteSessionClient struct {
 	Scope []string
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string
+	Audience *string
+	// RFC 8707 resource indicator sent on the authorize redirect, token exchange,
+	// and refresh grant. Null omits the resource parameter.
+	Resource  *string
 	CreatedAt string
 	UpdatedAt string
 }

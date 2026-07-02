@@ -135,6 +135,13 @@ func audienceAttribute() {
 	MaxLength(512)
 }
 
+// resourceAttribute constrains RFC 8707 resource indicators: an absolute
+// URI without whitespace. Full URI validation happens upstream at the AS.
+func resourceAttribute() {
+	Pattern(audiencePattern)
+	MaxLength(512)
+}
+
 // CreateOrganizationRemoteSessionClientForm registers a standalone
 // remote_session_client under an existing remote_session_issuer in the caller's
 // organization, with no user_session_issuer attachments. Scope mirrors
@@ -163,6 +170,7 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("resource", String, "Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant.", resourceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
 })
@@ -183,6 +191,7 @@ var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganization
 		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("resource", String, "Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant.", resourceAttribute)
 
 	Required("remote_session_issuer_id")
 })
@@ -205,6 +214,7 @@ var UpdateOrganizationRemoteSessionClientForm = Type("UpdateOrganizationRemoteSe
 		scopeAttribute("Replace the explicit upstream OAuth scopes for this client.")
 	})
 	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client.", audienceAttribute)
+	Attribute("resource", String, "Replace the RFC 8707 resource indicator sent for this client.", resourceAttribute)
 
 	Required("id")
 })

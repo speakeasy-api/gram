@@ -887,6 +887,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgissuersgen.Creat
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		Resource:                conv.PtrToPGText(payload.Resource),
 		LegacyCallbackUrl:       false,
 	})
 	if err != nil {
@@ -1024,6 +1025,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgissuersgen.C
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		Resource:              conv.PtrToPGText(payload.Resource),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
@@ -1118,6 +1120,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgissuersgen.Updat
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		Resource:                conv.PtrToPGText(payload.Resource),
 		ID:                      clientID,
 		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
 	})

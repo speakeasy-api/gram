@@ -145,6 +145,9 @@ type CreateCimdClientPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant.
+	Resource *string
 }
 
 // CreateClientPayload is the payload type of the
@@ -174,6 +177,9 @@ type CreateClientPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Optional RFC 8707 resource indicator sent on the authorize redirect, token
+	// exchange, and refresh grant.
+	Resource *string
 }
 
 // CreateIssuerPayload is the payload type of the
@@ -484,6 +490,8 @@ type UpdateClientPayload struct {
 	Scope []string
 	// Replace the upstream OAuth audience sent for this client.
 	Audience *string
+	// Replace the RFC 8707 resource indicator sent for this client.
+	Resource *string
 }
 
 // UpdateIssuerPayload is the payload type of the

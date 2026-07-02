@@ -189,6 +189,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_method,
     scope,
     audience,
+    resource,
     legacy_callback_url
 )
 VALUES (
@@ -202,6 +203,7 @@ VALUES (
     @token_endpoint_auth_method,
     sqlc.narg('scope')::text[],
     @audience,
+    @resource,
     @legacy_callback_url
 )
 RETURNING *;
@@ -316,6 +318,7 @@ SET
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
     audience = COALESCE(sqlc.narg('audience'), audience),
+    resource = COALESCE(sqlc.narg('resource'), resource),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -336,7 +339,8 @@ INSERT INTO remote_session_clients (
     client_id_issued_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    resource
 )
 VALUES (
     @id,
@@ -348,7 +352,8 @@ VALUES (
     @client_id_issued_at,
     'none',
     sqlc.narg('scope')::text[],
-    @audience
+    @audience,
+    @resource
 )
 RETURNING *;
 
@@ -494,6 +499,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.resource                             AS client_resource,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -523,6 +529,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.resource                             AS client_resource,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -754,6 +761,10 @@ SET
     audience = CASE
         WHEN sqlc.narg('audience')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('audience'), c.audience)
+    END,
+    resource = CASE
+        WHEN sqlc.narg('resource')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('resource'), c.resource)
     END,
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i

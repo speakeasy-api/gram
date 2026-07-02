@@ -4854,6 +4854,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
+		Resource:                v.Resource,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,
 	}

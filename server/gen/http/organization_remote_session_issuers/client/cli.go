@@ -557,7 +557,7 @@ func BuildCreateClientPayload(organizationRemoteSessionIssuersCreateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		if body.ProjectID != nil {
@@ -580,6 +580,14 @@ func BuildCreateClientPayload(organizationRemoteSessionIssuersCreateClientBody s
 		if body.Audience != nil {
 			if utf8.RuneCountInString(*body.Audience) > 512 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if body.Resource != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.resource", *body.Resource, "^[!-~]+$"))
+		}
+		if body.Resource != nil {
+			if utf8.RuneCountInString(*body.Resource) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 512, false))
 			}
 		}
 		if err != nil {
@@ -605,6 +613,7 @@ func BuildCreateClientPayload(organizationRemoteSessionIssuersCreateClientBody s
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -626,7 +635,7 @@ func BuildCreateCimdClientPayload(organizationRemoteSessionIssuersCreateCimdClie
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersCreateCimdClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		if body.ProjectID != nil {
@@ -644,6 +653,14 @@ func BuildCreateCimdClientPayload(organizationRemoteSessionIssuersCreateCimdClie
 		if body.Audience != nil {
 			if utf8.RuneCountInString(*body.Audience) > 512 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if body.Resource != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.resource", *body.Resource, "^[!-~]+$"))
+		}
+		if body.Resource != nil {
+			if utf8.RuneCountInString(*body.Resource) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 512, false))
 			}
 		}
 		if err != nil {
@@ -666,6 +683,7 @@ func BuildCreateCimdClientPayload(organizationRemoteSessionIssuersCreateCimdClie
 		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
 		ProjectID:             body.ProjectID,
 		Audience:              body.Audience,
+		Resource:              body.Resource,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -687,7 +705,7 @@ func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersUpdateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.TokenEndpointAuthMethod != nil {
@@ -707,6 +725,14 @@ func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody s
 		if body.Audience != nil {
 			if utf8.RuneCountInString(*body.Audience) > 512 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if body.Resource != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.resource", *body.Resource, "^[!-~]+$"))
+		}
+		if body.Resource != nil {
+			if utf8.RuneCountInString(*body.Resource) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 512, false))
 			}
 		}
 		if err != nil {
@@ -730,6 +756,7 @@ func BuildUpdateClientPayload(organizationRemoteSessionIssuersUpdateClientBody s
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		Resource:                body.Resource,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))

@@ -31,6 +31,13 @@ func audienceAttribute() {
 	MaxLength(512)
 }
 
+// resourceAttribute constrains RFC 8707 resource indicators: an absolute
+// URI without whitespace. Full URI validation happens upstream at the AS.
+func resourceAttribute() {
+	Pattern(audiencePattern)
+	MaxLength(512)
+}
+
 var _ = Service("remoteSessionClients", func() {
 	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
@@ -301,6 +308,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("resource", String, "Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Use the MCP server's canonical resource URI.", resourceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
 })
@@ -320,6 +328,7 @@ var CreateCimdForm = Type("CreateCimdForm", func() {
 		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("resource", String, "Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Use the MCP server's canonical resource URI.", resourceAttribute)
 
 	Required("remote_session_issuer_id")
 })
@@ -343,6 +352,7 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 		scopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", audienceAttribute)
+	Attribute("resource", String, "Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant for the cloned client.", resourceAttribute)
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id")
 })
@@ -359,6 +369,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 		scopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
 	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", audienceAttribute)
+	Attribute("resource", String, "Replace the RFC 8707 resource indicator sent for this client. Omit to leave unchanged.", resourceAttribute)
 
 	Required("id")
 })
@@ -420,6 +431,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
+	Attribute("resource", String, "RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Null omits the resource parameter.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
