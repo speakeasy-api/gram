@@ -540,7 +540,6 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", state.RedirectURI)
-	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
 	if audience != "" {
 		form.Set("audience", audience)
