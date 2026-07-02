@@ -402,36 +402,68 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 
     -- AI account classification (gram.account_type): 'team' | 'personal' | ''
     -- (unclassified); AI provider (gram.provider): 'anthropic' | 'openai' |
-    -- 'cursor' | ''; and billing mode (gram.billing_mode): 'metered' | 'flat_rate'
-    -- | 'unknown' | ''. All three are sort-key DIMENSIONS (appended to ORDER BY
-    -- below), NOT carried values: account_type/billing_mode are not distinguished
-    -- by any other key column (the same employee's team and personal usage shares
-    -- user_email + WorkOS attrs), so as carried values they would merge under the
-    -- existing grain. As key columns they stay separate and remain group-/
-    -- filterable — billing_mode lets the cost rollup tell metered (real) spend
-    -- from an estimate. Added via a non-destructive ALTER ADD COLUMN + MODIFY
-    -- ORDER BY (atlas only emits DROP+recreate for a sort-key change, so the
-    -- migration is hand-written). Empty account_type is treated as team by the
-    -- query layer.
+    -- 'cursor' | ''; billing mode (gram.billing_mode): 'metered' | 'flat_rate'
+    -- | 'unknown' | ''; and Claude attribution dimensions. These are sort-key
+    -- DIMENSIONS (appended to ORDER BY below), NOT carried values: account_type,
+    -- billing_mode, and attribution values are not distinguished by any other key
+    -- column, so as carried values they would merge under the existing grain. As
+    -- key columns they stay separate and remain group-/filterable. Added via
+    -- non-destructive ALTER ADD COLUMN + MODIFY ORDER BY migrations (atlas only
+    -- emits DROP+recreate for a sort-key change, so the migrations are
+    -- hand-written). Empty account_type is treated as team by the query layer.
     account_type String,
     provider String,
-    billing_mode String
+    billing_mode String,
+    query_source String,
+    skill_name String,
+    agent_name String,
+    mcp_server_name String,
+    mcp_tool_name String
 ) ENGINE = AggregatingMergeTree
--- Primary key stays the original 12 dimensions; account_type + provider +
--- billing_mode are appended to ORDER BY only (the sorting key). ALTER MODIFY
--- ORDER BY extends the sorting key but leaves the primary key as a prefix, so
--- this must be declared explicitly here to match the migrated table (otherwise a
--- bare ORDER BY would imply the primary key includes the appended dims, and atlas
--- would see drift it can't reconcile — "modifying primary key is not supported").
+-- Primary key stays the original 12 dimensions; account_type, provider,
+-- billing_mode, and attribution dimensions are appended to ORDER BY only (the
+-- sorting key). ALTER MODIFY ORDER BY extends the sorting key but leaves the
+-- primary key as a prefix, so this must be declared explicitly here to match the
+-- migrated table (otherwise a bare ORDER BY would imply the primary key includes
+-- the appended dims, and atlas would see drift it can't reconcile — "modifying
+-- primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
 TTL time_bucket + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
 -- Cutoff separates live MV ingestion from one-time historical backfill.
-WITH toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano
+WITH
+    toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
+    -- Claude emits one api_request row with model, token, cost, and attribution
+    -- fields. Do not count legacy claude-code:usage rows for Claude cost.
+    (
+        chat_id != ''
+        AND toString(attributes.prompt.id) != ''
+        AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+        AND (
+            service_name = 'claude-code'
+            OR toString(resource_attributes.service.name) = 'claude-code'
+            OR startsWith(body, 'claude_code.')
+        )
+    ) AS is_claude_api_request,
+    (
+        startsWith(gram_urn, 'codex:usage')
+        OR startsWith(gram_urn, 'cursor:usage')
+        OR (
+            toString(attributes.gen_ai.operation.name) = 'chat'
+            AND toString(attributes.gen_ai.usage.cost) != ''
+            AND NOT is_claude_api_request
+            AND NOT startsWith(gram_urn, 'claude-code:usage')
+        )
+    ) AS is_generic_usage_row,
+    (
+        toString(attributes.gram.tool.name) != ''
+        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+    ) AS is_tool_row,
+    (is_tool_row AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) AS is_completed_tool_call
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -445,7 +477,11 @@ SELECT
     user_email AS user_email,
 
     -- Request dimensions
-    toString(attributes.gen_ai.response.model) AS model,
+    multiIf(
+        is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
+        is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+        toString(attributes.gen_ai.response.model)
+    ) AS model,
     hook_source,
 
     -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
@@ -454,17 +490,17 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
-    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_generic_usage_row)) AS total_chats,
 
     -- Token sums
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_output_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_read_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_creation_input_tokens,
 
     -- Cost
-    sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost,
+    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_generic_usage_row) AS total_cost,
 
     -- Tool-call count. Tool calls in a session — Gram and non-Gram alike — are
     -- reported via agent hooks as one PostToolUse / PostToolUseFailure row per
@@ -472,35 +508,25 @@ SELECT
     -- tool call also emits a PreToolUse row with the same gram.tool.name, so a
     -- bare `tool.name != ''` count would double-count. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
-    countIfState(
-        toString(attributes.gram.tool.name) != ''
-        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
-        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
-    ) AS total_tool_calls,
+    countIfState(is_completed_tool_call) AS total_tool_calls,
 
-    -- Account-type + provider + billing-mode dimensions (grouped; appended to the
-    -- sort key so team/personal, provider, and metered/flat-rate usage stay
+    -- Account-type + provider + billing-mode + attribution dimensions (grouped;
+    -- appended to the sort key so each billing/attribution combination remains
     -- separate). Kept last to match the table column order.
     account_type,
     provider,
-    billing_mode
+    billing_mode,
+    if(is_claude_api_request, toString(attributes.query_source), '') AS query_source,
+    if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
+    if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
+    if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
+    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
 FROM telemetry_logs
--- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
--- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
--- inflating cost) AND tool-call rows.
--- Tool calls are captured by the hook events' gram.tool.name, which covers all
--- tools used in a session, not just Gram-proxied ones. The previous filter kept
--- only usage rows, so total_tool_calls (counted from a separate event class) was
--- always 0 (POC-209). Tool rows carry no gen_ai.usage.* so they cannot inflate
--- token/cost totals.
+-- Admit Claude api_request rows, generic usage/cost-bearing rows, and tool-call
+-- hook rows. Tool rows carry no token/cost fields, so they only contribute to
+-- total_tool_calls.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (
-    startsWith(gram_urn, 'claude-code:usage') OR
-    startsWith(gram_urn, 'codex:usage') OR
-    startsWith(gram_urn, 'cursor:usage') OR
-    (toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '') OR
-    (toString(attributes.gram.tool.name) != '' AND
-     toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
+  AND (is_claude_api_request OR is_generic_usage_row OR is_tool_row)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -516,7 +542,12 @@ GROUP BY
     groups,
     account_type,
     provider,
-    billing_mode;
+    billing_mode,
+    query_source,
+    skill_name,
+    agent_name,
+    mcp_server_name,
+    mcp_tool_name;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns
