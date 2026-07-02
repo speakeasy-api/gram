@@ -1505,6 +1505,16 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Backs the project telemetry aggregations (top users, LLM client breakdown,
+-- active user count, session count, chat metrics summary) that join
+-- chats -> chat_messages and filter messages by created_at within a time
+-- window. Without created_at trailing the join key, the planner falls back to
+-- a full sequential scan of chat_messages (observed at 272k rows / ~3.2s on
+-- large orgs); this composite lets each chat's in-window messages be read from
+-- a bounded index range instead.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
@@ -3434,6 +3444,15 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Backs GetRiskOverviewCounts, which counts ALL risk_results in a project +
+-- time window (including non-found rows, to report messages_scanned). The
+-- partial risk_results_project_found_idx above only covers found rows, so that
+-- query otherwise scanned every finding for the project and filtered created_at
+-- on the heap. This non-partial composite serves the (project_id, created_at
+-- range) scan directly.
+CREATE INDEX IF NOT EXISTS risk_results_project_created_at_idx
+ON risk_results (project_id, created_at);
 
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed

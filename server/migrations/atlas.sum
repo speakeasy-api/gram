@@ -1,4 +1,4 @@
-h1:fB06IY8EIcYsM+1hZUUm1mwgauhRMUqqP+7jCTeuICA=
+h1:MLe5+Ab+sQN7re9CitotHYU7YR5r6faKzX4+ANBuNfU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -238,3 +238,4 @@ h1:fB06IY8EIcYsM+1hZUUm1mwgauhRMUqqP+7jCTeuICA=
 20260630213745_remote-session-issuers-global-slug-key.sql h1:2fXBIcMhRXsLIGrvLEXmzJ0qncFXF7ZI3RbSglU5z5Q=
 20260701215608_billing-mode-declarations.sql h1:wEegAGkGu26TmLNS3jrwPTcPumpS89I7XatrDKoQtJ8=
 20260701230608_session-capture-exclusions.sql h1:0/b+s8X5U0pMrunBZ7OawV5Wm1DdXiPcXrpMnPqhAjY=
+20260702164015_observability-home-page-metrics-indexes.sql h1:JY6LlQgcEeDwEgMgKnf1SGdGtV/F/l0c8J7s1i6YNYU=
