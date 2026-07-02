@@ -214,6 +214,46 @@ func TestLogs_SingleAccountEnterpriseStaysTeam(t *testing.T) {
 	require.Equal(t, userID, acct.UserID.String)
 }
 
+// TestLogs_PromotesUnresolvedAccountUnderSharedEnterpriseOrg covers the core
+// Path A improvement: once a provider org is shared by >= 2 distinct resolved
+// employees it is recognized as the company's enterprise org, so a later account
+// under that org is classified team even though its own email does not resolve to
+// a Gram member (the case email resolution alone would misclassify personal).
+func TestLogs_PromotesUnresolvedAccountUnderSharedEnterpriseOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// The session cache is keyed by session id alone and Redis is shared across
+	// parallel tests, so every id here must be unique to this test — a session id
+	// reused from another test would hit its cached attribution and skip ours.
+	const enterpriseOrg = "promote-enterprise-org"
+	userA, emailA := "promote-employee-a", "promote-a@example.com"
+	userB, emailB := "promote-employee-b", "promote-b@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userA, emailA)
+	seedHookUser(t, ctx, ti.conn, orgID, userB, emailB)
+
+	// Two resolved employees under the same org -> it is now a shared enterprise org.
+	claudeAccountSession(t, ctx, ti, "promote-ent-a", emailA, enterpriseOrg, "acct-promote-a", "device-promote-a", now)
+	claudeAccountSession(t, ctx, ti, "promote-ent-b", emailB, enterpriseOrg, "acct-promote-b", "device-promote-b", now.Add(time.Minute))
+
+	// A third account under the same org whose email does NOT resolve to a Gram
+	// member (e.g. an employee not yet provisioned in Gram). It is still team
+	// because the org is a recognized enterprise org.
+	claudeAccountSession(t, ctx, ti, "promote-ent-c", "unprovisioned@example.com", enterpriseOrg, "acct-promote-c", "device-promote-c", now.Add(2*time.Minute))
+
+	acct, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-promote-c",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, acct.AccountType.String, "unresolved account under a shared enterprise org is team")
+	require.Empty(t, acct.UserID.String, "no email resolution and no device owner, so it stays unattributed")
+}
+
 // TestLogs_AttributesOncePerSession confirms attribution runs only on a session's
 // first batch: a later batch for the same session reuses the cached result and
 // does not re-classify, even after the session's email becomes a connected user.

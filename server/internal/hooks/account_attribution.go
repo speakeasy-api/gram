@@ -24,11 +24,13 @@ const (
 	// so the account's provider is Cursor itself).
 	providerCursor = "cursor"
 
-	// accountTypeTeam is a company/enterprise AI account: its session email
-	// resolves to a Gram org member.
+	// accountTypeTeam is a company/enterprise AI account: it lives under a
+	// provider org already shared by resolved org members, or its session email
+	// resolves to a Gram org member (see classifyAccount).
 	accountTypeTeam = "team"
-	// accountTypePersonal is an individual AI account (e.g. Claude Max) whose
-	// email does not resolve to an org member.
+	// accountTypePersonal is an individual AI account (e.g. Claude Max): its
+	// provider org is not a recognized enterprise org and its email does not
+	// resolve to an org member.
 	accountTypePersonal = "personal"
 )
 
@@ -151,44 +153,65 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 }
 
 // classifyAccount determines whether the session's account is team or personal.
-// The base signal is email resolution (classifyAccountType). On top of that it
-// applies the work-email guard: a session that resolved to an org member is
-// downgraded to personal when it looks like a personal account signed in with
-// the employee's work email. meta.UserID must still reflect email resolution
-// only (i.e. call before the device bridge can fill it in).
+//
+// The primary signal is deterministic and data-derived: a provider org already
+// shared by two or more distinct resolved employees is the company's real
+// enterprise org, so every account observed under it is team — including one
+// whose own email has not (yet) resolved to a Gram member. This is what lets a
+// genuine employee on the company Claude org be classified team before they are
+// provisioned in Gram (email resolution alone would call them personal).
+//
+// When the session's org is not (yet) a shared enterprise org, classification
+// falls back to email resolution: a resolved work email is team, anything else
+// (a personal email that does not resolve, or no email) is personal. One
+// correction rides on top of the resolved case — the work-email guard: a
+// resolved email under a solo provider org is downgraded to personal when the
+// same employee also appears under a DIFFERENT shared enterprise org, i.e. a
+// personal account (e.g. Claude Max) signed in with the work email.
+//
+// meta.UserID must still reflect email resolution only (call before the device
+// bridge can fill it in).
+//
+// KNOWN RESIDUAL GAP: an org with fewer than two resolved employees cannot be
+// recognized as an enterprise org from data alone, so a personal account on a
+// work email at a solo/low-adoption company stays labeled team, and an
+// unresolved account there stays personal even if it is a real employee. Closing
+// this deterministically needs an explicit admin-declared enterprise org id (a
+// separate follow-up); accepted because Gram is enterprise software.
 func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (string, error) {
-	base := classifyAccountType(meta.UserID)
-	if base != accountTypeTeam || meta.ExternalOrgID == "" {
-		return base, nil
+	if meta.ExternalOrgID != "" {
+		shared, err := s.isSharedEnterpriseOrg(ctx, meta)
+		if err != nil {
+			return "", fmt.Errorf("evaluate shared enterprise org: %w", err)
+		}
+		if shared {
+			return accountTypeTeam, nil
+		}
 	}
 
-	personal, err := s.looksLikePersonalAccountOnWorkEmail(ctx, meta)
-	if err != nil {
-		return "", fmt.Errorf("evaluate enterprise org membership: %w", err)
-	}
-	if personal {
+	if classifyAccountType(meta.UserID) != accountTypeTeam {
 		return accountTypePersonal, nil
+	}
+
+	// Resolved work email under a non-shared org: guard against a personal account
+	// signed in with the employee's work email.
+	if meta.ExternalOrgID != "" {
+		personal, err := s.employeeAlsoUsesSharedOrg(ctx, meta)
+		if err != nil {
+			return "", fmt.Errorf("evaluate work-email guard: %w", err)
+		}
+		if personal {
+			return accountTypePersonal, nil
+		}
 	}
 	return accountTypeTeam, nil
 }
 
-// looksLikePersonalAccountOnWorkEmail reports whether a session that resolved to
-// an org member (so it classified team on email alone) is actually a personal
-// account signed in with the employee's work email. The signal: this provider
-// org is solo for the employee (fewer than two distinct employees ever seen
-// under it) while the same employee also appears under a DIFFERENT provider org
-// shared by >= 2 employees — i.e. the company's real enterprise org.
-//
-// This is a best-effort heuristic, not a proof. It never downgrades a normal
-// employee with a single provider org, and it leans team when it cannot tell.
-//
-// KNOWN RESIDUAL GAP: a truly solo company — a single employee whose enterprise
-// org also has just one member — cannot be distinguished from a personal account
-// on a work email, so such a personal account stays labeled team. Accepted
-// because Gram is enterprise software and won't be used by solo companies. The
-// deterministic fix (an admin-declared enterprise organization.id, matched
-// against the stored external_org_id) can close it later if ever needed.
-func (s *Service) looksLikePersonalAccountOnWorkEmail(ctx context.Context, meta *SessionMetadata) (bool, error) {
+// isSharedEnterpriseOrg reports whether the session's provider org is already
+// shared by two or more distinct resolved employees. Such an org is the company's
+// real enterprise org, so any account under it — even one whose email has not
+// resolved — is a team account. Requires meta.ExternalOrgID to be non-empty.
+func (s *Service) isSharedEnterpriseOrg(ctx context.Context, meta *SessionMetadata) (bool, error) {
 	employees, err := s.repo.CountEmployeesForExternalOrg(ctx, repo.CountEmployeesForExternalOrgParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       meta.Provider,
@@ -197,12 +220,16 @@ func (s *Service) looksLikePersonalAccountOnWorkEmail(ctx context.Context, meta 
 	if err != nil {
 		return false, fmt.Errorf("count employees for external org: %w", err)
 	}
-	// A provider org already shared across employees is the enterprise org, not a
-	// personal one — never downgrade it.
-	if employees >= 2 {
-		return false, nil
-	}
+	return employees >= 2, nil
+}
 
+// employeeAlsoUsesSharedOrg reports whether the resolved employee behind this
+// session also appears under a DIFFERENT provider org shared by >= 2 employees
+// (the company's real enterprise org). If so, this session's solo provider org is
+// almost certainly a personal account signed in with the work email, and should
+// not be classified team. Requires meta.UserID and meta.ExternalOrgID to be
+// non-empty. This is a best-effort heuristic: it leans team when it cannot tell.
+func (s *Service) employeeAlsoUsesSharedOrg(ctx context.Context, meta *SessionMetadata) (bool, error) {
 	hasShared, err := s.repo.EmployeeHasSharedExternalOrg(ctx, repo.EmployeeHasSharedExternalOrgParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       meta.Provider,
