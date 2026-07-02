@@ -175,6 +175,7 @@ export function AuthenticationSection({
           userSessionIssuer={userSessionIssuer ?? null}
           selectableIssuers={selectableIssuers}
           initialIssuerUrl={sheetInitialUrl}
+          defaultResource={protectedResourceMetadata?.resource}
         />
 
         {deleteTarget && userSessionIssuerId && (

@@ -68,6 +68,7 @@ export function AttachRemoteIdentityProviderSheet({
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
+  defaultResource,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -84,6 +85,10 @@ export function AttachRemoteIdentityProviderSheet({
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
   // upstream endpoints.
   initialIssuerUrl?: string;
+  // The RFC 9728 protected-resource metadata `resource` value discovered for
+  // this MCP server, used to seed the RFC 8707 resource-indicator override on
+  // newly created clients. Undefined when the probe found no metadata.
+  defaultResource?: string;
 }): JSX.Element {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
@@ -149,6 +154,7 @@ export function AttachRemoteIdentityProviderSheet({
   // at flow time, never at DCR registration.
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
+  const [resourceOverride, setResourceOverride] = useState("");
 
   // Session Client section state. The client toggle mirrors the issuer toggle:
   // when the resolved issuer already has attachable clients the operator can
@@ -285,6 +291,7 @@ export function AttachRemoteIdentityProviderSheet({
       // client's stored configuration.
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
+      const trimmedResource = resourceOverride.trim();
       // Tracks when DCR returns an auth method the SDK enum doesn't model
       // (e.g. `private_key_jwt`). We swallow it for the local client record
       // but warn the operator after success so they understand why their
@@ -308,6 +315,7 @@ export function AttachRemoteIdentityProviderSheet({
             userSessionIssuerIds: [issuerId],
             scope: parsedScopes.length > 0 ? parsedScopes : undefined,
             audience: trimmedAudience || undefined,
+            resource: trimmedResource || undefined,
           },
         });
       } else {
@@ -366,6 +374,7 @@ export function AttachRemoteIdentityProviderSheet({
             tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
             scope: parsedScopes.length > 0 ? parsedScopes : undefined,
             audience: trimmedAudience || undefined,
+            resource: trimmedResource || undefined,
           },
         });
       }
@@ -451,6 +460,7 @@ export function AttachRemoteIdentityProviderSheet({
     setTokenEndpointAuthMethod("");
     setScopeOverride("");
     setAudienceOverride("");
+    setResourceOverride(defaultResource ?? "");
     setClientMode("select");
     setSelectedClientId("");
     resetAttachMutation();
@@ -458,6 +468,7 @@ export function AttachRemoteIdentityProviderSheet({
     open,
     mcpServer.slug,
     initialIssuerUrl,
+    defaultResource,
     hasSelectable,
     setIssuerUrl,
     resetEndpointState,
@@ -576,8 +587,10 @@ export function AttachRemoteIdentityProviderSheet({
         <OverridesFields
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
+          resourceOverride={resourceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
+          onResourceOverrideChange={setResourceOverride}
         />
       </Stack>
     );
@@ -888,6 +901,7 @@ function SelectedClientDetails({
     },
     { label: "Scope", value: scopeValue, mono: false },
     { label: "Audience", value: client.audience || "—", mono: false },
+    { label: "Resource Indicator", value: client.resource || "—", mono: false },
   ];
   return (
     <Stack gap={3} className="border-t pt-4">

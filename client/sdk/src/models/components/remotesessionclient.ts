@@ -63,6 +63,10 @@ export type RemoteSessionClient = {
    */
   remoteSessionIssuerId: string;
   /**
+   * RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Null omits the resource parameter.
+   */
+  resource?: string | undefined;
+  /**
    * Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
@@ -106,6 +110,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
+    resource: z.optional(z.string()),
     scope: z.optional(z.array(z.string())),
     token_endpoint_auth_method: z.optional(
       TokenEndpointAuthMethod$inboundSchema,

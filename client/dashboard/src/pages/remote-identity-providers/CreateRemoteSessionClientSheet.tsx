@@ -114,6 +114,7 @@ export function CreateRemoteSessionClientSheet({
   >("");
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
+  const [resourceOverride, setResourceOverride] = useState("");
 
   // One mutation drives all client types. Its mutationFn does whatever async
   // work the chosen type needs — a DCR proxy registration pre-step, or a direct
@@ -126,6 +127,7 @@ export function CreateRemoteSessionClientSheet({
     }> => {
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
+      const trimmedResource = resourceOverride.trim();
       // Project-specific issuers inherit their project (project_id omitted). For
       // an org-level issuer, omitting project_id creates an organization-level
       // client (no project); sending it downscopes to the chosen project.
@@ -141,6 +143,7 @@ export function CreateRemoteSessionClientSheet({
             projectId: projectIdForOrg,
             scope: parsedScopes.length > 0 ? parsedScopes : undefined,
             audience: trimmedAudience || undefined,
+            resource: trimmedResource || undefined,
           },
         });
         return { unsupportedDcrAuthMethod: null };
@@ -190,6 +193,7 @@ export function CreateRemoteSessionClientSheet({
           tokenEndpointAuthMethod: credentials.tokenEndpointAuthMethod,
           scope: parsedScopes.length > 0 ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
+          resource: trimmedResource || undefined,
         },
       });
 
@@ -233,6 +237,7 @@ export function CreateRemoteSessionClientSheet({
     setTokenEndpointAuthMethod("");
     setScopeOverride("");
     setAudienceOverride("");
+    setResourceOverride("");
     setClientType(defaultClientType);
     resetCreateMutation();
   }, [open, defaultClientType, resetCreateMutation]);
@@ -334,8 +339,10 @@ export function CreateRemoteSessionClientSheet({
             <OverridesFields
               scopeOverride={scopeOverride}
               audienceOverride={audienceOverride}
+              resourceOverride={resourceOverride}
               onScopeOverrideChange={setScopeOverride}
               onAudienceOverrideChange={setAudienceOverride}
+              onResourceOverrideChange={setResourceOverride}
             />
           </Stack>
 

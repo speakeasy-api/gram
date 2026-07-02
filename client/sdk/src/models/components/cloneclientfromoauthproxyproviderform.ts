@@ -39,6 +39,10 @@ export type CloneClientFromOAuthProxyProviderForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant for the cloned client.
+   */
+  resource?: string | undefined;
+  /**
    * Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
@@ -65,6 +69,7 @@ export type CloneClientFromOAuthProxyProviderForm$Outbound = {
   audience?: string | undefined;
   oauth_proxy_provider_id: string;
   remote_session_issuer_id: string;
+  resource?: string | undefined;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
@@ -80,6 +85,7 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
       audience: z.optional(z.string()),
       oauthProxyProviderId: z.string(),
       remoteSessionIssuerId: z.string(),
+      resource: z.optional(z.string()),
       scope: z.optional(z.array(z.string())),
       tokenEndpointAuthMethod: z.optional(
         CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod$outboundSchema,

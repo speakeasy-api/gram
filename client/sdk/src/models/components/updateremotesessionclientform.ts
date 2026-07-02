@@ -38,6 +38,10 @@ export type UpdateRemoteSessionClientForm = {
    */
   id: string;
   /**
+   * Replace the RFC 8707 resource indicator sent for this client. Omit to leave unchanged.
+   */
+  resource?: string | undefined;
+  /**
    * Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
    */
   scope?: Array<string> | undefined;
@@ -59,6 +63,7 @@ export type UpdateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   client_secret?: string | undefined;
   id: string;
+  resource?: string | undefined;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
 };
@@ -72,6 +77,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     audience: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     id: z.string(),
+    resource: z.optional(z.string()),
     scope: z.optional(z.array(z.string())),
     tokenEndpointAuthMethod: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,

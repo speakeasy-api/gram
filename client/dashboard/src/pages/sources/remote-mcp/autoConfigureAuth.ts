@@ -201,7 +201,11 @@ export async function autoConfigureRemoteMcpAuth({
     }
 
     // Attach the freshly-registered upstream client to the server's permanent
-    // USI.
+    // USI. The RFC 8707 resource indicator is the canonical resource URI from
+    // the RFC 9728 metadata (falling back to the server URL, mirroring what
+    // MCP clients send when connecting directly) so the upstream AS
+    // audience-binds issued tokens — strict resource servers reject tokens
+    // minted without it.
     await client.remoteSessionClients.create({
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
@@ -212,6 +216,7 @@ export async function autoConfigureRemoteMcpAuth({
           narrowTokenEndpointAuthMethod(registered.tokenEndpointAuthMethod) ??
           preferredAuthMethod,
         scope: scopes.length > 0 ? scopes : undefined,
+        resource: protectedResourceMetadata.resource || remoteMcpServer.url,
       },
     });
 

@@ -362,20 +362,24 @@ export function ClientCredentialsFields({
   );
 }
 
-// OverridesFields renders the per-client OAuth dance overrides. Both fields
+// OverridesFields renders the per-client OAuth dance overrides. All fields
 // are optional and apply in both DCR and manual modes — they control what
 // Gram sends at authorize/token time, independent of how the client was
 // registered.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
+  resourceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
+  onResourceOverrideChange,
 }: {
   scopeOverride: string;
   audienceOverride: string;
+  resourceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
+  onResourceOverrideChange: (value: string) => void;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -406,8 +410,25 @@ export function OverridesFields({
         />
         <Type muted small>
           When provided, the platform includes this audience in authorize and
-          token requests (RFC 8707). Required by some providers (e.g. Auth0) to
-          return JWT access tokens.
+          token requests. Required by some providers (e.g. Auth0) to return JWT
+          access tokens.
+        </Type>
+      </Stack>
+
+      <Stack gap={2}>
+        <Label className="text-muted-foreground text-xs">
+          Resource indicator (optional)
+        </Label>
+        <Input
+          value={resourceOverride}
+          onChange={onResourceOverrideChange}
+          placeholder="https://mcp.example.com/mcp"
+        />
+        <Type muted small>
+          RFC 8707 resource indicator sent in authorize, token, and refresh
+          requests so the provider audience-binds issued tokens. Use the MCP
+          server's canonical URL. Required by some providers to accept the
+          resulting access tokens.
         </Type>
       </Stack>
     </Stack>

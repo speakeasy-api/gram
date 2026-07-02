@@ -18,6 +18,10 @@ export type CreateCimdForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Use the MCP server's canonical resource URI.
+   */
+  resource?: string | undefined;
+  /**
    * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
@@ -31,6 +35,7 @@ export type CreateCimdForm = {
 export type CreateCimdForm$Outbound = {
   audience?: string | undefined;
   remote_session_issuer_id: string;
+  resource?: string | undefined;
   scope?: Array<string> | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
 };
@@ -43,6 +48,7 @@ export const CreateCimdForm$outboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
+    resource: z.optional(z.string()),
     scope: z.optional(z.array(z.string())),
     userSessionIssuerIds: z.optional(z.array(z.string())),
   }),

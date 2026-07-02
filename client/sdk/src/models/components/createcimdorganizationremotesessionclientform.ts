@@ -22,6 +22,10 @@ export type CreateCimdOrganizationRemoteSessionClientForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant.
+   */
+  resource?: string | undefined;
+  /**
    * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
@@ -32,6 +36,7 @@ export type CreateCimdOrganizationRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   project_id?: string | undefined;
   remote_session_issuer_id: string;
+  resource?: string | undefined;
   scope?: Array<string> | undefined;
 };
 
@@ -45,6 +50,7 @@ export const CreateCimdOrganizationRemoteSessionClientForm$outboundSchema:
       audience: z.optional(z.string()),
       projectId: z.optional(z.string()),
       remoteSessionIssuerId: z.string(),
+      resource: z.optional(z.string()),
       scope: z.optional(z.array(z.string())),
     }),
     z.transform((v) => {

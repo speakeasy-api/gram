@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 61203614a47a620939fb8cc87fe05576
+  docChecksum: 39080786a07acfe5bfc3077c01afbfcc
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -153,7 +153,7 @@ trackedFiles:
   docs/models/components/claudeturnusage.md:
     last_write_checksum: sha1:661e3a0df6c3655a145d6b37ef945a186c01bf02
   docs/models/components/cloneclientfromoauthproxyproviderform.md:
-    last_write_checksum: sha1:1da53ed547478e83f2cf380dc062d710e5fe36cc
+    last_write_checksum: sha1:e6f4c5fa3859c4cb32c73f5e9797fb0d8c329c57
   docs/models/components/cloneclientfromoauthproxyproviderformtokenendpointauthmethod.md:
     last_write_checksum: sha1:1a1d1aa2b64281dde00d7127ea51e5c4102f0b5b
   docs/models/components/cloneenvironmentrequestbody.md:
@@ -171,9 +171,9 @@ trackedFiles:
   docs/models/components/createassistantformstatus.md:
     last_write_checksum: sha1:7436f6e05e725b649a2872e91c305ff297fd4c0f
   docs/models/components/createcimdform.md:
-    last_write_checksum: sha1:ea2c2573fdc2d541599030dc5280df065a9b1a8f
+    last_write_checksum: sha1:2b5309d5a79ac18048dd7d7c8ef9aeb16e89545c
   docs/models/components/createcimdorganizationremotesessionclientform.md:
-    last_write_checksum: sha1:0e0bf595ec54358b11409e744174f5584a97a76b
+    last_write_checksum: sha1:9f2d684087e9136df422b1860a1de258a39b014f
   docs/models/components/createcustomdetectionrulerequestbody.md:
     last_write_checksum: sha1:90b82406fb3a5ff0e7478151419ffbff5c022fdd
   docs/models/components/createdeploymentrequestbody.md:
@@ -195,7 +195,7 @@ trackedFiles:
   docs/models/components/createmcpserverformvisibility.md:
     last_write_checksum: sha1:a75c05e8b8f0d0bd19a21755e3425a63cd4788fb
   docs/models/components/createorganizationremotesessionclientform.md:
-    last_write_checksum: sha1:741262e669d374db92949b20f288aeca9a269dc2
+    last_write_checksum: sha1:6359516dd5aab10779c7cfc4ee6837a142229c09
   docs/models/components/createorganizationremotesessionclientformtokenendpointauthmethod.md:
     last_write_checksum: sha1:4b20e80bbe2bfffa7cf4c5a2e915ca93ac6a1dd5
   docs/models/components/createpackageform.md:
@@ -219,7 +219,7 @@ trackedFiles:
   docs/models/components/createprompttemplateresult.md:
     last_write_checksum: sha1:82f8d98abd297718c3883827787f66a91a125583
   docs/models/components/createremotesessionclientform.md:
-    last_write_checksum: sha1:7f9eba66cbc007ce48aa4801a3c4be0c4be1256a
+    last_write_checksum: sha1:0bb87a70d59d0bd179e3b8de24fb4d3674781bee
   docs/models/components/createremotesessionclientformtokenendpointauthmethod.md:
     last_write_checksum: sha1:975db3f1436c7c954ee699e000b8d6e37820ff08
   docs/models/components/createremotesessionissuerform.md:
@@ -849,7 +849,7 @@ trackedFiles:
   docs/models/components/remotesession.md:
     last_write_checksum: sha1:f1dfcb231545e82b9ae388684bf6e90119799326
   docs/models/components/remotesessionclient.md:
-    last_write_checksum: sha1:46d79345f17f380d07984e6b6ee375008fdfdc87
+    last_write_checksum: sha1:158a2f7689c8816ea2f3087dd3ddf66e2576a5ee
   docs/models/components/remotesessionissuer.md:
     last_write_checksum: sha1:0199fb8f029aa05990b837f817a7c9d32df99868
   docs/models/components/remotesessionissuerdraft.md:
@@ -1289,7 +1289,7 @@ trackedFiles:
   docs/models/components/updateprompttemplateresult.md:
     last_write_checksum: sha1:2c3026fda1bac0c4bb6819757d917b5cb2be7a9c
   docs/models/components/updateremotesessionclientform.md:
-    last_write_checksum: sha1:cebb27c833e52ecdd84dacb5bd13670dc318b02a
+    last_write_checksum: sha1:32ae1e66e2935379bfeaf829ae290380ec0b9b1a
   docs/models/components/updateremotesessionclientformtokenendpointauthmethod.md:
     last_write_checksum: sha1:a6e4c2b408de7ec769da08fcb125836d30488582
   docs/models/components/updateremotesessionissuerform.md:
@@ -4421,7 +4421,7 @@ trackedFiles:
   src/models/components/claudeturnusage.ts:
     last_write_checksum: sha1:0709fcfcc09ab8269e6c73f2081cdd0efbc21064
   src/models/components/cloneclientfromoauthproxyproviderform.ts:
-    last_write_checksum: sha1:6d6ad384c73565d7bcd00583b3487d415771693a
+    last_write_checksum: sha1:f6d664087f34fe5e4842d820face0000e0cf12c2
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
   src/models/components/codexhookpayload.ts:
@@ -4431,9 +4431,9 @@ trackedFiles:
   src/models/components/createassistantform.ts:
     last_write_checksum: sha1:8661cb7dace7db097ac9a071d2a475d85fa5c372
   src/models/components/createcimdform.ts:
-    last_write_checksum: sha1:796bd6b4b57cb5f82156102f50f01d871346e557
+    last_write_checksum: sha1:db039fa8d8835e50c8a7ed7cbe1ea186d033bf84
   src/models/components/createcimdorganizationremotesessionclientform.ts:
-    last_write_checksum: sha1:edd9bb4692caac063af6e738b86d1ba233b4dd3e
+    last_write_checksum: sha1:8af64f243f5790d918a34f6fce86726e76103669
   src/models/components/createcustomdetectionrulerequestbody.ts:
     last_write_checksum: sha1:090ba7d561004059f6282970d153054e1f578b51
   src/models/components/createdeploymentrequestbody.ts:
@@ -4453,7 +4453,7 @@ trackedFiles:
   src/models/components/createmcpserverform.ts:
     last_write_checksum: sha1:ac90ac88d40a5f285ae50741c5e2cf744c6f9544
   src/models/components/createorganizationremotesessionclientform.ts:
-    last_write_checksum: sha1:863fefc429973a3ae155268c483e5d82462dfef9
+    last_write_checksum: sha1:e674f46b757ac0f9c0d55771c999874ab732bd8f
   src/models/components/createpackageform.ts:
     last_write_checksum: sha1:7388e08e207a0244cd85e7152b8dd171e8023fc1
   src/models/components/createpackageresult.ts:
@@ -4471,7 +4471,7 @@ trackedFiles:
   src/models/components/createprompttemplateresult.ts:
     last_write_checksum: sha1:de5a016f9f988dac8c413482fb71ed8b4b6b82f3
   src/models/components/createremotesessionclientform.ts:
-    last_write_checksum: sha1:4a608b23fbcff8c15c4fc51e141a5d4a00bf0c43
+    last_write_checksum: sha1:1873a2433a964106d8728b9d34997bb2c7f39ff6
   src/models/components/createremotesessionissuerform.ts:
     last_write_checksum: sha1:9c12ff7a6e974541518f7c9342373c0d8900b824
   src/models/components/createrequestbody.ts:
@@ -5015,7 +5015,7 @@ trackedFiles:
   src/models/components/remotesession.ts:
     last_write_checksum: sha1:93f1c9dba819d46dffc198584b6ab7999d032289
   src/models/components/remotesessionclient.ts:
-    last_write_checksum: sha1:b394088c230a6b2e77916a7bfcf49c194c2fa453
+    last_write_checksum: sha1:9058f10e63cf3f1c97f6bc037b71e316cce558c7
   src/models/components/remotesessionissuer.ts:
     last_write_checksum: sha1:a6ca3654455fdb7fddda1e40cffcfd7cd6632dde
   src/models/components/remotesessionissuerdraft.ts:
@@ -5315,7 +5315,7 @@ trackedFiles:
   src/models/components/updateprompttemplateresult.ts:
     last_write_checksum: sha1:5a041b5080adcfc65c1afef00705abcfa4073103
   src/models/components/updateremotesessionclientform.ts:
-    last_write_checksum: sha1:1bfeaddd44390f6d322233a4304754c1b68605d9
+    last_write_checksum: sha1:226250aa0e955c28c988c516d61053d2044d8c5e
   src/models/components/updateremotesessionissuerform.ts:
     last_write_checksum: sha1:504bddd8fbd92c5756b46afb9d6ba2c8d0f3fe57
   src/models/components/updaterequestbody.ts:

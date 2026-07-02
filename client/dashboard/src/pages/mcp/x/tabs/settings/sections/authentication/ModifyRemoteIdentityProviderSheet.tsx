@@ -182,6 +182,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   >("");
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
+  const [resourceOverride, setResourceOverride] = useState("");
 
   const modifyMutation = useMutation({
     mutationFn: async () => {
@@ -190,6 +191,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       }
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
+      const trimmedResource = resourceOverride.trim();
 
       // Update the remote_session_issuer. The backend now reads an explicit
       // empty string on the four nullable endpoint fields as "clear to
@@ -236,6 +238,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           // provider with new settings.
           scope: parsedScopes.length > 0 ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
+          resource: trimmedResource || undefined,
         },
       });
     },
@@ -271,6 +274,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
     setScopeOverride((primaryClient.scope ?? []).join(", "));
     setAudienceOverride(primaryClient.audience ?? "");
+    setResourceOverride(primaryClient.resource ?? "");
     clientFieldsInitializedRef.current = true;
   }, [primaryClient]);
 
@@ -397,8 +401,10 @@ function ModifyRemoteIdentityProviderSheetBody({
         <OverridesFields
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
+          resourceOverride={resourceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
+          onResourceOverrideChange={setResourceOverride}
         />
 
         {submitError && (

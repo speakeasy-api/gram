@@ -36422,6 +36422,11 @@ components:
           type: string
           description: The remote_session_issuer the new client is registered with.
           format: uuid
+        resource:
+          type: string
+          description: Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant for the cloned client.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -36584,6 +36589,11 @@ components:
           type: string
           description: The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.
           format: uuid
+        resource:
+          type: string
+          description: Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Use the MCP server's canonical resource URI.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -36616,6 +36626,11 @@ components:
           type: string
           description: The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.
           format: uuid
+        resource:
+          type: string
+          description: Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -36945,6 +36960,11 @@ components:
           type: string
           description: The owning remote_session_issuer id; must belong to the caller's organization.
           format: uuid
+        resource:
+          type: string
+          description: Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -37142,6 +37162,11 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        resource:
+          type: string
+          description: Optional RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Use the MCP server's canonical resource URI.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -44192,6 +44217,9 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        resource:
+          type: string
+          description: RFC 8707 resource indicator sent on the authorize redirect, token exchange, and refresh grant. Null omits the resource parameter.
         scope:
           type: array
           items:
@@ -48922,6 +48950,11 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        resource:
+          type: string
+          description: Replace the RFC 8707 resource indicator sent for this client.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
@@ -49105,6 +49138,11 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        resource:
+          type: string
+          description: Replace the RFC 8707 resource indicator sent for this client. Omit to leave unchanged.
+          pattern: ^[!-~]+$
+          maxLength: 512
         scope:
           type: array
           items:
