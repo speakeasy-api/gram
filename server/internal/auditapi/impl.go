@@ -30,10 +30,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 const listAuditLogsPageSize = 50
+
+// Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
+// override) are shown under a collective label instead of the staff member's
+// email. Logs viewed within the Speakeasy org itself are not masked.
+const (
+	speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+	speakeasyTeamActorLabel     = "Speakeasy Team"
+)
 
 type Service struct {
 	tracer trace.Tracer
@@ -128,10 +137,51 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		logs = logs[:listAuditLogsPageSize]
 	}
 
+	actorIDs := make([]string, 0, len(logs))
+	for _, log := range logs {
+		if log.ActorType == "user" {
+			actorIDs = append(actorIDs, log.ActorID)
+		}
+	}
+	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
+	}
+	for _, log := range logs {
+		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
+			log.ActorDisplayName = conv.PtrEmpty(speakeasyTeamActorLabel)
+			log.ActorSlug = nil
+		}
+	}
+
 	return &gen.ListAuditLogsResult{
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// speakeasyActorIDs returns which of the given user actor IDs belong to the
+// Speakeasy org, so their identities can be masked in customer-facing feeds.
+// It returns nil when the viewer is the Speakeasy org itself.
+func (s *Service) speakeasyActorIDs(ctx context.Context, viewerOrganizationID string, actorIDs []string) (map[string]bool, error) {
+	if viewerOrganizationID == speakeasyTeamOrganizationID || len(actorIDs) == 0 {
+		return nil, nil
+	}
+
+	memberIDs, err := orgrepo.New(s.db).FilterOrganizationMemberUserIDs(ctx, orgrepo.FilterOrganizationMemberUserIDsParams{
+		OrganizationID: speakeasyTeamOrganizationID,
+		UserIds:        actorIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("filter speakeasy org members: %w", err)
+	}
+
+	members := make(map[string]bool, len(memberIDs))
+	for _, id := range memberIDs {
+		members[id] = true
+	}
+
+	return members, nil
 }
 
 func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload) (*gen.ListAuditLogFacetsResult, error) {
@@ -165,8 +215,26 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
 	}
 
+	actors := toAuditActorFacetOptions(actorRows)
+
+	// Facet values are actor IDs, so mask their display names the same way the
+	// log feed does.
+	actorIDs := make([]string, 0, len(actors))
+	for _, actor := range actors {
+		actorIDs = append(actorIDs, actor.Value)
+	}
+	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
+	}
+	for _, actor := range actors {
+		if speakeasyActors[actor.Value] {
+			actor.DisplayName = speakeasyTeamActorLabel
+		}
+	}
+
 	return &gen.ListAuditLogFacetsResult{
-		Actors:  toAuditActorFacetOptions(actorRows),
+		Actors:  actors,
 		Actions: toAuditActionFacetOptions(actionRows),
 	}, nil
 }
