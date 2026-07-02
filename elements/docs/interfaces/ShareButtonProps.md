@@ -8,9 +8,9 @@
 
 ## Properties
 
-### onShare()?
+### onShare?
 
-> `optional` **onShare**: (`result`) => `void`
+> `optional` **onShare?**: (`result`) => `void`
 
 Called when the share action completes.
 Receives the share URL on success, or an Error on failure.
@@ -20,7 +20,7 @@ Use this to show toast notifications or track analytics.
 
 ##### result
 
-\{ `url`: `string`; \} | \{ `error`: `Error`; \}
+\{ `url`: `string`; \} \| \{ `error`: `Error`; \}
 
 #### Returns
 
@@ -28,9 +28,9 @@ Use this to show toast notifications or track analytics.
 
 ***
 
-### buildShareUrl()?
+### buildShareUrl?
 
-> `optional` **buildShareUrl**: (`threadId`) => `string`
+> `optional` **buildShareUrl?**: (`threadId`) => `string`
 
 Custom URL builder. By default, appends `?threadId={id}` to current URL.
 Return the full share URL.
@@ -49,7 +49,7 @@ Return the full share URL.
 
 ### variant?
 
-> `optional` **variant**: `"default"` \| `"outline"` \| `"ghost"`
+> `optional` **variant?**: `"default"` \| `"outline"` \| `"ghost"`
 
 Button variant
 
@@ -63,7 +63,7 @@ Button variant
 
 ### size?
 
-> `optional` **size**: `"icon"` \| `"default"` \| `"sm"` \| `"lg"`
+> `optional` **size?**: `"icon"` \| `"default"` \| `"sm"` \| `"lg"`
 
 Button size
 
@@ -77,7 +77,7 @@ Button size
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Additional CSS classes
 
@@ -85,6 +85,6 @@ Additional CSS classes
 
 ### children?
 
-> `optional` **children**: `ReactNode`
+> `optional` **children?**: `ReactNode`
 
 Custom button content. If not provided, shows icon + "Share chat"

@@ -6,4 +6,4 @@
 
 # Type Alias: ToolsFilter
 
-> **ToolsFilter** = `string`[] \| (`{ toolName }`) => `boolean`
+> **ToolsFilter** = `string`[] \| ((`{ toolName }`) => `boolean`)

@@ -4,7 +4,7 @@
 
 [@gram-ai/elements](../globals.md) / GetSessionFn
 
-# Type Alias: GetSessionFn()
+# Type Alias: GetSessionFn
 
 > **GetSessionFn** = (`init`) => `Promise`\<`string`\>
 

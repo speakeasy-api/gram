@@ -16,7 +16,7 @@
 
 ### expanded?
 
-> `optional` **expanded**: `object`
+> `optional` **expanded?**: `object`
 
 #### width
 

@@ -4,7 +4,7 @@
 
 [@gram-ai/elements](../globals.md) / ElementsTransportFactory
 
-# Type Alias: ElementsTransportFactory()
+# Type Alias: ElementsTransportFactory
 
 > **ElementsTransportFactory** = (`ctx`) => `ChatTransport`\<`UIMessage`\>
 

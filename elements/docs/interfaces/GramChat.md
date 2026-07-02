@@ -54,4 +54,4 @@ Represents a chat from the Gram API.
 
 ### has\_more\_before?
 
-> `optional` **has\_more\_before**: `boolean`
+> `optional` **has\_more\_before?**: `boolean`

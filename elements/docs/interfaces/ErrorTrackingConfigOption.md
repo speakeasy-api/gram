@@ -12,7 +12,7 @@ Configuration for error tracking.
 
 ### enabled?
 
-> `optional` **enabled**: `boolean`
+> `optional` **enabled?**: `boolean`
 
 Set to false to disable error reporting.
 

@@ -10,7 +10,7 @@
 
 ### typingSpeed?
 
-> `optional` **typingSpeed**: `number`
+> `optional` **typingSpeed?**: `number`
 
 Milliseconds per character when streaming text.
 
@@ -24,7 +24,7 @@ Milliseconds per character when streaming text.
 
 ### userMessageDelay?
 
-> `optional` **userMessageDelay**: `number`
+> `optional` **userMessageDelay?**: `number`
 
 Milliseconds to wait before showing each user message.
 
@@ -38,7 +38,7 @@ Milliseconds to wait before showing each user message.
 
 ### assistantStartDelay?
 
-> `optional` **assistantStartDelay**: `number`
+> `optional` **assistantStartDelay?**: `number`
 
 Milliseconds to wait before the assistant starts "typing".
 
@@ -50,9 +50,9 @@ Milliseconds to wait before the assistant starts "typing".
 
 ***
 
-### onComplete()?
+### onComplete?
 
-> `optional` **onComplete**: () => `void`
+> `optional` **onComplete?**: () => `void`
 
 Called when the full replay sequence finishes.
 

@@ -22,4 +22,4 @@
 
 ### maxHeight?
 
-> `optional` **maxHeight**: `string` \| `number`
+> `optional` **maxHeight?**: `string` \| `number`

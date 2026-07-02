@@ -10,7 +10,7 @@
 
 ### enabled?
 
-> `optional` **enabled**: `boolean`
+> `optional` **enabled?**: `boolean`
 
 #### Default
 
@@ -22,7 +22,7 @@ true
 
 ### maxSuggestions?
 
-> `optional` **maxSuggestions**: `number`
+> `optional` **maxSuggestions?**: `number`
 
 #### Default
 
@@ -34,4 +34,4 @@ true
 
 ### placeholder?
 
-> `optional` **placeholder**: `string`
+> `optional` **placeholder?**: `string`

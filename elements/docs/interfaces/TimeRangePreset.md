@@ -26,7 +26,7 @@
 
 ***
 
-### getRange()
+### getRange
 
 > **getRange**: () => [`TimeRange`](TimeRange.md)
 

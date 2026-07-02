@@ -18,6 +18,6 @@ Raw markdown text.
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Optional className applied to the `.aui-md` root wrapper.
