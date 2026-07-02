@@ -80,7 +80,10 @@ DO UPDATE SET
   , account_type        = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
   , last_seen_at        = clock_timestamp()
   , updated_at          = clock_timestamp()
-RETURNING id;
+-- billing_mode is intentionally not written here: it is an admin/out-of-band
+-- override, never set by ingest. Returning it lets attribution resolve the
+-- account-level tier of the billing-mode cascade without a second round trip.
+RETURNING id, billing_mode;
 
 -- name: CountEmployeesForExternalOrg :one
 -- Distinct employees (resolved Gram users) ever seen under a provider org. An
@@ -139,6 +142,28 @@ WHERE organization_id = @organization_id
   AND user_id = ANY(@user_ids::text[])
   AND deleted_at IS NULL
 ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
+-- name: GetProviderOrgBillingMode :one
+-- Resolves the org-level admin-declared billing mode for a provider org from the
+-- org's AI integration config (the org-level tier of the billing-mode cascade).
+-- A config scoped to a specific external_organization_id must match the session's
+-- provider org; a config with none applies provider-wide. Exact-org matches are
+-- preferred over provider-wide. Only configs with a non-null billing_mode are
+-- considered, so an undeclared org returns no rows (treated as unknown upstream).
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+  AND (
+    external_organization_id IS NULL
+    OR external_organization_id = ''
+    OR external_organization_id = @external_org_id
+  )
+ORDER BY (external_organization_id = @external_org_id) DESC
+LIMIT 1;
 
 -- name: GetDeviceOwner :one
 SELECT * FROM device_owners

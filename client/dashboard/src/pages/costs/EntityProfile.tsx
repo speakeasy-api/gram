@@ -26,6 +26,7 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
+import { CostMeasureLabel } from "@/components/estimated-cost";
 import { CostTable } from "./CostTable";
 import { type Crumb, LABELS, type Measures } from "./taxonomy";
 
@@ -180,7 +181,7 @@ function HeaderStat({
   value,
   onClick,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   // When set, the stat becomes a button — used to turn "Agent sessions" into the
   // header entry point for the per-session list.
@@ -236,6 +237,9 @@ export type EntityProfileProps = {
   onAxisChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
+  // The view's resolved billing mode; "metered" shows real cost instead of the
+  // API-rate estimate on the cost columns.
+  billingMode?: string;
   onDrill: (row: QueryRow) => void;
   // When set, replaces the dimension CostTable (the per-session list in sessions
   // mode). The override owns its own loading/empty/error states.
@@ -275,6 +279,7 @@ export function EntityProfile({
   axisOptions,
   onAxisChange,
   rows,
+  billingMode,
   onDrill,
   tableOverride,
   onViewSessions,
@@ -318,6 +323,7 @@ export function EntityProfile({
       onDrill={onDrill}
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
+      billingMode={billingMode}
     />
   );
 
@@ -404,7 +410,10 @@ export function EntityProfile({
               </div>
             </div>
             <div className="flex shrink-0 gap-8">
-              <HeaderStat label="Cost" value={formatCost(stats.cost)} />
+              <HeaderStat
+                label={<CostMeasureLabel billingMode={billingMode} />}
+                value={formatCost(stats.cost)}
+              />
               <HeaderStat
                 label="Agent sessions"
                 value={stats.sessions.toLocaleString()}

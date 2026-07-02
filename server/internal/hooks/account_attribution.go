@@ -2,7 +2,10 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -85,7 +88,7 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		}
 	}
 
-	accountID, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
+	account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
 		OrganizationID:      meta.GramOrgID,
 		Provider:            meta.Provider,
 		ExternalAccountUuid: meta.ExternalAccountUUID,
@@ -98,9 +101,55 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	if err != nil {
 		return fmt.Errorf("upsert user account: %w", err)
 	}
-	meta.UserAccountID = accountID.String()
+	meta.UserAccountID = account.ID.String()
+
+	billingMode, err := s.resolveBillingMode(ctx, meta, conv.FromPGTextOrEmpty[string](account.BillingMode))
+	if err != nil {
+		return fmt.Errorf("resolve billing mode: %w", err)
+	}
+	meta.BillingMode = billingMode
 
 	return nil
+}
+
+// providerBillingConfigProvider maps a session's provider tag to the provider
+// identifier used on ai_integration_configs, where org-level billing modes are
+// declared. Claude sessions tag provider "anthropic", but its integration config
+// (the Compliance API integration that carries the external org) is stored under
+// "anthropic_compliance". Providers without a distinct config identifier map to
+// themselves.
+func providerBillingConfigProvider(provider string) string {
+	switch provider {
+	case providerAnthropic:
+		return "anthropic_compliance"
+	default:
+		return provider
+	}
+}
+
+// resolveBillingMode walks the billing-mode cascade for a session: an account
+// override (user_accounts.billing_mode) wins, else the org-level declaration on
+// the provider's AI integration config (matched to the session's external org),
+// else empty (treated as unknown — cost is an estimate). accountOverride is the
+// value returned by the user_accounts upsert, so no extra query is needed for the
+// common case where no override is set.
+func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata, accountOverride string) (string, error) {
+	if accountOverride != "" {
+		return accountOverride, nil
+	}
+
+	orgMode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
+		OrganizationID: meta.GramOrgID,
+		Provider:       providerBillingConfigProvider(meta.Provider),
+		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("get provider org billing mode: %w", err)
+	}
+	return conv.FromPGTextOrEmpty[string](orgMode), nil
 }
 
 // classifyAccount determines whether the session's account is team or personal.
@@ -208,6 +257,9 @@ func stampAccountAttribution(attrs map[attr.Key]any, meta SessionMetadata) {
 	}
 	if meta.AccountType != "" {
 		attrs[attr.AccountTypeKey] = meta.AccountType
+	}
+	if meta.BillingMode != "" {
+		attrs[attr.BillingModeKey] = meta.BillingMode
 	}
 	if meta.DeviceID != "" {
 		attrs[attr.DeviceIDKey] = meta.DeviceID

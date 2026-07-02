@@ -90,6 +90,12 @@ type SessionMetadata struct {
 	DeviceID string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
+	// BillingMode is the admin-declared billing mode for the provider org this
+	// session's account belongs to (ai_integration_configs.billing_mode), resolved
+	// at attribution time. Well-known values: "metered", "flat_rate", "unknown";
+	// empty when no declaration covers the session's provider org. Cost figures
+	// are real spend only for "metered" — everything else is an estimate.
+	BillingMode string
 	// UserAccountID is the user_accounts row id for this session's account, set
 	// once the account entity has been upserted.
 	UserAccountID string

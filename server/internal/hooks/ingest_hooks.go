@@ -401,6 +401,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		AccountType:         "",
+		BillingMode:         "",
 		UserAccountID:       "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),

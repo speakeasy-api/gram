@@ -19,6 +19,7 @@ export const Dimension = {
   HookSource: "hook_source",
   AccountType: "account_type",
   Provider: "provider",
+  BillingMode: "billing_mode",
   Role: "role",
   Group: "group",
   ProjectId: "project_id",
