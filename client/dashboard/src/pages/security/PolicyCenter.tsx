@@ -1119,9 +1119,17 @@ function PolicyCenterContent() {
   // every render. Body references only module-level helpers + stable setters
   // (setNav is stable), so listing setNav is enough.
   const handleEdit = useCallback(
-    (policy: RiskPolicy) => {
+    (
+      policy: RiskPolicy,
+      // Deep-link hydration passes `history: "replace"` (the `?policy=` entry
+      // already exists, so pushing would add a duplicate Back stop) and the
+      // step already in the URL, so a reload keeps its place.
+      opts?: { history?: "push" | "replace"; step?: string | null },
+    ) => {
       const isPrompt = isPromptPolicy(policy);
       const kind: PolicyKind = isPrompt ? "prompt" : "risk";
+      const history = opts?.history ?? "push";
+      const step = opts?.step ?? firstStepId(kind);
       // Mark the deep-link effect as handled for this id so it doesn't re-open
       // the sheet when we set `?policy=` below.
       openedPolicyRef.current = policy.id;
@@ -1146,10 +1154,7 @@ function PolicyCenterContent() {
         setFormFailOpen(policy.modelConfig?.failOpen ?? true);
         setFormAudienceType("everyone");
         setSelectedAudiencePrincipalUrns(new Set<string>());
-        void setNav(
-          { policy: policy.id, create: null, step: firstStepId(kind) },
-          { history: "push" },
-        );
+        void setNav({ policy: policy.id, create: null, step }, { history });
         return;
       }
       setFormPromptInstruction("");
@@ -1178,10 +1183,7 @@ function PolicyCenterContent() {
           ? new Set<string>(policy.audiencePrincipalUrns ?? [])
           : new Set<string>(),
       );
-      void setNav(
-        { policy: policy.id, create: null, step: firstStepId(kind) },
-        { history: "push" },
-      );
+      void setNav({ policy: policy.id, create: null, step }, { history });
     },
     [setNav],
   );
@@ -1198,9 +1200,11 @@ function PolicyCenterContent() {
     const policy = data?.policies?.find((p) => p.id === nav.policy);
     openedPolicyRef.current = nav.policy;
     if (policy) {
-      handleEdit(policy);
+      // Hydrating from the URL: rewrite the current entry rather than pushing a
+      // duplicate, and keep whatever step the URL already carries.
+      handleEdit(policy, { history: "replace", step: nav.step });
     }
-  }, [nav.policy, isLoading, data, handleEdit]);
+  }, [nav.policy, nav.step, isLoading, data, handleEdit]);
 
   // When the URL stops pointing at a policy — e.g. the user pressed the browser
   // Back button out of an edit session — drop the loaded policy so the sheet
