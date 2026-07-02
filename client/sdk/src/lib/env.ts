@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { dlv } from "./dlv.js";
 
 export interface Env {
   GRAM_DEBUG?: boolean | undefined;
@@ -34,11 +33,16 @@ export function env(): Env {
     return envMemo;
   }
 
+  const globals = globalThis as {
+    Deno?: { env?: { toObject?: () => Record<string, string | undefined> } };
+    process?: { env?: Record<string, string | undefined> };
+  };
+
   let envObject: Record<string, unknown> = {};
   if (isDeno()) {
-    envObject = (globalThis as any).Deno?.env?.toObject?.() ?? {};
+    envObject = globals.Deno?.env?.toObject?.() ?? {};
   } else {
-    envObject = dlv(globalThis, "process.env") ?? {};
+    envObject = globals.process?.env ?? {};
   }
 
   envMemo = envSchema.parse(envObject);
