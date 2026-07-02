@@ -382,7 +382,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	// an empty filter to avoid a nil pointer dereference.
 	filter := payload.Filter
 	if filter == nil {
-		filter = &telem_gen.SearchUsersFilter{}
+		filter = &telem_gen.SearchUsersFilter{
+			From:         "",
+			To:           "",
+			DeploymentID: nil,
+			UserIds:      nil,
+			EventSource:  nil,
+			HookSource:   nil,
+		}
 	}
 
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
@@ -482,7 +489,14 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	// an empty filter to avoid a nil pointer dereference.
 	filter := payload.Filter
 	if filter == nil {
-		filter = &telem_gen.SearchUsersFilter{}
+		filter = &telem_gen.SearchUsersFilter{
+			From:         "",
+			To:           "",
+			DeploymentID: nil,
+			UserIds:      nil,
+			EventSource:  nil,
+			HookSource:   nil,
+		}
 	}
 
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
