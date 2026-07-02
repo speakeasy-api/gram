@@ -15,6 +15,7 @@ export * from "./captureevent.js";
 export * from "./checkmcpendpointslugavailability.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./clearmcpregistrycache.js";
+export * from "./cliauthauthorize.js";
 export * from "./cloneclientfromoauthproxyprovider.js";
 export * from "./cloneenvironment.js";
 export * from "./clonetoolset.js";
