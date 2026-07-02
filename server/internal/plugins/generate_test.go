@@ -1240,6 +1240,109 @@ printf '{}\n200'
 	require.Equal(t, "https://mcp.example.com/x", urlMCP["url"])
 }
 
+// TestRenderHookScriptClaudeStdioMCPIdentityFromSanitizedMCPJSONName verifies
+// command discovery for Claude MCP tools whose mcp__<server>__ prefix carries
+// a sanitized display name: the .mcp.json entry "Linear Server" must still be
+// found for prefix "Linear_Server", pinning the stdio identity to the launch
+// command instead of the mutable alias.
+func TestRenderHookScriptClaudeStdioMCPIdentityFromSanitizedMCPJSONName(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for .mcp.json metadata lookup")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	workDir := filepath.Join(dir, "workspace")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.MkdirAll(workDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, ".mcp.json"), []byte(`{"mcpServers":{"Linear Server":{"command":"npx","args":["linear-mcp"]}}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-sanitized","tool_name":"mcp__Linear_Server__create_issue","tool_input":{"title":"x"}}`)
+	cmd.Env = env
+	cmd.Dir = workDir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	mcp := requireMapValue(t, requireMapValue(t, parsed, "data"), "mcp")
+	require.Equal(t, "npx linear-mcp", mcp["command"],
+		"sanitized prefix must still resolve the .mcp.json launch command")
+	require.Equal(t, "npx linear-mcp", mcp["server_identity"],
+		"stdio MCP identity must be pinned to the launch command, not the alias")
+}
+
+// TestRenderAuthPreflightScriptObservabilityModeFailsOpen verifies the
+// established-but-broken side of the ratchet never blocks session start in
+// observability mode: the mode is documented as fully non-blocking.
+func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	dir := t.TempDir()
+	preflightPath := filepath.Join(dir, "auth_preflight.sh")
+	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+
+	broken := exec.Command("bash", preflightPath)
+	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+authFile, "CI=1")
+	var brokenErr bytes.Buffer
+	broken.Stderr = &brokenErr
+	require.NoError(t, broken.Run(),
+		"observability mode must not block session start on broken established auth: %s", brokenErr.String())
+}
+
 // checkedInSenderCapturedRequest runs a checked-in per-event sender with no
 // env credentials but a cached browser-login auth file, and returns the curl
 // config lines plus request URL captured by a stubbed curl.
@@ -1562,6 +1665,17 @@ printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
 	failed.Stderr = &failedErr
 	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
 	require.Equal(t, "{}", strings.TrimSpace(failedOut.String()))
+
+	// Established-but-broken auth (marker without cache, no env credentials)
+	// exits closed with 2 outside observability mode; here it must not block.
+	brokenAuthFile := filepath.Join(dir, "broken-auth.env")
+	require.NoError(t, os.WriteFile(brokenAuthFile+".established", nil, 0o600))
+	broken := exec.Command("bash", hookPath)
+	broken.Stdin = strings.NewReader(payload)
+	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+brokenAuthFile)
+	var brokenErr bytes.Buffer
+	broken.Stderr = &brokenErr
+	require.NoError(t, broken.Run(), "observability mode must not block on broken established auth: %s", brokenErr.String())
 }
 
 // TestRenderHookScriptCodexObservabilityModeNeverBlocks verifies the same
@@ -1614,6 +1728,17 @@ printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
 	var failedErr bytes.Buffer
 	failed.Stderr = &failedErr
 	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
+
+	// Established-but-broken auth (marker without cache, no env credentials)
+	// exits closed with 2 outside observability mode; here it must not block.
+	brokenAuthFile := filepath.Join(dir, "broken-auth.env")
+	require.NoError(t, os.WriteFile(brokenAuthFile+".established", nil, 0o600))
+	broken := exec.Command("bash", hookPath)
+	broken.Stdin = strings.NewReader(payload)
+	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+brokenAuthFile)
+	var brokenErr bytes.Buffer
+	broken.Stderr = &brokenErr
+	require.NoError(t, broken.Run(), "observability mode must not block on broken established auth: %s", brokenErr.String())
 }
 
 // TestRenderHookScriptCursorThoughtMapsToAssistantThought verifies Cursor
@@ -2450,7 +2575,7 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.NotContains(t, script, `X-Gram-Hook-Source`)
 	require.Contains(t, script, `gram_hooks_build_canonical_payload`)
 	require.Contains(t, script, `"adapter" "codex"`)
-	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2`)
+	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" "$gram_hooks_failure_exit"`)
 	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
 	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.NotContains(t, script, cfg.HooksAPIKey, "hook.sh must not embed the publish-time hooks key")

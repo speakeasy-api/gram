@@ -468,6 +468,10 @@ gram_hooks_codex_mcp_metadata() {
   ' | head -n 2
 }
 
+# Claude's mcp__<server>__<tool> prefixes carry a sanitized form of the config
+# display name, so the lookup falls back to comparing sanitized keys. The jq
+# sanitize def below must stay in lockstep with
+# gram_hooks_sanitize_claude_mcp_name in the Claude enrichment snippet.
 gram_hooks_mcp_metadata_from_file() {
   local file="$1"
   local server="$2"
@@ -476,6 +480,7 @@ gram_hooks_mcp_metadata_from_file() {
   command -v jq >/dev/null 2>&1 || return 0
   jq -r --arg server "$server" '
     def clean: map(select(. != null and . != "") | tostring);
+    def sanitize: gsub(" "; "_") | gsub("[()]"; "") | gsub("_{2,}"; "_") | sub("^_+"; "") | sub("_+$"; "");
     def redact_args: reduce .[] as $arg ({out: [], next: false};
       if .next then {out: (.out + ["***"]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
@@ -489,7 +494,11 @@ gram_hooks_mcp_metadata_from_file() {
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
         {out: (.out + ["***"]), next: false}
       else {out: (.out + [$arg]), next: false} end) | .out;
-    (.mcpServers[$server] // empty) as $m |
+    (.mcpServers // {}) as $servers |
+    ($servers[$server] // (
+      $servers | to_entries | map(select((.key | sanitize) == $server)) |
+      if length == 1 then .[0].value else null end
+    )) as $m |
     if $m == null then
       empty
     else
@@ -615,7 +624,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   canonical_prompt="$(gram_hooks_build_canonical_payload "$prompt_payload" "$hostname")"
 
   unset GRAM_IDEMPOTENCY_TOKEN
-  gram_hooks_post_authenticated "$server_url_arg" "$canonical_prompt" 10 "$project_slug_arg" 2
+  gram_hooks_post_authenticated "$server_url_arg" "$canonical_prompt" 10 "$project_slug_arg" "${gram_hooks_failure_exit:-2}"
   unset GRAM_IDEMPOTENCY_TOKEN
   http_code="$GRAM_HTTP_CODE"
   if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
