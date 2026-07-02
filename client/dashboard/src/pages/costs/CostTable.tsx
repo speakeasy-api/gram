@@ -19,6 +19,7 @@ import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
 import {
+  costMeasureLabel,
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
@@ -307,7 +308,7 @@ export function CostTable({
         </span>
         <span className="flex items-center gap-1">
           <HeaderButton
-            label="Total Cost"
+            label={costMeasureLabel(billingMode)}
             sortKey="cost"
             sort={sort}
             onSort={onSort}
@@ -327,7 +328,7 @@ export function CostTable({
         </span>
         <span className="flex items-center gap-1">
           <HeaderButton
-            label="Cost / session"
+            label={costMeasureLabel(billingMode) + " / session"}
             sortKey="perSession"
             sort={sort}
             onSort={onSort}

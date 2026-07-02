@@ -17,7 +17,7 @@
 // exists, no scope is known-metered and every surface shows the estimate. When
 // it lands, metered scopes render a plain, confident "Cost" with no asterisk.
 export const ESTIMATED_COST_TOOLTIP =
-  "Estimated from token usage at standard API rates. Actual billing depends on the plan — subscription seats (Claude Max, Pro, Team, Enterprise) include usage in a flat fee, so this can overstate real cost for non-metered accounts.";
+  "Estimated from token usage at standard API rates. Flat-fee plans (Claude Max/Pro/Team) include usage in the subscription, so real spend may be lower.";
 
 // Known billing modes. Deliberately a widening string, not a closed enum, so new
 // modes can be added without a breaking type change (mirrors the backend, which
