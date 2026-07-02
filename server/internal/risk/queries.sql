@@ -833,11 +833,16 @@ ORDER BY sub.message_created_at DESC, sub.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
+-- Unlike the other list queries, this does NOT require the policy to be
+-- enabled. When the user explicitly filters to a specific policy we surface its
+-- historical findings even after it has been turned off, so disabled policies
+-- still show the matches they produced while active. Deleted policies remain
+-- excluded. The frontend flags the inactive policy as historical data.
 SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id

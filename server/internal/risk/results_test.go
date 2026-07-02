@@ -105,6 +105,49 @@ func TestListRiskResults_ByPolicy(t *testing.T) {
 	require.Equal(t, "aws-access-key-id", *result.Results[0].RuleID)
 }
 
+// A disabled ("turned off") policy still holds the findings it produced while
+// active. When the user explicitly filters to that policy the list must surface
+// those historical findings rather than coming back empty, while the default
+// unfiltered view keeps hiding them (only active policies contribute there).
+func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled Policy Test")})
+	require.NoError(t, err)
+
+	policyID, _ := uuid.Parse(policy.ID)
+	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+
+	// Turn the policy off.
+	disabled := false
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      policy.ID,
+		Name:    policy.Name,
+		Enabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	// Explicit filter on the disabled policy surfaces its historical findings.
+	byPolicy, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		PolicyID: &policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, byPolicy.Results, 1, "disabled policy should still show its historical findings when filtered")
+	require.Equal(t, "aws-access-key-id", *byPolicy.Results[0].RuleID)
+
+	// The default unfiltered view keeps excluding disabled-policy findings.
+	unfiltered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, unfiltered.Results, "unfiltered view should not include disabled-policy findings")
+}
+
 func TestListRiskResults_ByChatID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

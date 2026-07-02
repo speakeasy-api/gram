@@ -2210,7 +2210,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -2267,6 +2267,11 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	BlockID             uuid.UUID
 }
 
+// Unlike the other list queries, this does NOT require the policy to be
+// enabled. When the user explicitly filters to a specific policy we surface its
+// historical findings even after it has been turned off, so disabled policies
+// still show the matches they produced while active. Deleted policies remain
+// excluded. The frontend flags the inactive policy as historical data.
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
