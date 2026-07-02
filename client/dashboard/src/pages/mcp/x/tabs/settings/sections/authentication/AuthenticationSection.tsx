@@ -91,9 +91,16 @@ export function AuthenticationSection({
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
+  // Snapshot the discovered RFC 9728 resource at open time (like
+  // sheetInitialUrl) so a probe resolving while the sheet is open doesn't
+  // re-trigger the sheet's reset effect and wipe in-progress form input.
+  const [sheetDefaultResource, setSheetDefaultResource] = useState<
+    string | undefined
+  >();
 
   const openSheet = (initialIssuerUrl?: string) => {
     setSheetInitialUrl(initialIssuerUrl);
+    setSheetDefaultResource(protectedResourceMetadata?.resource);
     setSheetOpen(true);
   };
 
@@ -175,7 +182,7 @@ export function AuthenticationSection({
           userSessionIssuer={userSessionIssuer ?? null}
           selectableIssuers={selectableIssuers}
           initialIssuerUrl={sheetInitialUrl}
-          defaultResource={protectedResourceMetadata?.resource}
+          defaultResource={sheetDefaultResource}
         />
 
         {deleteTarget && userSessionIssuerId && (

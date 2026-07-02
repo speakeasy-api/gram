@@ -329,6 +329,7 @@ function ModifyRemoteIdentityProviderSheetBody({
               setTokenEndpointAuthMethod("");
               setScopeOverride("");
               setAudienceOverride("");
+              setResourceOverride("");
             }
           }}
         />

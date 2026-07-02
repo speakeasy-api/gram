@@ -661,6 +661,11 @@ export function AttachRemoteIdentityProviderSheet({
                       setTokenEndpointAuthMethod("");
                       setScopeOverride("");
                       setAudienceOverride("");
+                      // Reset to the seeded default rather than clearing: the
+                      // resource indicator names this MCP server (from its
+                      // RFC 9728 metadata), so it stays valid when the
+                      // authorization-server URL changes.
+                      setResourceOverride(defaultResource ?? "");
                     }
                   }}
                 />
