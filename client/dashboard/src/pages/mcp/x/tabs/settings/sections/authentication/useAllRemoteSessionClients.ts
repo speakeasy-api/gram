@@ -19,10 +19,11 @@ export function useAllRemoteSessionClients(
     ListRemoteSessionClientsRequest,
     "userSessionIssuerId" | "remoteSessionIssuerId"
   >,
-  options?: { enabled?: boolean },
-): { items: RemoteSessionClient[]; isLoading: boolean } {
+  options?: { enabled?: boolean; throwOnError?: boolean },
+): { items: RemoteSessionClient[]; isLoading: boolean; error: Error | null } {
   const query = useRemoteSessionClientsInfinite(filters, undefined, {
     enabled: options?.enabled,
+    throwOnError: options?.throwOnError,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
@@ -43,5 +44,5 @@ export function useAllRemoteSessionClients(
   // coming.
   const isLoading = query.isLoading || hasNextPage;
 
-  return { items, isLoading };
+  return { items, isLoading, error: query.error };
 }

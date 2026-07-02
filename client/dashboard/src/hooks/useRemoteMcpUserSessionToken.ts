@@ -9,30 +9,26 @@ export interface UseRemoteMcpUserSessionTokenResult {
 }
 
 /**
- * Mints a user-session JWT scoped to a remote MCP server, mirroring the
- * playground (see PlaygroundElements.tsx) but passing `mcpServerId` to the
- * unified mint: remote MCP servers are mcp_servers-backed and carry no toolset,
- * so the JWT audience binds to the server's user_session_issuer (the /x/mcp
- * convention).
- * The minted token matches what /x/mcp/{slug}/token would emit after an OAuth
- * dance, so the runtime gateway resolves the dashboard user's stored upstream
- * credentials through the same path a real MCP client would.
+ * Mints a user-session JWT scoped to a remote MCP server. The token matches
+ * what /x/mcp/{slug}/token would emit after an OAuth dance, so the runtime
+ * gateway resolves the dashboard user's stored upstream credentials through
+ * the same path a real MCP client would.
  *
- * Only issuer-gated servers get a token; the mint RPC 400s for the rest, so we
- * leave `accessToken` undefined and let the connection proceed unauthenticated.
+ * Minting persists a user_sessions row visible in the server's "User sessions"
+ * panel, so mounting this hook is the gate: render it only for users who have
+ * already connected (see RemoteMcpConnection), never from a component that
+ * mounts merely because a page was viewed.
  */
 export function useRemoteMcpUserSessionToken({
   mcpServerId,
-  isIssuerGated,
 }: {
   mcpServerId: string | undefined;
-  isIssuerGated: boolean;
 }): UseRemoteMcpUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
   const mintMutation = useMintUserSessionMutation();
 
-  const enabled = !!mcpServerId && isIssuerGated;
+  const enabled = !!mcpServerId;
 
   const query = useQuery({
     queryKey: [
@@ -65,9 +61,6 @@ export function useRemoteMcpUserSessionToken({
   });
 
   return {
-    // Gate on `enabled` so a non-issuer-gated server never surfaces a token
-    // (stale or otherwise) that would get attached to an unauthenticated
-    // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
     isLoading: enabled && query.isLoading && query.fetchStatus !== "idle",
   };
