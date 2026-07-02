@@ -693,12 +693,27 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 			FailClosed: nil,
 		},
 	}
+	// Cursor fails hooks open by default: a crashed or timed-out hook allows
+	// the action unless the entry opts into failClosed. Decision-capable
+	// events must not silently allow when the sender exits 2 (established
+	// machine with broken auth, unreachable server). The never-authenticated
+	// ratchet is unaffected — that path exits 0 with a pass-through body.
+	cursorBlockingEvents := map[string]bool{
+		"beforeSubmitPrompt": true,
+		"preToolUse":         true,
+		"beforeMCPExecution": true,
+	}
+	cursorHookFailClosed := true
 	for _, event := range CursorObservabilityHookEvents {
+		var failClosed *bool
+		if cursorBlockingEvents[event] {
+			failClosed = &cursorHookFailClosed
+		}
 		hookEvents[event] = []cursorHookCommand{{
 			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
 			Matcher:    "",
 			Timeout:    nil,
-			FailClosed: nil,
+			FailClosed: failClosed,
 		}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})

@@ -533,7 +533,14 @@ gram_hooks_cursor_mark_prompt_submitted() {
   local session_id state_path
   session_id="$(gram_hooks_session_id "$payload")"
   state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 0
-  printf 'seen\n' >"$state_path" 2>/dev/null || true
+  printf '%%s\n' "$(gram_hooks_cursor_prompt_fingerprint "$(gram_hooks_json_string_value "$payload" "prompt")")" >"$state_path" 2>/dev/null || true
+}
+
+# gram_hooks_cursor_prompt_fingerprint reduces a prompt to a stable content
+# fingerprint. Trailing blank lines are stripped first so the payload prompt
+# and its transcript rendering normalize identically.
+gram_hooks_cursor_prompt_fingerprint() {
+  printf '%%s' "$1" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' | cksum 2>/dev/null | tr -s ' \t' '_'
 }
 
 gram_hooks_base64_decode() {
@@ -561,12 +568,14 @@ gram_hooks_cursor_transcript_prompt() {
   command -v jq >/dev/null 2>&1 || return 0
   command -v base64 >/dev/null 2>&1 || return 0
 
+  # Take the LATEST user entry: during turn N the transcript already holds
+  # prompts 1..N, and the backfill targets the current turn's prompt.
   encoded="$(jq -r '
     select(.role == "user")
     | [.message.content[]? | select(.type == "text") | .text]
     | join("\n")
     | @base64
-  ' "$transcript_path" 2>/dev/null | sed -n '1p')" || true
+  ' "$transcript_path" 2>/dev/null | sed -n '$p')" || true
   [ -n "$encoded" ] || return 0
   printf '%%s' "$encoded" | gram_hooks_base64_decode 2>/dev/null | gram_hooks_cursor_clean_transcript_prompt
 }
@@ -576,14 +585,22 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   local hostname="$2"
   local server_url_arg="$3"
   local project_slug_arg="$4"
-  local session_id state_path prompt prompt_payload prompt_members canonical_prompt http_code
+  local session_id state_path prompt fingerprint prompt_payload prompt_members canonical_prompt http_code
 
   session_id="$(gram_hooks_session_id "$payload")"
   state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 0
-  [ ! -f "$state_path" ] || return 0
 
   prompt="$(gram_hooks_cursor_transcript_prompt "$payload")"
   [ -n "$prompt" ] || return 0
+
+  # The marker stores a fingerprint of the last prompt handled (delivered or
+  # backfilled), not a per-session boolean, so a beforeSubmitPrompt dropped on
+  # a LATER turn is still backfilled. Consecutive identical prompts are
+  # indistinguishable from already-handled ones and are not re-sent.
+  fingerprint="$(gram_hooks_cursor_prompt_fingerprint "$prompt")"
+  if [ -r "$state_path" ] && [ "$(cat "$state_path" 2>/dev/null)" = "$fingerprint" ]; then
+    return 0
+  fi
 
   prompt_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "hook_event_name" "beforeSubmitPrompt")" \
@@ -602,7 +619,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   unset GRAM_IDEMPOTENCY_TOKEN
   http_code="$GRAM_HTTP_CODE"
   if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
-    printf 'seen\n' >"$state_path" 2>/dev/null || true
+    printf '%%s\n' "$fingerprint" >"$state_path" 2>/dev/null || true
   fi
 }
 

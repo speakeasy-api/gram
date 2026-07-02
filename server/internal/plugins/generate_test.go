@@ -1238,6 +1238,113 @@ func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	require.Contains(t, headers, "/rpc/hooks.claude")
 }
 
+// TestRenderHookScriptCursorBackfillsLaterTurnPrompts verifies the prompt
+// backfill marker tracks prompt content rather than a per-session boolean: a
+// beforeSubmitPrompt dropped on a later turn is still backfilled from the
+// transcript's latest user entry, while turns whose prompt was delivered are
+// not re-sent.
+func TestRenderHookScriptCursorBackfillsLaterTurnPrompts(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Cursor transcript backfill")
+	_, err = exec.LookPath("base64")
+	require.NoError(t, err, "base64 is required for Cursor transcript backfill")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	stateDir := filepath.Join(dir, "state")
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"XDG_STATE_HOME="+stateDir,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	run := func(payload string) {
+		t.Helper()
+		cmd := exec.Command("bash", hookPath)
+		cmd.Stdin = strings.NewReader(payload)
+		cmd.Env = env
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(output))
+	}
+
+	// Turn 1: prompt delivered normally, then the agent responds.
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nfirst prompt\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"ok one"}]}}
+`), 0o600))
+	run(`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-turns","session_id":"sess-turns","prompt":"first prompt"}`)
+	run(`{"hook_event_name":"afterAgentResponse","conversation_id":"sess-turns","session_id":"sess-turns","generation_id":"turn-1","text":"ok one","transcript_path":"` + transcriptPath + `"}`)
+
+	// Turn 2: beforeSubmitPrompt is dropped; only the response event arrives.
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nfirst prompt\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"ok one"}]}}
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nsecond prompt\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"ok two"}]}}
+`), 0o600))
+	run(`{"hook_event_name":"afterAgentResponse","conversation_id":"sess-turns","session_id":"sess-turns","generation_id":"turn-2","text":"ok two","transcript_path":"` + transcriptPath + `"}`)
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 5, "expected prompt, response, backfilled prompt, response, trailing split")
+
+	eventType := func(raw string) (string, map[string]any) {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed))
+		event := requireMapValue(t, parsed, "event")
+		typ, _ := event["type"].(string)
+		return typ, parsed
+	}
+
+	typ0, _ := eventType(chunks[0])
+	require.Equal(t, "prompt.submitted", typ0)
+	typ1, _ := eventType(chunks[1])
+	require.Equal(t, "assistant.responded", typ1, "delivered turn-1 prompt must not be re-sent by backfill")
+	typ2, parsed2 := eventType(chunks[2])
+	require.Equal(t, "prompt.submitted", typ2, "turn-2 dropped prompt must be backfilled")
+	prompt2 := requireMapValue(t, requireMapValue(t, parsed2, "data"), "prompt")
+	require.Equal(t, "second prompt", prompt2["text"])
+	typ3, _ := eventType(chunks[3])
+	require.Equal(t, "assistant.responded", typ3)
+}
+
 // TestSharedAuthScriptEscapesCurlConfigValues verifies credentials containing
 // curl config metacharacters cannot break out of the header directive.
 func TestSharedAuthScriptEscapesCurlConfigValues(t *testing.T) {
@@ -1883,10 +1990,24 @@ func TestGenerateCursorObservabilityPluginRegistersBlockingSessionStartAuth(t *t
 	require.True(t, *sessionStart[0].FailClosed, "Cursor auth preflight must fail closed")
 	require.Contains(t, sessionStart[1].Command, "hooks/hook.sh", "Cursor sessionStart must send unified telemetry after auth preflight")
 
+	// Cursor fails hooks open by default on command error/timeout; the
+	// decision-capable events must opt into failClosed or an established
+	// machine with broken auth (or an unreachable server) silently allows.
+	blockingEvents := map[string]bool{
+		"beforeSubmitPrompt": true,
+		"preToolUse":         true,
+		"beforeMCPExecution": true,
+	}
 	for _, event := range CursorObservabilityHookEvents {
 		require.Contains(t, parsed.Hooks, event, "event %q must be registered", event)
 		require.Len(t, parsed.Hooks[event], 1)
 		require.Contains(t, parsed.Hooks[event][0].Command, "hooks/hook.sh")
+		if blockingEvents[event] {
+			require.NotNil(t, parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
+			require.True(t, *parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
+		} else {
+			require.Nil(t, parsed.Hooks[event][0].FailClosed, "observational event %q must not fail closed", event)
+		}
 	}
 }
 
