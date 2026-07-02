@@ -3,18 +3,17 @@ import { useEffect, useState, useRef } from "react";
 import { useSessionData } from "@/contexts/Auth";
 
 interface CliCallbackProps {
-  keyScope?: "producer" | "hooks";
   localCallbackUrl: string;
-  projectSlug?: string | null;
 }
 
 /**
- * CliCallback is an authentication handler for local clients such as the CLI
- * and coding-agent hooks. It generates the requested API key scope and returns
- * it to the localhost callback URL as query parameters.
+ * CliCallback is an authentication handler for the CLI. When this component
+ * receives a local callback URL, it generates a producer-scoped API key and
+ * transmits it to the client by appending it to the callback URL as a query
+ * parameter.
  */
 export default function CliCallback(props: CliCallbackProps): JSX.Element {
-  const { keyScope = "producer", localCallbackUrl, projectSlug } = props;
+  const { localCallbackUrl } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey } = useCreateAPIKeyMutation();
@@ -47,33 +46,26 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
 
     hasCreatedKey.current = true;
 
-    const selectedProjectSlug = selectCallbackProjectSlug(
-      session.organization.projects,
-      projectSlug,
-    );
+    // Only get project from localStorage if it exists and is valid
+    let projectSlug: string | null = null;
+    const preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
+    if (
+      preferredProject &&
+      session.organization.projects.find((p) => p.slug === preferredProject)
+    ) {
+      projectSlug = preferredProject;
+    }
 
-    createScopedKey(createKey, session.session, keyScope)
+    createProducerKey(createKey, session.session)
       .then((key) =>
-        transmitKey(
-          localCallbackUrl,
-          key,
-          selectedProjectSlug,
-          session.user.email,
-        ),
+        transmitKey(localCallbackUrl, key, projectSlug, session.user.email),
       )
       .catch((err) => {
         setError(
           err instanceof Error ? err.message : "Failed to create API key",
         );
       });
-  }, [
-    createKey,
-    keyScope,
-    localCallbackUrl,
-    projectSlug,
-    session,
-    validCallback,
-  ]);
+  }, [createKey, session, localCallbackUrl, validCallback]);
 
   if (error) {
     return <FailedScreen error={error} />;
@@ -111,13 +103,6 @@ function generateKeyName(): string {
   return `CLI Key (Generated) - ${timestamp}`.slice(0, maxLength);
 }
 
-function generateHooksKeyName(): string {
-  const timestamp = Date.now();
-  const maxLength = 40;
-
-  return `Hooks Key (Generated) - ${timestamp}`.slice(0, maxLength);
-}
-
 const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
@@ -138,9 +123,7 @@ interface KeyRequestParams {
 }
 function keyRequest(params: KeyRequestParams) {
   const { scopes, sessionId } = params;
-  const name = scopes.includes("hooks")
-    ? generateHooksKeyName()
-    : generateKeyName();
+  const name = generateKeyName();
 
   return {
     createKeyForm: { name, scopes },
@@ -148,37 +131,17 @@ function keyRequest(params: KeyRequestParams) {
   };
 }
 
-async function createScopedKey(
+async function createProducerKey(
   createKey: ReturnType<typeof useCreateAPIKeyMutation>["mutateAsync"],
   sessionId: string,
-  keyScope: "producer" | "hooks",
 ): Promise<string> {
-  const scopes = [keyScope];
+  const scopes = ["producer"];
   const result = await createKey({
     request: keyRequest({ sessionId, scopes }),
   });
   if (!result.key) throw new Error("No API key returned from server");
 
   return result.key;
-}
-
-function selectCallbackProjectSlug(
-  projects: { slug: string }[],
-  requestedProjectSlug: string | null | undefined,
-): string | null {
-  if (
-    requestedProjectSlug &&
-    projects.find((p) => p.slug === requestedProjectSlug)
-  ) {
-    return requestedProjectSlug;
-  }
-
-  const preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
-  if (preferredProject && projects.find((p) => p.slug === preferredProject)) {
-    return preferredProject;
-  }
-
-  return projects[0]?.slug ?? null;
 }
 
 async function transmitKey(

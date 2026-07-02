@@ -1384,19 +1384,15 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders must not embed the publish-time hooks key anymore. Each
-	// developer authenticates locally; auth.sh writes the resulting key to a
-	// protected curl config when the hook fires.
+	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
+	// accepts it as an optional header for plugin-driven attribution).
 	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.NotContains(t, script, hooksKeyPrefix, "%s embeds the publish-time hooks key", path)
+		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
 		// Must NOT contain the MCP key — separate scope, separate concerns.
 		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
 	}
-	authScript := string(mock.lastPushedFiles[claudeObservability+"/hooks/auth.sh"])
-	require.Contains(t, authScript, `printf 'header = "Gram-Key: %s"\n'`, "auth.sh must write Gram-Key to curl config")
 }
 
 // The observability plugin must appear FIRST in each platform's marketplace

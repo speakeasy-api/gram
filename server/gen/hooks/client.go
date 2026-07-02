@@ -18,18 +18,16 @@ type Client struct {
 	ClaudeEndpoint  goa.Endpoint
 	CursorEndpoint  goa.Endpoint
 	CodexEndpoint   goa.Endpoint
-	IngestEndpoint  goa.Endpoint
 	LogsEndpoint    goa.Endpoint
 	MetricsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "hooks" service client given the endpoints.
-func NewClient(claude, cursor, codex, ingest, logs, metrics goa.Endpoint) *Client {
+func NewClient(claude, cursor, codex, logs, metrics goa.Endpoint) *Client {
 	return &Client{
 		ClaudeEndpoint:  claude,
 		CursorEndpoint:  cursor,
 		CodexEndpoint:   codex,
-		IngestEndpoint:  ingest,
 		LogsEndpoint:    logs,
 		MetricsEndpoint: metrics,
 	}
@@ -99,28 +97,6 @@ func (c *Client) Codex(ctx context.Context, p *CodexPayload) (res *CodexHookResu
 		return
 	}
 	return ires.(*CodexHookResult), nil
-}
-
-// Ingest calls the "ingest" endpoint of the "hooks" service.
-// Ingest may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) Ingest(ctx context.Context, p *IngestPayload) (res *IngestHookResult, err error) {
-	var ires any
-	ires, err = c.IngestEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*IngestHookResult), nil
 }
 
 // Logs calls the "logs" endpoint of the "hooks" service.
