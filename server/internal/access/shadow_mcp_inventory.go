@@ -128,11 +128,8 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
 		UserCount:          shadowMCPInventoryCount(usage.UserCount),
 		TopUsers:           topUsers,
-		ExplicitAccess:     accessState.ExplicitDisposition,
-		EffectiveAccess:    accessState.EffectiveDisposition,
-		ExplicitRule:       buildShadowMCPInventoryAccessRuleMatch(accessState.ExplicitRule),
-		EffectiveRule:      buildShadowMCPInventoryAccessRuleMatch(accessState.EffectiveRule),
-		ExplanatoryRules:   buildShadowMCPInventoryAccessRuleMatches(accessState.ExplanatoryRules),
+		Access:             accessState.Access,
+		Rule:               buildShadowMCPInventoryAccessRuleMatch(accessState.Rule),
 	}
 }
 
@@ -142,14 +139,6 @@ func shadowMCPInventoryCanonicalURLs(rows []telemetryrepo.ShadowMCPInventoryURLR
 		if row.CanonicalServerURL != "" {
 			out = append(out, row.CanonicalServerURL)
 		}
-	}
-	return out
-}
-
-func buildShadowMCPInventoryAccessRuleMatches(matches []shadowMCPInventoryAccessRuleMatch) []*gen.ShadowMCPInventoryAccessRuleMatch {
-	out := make([]*gen.ShadowMCPInventoryAccessRuleMatch, 0, len(matches))
-	for i := range matches {
-		out = append(out, buildShadowMCPInventoryAccessRuleMatch(&matches[i]))
 	}
 	return out
 }

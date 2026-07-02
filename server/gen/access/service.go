@@ -716,11 +716,8 @@ type ShadowMCPInventoryServer struct {
 	ObservedUseCount   int
 	UserCount          int
 	TopUsers           []string
-	ExplicitAccess     string
-	EffectiveAccess    string
-	ExplicitRule       *ShadowMCPInventoryAccessRuleMatch
-	EffectiveRule      *ShadowMCPInventoryAccessRuleMatch
-	ExplanatoryRules   []*ShadowMCPInventoryAccessRuleMatch
+	Access             string
+	Rule               *ShadowMCPInventoryAccessRuleMatch
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service

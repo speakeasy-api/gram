@@ -52744,28 +52744,14 @@ components:
     ShadowMCPInventoryServer:
       type: object
       properties:
+        access:
+          type: string
+          enum:
+            - none
+            - allowed
+            - denied
         canonical_server_url:
           type: string
-        effective_access:
-          type: string
-          enum:
-            - none
-            - allowed
-            - denied
-        effective_rule:
-          $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
-        explanatory_rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
-        explicit_access:
-          type: string
-          enum:
-            - none
-            - allowed
-            - denied
-        explicit_rule:
-          $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
         first_seen:
           type: string
           format: date-time
@@ -52778,6 +52764,8 @@ components:
         observed_use_count:
           type: integer
           format: int64
+        rule:
+          $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
         server_name:
           type: string
         top_users:
@@ -52797,9 +52785,7 @@ components:
         - observed_use_count
         - user_count
         - top_users
-        - explicit_access
-        - effective_access
-        - explanatory_rules
+        - access
     SkillBreakdownRow:
       type: object
       properties:

@@ -5531,8 +5531,7 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   v.ObservedUseCount,
 		UserCount:          v.UserCount,
-		ExplicitAccess:     v.ExplicitAccess,
-		EffectiveAccess:    v.EffectiveAccess,
+		Access:             v.Access,
 	}
 	if v.TopUsers != nil {
 		res.TopUsers = make([]string, len(v.TopUsers))
@@ -5542,23 +5541,8 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.TopUsers = []string{}
 	}
-	if v.ExplicitRule != nil {
-		res.ExplicitRule = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v.ExplicitRule)
-	}
-	if v.EffectiveRule != nil {
-		res.EffectiveRule = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v.EffectiveRule)
-	}
-	if v.ExplanatoryRules != nil {
-		res.ExplanatoryRules = make([]*ShadowMCPInventoryAccessRuleMatchResponseBody, len(v.ExplanatoryRules))
-		for i, val := range v.ExplanatoryRules {
-			if val == nil {
-				res.ExplanatoryRules[i] = nil
-				continue
-			}
-			res.ExplanatoryRules[i] = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(val)
-		}
-	} else {
-		res.ExplanatoryRules = []*ShadowMCPInventoryAccessRuleMatchResponseBody{}
+	if v.Rule != nil {
+		res.Rule = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v.Rule)
 	}
 
 	return res

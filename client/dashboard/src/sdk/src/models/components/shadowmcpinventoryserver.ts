@@ -13,31 +13,21 @@ import {
   ShadowMCPInventoryAccessRuleMatch$inboundSchema,
 } from "./shadowmcpinventoryaccessrulematch.js";
 
-export const EffectiveAccess = {
+export const Access = {
   None: "none",
   Allowed: "allowed",
   Denied: "denied",
 } as const;
-export type EffectiveAccess = ClosedEnum<typeof EffectiveAccess>;
-
-export const ExplicitAccess = {
-  None: "none",
-  Allowed: "allowed",
-  Denied: "denied",
-} as const;
-export type ExplicitAccess = ClosedEnum<typeof ExplicitAccess>;
+export type Access = ClosedEnum<typeof Access>;
 
 export type ShadowMCPInventoryServer = {
+  access: Access;
   canonicalServerUrl: string;
-  effectiveAccess: EffectiveAccess;
-  effectiveRule?: ShadowMCPInventoryAccessRuleMatch | undefined;
-  explanatoryRules: Array<ShadowMCPInventoryAccessRuleMatch>;
-  explicitAccess: ExplicitAccess;
-  explicitRule?: ShadowMCPInventoryAccessRuleMatch | undefined;
   firstSeen: Date;
   lastCalled?: Date | undefined;
   lastSeen: Date;
   observedUseCount: number;
+  rule?: ShadowMCPInventoryAccessRuleMatch | undefined;
   serverName?: string | undefined;
   topUsers: Array<string>;
   urlHost: string;
@@ -45,14 +35,9 @@ export type ShadowMCPInventoryServer = {
 };
 
 /** @internal */
-export const EffectiveAccess$inboundSchema: z.ZodMiniEnum<
-  typeof EffectiveAccess
-> = z.enum(EffectiveAccess);
-
-/** @internal */
-export const ExplicitAccess$inboundSchema: z.ZodMiniEnum<
-  typeof ExplicitAccess
-> = z.enum(ExplicitAccess);
+export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
+  Access,
+);
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
@@ -60,12 +45,8 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    access: Access$inboundSchema,
     canonical_server_url: z.string(),
-    effective_access: EffectiveAccess$inboundSchema,
-    effective_rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
-    explanatory_rules: z.array(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
-    explicit_access: ExplicitAccess$inboundSchema,
-    explicit_rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -78,6 +59,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     observed_use_count: z.int(),
+    rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
     server_name: z.optional(z.string()),
     top_users: z.array(z.string()),
     url_host: z.string(),
@@ -86,11 +68,6 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "canonical_server_url": "canonicalServerUrl",
-      "effective_access": "effectiveAccess",
-      "effective_rule": "effectiveRule",
-      "explanatory_rules": "explanatoryRules",
-      "explicit_access": "explicitAccess",
-      "explicit_rule": "explicitRule",
       "first_seen": "firstSeen",
       "last_called": "lastCalled",
       "last_seen": "lastSeen",

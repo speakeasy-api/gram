@@ -5947,26 +5947,14 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   *v.ObservedUseCount,
 		UserCount:          *v.UserCount,
-		ExplicitAccess:     *v.ExplicitAccess,
-		EffectiveAccess:    *v.EffectiveAccess,
+		Access:             *v.Access,
 	}
 	res.TopUsers = make([]string, len(v.TopUsers))
 	for i, val := range v.TopUsers {
 		res.TopUsers[i] = val
 	}
-	if v.ExplicitRule != nil {
-		res.ExplicitRule = unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(v.ExplicitRule)
-	}
-	if v.EffectiveRule != nil {
-		res.EffectiveRule = unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(v.EffectiveRule)
-	}
-	res.ExplanatoryRules = make([]*access.ShadowMCPInventoryAccessRuleMatch, len(v.ExplanatoryRules))
-	for i, val := range v.ExplanatoryRules {
-		if val == nil {
-			res.ExplanatoryRules[i] = nil
-			continue
-		}
-		res.ExplanatoryRules[i] = unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(val)
+	if v.Rule != nil {
+		res.Rule = unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(v.Rule)
 	}
 
 	return res
