@@ -65,9 +65,8 @@ func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
 // the credentials and clear the attempt cooldown marker.
 func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("nc"); err != nil {
-		t.Skip("nc not available on this machine")
-	}
+	_, err := exec.LookPath("nc")
+	require.NoError(t, err, "netcat is required: the browser login flow depends on it and must stay covered")
 
 	dir := t.TempDir()
 	authFile := filepath.Join(dir, "auth.env")
