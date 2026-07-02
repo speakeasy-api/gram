@@ -41,6 +41,44 @@ func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
+// TestConvertPresidioFindings_DropsUSDriverLicense is the regression test for
+// AIS-158: a policy that pins no Presidio entities makes Presidio scan its full
+// default set, which includes US_DRIVER_LICENSE. filterEntities cannot strip it
+// (there is no pinned list to trim), so the finding-level gate in
+// convertPresidioFindings must drop it. Other findings — including PERSON,
+// whose unpinned detection is intended — still flow through.
+func TestConvertPresidioFindings_DropsUSDriverLicense(t *testing.T) {
+	t.Parallel()
+
+	text := "D1234567 Jane Roe alice@globex.com"
+	results := []presidioResult{
+		{EntityType: "US_DRIVER_LICENSE", Start: 0, End: 8, Score: 0.9},
+		{EntityType: "PERSON", Start: 9, End: 17, Score: 0.85},
+		{EntityType: "EMAIL_ADDRESS", Start: 18, End: 34, Score: 1},
+	}
+
+	findings := convertPresidioFindings(text, results)
+	ruleIDs := make([]string, len(findings))
+	for i, f := range findings {
+		ruleIDs[i] = f.RuleID
+	}
+	assert.NotContains(t, ruleIDs, guard(prefixPII+"us_driver_license"), "US_DRIVER_LICENSE must be dropped")
+	assert.Contains(t, ruleIDs, guard(prefixPII+"person"), "PERSON detection is intended and must survive")
+	assert.Contains(t, ruleIDs, guard(prefixPII+"email_address"))
+}
+
+// TestIsFindingLevelDropped locks the finding-level gate to US_DRIVER_LICENSE
+// only. PERSON is blocklisted from pinned request lists (filterEntities) but is
+// deliberately not dropped here, so unpinned scans still surface it.
+func TestIsFindingLevelDropped(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isFindingLevelDropped("US_DRIVER_LICENSE"))
+	assert.False(t, isFindingLevelDropped("PERSON"))
+	assert.False(t, isFindingLevelDropped("EMAIL_ADDRESS"))
+	assert.False(t, isFindingLevelDropped(""))
+}
+
 // TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
 // positive-coverage gate: every IP in testdata/fp-ip.txt is an address
 // the catalog must drop. Each line is run through
@@ -611,22 +649,22 @@ func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
 	assert.Empty(t, truncateAtRuneBoundary(in, 0))
 }
 
-// TestFilterEntitiesDropsBlacklistedTypes asserts that PERSON and
+// TestFilterEntitiesDropsBlocklistedTypes asserts that PERSON and
 // US_DRIVER_LICENSE are stripped from any caller-supplied entity list
 // before reaching Presidio. PERSON is dropped because NER trips on
 // capitalized words inside tool calls; US_DRIVER_LICENSE because the
 // upstream regex is unusably broad (microsoft/presidio#1063).
-func TestFilterEntitiesDropsBlacklistedTypes(t *testing.T) {
+func TestFilterEntitiesDropsBlocklistedTypes(t *testing.T) {
 	t.Parallel()
 
 	// nil passes through untouched so Presidio's default entity set still applies.
 	assert.Nil(t, filterEntities(nil))
 
-	// Blacklisted entries are removed; the rest survive in order.
+	// Blocklisted entries are removed; the rest survive in order.
 	got := filterEntities([]string{"EMAIL_ADDRESS", "PERSON", "US_DRIVER_LICENSE", "CREDIT_CARD"})
 	assert.Equal(t, []string{"EMAIL_ADDRESS", "CREDIT_CARD"}, got)
 
-	// All-blacklisted input returns an empty (non-nil) slice so AnalyzeBatch
+	// All-blocklisted input returns an empty (non-nil) slice so AnalyzeBatch
 	// can short-circuit instead of falling back to the unbounded default scan.
 	got = filterEntities([]string{"PERSON", "US_DRIVER_LICENSE"})
 	assert.NotNil(t, got)
