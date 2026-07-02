@@ -6,8 +6,8 @@
 set -euo pipefail
 
 if [[ -z "${TUNNEL_LOCAL_KEY:-}" ]]; then
-  echo "TUNNEL_LOCAL_KEY is not set. Run 'mise run seed' first." >&2
-  exit 2
+  echo "TUNNEL_LOCAL_KEY is not set; skipping the local Postgres MCP tunnel. Run 'mise run seed' to enable it." >&2
+  exit 0
 fi
 
 cleanup() {
