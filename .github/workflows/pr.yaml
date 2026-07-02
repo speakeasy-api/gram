@@ -192,7 +192,6 @@ jobs:
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   preview-image-tags:
-    name: Tag ${{ matrix.component }} preview image
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: changes
     # Preview environments deploy images tagged pr-<number>-<8-char head sha>
