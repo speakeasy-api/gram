@@ -135,7 +135,7 @@ type Scanner struct {
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, celEng *celenv.Engine) (*Scanner, error) {
+func NewScanner(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, celEng *celenv.Engine) (*Scanner, error) {
 	gitleaksScanner, err := ra.NewGitleaksScanner()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
