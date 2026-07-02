@@ -1,6 +1,7 @@
 package customruleanalyzer
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,44 @@ func TestEvaluator_ReusesCompiledProgram(t *testing.T) {
 	_, _, err = e.execute(`content.matchRegex("other")`, msg)
 	require.NoError(t, err)
 	require.Equal(t, 2, e.cache.Len())
+}
+
+// Concurrent cold misses for the same expression must resolve to a single cached
+// program (no duplicate compilations, no races). Run with -race to catch unsafe
+// access to the engine or cache.
+func TestEvaluator_ConcurrentMissesCompileOnce(t *testing.T) {
+	t.Parallel()
+
+	e, err := newEvaluator(8)
+	require.NoError(t, err)
+
+	msg := celenv.Message{Content: "here is a secret value", Type: "user_message", Tools: nil}
+	const expr = `content.matchRegex("secret")`
+
+	// Each goroutine writes its own slot, so the slices are race-free without a
+	// mutex, and require assertions run on the test goroutine after Wait.
+	const goroutines = 32
+	errs := make([]error, goroutines)
+	matches := make([]bool, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			_, matched, err := e.execute(expr, msg)
+			errs[i] = err
+			matches[i] = matched
+		}(i)
+	}
+	wg.Wait()
+
+	for i := range goroutines {
+		require.NoErrorf(t, errs[i], "goroutine %d", i)
+		require.Truef(t, matches[i], "goroutine %d", i)
+	}
+
+	// A single expression yields a single cache entry regardless of contention.
+	require.Equal(t, 1, e.cache.Len())
 }
 
 func TestEvaluator_EvictsLeastRecentlyUsed(t *testing.T) {

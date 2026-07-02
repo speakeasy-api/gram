@@ -32,6 +32,7 @@ func TestHandle_PublishesCustomRuleFinding(t *testing.T) {
 	require.Equal(t, "msg-1", f.GetChatMessageId())
 	require.Equal(t, p.projectID.String(), f.GetProjectId())
 	require.Equal(t, p.orgID, f.GetOrganizationId())
+	require.Equal(t, "policy-1", f.GetRiskPolicyId())
 	require.Equal(t, int64(3), f.GetRiskPolicyVersion())
 	require.Equal(t, "test rule description", f.GetDescription())
 	require.NotEmpty(t, f.GetId())
