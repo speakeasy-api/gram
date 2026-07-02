@@ -28,9 +28,9 @@ import (
 // grant, so each handler gates inline on the platform-admin flag; audit is
 // structured-logs only (audit_log.organization_id is NOT NULL).
 
-// requireGlobalAdmin extracts the auth context and enforces the platform-admin
+// requirePlatformAdmin extracts the auth context and enforces the platform-admin
 // flag. The returned logger is pre-tagged with the actor for audit/error lines.
-func (s *Service) requireGlobalAdmin(ctx context.Context) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -73,7 +73,7 @@ func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx *contex
 // CreateGlobalIssuer creates a global remote_session_issuer (project_id NULL,
 // organization_id NULL), reusing CreateRemoteSessionIssuer with NULL scoping.
 func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 
 // ListGlobalIssuers lists the global remote_session_issuers.
 func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListRemoteSessionIssuersResult, error) {
-	_, logger, err := s.requireGlobalAdmin(ctx)
+	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 
 // GetGlobalIssuer resolves a global remote_session_issuer by id.
 func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	_, logger, err := s.requireGlobalAdmin(ctx)
+	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
 func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 // any global clients still reference it (the operator deletes the clients
 // first). Mirrors the org-scoped DeleteIssuer.
 func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.DeleteGlobalIssuerPayload) error {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 // global issuer, reusing CreateRemoteSessionClient with NULL scoping. Global
 // clients carry no user_session_issuer attachments.
 func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.CreateGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +396,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 
 // ListGlobalClients lists the global clients registered with a global issuer.
 func (s *Service) ListGlobalClients(ctx context.Context, payload *adminrsgen.ListGlobalClientsPayload) (*adminrsgen.ListRemoteSessionClientsResult, error) {
-	_, logger, err := s.requireGlobalAdmin(ctx)
+	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +440,7 @@ func (s *Service) ListGlobalClients(ctx context.Context, payload *adminrsgen.Lis
 
 // GetGlobalClient resolves a global client by id.
 func (s *Service) GetGlobalClient(ctx context.Context, payload *adminrsgen.GetGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	_, logger, err := s.requireGlobalAdmin(ctx)
+	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +464,7 @@ func (s *Service) GetGlobalClient(ctx context.Context, payload *adminrsgen.GetGl
 // UpdateGlobalClient patches a global client's non-issuer fields, rotating the
 // client secret when supplied.
 func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.UpdateGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 // DeleteGlobalClient soft-deletes a global client and cascades the
 // remote_sessions minted against it.
 func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.DeleteGlobalClientPayload) error {
-	authCtx, logger, err := s.requireGlobalAdmin(ctx)
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
