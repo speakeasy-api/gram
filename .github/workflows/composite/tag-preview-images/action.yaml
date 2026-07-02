@@ -79,6 +79,12 @@ runs:
             pathspecs+=(":(glob)${path}")
           done < <(yq -r ".${filter}[]" .github/filters.yaml)
         done
+        # An empty pathspec list would make git diff compare the full tree and
+        # silently skip every candidate (e.g. yq missing or a bad filter key).
+        if [ "${#pathspecs[@]}" -eq 0 ]; then
+          echo "::error::No watched paths resolved from .github/filters.yaml for filters: ${FILTERS}"
+          exit 1
+        fi
 
         # HEAD is the PR merge commit, so a main commit that only differs from
         # it in unwatched paths produced a byte-identical component build.
