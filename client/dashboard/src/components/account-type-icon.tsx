@@ -53,6 +53,8 @@ function glyphForAccountType(
         tooltip: TEAM_TOOLTIP,
         iconClassName: "opacity-60",
       };
+    case null:
+    case undefined:
     default:
       return {
         iconName: "user",
