@@ -45,7 +45,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	chatID3 := uuid.NewString()
 	chatID4 := uuid.NewString()
 
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-10 * time.Minute),
 		chatID:       chatID1,
@@ -59,7 +59,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		totalTokens:  150,
 		cost:         1.25,
 	})
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-9 * time.Minute),
 		chatID:       chatID1,
@@ -84,7 +84,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		statusCode: 200,
 		toolURN:    "tools:http:petstore:listPets",
 	})
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    otherProject.ID.String(),
 		timestamp:    now.Add(-7 * time.Minute),
 		chatID:       chatID2,
@@ -253,9 +253,10 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	now := time.Now().UTC()
 	chatID := uuid.NewString()
 
-	// Usage row carries cost + hook_source but NOT the directory attribute
-	// (mirrors production: usage/OTEL rows aren't enriched with WorkOS attrs).
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	// Cost-bearing api_request row carries cost + hook_source but NOT the
+	// directory attribute (mirrors production: usage/OTEL rows aren't enriched
+	// with WorkOS attrs).
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-10 * time.Minute),
 		chatID:       chatID,
@@ -383,7 +384,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	costs := []float64{3.0, 2.0, 1.0}
 	for i, chatID := range chatIDs {
-		insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+		insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 			projectID:    projectID,
 			timestamp:    now.Add(time.Duration(i) * time.Minute),
 			chatID:       chatID,
@@ -538,6 +539,50 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
 		p.projectID, usageURN, "gram-server", p.chatID)
+	require.NoError(t, err)
+}
+
+// insertListSessionClaudeAPIRequestLog inserts a Claude Code api_request row —
+// the authoritative source of Claude token/cost now that claude-code:usage rows
+// are excluded (mirrors insertAttributeClaudeAPIRequestLog in query_test.go and
+// the sessionClaudeAPIRequestPredicate the session query keys off).
+func insertListSessionClaudeAPIRequestLog(t *testing.T, ctx context.Context, p listSessionLogParams) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":          p.chatID,
+		"prompt.id":                       uuid.NewString(),
+		"event.name":                      "api_request",
+		"input_tokens":                    p.inputTokens,
+		"output_tokens":                   p.outputTokens,
+		"cost_usd":                        p.cost,
+		"model":                           p.model,
+		"gen_ai.request.model":            p.model,
+		"gram.hook.source":                p.hookSource,
+		"user.email":                      p.email,
+		"user.attributes.department_name": p.department,
+	}
+	if p.roles != nil {
+		attributes["user.roles"] = p.roles
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name, gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		p.projectID, "claude-code:api_request", "claude-code", p.chatID)
 	require.NoError(t, err)
 }
 

@@ -78,6 +78,58 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	require.NoError(t, err)
 }
 
+// insertAttributeClaudeAPIRequestLog inserts the Claude Code api_request row that
+// now carries Claude token/cost attribution for attribute_metrics_summaries.
+func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens int, model, email, department string, roles []string, querySource, skillName, agentName, mcpServerName, mcpToolName string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":          chatID,
+		"prompt.id":                       uuid.NewString(),
+		"event.name":                      "api_request",
+		"input_tokens":                    inputTokens,
+		"output_tokens":                   outputTokens,
+		"cache_read_tokens":               cacheReadTokens,
+		"cache_creation_tokens":           cacheCreationTokens,
+		"cost_usd":                        cost,
+		"model":                           model,
+		"gen_ai.request.model":            model,
+		"gram.hook.source":                "claude-code",
+		"gram.provider":                   "anthropic",
+		"gram.account_type":               "team",
+		"user.email":                      email,
+		"user.attributes.department_name": department,
+		"query_source":                    querySource,
+		"skill.name":                      skillName,
+		"agent.name":                      agentName,
+		"mcp_server.name":                 mcpServerName,
+		"mcp_tool.name":                   mcpToolName,
+	}
+	if roles != nil {
+		attributes["user.roles"] = roles
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:api_request", "claude-code")
+	require.NoError(t, err)
+}
+
 func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, email, department string, roles []string) {
 	t.Helper()
 
@@ -196,9 +248,9 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	ts := now.Add(-10 * time.Minute)
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", []string{"admin", "dev"})
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, 0, 0, 0, "opus", "a@x.com", "Engineering", []string{"admin", "dev"}, "main", "", "", "", "")
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.10, 5, "opus", "cursor", "b@x.com", "Engineering", []string{"dev"})
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.50, 50, "sonnet", "claude-code", "c@x.com", "Sales", nil)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.50, 50, 0, 0, 0, "sonnet", "c@x.com", "Sales", nil, "main", "", "", "", "")
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -318,7 +370,7 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	for i := range 12 {
 		dept := "D" + strconv.Itoa(i+1)
 		cost := float64(12 - i)
-		insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), cost, 1, "m", "claude-code", dept+"@x.com", dept, nil)
+		insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), cost, 1, 0, 0, 0, "m", dept+"@x.com", dept, nil, "main", "", "", "", "")
 	}
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -349,7 +401,7 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 // `*:usage` rows, excluding the hook tool-call rows the count is sourced from.
 // The count must reflect all tools used in a session (Gram and non-Gram), fire
 // once per call (PostToolUse/PostToolUseFailure, not the matching PreToolUse),
-// exclude provider self-names, and leave token/cost sourced from usage rows.
+// exclude provider self-names, and leave token/cost sourced from api_request rows.
 func TestQuery_CountsToolCalls(t *testing.T) {
 	t.Parallel()
 
@@ -367,8 +419,8 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// One usage row (carries cost/tokens).
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", nil)
+	// One Claude api_request row carries cost/tokens.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, 0, 0, 0, "opus", "a@x.com", "Engineering", nil, "main", "", "", "", "")
 
 	// One Bash call: PreToolUse + PostToolUse. Must count once, not twice.
 	insertAttributeHookToolLog(t, ctx, projectID, ts, "Bash", "PreToolUse", "a@x.com", "Engineering")
@@ -402,8 +454,8 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 
 	require.NotNil(t, totalResult, "expected an aggregate row with tool calls")
 	require.EqualValues(t, 3, totalResult.Table[0].Measures.TotalToolCalls)
-	// Hook tool rows carry no gen_ai.usage.cost, so cost stays sourced from the
-	// single usage row — admitting tool rows must not inflate cost.
+	// Hook tool rows carry no token/cost measures, so admitting them must not
+	// inflate cost from the single api_request row.
 	require.InDelta(t, 0.25, totalResult.Table[0].Measures.TotalCost, 1e-9)
 }
 
@@ -449,6 +501,68 @@ func TestQuery_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
 	require.Equal(t, int64(25), result.Table[0].Measures.TotalInputTokens)
 }
 
+func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	chatID := uuid.NewString()
+
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, chatID, 0.40, 10, 2, 3, 5, "opus", "a@x.com", "Engineering", []string{"dev"}, "main", "git-skill", "generalPurpose", "github", "search")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var byServer *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("mcp_server_name"),
+			TopN:    10,
+			SortBy:  "cache_creation_input_tokens",
+		})
+		if err != nil || res == nil || len(res.Table) != 1 {
+			return false
+		}
+		byServer = res
+		return res.Table[0].GroupValue == "github"
+	}, 10*time.Second, 200*time.Millisecond)
+
+	row := byServer.Table[0]
+	require.Equal(t, "github", row.GroupValue)
+	require.InDelta(t, 0.40, row.Measures.TotalCost, 1e-9)
+	require.Equal(t, int64(10), row.Measures.TotalInputTokens)
+	require.Equal(t, int64(2), row.Measures.TotalOutputTokens)
+	require.Equal(t, int64(20), row.Measures.TotalTokens)
+	require.Equal(t, int64(3), row.Measures.CacheReadInputTokens)
+	require.Equal(t, int64(5), row.Measures.CacheCreationInputTokens)
+	require.ElementsMatch(t, []string{"git-skill"}, row.DimensionValues["skill_name"])
+
+	bySkill, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_name"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, bySkill.Table, 1)
+	require.Equal(t, "git-skill", bySkill.Table[0].GroupValue)
+	require.InDelta(t, 0.40, bySkill.Table[0].Measures.TotalCost, 1e-9)
+}
+
 func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	t.Parallel()
 
@@ -468,10 +582,10 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 
 	// Four departments with distinct costs; top_n=2 keeps the two priciest and
 	// folds the rest into "Other".
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 4.0, 1, "m", "claude-code", "a@x.com", "D1", nil)
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 3.0, 1, "m", "claude-code", "b@x.com", "D2", nil)
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 2.0, 1, "m", "claude-code", "c@x.com", "D3", nil)
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 1.0, 1, "m", "claude-code", "d@x.com", "D4", nil)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 4.0, 1, 0, 0, 0, "m", "a@x.com", "D1", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 3.0, 1, 0, 0, 0, "m", "b@x.com", "D2", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 2.0, 1, 0, 0, 0, "m", "c@x.com", "D3", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.0, 1, 0, 0, 0, "m", "d@x.com", "D4", nil, "main", "", "", "", "")
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
