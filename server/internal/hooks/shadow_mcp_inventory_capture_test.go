@@ -1,7 +1,11 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -198,6 +203,148 @@ func TestCodexSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	require.Equal(t, "platform-logs", rows[0].ServerName)
 }
 
+func TestCodexSessionStartUpsertsShadowMCPInventoryURLWithoutName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := uuid.NewString()
+	userEmail := "codex-shadow-inventory-no-name@example.com"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_codex": []any{
+				map[string]any{
+					"enabled": true,
+					"transport": map[string]any{
+						"type": "streamable_http",
+						"url":  "https://nameless.example.com/mcp?auth=secret",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	require.Equal(t, "https://nameless.example.com/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "nameless.example.com", rows[0].URLHost)
+	require.Empty(t, rows[0].ServerName)
+}
+
+func TestCodexSessionStartDedupesShadowMCPInventoryURLsByCanonicalURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := uuid.NewString()
+	userEmail := "codex-shadow-inventory-dedupe@example.com"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_codex": []any{
+				map[string]any{
+					"name":    "first",
+					"enabled": true,
+					"transport": map[string]any{
+						"type": "streamable_http",
+						"url":  "https://dedupe.example.com/mcp?token=one",
+					},
+				},
+				map[string]any{
+					"name":    "second",
+					"enabled": true,
+					"transport": map[string]any{
+						"type": "streamable_http",
+						"url":  "https://dedupe.example.com/mcp?token=two",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	require.Equal(t, "https://dedupe.example.com/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "dedupe.example.com", rows[0].URLHost)
+}
+
+func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := uuid.NewString()
+	ti.service.cache = mcpSetErrorCache{
+		Cache:   ti.service.cache,
+		failKey: sessionMCPListCacheKey(sessionID),
+		err:     errors.New("redis: connection refused"),
+	}
+
+	userEmail := "codex-shadow-inventory-cache-fail@example.com"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_codex": []any{
+				map[string]any{
+					"name":    "cache-fail",
+					"enabled": true,
+					"transport": map[string]any{
+						"type": "streamable_http",
+						"url":  "https://cache-fail.example.com/mcp",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	require.Never(t, func() bool {
+		rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			Limit:         50,
+		})
+		require.NoError(t, err)
+		return len(rows) > 0
+	}, 500*time.Millisecond, 50*time.Millisecond)
+}
+
+func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	var logBuffer bytes.Buffer
+	ti.service.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	sessionID := uuid.NewString()
+	userEmail := "missing-mcp-list@example.com"
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("session api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", userEmail),
+				strAttr("organization.id", "claude-org-missing-mcp-list"),
+			},
+		},
+	))
+	require.NoError(t, err)
+	require.Contains(t, logBuffer.String(), "claude_otel_mcp_list_cache_miss")
+	require.Contains(t, logBuffer.String(), sessionID)
+	require.True(t, strings.Contains(logBuffer.String(), "cache miss") || strings.Contains(logBuffer.String(), "cache"))
+}
+
 func requireShadowMCPInventoryURLsFromHooksEventually(
 	ctx context.Context,
 	t *testing.T,
@@ -219,4 +366,18 @@ func requireShadowMCPInventoryURLsFromHooksEventually(
 	}, 5*time.Second, 100*time.Millisecond)
 
 	return rows
+}
+
+type mcpSetErrorCache struct {
+	cache.Cache
+	failKey string
+	err     error
+}
+
+func (c mcpSetErrorCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if key == c.failKey {
+		return c.err
+	}
+	//nolint:wrapcheck // test pass-through to the embedded real cache
+	return c.Cache.Set(ctx, key, value, ttl)
 }
