@@ -498,6 +498,7 @@ export function LogsTools(): JSX.Element {
           <LogsToolsContent
             isLoading={isLoading}
             isFetching={isFetching}
+            onRefresh={refetch}
             error={displayError}
             traces={traces}
             serverOptionGroups={serverOptionGroups}
@@ -554,6 +555,7 @@ export function LogsTools(): JSX.Element {
 function LogsToolsContent({
   isLoading,
   isFetching,
+  onRefresh,
   error,
   traces,
   serverOptionGroups,
@@ -601,6 +603,7 @@ function LogsToolsContent({
 }: {
   isLoading: boolean;
   isFetching: boolean;
+  onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
   serverOptionGroups: Parameters<
@@ -711,6 +714,8 @@ function LogsToolsContent({
                 />
               </div>
             }
+            onRefresh={onRefresh}
+            isRefreshing={isFetching}
           />
 
           {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
