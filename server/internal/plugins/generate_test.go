@@ -3,14 +3,20 @@ package plugins
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,6 +44,112 @@ func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
 	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
 	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
 		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
+}
+
+// TestSharedAuthScriptMatchesCheckedIn guards against drift between the
+// generated hooks/auth.sh (renderSharedAuthScript) and the checked-in
+// hooks/plugin-claude/hooks/auth.sh sourced by the local-dev plugin. Both must
+// be identical so local-dev and generated plugins share one auth flow.
+func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
+	t.Parallel()
+	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "auth.sh"))
+	// renderSharedAuthScript() is canonical → pass it as testify's "expected".
+	require.Equal(t, string(renderSharedAuthScript()), string(checkedIn),
+		"hooks/plugin-claude/hooks/auth.sh has drifted from renderSharedAuthScript() — keep them identical")
+}
+
+// TestSharedAuthScriptBrowserLoginRoundtrip drives the interactive login flow
+// end to end against the real nc-based localhost listener: a stubbed browser
+// opener captures the dashboard URL, the test plays the dashboard's role by
+// requesting the localhost callback with an api_key, and the flow must cache
+// the credentials and clear the attempt cooldown marker.
+func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("nc"); err != nil {
+		t.Skip("nc not available on this machine")
+	}
+
+	dir := t.TempDir()
+	authFile := filepath.Join(dir, "auth.env")
+	urlFile := filepath.Join(dir, "auth-url")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	// Stub both browser openers; whichever the host OS selects writes the URL.
+	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
+
+	// The login flow refuses to run under CI/SSH markers and, on Linux,
+	// without a display — scrub and pin those so the test drives the real
+	// listener everywhere.
+	env := []string{"PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")}
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "CI=") || strings.HasPrefix(kv, "SSH_CONNECTION=") ||
+			strings.HasPrefix(kv, "SSH_TTY=") || strings.HasPrefix(kv, "PATH=") ||
+			strings.HasPrefix(kv, "GRAM_") || strings.HasPrefix(kv, "DISPLAY=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_TEST_URL_FILE="+urlFile,
+		"GRAM_HOOKS_INTERACTIVE=1",
+		"GRAM_HOOKS_LOGIN_FORCE=1",
+		"GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS=60",
+		"DISPLAY=:0",
+	)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-c", `. ./auth.sh; gram_hooks_login https://gram.test default`)
+	cmd.Dir = dir
+	cmd.Env = env
+	// The listener runs as a background child sharing stdout; WaitDelay keeps
+	// Wait from blocking on its pipe if a failure path leaks it.
+	cmd.WaitDelay = 5 * time.Second
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	require.NoError(t, cmd.Start())
+
+	var port string
+	portPattern := regexp.MustCompile(`127\.0\.0\.1%3A(\d+)%2Fcallback`)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		raw, err := os.ReadFile(urlFile)
+		if !assert.NoError(c, err) {
+			return
+		}
+		match := portPattern.FindStringSubmatch(string(raw))
+		if assert.NotNil(c, match, "auth URL missing callback port: %s", string(raw)) {
+			port = match[1]
+		}
+	}, 30*time.Second, 100*time.Millisecond, "browser opener was never invoked: %s", output.String())
+
+	callback := "http://127.0.0.1:" + port + "/callback?api_key=test-key-123&project=default&email=a%40b.c"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, callback, nil)
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(c, err)
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		assert.Contains(c, string(body), "close this tab")
+	}, 30*time.Second, 200*time.Millisecond, "callback request never succeeded: %s", output.String())
+
+	require.NoError(t, cmd.Wait(), output.String())
+
+	cached := string(requireFileBytes(t, authFile))
+	require.Contains(t, cached, "server_url=https://gram.test\n")
+	require.Contains(t, cached, "api_key=test-key-123\n")
+	require.Contains(t, cached, "project=default\n")
+	require.Contains(t, cached, "email=a@b.c\n")
+	require.NoFileExists(t, authFile+".login-attempt", "successful login must clear the attempt cooldown marker")
 }
 
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
@@ -1084,12 +1196,15 @@ func TestGenerateObservabilityPluginsIncludeSharedHookHelpers(t *testing.T) {
 	for _, path := range []string{
 		ClaudeObservabilitySlug(cfg) + "/hooks/identity.sh",
 		ClaudeObservabilitySlug(cfg) + "/hooks/auth.sh",
+		ClaudeObservabilitySlug(cfg) + "/hooks/login.sh",
 		ClaudeObservabilitySlug(cfg) + "/hooks/auth_preflight.sh",
 		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
 		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/auth.sh",
+		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/login.sh",
 		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/auth_preflight.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/identity.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/auth.sh",
+		CodexObservabilitySlug(cfg) + "/hooks/login.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/auth_preflight.sh",
 	} {
 		require.NotNil(t, files[path], "observability helper missing: %s", path)

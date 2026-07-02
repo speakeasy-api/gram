@@ -14,5 +14,7 @@ if ! . "$script_dir/auth.sh"; then
   exit 2
 fi
 
+export GRAM_HOOKS_INTERACTIVE=1
+
 gram_hooks_prepare_auth "$server_url" "$project_slug" 2
 exit 0
