@@ -688,6 +688,10 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
+	// Windows counterpart to hook.sh. hooks.json's single `command` runs bash on
+	// Unix; the device agent rewrites it to invoke this hook.ps1 on Windows,
+	// where bash isn't reliably present (see renderCursorHookScriptPowerShell).
+	files[path.Join(subdir, "hooks/hook.ps1")] = renderCursorHookScriptPowerShell(cfg)
 
 	return nil
 }

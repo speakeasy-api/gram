@@ -1054,6 +1054,64 @@ exit 1
 	require.Equal(t, "agent@example.com", posted["user_email"])
 }
 
+// The Cursor bundle ships a PowerShell hook.ps1 alongside hook.sh: on Windows
+// Cursor runs the hook command through PowerShell, where bash isn't reliably
+// present, so the device agent rewrites hooks.json to invoke hook.ps1 there.
+func TestRenderCursorHookPowerShellUsesGramKeyServerURLAndProjectHeader(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderCursorHookScriptPowerShell(cfg))
+
+	require.Contains(t, script, `"$serverUrl/rpc/hooks.cursor"`, "must POST to the cursor endpoint")
+	require.Contains(t, script, "https://app.getgram.ai", "server URL must be the env-var default")
+	require.Contains(t, script, `'Gram-Key' = 'gram_local_secret_xyz'`, "bakes the Gram-Key header")
+	require.Contains(t, script, `$headers['Gram-Project'] = 'acme-prod'`, "cursor requires the project header")
+	require.Contains(t, script, `'X-Gram-Hook-Hostname'`, "sends the hostname header like the bash hook")
+	require.Contains(t, script, `permission = 'deny'`, "fails closed with a deny body")
+	require.Contains(t, script, "speakeasyd", "default device-agent command for identity")
+	require.NotContains(t, script, "bash", "PowerShell hook must not shell out to bash")
+}
+
+func TestRenderCursorHookPowerShellOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	script := string(renderCursorHookScriptPowerShell(cfg))
+
+	require.Contains(t, script, `'Gram-Key' = 'gram_local_secret_xyz'`)
+	require.NotContains(t, script, "Gram-Project")
+}
+
+func TestGenerateCursorObservabilityPluginIncludesPowerShellHook(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	base := "cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/"
+	require.NotNil(t, files[base+"hook.ps1"], "cursor bundle must ship hook.ps1 for Windows")
+	require.NotNil(t, files[base+"hook.sh"], "cursor bundle still ships hook.sh for Unix")
+
+	// hooks.json's single command stays bash; the device agent rewrites it to
+	// hook.ps1 on Windows (Cursor's local-hook schema has no per-OS command).
+	var hooks cursorHooksConfig
+	require.NoError(t, json.Unmarshal(files[base+"hooks.json"], &hooks))
+	for event, cmds := range hooks.Hooks {
+		require.NotEmpty(t, cmds, "event %s has no command", event)
+		require.Contains(t, cmds[0].Command, "hook.sh", "default command stays bash for event %s", event)
+	}
+}
+
 func TestGenerateObservabilityPluginsIncludeIdentityHelper(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
