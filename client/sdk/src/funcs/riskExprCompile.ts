@@ -94,7 +94,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.compileExpr")();
+  const path = pathToFunc("/rpc/risk.compileCELExpression")();
 
   const query = encodeFormQuery({
     "expr": payload?.expr,

@@ -490,6 +490,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		RouteBase:           "mcp",
 		McpSlug:             mcpSlug,
 		FinalRedirectURI:    parsedRedirect.String(),
+		Resource:            "",
 	}
 	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, selected)
 	if err != nil {
@@ -777,7 +778,7 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 // would lie about a connection that the next /mcp/{slug} call will 401 on.
 func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID uuid.UUID, organizationID string, issuerID uuid.UUID) error {
 	subject := urn.NewUserSubject(userID)
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, projectID, organizationID, issuerID, subject)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, projectID, organizationID, issuerID, subject, "")
 
 	status := "needs_auth"
 	switch {

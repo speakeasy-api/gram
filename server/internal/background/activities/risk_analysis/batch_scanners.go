@@ -69,7 +69,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, messages, customRules)
+			findings, err := a.scanCustomRules(ctx, args, requestID, messages, customRules)
 			if err != nil {
 				customErr = err
 				return

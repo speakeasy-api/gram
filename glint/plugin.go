@@ -34,6 +34,7 @@ type ruleSettings struct {
 	NoSqlErrNoRows             noSqlErrNoRowsSettings             `json:"no-sql-err-no-rows"`
 	NoTestingRawSql            noTestingRawSqlSettings            `json:"no-testing-raw-sql"`
 	NoClientErrorLogError      noClientErrorLogErrorSettings      `json:"no-client-error-log-error"`
+	RpcEndpointFormat          rpcEndpointFormatSettings          `json:"rpc-endpoint-format"`
 }
 
 type plugin struct {
@@ -92,6 +93,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoClientErrorLogError.Disabled {
 		analyzers = append(analyzers, newNoClientErrorLogErrorAnalyzer(p.settings.Rules.NoClientErrorLogError))
+	}
+	if !p.settings.Rules.RpcEndpointFormat.Disabled {
+		analyzers = append(analyzers, newRpcEndpointFormatAnalyzer(p.settings.Rules.RpcEndpointFormat))
 	}
 
 	return analyzers, nil

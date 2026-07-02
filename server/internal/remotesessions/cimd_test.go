@@ -388,7 +388,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	subject := urn.NewUserSubject("cimd-refresh-subject")
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, uuid.MustParse(created.ID))
 
-	tok, err := mgr.ResolveAccessToken(ctx, uuid.MustParse(created.ID), subject)
+	tok, err := mgr.ResolveAccessToken(ctx, uuid.MustParse(created.ID), subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
