@@ -875,7 +875,6 @@ type ReverseProxyOptions struct {
 	// function-runner path sets this so every attempt dials a fresh connection
 	// rather than re-drawing a pooled keep-alive to a Fly machine that may have
 	// been idled/suspended out from under us (which surfaces as an instant EOF).
-	// See FLY_CONN_ISSUES.md.
 	DisableKeepAlives bool
 	// Descriptor fields
 	ID               string
