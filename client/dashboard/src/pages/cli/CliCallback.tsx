@@ -7,37 +7,35 @@ import { useSessionData } from "@/contexts/Auth";
 interface CliCallbackProps {
   localCallbackUrl: string;
   /**
-   * When `client === "device-agent"`, the PKCE enrollment flow is used instead
-   * of the default producer-key flow.
+   * PKCE parameters. Their presence — a `codeChallenge` — is what selects the
+   * PKCE one-time-code enrollment flow over the default producer-key flow. The
+   * request opts into PKCE by supplying these, so no client has to identify
+   * itself (or spoof another client) to use it.
    */
-  client?: string | null;
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
 }
 
-const DEVICE_AGENT_CLIENT = "device-agent";
-
 /**
- * CliCallback is an authentication handler for the CLI. When this component
- * receives a local callback URL, it generates a producer-scoped API key and
- * transmits it to the client by appending it to the callback URL as a query
- * parameter.
+ * CliCallback is an authentication handler for the CLI. By default it generates
+ * a producer-scoped API key and transmits it to the client by appending it to
+ * the local callback URL as a query parameter.
  *
- * When the incoming request identifies itself as `client=device-agent`, it
- * instead runs the PKCE enrollment flow: it exchanges the supplied
- * `code_challenge` for a short-lived one-time code via `cliAuth.authorize` and
- * transmits only that code back to the local callback.
+ * When the request supplies a PKCE `code_challenge`, it instead runs the PKCE
+ * enrollment flow: it exchanges the challenge for a short-lived one-time code
+ * via `cliAuth.authorize` and transmits only that code back to the local
+ * callback (the raw key is minted server-side at redeem, never in a URL). The
+ * flow is selected by the presence of PKCE parameters, not by client identity.
  */
 export default function CliCallback(props: CliCallbackProps): JSX.Element {
-  const { localCallbackUrl, client, codeChallenge, codeChallengeMethod } =
-    props;
+  const { localCallbackUrl, codeChallenge, codeChallengeMethod } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey } = useCreateAPIKeyMutation();
   const { mutateAsync: authorizeCode } = useCliAuthAuthorizeMutation();
   const hasCreatedKey = useRef(false);
   const validCallback = isCallbackLocal(localCallbackUrl);
-  const isDeviceAgent = client === DEVICE_AGENT_CLIENT;
+  const isPkceFlow = Boolean(codeChallenge);
 
   useEffect(() => {
     if (status === "pending") return;
@@ -75,7 +73,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
       projectSlug = preferredProject;
     }
 
-    if (isDeviceAgent) {
+    if (isPkceFlow) {
       authorizePkceCode(
         authorizeCode,
         session.session,
@@ -107,7 +105,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     session,
     localCallbackUrl,
     validCallback,
-    isDeviceAgent,
+    isPkceFlow,
     codeChallenge,
     codeChallengeMethod,
   ]);

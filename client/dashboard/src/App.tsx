@@ -138,7 +138,6 @@ function AppContent() {
     return (
       <CliCallback
         localCallbackUrl={cliFlow.cliCallbackUrl}
-        client={cliFlow.client}
         codeChallenge={cliFlow.codeChallenge}
         codeChallengeMethod={cliFlow.codeChallengeMethod}
       />
@@ -431,12 +430,11 @@ function useCliAuthFlow() {
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
-  const client = searchParams.get("client");
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod = searchParams.get("code_challenge_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl, client, codeChallenge, codeChallengeMethod };
+    return { cliCallbackUrl, codeChallenge, codeChallengeMethod };
   }
 
   return null;
