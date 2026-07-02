@@ -29,10 +29,18 @@ export function ExternalOAuthForm({
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         {hasMultipleOAuth2AuthCode && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4">
-            <Type small className="mt-1 text-red-600">
-              Not Supported: This MCP server has {oauth2SecurityCount} OAuth2
-              security schemes detected.
+          <div className="mb-4 rounded-md border border-yellow-500/50 bg-yellow-50 p-4 dark:bg-yellow-950/20">
+            <Type
+              small
+              className="font-medium text-yellow-700 dark:text-yellow-400"
+            >
+              Multiple OAuth2 security schemes detected
+            </Type>
+            <Type small className="mt-1 text-yellow-700 dark:text-yellow-400">
+              This MCP server has {oauth2SecurityCount} OAuth2 security schemes.
+              Speakeasy can't determine which one applies, so double-check that
+              the configuration below matches the scheme you intend to use
+              before continuing.
             </Type>
           </div>
         )}
@@ -144,7 +152,6 @@ export function ExternalOAuthForm({
           <Button
             onClick={() => send({ type: "SUBMIT" })}
             disabled={
-              hasMultipleOAuth2AuthCode ||
               submitting ||
               !external.slug.trim() ||
               !external.metadataJson.trim()
