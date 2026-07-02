@@ -1160,14 +1160,13 @@ printf '{}\n200'
 	require.Equal(t, "https://mcp.example.com/x", urlMCP["url"])
 }
 
-// TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
-// Cursor plugin's per-event sender falls back to the credentials cached by
-// the browser login flow (auth_preflight.sh / login.sh) when no env key is
-// set, instead of silently skipping the send.
-func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
-	t.Parallel()
+// checkedInSenderCapturedRequest runs a checked-in per-event sender with no
+// env credentials but a cached browser-login auth file, and returns the curl
+// config lines plus request URL captured by a stubbed curl.
+func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string) string {
+	t.Helper()
 
-	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-cursor", "hooks", "send_hook.sh"))
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "send_hook.sh"))
 	require.NoError(t, err)
 
 	dir := t.TempDir()
@@ -1203,12 +1202,23 @@ printf '{}\n200'
 	}
 
 	cmd := exec.Command("bash", senderPath)
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
+	cmd.Stdin = strings.NewReader(payload)
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 
-	headers := string(requireFileBytes(t, headersPath))
+	return string(requireFileBytes(t, headersPath))
+}
+
+// TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
+// Cursor plugin's per-event sender falls back to the credentials cached by
+// the browser login flow (auth_preflight.sh / login.sh) when no env key is
+// set, instead of silently skipping the send.
+func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
+	t.Parallel()
+
+	headers := checkedInSenderCapturedRequest(t, "plugin-cursor",
+		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
 	require.Contains(t, headers, "/rpc/hooks.cursor")
@@ -1221,51 +1231,28 @@ printf '{}\n200'
 func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	t.Parallel()
 
-	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
-	require.NoError(t, err)
-
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, "bin")
-	require.NoError(t, os.MkdirAll(binDir, 0o755))
-	headersPath := filepath.Join(dir, "headers.txt")
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
-url=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --config) cat "$2" >> "$GRAM_CAPTURE_HEADERS"; shift 2 ;;
-    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
-    -*) shift ;;
-    *) url="$1"; shift ;;
-  esac
-done
-cat >/dev/null
-printf '%s\n' "$url" >> "$GRAM_CAPTURE_HEADERS"
-printf '{}\n200'
-`), 0o755))
-
-	authFile := filepath.Join(dir, "auth.env")
-	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_browser_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
-
-	env := hookAuthTestEnv(dir,
-		"GRAM_CAPTURE_HEADERS="+headersPath,
-		"GRAM_HOOKS_AUTH_FILE="+authFile,
-	)
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
-		}
-	}
-
-	cmd := exec.Command("bash", senderPath)
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(output))
-
-	headers := string(requireFileBytes(t, headersPath))
+	headers := checkedInSenderCapturedRequest(t, "plugin-claude",
+		`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
 	require.Contains(t, headers, "/rpc/hooks.claude")
+}
+
+// TestSharedAuthScriptEscapesCurlConfigValues verifies credentials containing
+// curl config metacharacters cannot break out of the header directive.
+func TestSharedAuthScriptEscapesCurlConfigValues(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	authPath := filepath.Join(dir, "auth.sh")
+	require.NoError(t, os.WriteFile(authPath, renderSharedAuthScript(), 0o755))
+
+	cmd := exec.Command("bash", "-c", `. "$GRAM_TEST_AUTH_SH"; gram_hooks_write_curl_config 'k"ey\1' 'pro"j\2'; cat "$auth_config"`)
+	cmd.Env = hookAuthTestEnv(dir, "GRAM_TEST_AUTH_SH="+authPath)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), `header = "Gram-Key: k\"ey\\1"`)
+	require.Contains(t, string(output), `header = "Gram-Project: pro\"j\\2"`)
 }
 
 // TestRenderHookPayloadNormalizationDecodesEscapedPromptWithoutJQ verifies

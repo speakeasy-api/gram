@@ -1420,6 +1420,13 @@ gram_hooks_write_curl_config() {
   auth_config_arg=()
   auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || return 1
   chmod 600 "$auth_config" || true
+  # curl config quoted strings treat backslash and double quote specially;
+  # escape them so a hostile or corrupted cached value cannot break out of
+  # the header directive.
+  api_key="${api_key//\\/\\\\}"
+  api_key="${api_key//\"/\\\"}"
+  project="${project//\\/\\\\}"
+  project="${project//\"/\\\"}"
   printf 'header = "Gram-Key: %s"\n' "$api_key" >"$auth_config"
   printf 'header = "Gram-Project: %s"\n' "$project" >>"$auth_config"
   auth_config_arg=(--config "$auth_config")

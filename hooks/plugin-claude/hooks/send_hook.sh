@@ -64,6 +64,12 @@ if [ -n "$api_key" ] || [ -n "$project_slug" ]; then
     exit 2
   fi
   chmod 600 "$auth_config" || true
+  # curl config quoted strings treat backslash and double quote specially;
+  # escape them so a corrupted value cannot break out of the directive.
+  api_key="${api_key//\\/\\\\}"
+  api_key="${api_key//\"/\\\"}"
+  project_slug="${project_slug//\\/\\\\}"
+  project_slug="${project_slug//\"/\\\"}"
   if [ -n "$api_key" ]; then
     printf 'header = "Gram-Key: %s"\n' "$api_key" >>"$auth_config"
   fi

@@ -95,6 +95,12 @@ auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || {
   exit 0
 }
 chmod 600 "$auth_config" || true
+# curl config quoted strings treat backslash and double quote specially;
+# escape them so a corrupted value cannot break out of the directive.
+api_key="${api_key//\\/\\\\}"
+api_key="${api_key//\"/\\\"}"
+project_slug="${project_slug//\\/\\\\}"
+project_slug="${project_slug//\"/\\\"}"
 printf 'header = "Gram-Key: %s"\n' "$api_key" >>"$auth_config"
 printf 'header = "Gram-Project: %s"\n' "$project_slug" >>"$auth_config"
 
