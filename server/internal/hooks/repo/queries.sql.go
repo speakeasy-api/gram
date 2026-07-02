@@ -206,7 +206,7 @@ WHERE organization_id = $1
     OR external_organization_id = ''
     OR external_organization_id = $3
   )
-ORDER BY (external_organization_id = $3) DESC
+ORDER BY (external_organization_id = $3) DESC NULLS LAST
 LIMIT 1
 `
 
@@ -220,8 +220,11 @@ type GetProviderOrgBillingModeParams struct {
 // org's AI integration config (the org-level tier of the billing-mode cascade).
 // A config scoped to a specific external_organization_id must match the session's
 // provider org; a config with none applies provider-wide. Exact-org matches are
-// preferred over provider-wide. Only configs with a non-null billing_mode are
-// considered, so an undeclared org returns no rows (treated as unknown upstream).
+// preferred over provider-wide (NULLS LAST because the comparison is NULL for a
+// NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
+// Only one live config per (org, provider) can exist today, so the ordering is
+// defensive. Only configs with a non-null billing_mode are considered, so an
+// undeclared org returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
 	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
 	var billing_mode pgtype.Text
