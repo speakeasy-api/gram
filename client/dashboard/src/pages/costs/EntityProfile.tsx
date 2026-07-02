@@ -26,6 +26,7 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
+import { CostMeasureLabel } from "@/components/estimated-cost";
 import { CostTable } from "./CostTable";
 import { type Crumb, LABELS, type Measures } from "./taxonomy";
 
@@ -180,7 +181,7 @@ function HeaderStat({
   value,
   onClick,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   // When set, the stat becomes a button — used to turn "Agent sessions" into the
   // header entry point for the per-session list.
@@ -409,7 +410,10 @@ export function EntityProfile({
               </div>
             </div>
             <div className="flex shrink-0 gap-8">
-              <HeaderStat label="Cost" value={formatCost(stats.cost)} />
+              <HeaderStat
+                label={<CostMeasureLabel billingMode={billingMode} />}
+                value={formatCost(stats.cost)}
+              />
               <HeaderStat
                 label="Agent sessions"
                 value={stats.sessions.toLocaleString()}

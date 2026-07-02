@@ -75,6 +75,7 @@ export function useAIIntegrationConfigForm(
         setEnabled(false);
         setApiKey("");
         setOrganizationId("");
+        setBillingMode("unknown");
         void invalidateAllAiIntegrationConfig(queryClient);
         options.onDeleteSuccess?.();
       },

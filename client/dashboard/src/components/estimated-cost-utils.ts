@@ -50,8 +50,10 @@ export function costMeasureLabel(billingMode?: string | null): string {
  * or the union across a view's rows). A scope is only confidently "metered" — and
  * therefore shows real cost rather than an estimate — when every contributing row
  * is metered, i.e. the single distinct value is "metered". Anything mixed,
- * flat_rate, unknown, or unclassified (empty list, since dimension_values drops
- * empty strings) stays an estimate.
+ * flat_rate, unknown, or unclassified stays an estimate. Unlike other
+ * dimensions, the server keeps empty strings in billing_mode dimension values,
+ * so unclassified contributors surface as "" and a mixed metered+unclassified
+ * scope correctly fails the single-value check.
  */
 export function resolveScopeBillingMode(
   billingModeValues: string[] | undefined,

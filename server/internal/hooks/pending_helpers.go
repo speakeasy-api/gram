@@ -351,9 +351,14 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		// path seeds SessionMetadata under sessionCacheKey. A cache miss (metrics
 		// arriving before logs seed the session) leaves the columns empty and
 		// self-heals on the session's later metric batches.
+		// The session cache is keyed by session id alone, so only trust cached
+		// metadata that the same org+project seeded — a colliding or spoofed
+		// session id must not stamp another tenant's attribution or user identity
+		// onto this org's rows.
 		var sessionMeta SessionMetadata
 		if m.SessionID != "" {
-			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil {
+			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&
+				meta.GramOrgID == orgID && meta.ProjectID == projectID {
 				sessionMeta = meta
 			}
 		}

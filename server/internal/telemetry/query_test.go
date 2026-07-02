@@ -228,6 +228,9 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
 	// Unset dimensions are present as keys with empty (filtered) lists.
 	require.Empty(t, eng.DimensionValues["job_title"])
+	// billing_mode is the exception: unclassified rows surface as "" so a scope
+	// mixing metered and unclassified spend can never read as confidently metered.
+	require.ElementsMatch(t, []string{""}, eng.DimensionValues["billing_mode"])
 
 	// Sales had a single role-less user; its email surfaces and role is empty.
 	sales := rowByGroup(t, deptResult.Table, "Sales")

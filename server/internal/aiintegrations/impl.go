@@ -266,10 +266,11 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 
 func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	return audit.AIIntegrationSnapshot{
-		Provider:  cfg.Provider,
-		ProjectID: cfg.ProjectID,
-		Enabled:   cfg.Enabled,
-		HasAPIKey: cfg.APIKey != "",
+		Provider:    cfg.Provider,
+		ProjectID:   cfg.ProjectID,
+		Enabled:     cfg.Enabled,
+		HasAPIKey:   cfg.APIKey != "",
+		BillingMode: cfg.BillingMode,
 	}
 }
 

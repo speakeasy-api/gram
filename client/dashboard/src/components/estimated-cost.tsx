@@ -23,15 +23,20 @@ export function EstimatedCostIndicator({
   className?: string;
 }): JSX.Element | null {
   if (isMeteredBilling(billingMode)) return null;
+  // A real button so the disclaimer is reachable by keyboard focus, not just
+  // pointer hover.
   return (
     <SimpleTooltip tooltip={ESTIMATED_COST_TOOLTIP}>
-      <Info
+      <button
+        type="button"
         aria-label="How estimated cost is calculated"
         className={cn(
-          "text-muted-foreground inline-block size-3 shrink-0 cursor-help align-text-top",
+          "text-muted-foreground inline-flex shrink-0 cursor-help align-text-top",
           className,
         )}
-      />
+      >
+        <Info aria-hidden className="size-3" />
+      </button>
     </SimpleTooltip>
   );
 }
