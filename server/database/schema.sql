@@ -945,6 +945,14 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   scope TEXT[],
   audience TEXT,
 
+  -- RFC 8707 resource indicator: when non-null, this exact URI is sent as
+  -- the `resource` parameter on the authorize redirect, code exchange, and
+  -- refresh grant so the upstream AS audience-binds the issued tokens. The
+  -- MCP authorization spec requires clients to send the canonical resource
+  -- URI from the server's RFC 9728 protected-resource metadata; NULL keeps
+  -- the historical behaviour of omitting the parameter.
+  resource TEXT CHECK (resource IS NULL OR btrim(resource) <> ''),
+
   -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
   -- Document at this HTTPS URL and uses the URL as the client_id on every
   -- outbound /authorize, /token, and refresh call. Per
