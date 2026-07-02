@@ -61,7 +61,9 @@ type CountEmployeesForExternalOrgParams struct {
 
 // Distinct employees (resolved Gram users) ever seen under a provider org. An
 // enterprise org is shared by many employees; a personal org maps to exactly one.
-// Used to tell an enterprise account from a personal account on a work email.
+// A count >= 2 marks the org as the company's enterprise org: accounts under it
+// classify team even when their own email has not resolved, and a resolved work
+// email under a solo org is checked against the work-email guard instead.
 func (q *Queries) CountEmployeesForExternalOrg(ctx context.Context, arg CountEmployeesForExternalOrgParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countEmployeesForExternalOrg, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
 	var column_1 int64
