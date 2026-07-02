@@ -57,7 +57,8 @@ func orEmptySlice(s []string) []string {
 
 // logGlobalMutation records a structured-log audit line (actor, action,
 // subject) for a global mutation, standing in for the auditlogs rows globals
-// can't have.
+// can't have. Call it only after the transaction commits so the log never
+// claims a mutation that rolled back.
 func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, action, subject, subjectID string) {
 	logger.InfoContext(ctx, "global remote session "+subject+" "+action,
 		attr.SlogAuditAction(action),
@@ -121,11 +122,11 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session issuer").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "create", "issuer", issuer.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "create", "issuer", issuer.ID.String())
 
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
@@ -249,11 +250,11 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "update", "issuer", updated.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "update", "issuer", updated.ID.String())
 
 	return mv.BuildRemoteSessionIssuerView(updated), nil
 }
@@ -281,8 +282,10 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	txRepo := repo.New(dbtx)
 
 	// Establish the issuer is global before counting clients or deleting, so a
-	// non-global id returns NotFound rather than probing client counts.
-	if _, err := txRepo.GetGlobalRemoteSessionIssuerByID(ctx, issuerID); err != nil {
+	// non-global id returns NotFound rather than probing client counts. FOR
+	// UPDATE locks the issuer row so a concurrent CreateGlobalClient can't
+	// insert a client between the count and the delete.
+	if _, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
@@ -305,11 +308,11 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session issuer").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "delete", "issuer", deleted.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "delete", "issuer", deleted.ID.String())
 
 	return nil
 }
@@ -336,9 +339,9 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 	}
 
 	// Encrypt a supplied client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext NULL.
+	// or blank secret leaves the stored ciphertext NULL.
 	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
+	if payload.ClientSecret != nil && strings.TrimSpace(*payload.ClientSecret) != "" {
 		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
 		if encErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
@@ -355,8 +358,10 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 	txRepo := repo.New(dbtx)
 
 	// Reject an issuer that isn't global so a global client can't be registered
-	// against a project- or org-scoped issuer.
-	if _, err := txRepo.GetGlobalRemoteSessionIssuerByID(ctx, issuerID); err != nil {
+	// against a project- or org-scoped issuer. FOR UPDATE serializes this insert
+	// against a concurrent DeleteGlobalIssuer, which takes the same lock before
+	// counting clients.
+	if _, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
@@ -380,11 +385,11 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "create", "client", created.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "create", "client", created.ID.String())
 
 	return mv.BuildGlobalRemoteSessionClientView(created), nil
 }
@@ -503,11 +508,11 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session client").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "update", "client", updated.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "update", "client", updated.ID.String())
 
 	return mv.BuildGlobalRemoteSessionClientView(updated), nil
 }
@@ -545,11 +550,11 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
-	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
 
 	return nil
 }

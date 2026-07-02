@@ -905,6 +905,17 @@ WHERE id = @id
   AND organization_id IS NULL
   AND deleted IS FALSE;
 
+-- name: GetGlobalRemoteSessionIssuerByIDForUpdate :one
+-- Locks the issuer row so DeleteGlobalIssuer's count-then-delete and
+-- CreateGlobalClient's exists-then-insert serialize instead of racing.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: UpdateGlobalRemoteSessionIssuer :one
 -- Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to the
 -- global partition (project_id NULL, organization_id NULL).
