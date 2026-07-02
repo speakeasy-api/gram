@@ -182,7 +182,7 @@ func (s *Scanner) ScanForEnforcement(
 	ctx, span := s.tracer.Start(ctx, "risk.scanForEnforcement", trace.WithAttributes(
 		attr.OrganizationID(organizationID),
 		attr.ProjectID(projectID.String()),
-		attr.RiskMessageType(string(messageType)),
+		attr.RiskMessageType(messageType),
 	))
 	defer func() {
 		if retErr != nil {
