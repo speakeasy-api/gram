@@ -172,6 +172,48 @@ func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 }
 
+func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-thought-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	text := "internal reasoning about the task"
+	role := "assistant"
+	thoughtPayload := canonicalIngestPayload("cursor", "assistant.thought", sessionID)
+	thoughtPayload.Data = &gen.HookIngestData{
+		Message: &gen.HookMessageData{Text: &text, Role: &role},
+	}
+	res, err := ti.service.Ingest(ctx, thoughtPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// Same data shape as assistant.responded, which does persist — proving
+	// the exclusion is keyed on the event type, not on missing content.
+	responsePayload := canonicalIngestPayload("cursor", "assistant.responded", sessionID)
+	responsePayload.Data = &gen.HookIngestData{
+		Message: &gen.HookMessageData{Text: &text, Role: &role},
+	}
+	res, err = ti.service.Ingest(ctx, responsePayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1, "thought events must not be persisted as chat messages")
+	require.Equal(t, "assistant", msgs[0].Role)
+}
+
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	t.Parallel()
 

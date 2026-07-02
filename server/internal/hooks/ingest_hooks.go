@@ -181,6 +181,8 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 		return hookevents.EventTypeAfterToolUseFailure
 	case "assistant.responded":
 		return hookevents.EventTypeAfterAgentResponse
+	case "assistant.thought":
+		return hookevents.EventTypeAfterAgentThought
 	case "session.started":
 		return hookevents.EventTypeSessionStart
 	case "session.updated":

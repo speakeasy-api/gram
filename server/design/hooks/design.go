@@ -161,7 +161,7 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 	Attribute("type", String, "Canonical Gram hook event type.", func() {
 		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
-			"usage.reported", "skill.activated", "notification.reported")
+			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
 	})
 	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.", func() {
 		Format(FormatDateTime)

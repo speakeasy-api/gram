@@ -18,6 +18,7 @@ export const HookIngestEventType = {
   ToolCompleted: "tool.completed",
   ToolFailed: "tool.failed",
   AssistantResponded: "assistant.responded",
+  AssistantThought: "assistant.thought",
   UsageReported: "usage.reported",
   SkillActivated: "skill.activated",
   NotificationReported: "notification.reported",

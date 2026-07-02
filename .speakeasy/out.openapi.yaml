@@ -40225,6 +40225,7 @@ components:
             - tool.completed
             - tool.failed
             - assistant.responded
+            - assistant.thought
             - usage.reported
             - skill.activated
             - notification.reported

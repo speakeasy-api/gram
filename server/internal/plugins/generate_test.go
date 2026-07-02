@@ -1425,6 +1425,263 @@ printf '{}\n200'
 	require.Equal(t, "assistant.responded", typ3)
 }
 
+// TestRenderHookScriptCursorBackfillDenyBlocksDecisionEvent verifies that when
+// a missed prompt is backfilled during a decision-capable event and the server
+// denies it, the deny is relayed on that event instead of being swallowed —
+// the deny would have fired at beforeSubmitPrompt had it not been missed. The
+// denied turn's tool event must not proceed to its own ingest post.
+func TestRenderHookScriptCursorBackfillDenyBlocksDecisionEvent(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Cursor transcript backfill")
+	_, err = exec.LookPath("base64")
+	require.NoError(t, err, "base64 is required for Cursor transcript backfill")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+case "$payload" in
+  *'"type":"prompt.submitted"'*)
+    printf '{"decision":"deny","message":"prompt blocked by policy"}\n200'
+    ;;
+  *)
+    printf '{}\n200'
+    ;;
+esac
+`), 0o755))
+
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\ninjected prompt\n</user_query>"}]}}
+`), 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"XDG_STATE_HOME="+filepath.Join(dir, "state"),
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"preToolUse","conversation_id":"sess-backfill-deny","session_id":"sess-backfill-deny","generation_id":"turn-1","tool_name":"shell","tool_input":{"command":"ls"},"transcript_path":"` + transcriptPath + `"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), stderr.String())
+	require.Contains(t, stdout.String(), `"permission":"deny"`)
+	require.Contains(t, stdout.String(), "prompt blocked by policy")
+
+	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Equal(t, 1, posts, "only the backfilled prompt must be posted; the denied turn's tool event must not proceed")
+}
+
+// TestRenderHookScriptCursorObservabilityModeSwallowsDeny verifies the
+// observability-mode contract end to end for Cursor: server deny decisions are
+// not relayed (Cursor honors a deny body regardless of failClosed) and
+// transport failures exit 0 instead of 2.
+func TestRenderHookScriptCursorObservabilityModeSwallowsDeny(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+	payload := `{"hook_event_name":"preToolUse","session_id":"sess-obs","tool_name":"shell","tool_input":{"command":"ls"}}`
+
+	denied := exec.Command("bash", hookPath)
+	denied.Stdin = strings.NewReader(payload)
+	denied.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={\"decision\":\"deny\",\"message\":\"blocked\"}", "GRAM_FAKE_CODE=200")
+	var deniedOut, deniedErr bytes.Buffer
+	denied.Stdout = &deniedOut
+	denied.Stderr = &deniedErr
+	require.NoError(t, denied.Run(), "observability mode must not block on a deny decision: %s", deniedErr.String())
+	require.NotContains(t, deniedOut.String(), "deny")
+	require.Equal(t, "{}", strings.TrimSpace(deniedOut.String()))
+
+	failed := exec.Command("bash", hookPath)
+	failed.Stdin = strings.NewReader(payload)
+	failed.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={}", "GRAM_FAKE_CODE=500")
+	var failedOut, failedErr bytes.Buffer
+	failed.Stdout = &failedOut
+	failed.Stderr = &failedErr
+	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
+	require.Equal(t, "{}", strings.TrimSpace(failedOut.String()))
+}
+
+// TestRenderHookScriptCodexObservabilityModeNeverBlocks verifies the same
+// contract for Codex, where exit 2 is the only blocking signal: neither a
+// server deny nor a transport failure may exit non-zero in observability mode.
+func TestRenderHookScriptCodexObservabilityModeNeverBlocks(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "codex"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+	payload := `{"hook_event_name":"PreToolUse","session_id":"sess-obs-codex","tool_name":"shell","tool_input":{"command":"ls"}}`
+
+	denied := exec.Command("bash", hookPath)
+	denied.Stdin = strings.NewReader(payload)
+	denied.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={\"decision\":\"deny\",\"message\":\"blocked\"}", "GRAM_FAKE_CODE=200")
+	var deniedOut, deniedErr bytes.Buffer
+	denied.Stdout = &deniedOut
+	denied.Stderr = &deniedErr
+	require.NoError(t, denied.Run(), "observability mode must not block on a deny decision: %s", deniedErr.String())
+	require.Empty(t, deniedOut.String(), "codex allow must be empty stdout")
+
+	failed := exec.Command("bash", hookPath)
+	failed.Stdin = strings.NewReader(payload)
+	failed.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={}", "GRAM_FAKE_CODE=500")
+	var failedErr bytes.Buffer
+	failed.Stderr = &failedErr
+	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
+}
+
+// TestRenderHookScriptCursorThoughtMapsToAssistantThought verifies Cursor
+// afterAgentThought events are sent as the dedicated assistant.thought
+// canonical type: assistant.responded would be persisted into the session's
+// chat transcript, surfacing internal reasoning as a regular message.
+func TestRenderHookScriptCursorThoughtMapsToAssistantThought(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"afterAgentThought","conversation_id":"sess-thought","session_id":"sess-thought","generation_id":"turn-1","text":"internal reasoning"}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	event := requireMapValue(t, parsed, "event")
+	require.Equal(t, "assistant.thought", event["type"])
+	message := requireMapValue(t, requireMapValue(t, parsed, "data"), "message")
+	require.Equal(t, "internal reasoning", message["text"])
+}
+
 // TestSharedAuthScriptEscapesCurlConfigValues verifies credentials containing
 // curl config metacharacters cannot break out of the header directive.
 func TestSharedAuthScriptEscapesCurlConfigValues(t *testing.T) {

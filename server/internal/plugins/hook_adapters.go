@@ -39,7 +39,7 @@ func hookAdapterFor(platform string) hookAdapterSpec {
 				{Native: "sessionStart", EventType: "session.started"},
 				{Native: "beforeSubmitPrompt", EventType: "prompt.submitted"},
 				{Native: "afterAgentResponse", EventType: "assistant.responded"},
-				{Native: "afterAgentThought", EventType: "assistant.responded"},
+				{Native: "afterAgentThought", EventType: "assistant.thought"},
 				{Native: "preToolUse", EventType: "tool.requested"},
 				{Native: "postToolUse", EventType: "tool.completed"},
 				{Native: "postToolUseFailure", EventType: "tool.failed"},
@@ -620,6 +620,11 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   http_code="$GRAM_HTTP_CODE"
   if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
     printf '%%s\n' "$fingerprint" >"$state_path" 2>/dev/null || true
+    # Surface the server's verdict on the backfilled prompt: a deny would have
+    # fired at beforeSubmitPrompt had that delivery not been missed, so the
+    # caller can still relay it on the current decision event.
+    GRAM_HOOKS_BACKFILL_DECISION="$(gram_hooks_json_string_value "$GRAM_HTTP_BODY" "decision")"
+    GRAM_HOOKS_BACKFILL_BODY="$GRAM_HTTP_BODY"
   fi
 }
 

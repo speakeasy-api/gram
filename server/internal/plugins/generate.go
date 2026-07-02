@@ -1709,6 +1709,12 @@ gram_http_post() {
 // still exiting with code 2 on 4xx/5xx to signal a block to Claude.
 func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	projectSlug := cfg.ProjectSlug
+	// In observability mode the plugin must never block: server deny decisions
+	// are swallowed and transport failures exit 0 instead of 2.
+	nonblocking := ""
+	if cfg.ObservabilityMode {
+		nonblocking = "1"
+	}
 	cursorMCPEnrichment := ""
 	if platform == "cursor" {
 		cursorMCPEnrichment = renderCursorMCPEnrichmentSnippet()
@@ -1739,6 +1745,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
+gram_hooks_nonblocking="%s"
 provider_payload=$(cat)
 
 %s
@@ -1767,7 +1774,7 @@ body="$GRAM_HTTP_BODY"
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   decision="$(gram_hooks_json_string_value "$body" "decision")"
   reason="$(gram_hooks_decision_message "$body")"
-  if [ "$decision" = "deny" ]; then
+  if [ "$decision" = "deny" ] && [ -z "$gram_hooks_nonblocking" ]; then
     echo "${reason:-Speakeasy blocked this Codex hook}" >&2
     exit 2
   fi
@@ -1776,8 +1783,11 @@ fi
 
 reason="$(gram_hooks_json_string_value "$body" "message")"
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
+if [ -n "$gram_hooks_nonblocking" ]; then
+  exit 0
+fi
 exit 2
-`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
+`, cfg.ServerURL, projectSlug, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -1794,6 +1804,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
+gram_hooks_nonblocking="%s"
 
 %s
 provider_payload=$(cat)
@@ -1828,6 +1839,17 @@ hook_hostname=$(hostname 2>/dev/null || true)
 native_event="$(gram_hooks_native_event_name "$provider_payload")"
 if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
   gram_hooks_cursor_backfill_prompt_if_missing "$provider_payload" "$hook_hostname" "$server_url" "$project_slug"
+  # A denied backfilled prompt would have blocked at beforeSubmitPrompt had
+  # that delivery not been missed; relay the deny on this turn's decision
+  # event instead of letting the turn keep executing.
+  if [ -z "$gram_hooks_nonblocking" ] && [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
+    case "$native_event" in
+      preToolUse | beforeMCPExecution)
+        gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
+        exit 0
+        ;;
+    esac
+  fi
 fi
 if [ "%s" = "cursor" ] && [ "$native_event" = "preToolUse" ]; then
   cursor_tool_name="$(gram_hooks_json_string_value "$provider_payload" "tool_name")"
@@ -1865,14 +1887,21 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null;
   if [ "%s" = "cursor" ] && [ "$native_event" = "beforeSubmitPrompt" ]; then
     gram_hooks_cursor_mark_prompt_submitted "$provider_payload" "$server_url" "$project_slug"
   fi
+  if [ -n "$gram_hooks_nonblocking" ]; then
+    body='{}'
+  fi
   gram_hooks_provider_response "%s" "$native_event" "$body"
   exit 0
 fi
 
 reason="$(gram_hooks_json_string_value "$body" "message")"
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
+if [ -n "$gram_hooks_nonblocking" ]; then
+  gram_hooks_provider_response "%s" "$native_event" '{}'
+  exit 0
+fi
 exit 2
-`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {
