@@ -138,8 +138,9 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			PresidioAnalysis:    gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis:    gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			CustomRulesAnalysis: gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		},
 	}
 }

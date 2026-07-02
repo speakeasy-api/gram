@@ -3,6 +3,8 @@ package customrules
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -15,6 +17,30 @@ type Rule struct {
 	Description   string
 	DetectionExpr string
 	Regex         string
+}
+
+// EffectiveDetectionExpr returns the stored CEL predicate, or a legacy regex
+// wrapped as a CEL expression, or "" when the rule has neither.
+func (r Rule) EffectiveDetectionExpr() string {
+	if expr := strings.TrimSpace(r.DetectionExpr); expr != "" {
+		return expr
+	}
+	if pattern := strings.TrimSpace(r.Regex); pattern != "" {
+		return "content.matchRegex(" + strconv.Quote(pattern) + ")"
+	}
+	return ""
+}
+
+// DisplayDescription returns the best human-facing label for a rule: its
+// description, then its title, falling back to the rule id.
+func (r Rule) DisplayDescription() string {
+	if d := strings.TrimSpace(r.Description); d != "" {
+		return d
+	}
+	if t := strings.TrimSpace(r.Title); t != "" {
+		return t
+	}
+	return r.RuleID
 }
 
 func LoadSelected(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, detectorIDs []string) ([]Rule, error) {

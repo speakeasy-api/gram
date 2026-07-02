@@ -408,6 +408,7 @@ linters:
         - "fmt.Errorf("
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
+        - "(*golang.org/x/sync/singleflight.Group).Do("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithCause("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
