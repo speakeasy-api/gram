@@ -217,7 +217,7 @@ func (f *ProxyManager) BuildTarget(
 		Headers:                 headers,
 		AuthorizationOverride:   upstreamAuth,
 		UpstreamResponseRetryer: nil,
-		WWWAuthenticateOverride: wwwAuthenticate,
+		WWWAuthenticate:         wwwAuthenticate,
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),

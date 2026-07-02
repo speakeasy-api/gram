@@ -225,14 +225,14 @@ type Proxy struct {
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
 
-	// WWWAuthenticateOverride, when non-empty, replaces the upstream's
-	// WWW-Authenticate header on relayed 401/403 responses. Callers whose
-	// clients authenticate with this server's own authorization server
-	// (issuer-gated endpoints) set it to their own challenge so a client's
-	// re-auth is directed here rather than at the upstream's AS. Leave
-	// empty to relay the upstream challenge verbatim (external OAuth
-	// passthrough, where the client's token really is the upstream's).
-	WWWAuthenticateOverride string
+	// WWWAuthenticate is the challenge relayed to the client when the
+	// upstream rejects a request (401/403), replacing the upstream's own
+	// WWW-Authenticate — the upstream challenge names the upstream's
+	// protected-resource metadata, which misdirects a client that
+	// authenticated with this server. Empty when the endpoint has no
+	// authorization server of its own (nothing to substitute); the
+	// upstream challenge then relays verbatim.
+	WWWAuthenticate string
 
 	UserRequestInterceptors []UserRequestInterceptor
 
@@ -337,7 +337,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticateOverride)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -403,7 +403,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		return nil
 	}
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticateOverride)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -637,7 +637,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticateOverride)
+	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -781,7 +781,7 @@ func (p *Proxy) relaySSEStream(
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
-	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticateOverride)
+	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if upstreamResp.Body == nil {
@@ -1286,8 +1286,8 @@ func (p *Proxy) dispatchInterceptorError(
 // bounded by its internal buffer, and the body coming from a parsed POST
 // flow was already capped during [readJSONRPCBody] (upstream response) or
 // [UserRequest.ParseJSONRPCMessages] (inbound user request).
-func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader, wwwAuthenticateOverride string) (int64, error) {
-	applyResponseHeaders(w, upstreamResp, wwwAuthenticateOverride)
+func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader, wwwAuthenticate string) (int64, error) {
+	applyResponseHeaders(w, upstreamResp, wwwAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if body == nil {

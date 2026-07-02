@@ -23,12 +23,12 @@ func upstream401(t *testing.T) *httptest.Server {
 	return upstream
 }
 
-func TestProxy_Post_Upstream401_ReplacesWWWAuthenticateWhenOverrideSet(t *testing.T) {
+func TestProxy_Post_Upstream401_ReplacesWWWAuthenticateWhenSet(t *testing.T) {
 	t.Parallel()
 
 	upstream := upstream401(t)
 	p := newProxyForTest(t, upstream.URL)
-	p.WWWAuthenticateOverride = `Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/x/mcp/slug"`
+	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/.well-known/oauth-protected-resource/x/mcp/slug"`
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
@@ -45,7 +45,7 @@ func TestProxy_Post_Upstream401_ReplacesWWWAuthenticateWhenOverrideSet(t *testin
 	require.Contains(t, rr.Body.String(), "invalid_token", "upstream body still relays")
 }
 
-func TestProxy_Post_Upstream401_RelaysWWWAuthenticateWhenOverrideUnset(t *testing.T) {
+func TestProxy_Post_Upstream401_RelaysWWWAuthenticateWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	upstream := upstream401(t)
@@ -60,10 +60,10 @@ func TestProxy_Post_Upstream401_RelaysWWWAuthenticateWhenOverrideUnset(t *testin
 
 	require.Equal(t, http.StatusUnauthorized, rr.Code)
 	require.Contains(t, rr.Header().Get("WWW-Authenticate"), "upstream.example.com",
-		"without an override (external OAuth passthrough) the upstream challenge relays verbatim")
+		"without a challenge of our own (external OAuth passthrough) the upstream challenge relays verbatim")
 }
 
-func TestProxy_Post_Upstream200_OverrideDoesNotInjectHeader(t *testing.T) {
+func TestProxy_Post_Upstream200_DoesNotInjectHeader(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func TestProxy_Post_Upstream200_OverrideDoesNotInjectHeader(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	p := newProxyForTest(t, upstream.URL)
-	p.WWWAuthenticateOverride = `Bearer resource_metadata="https://gram.example.com/meta"`
+	p.WWWAuthenticate = `Bearer resource_metadata="https://gram.example.com/meta"`
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")

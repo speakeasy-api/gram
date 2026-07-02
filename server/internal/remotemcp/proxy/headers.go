@@ -77,32 +77,32 @@ func isSkippedResponseHeader(name string) bool {
 // transport-managed headers are not forwarded. Multi-value headers are
 // preserved by appending each value individually rather than joining.
 //
-// When the upstream rejected the request (401/403) and wwwAuthenticateOverride
-// is non-empty, the upstream's WWW-Authenticate is replaced with the override.
-// The upstream challenge names the upstream's own protected-resource metadata,
-// which a spec-following MCP client must reject — it doesn't match the URL the
+// When the upstream rejected the request (401/403) and wwwAuthenticate is
+// non-empty, it replaces the upstream's WWW-Authenticate. The upstream
+// challenge names the upstream's own protected-resource metadata, which a
+// spec-following MCP client must reject — it doesn't match the URL the
 // client connected to — and which otherwise misdirects its re-auth at the
 // upstream's authorization server instead of this server's.
 //
 // Callers ([writeResponse], [Proxy.relaySSEStream]) must invoke this before
 // [http.ResponseWriter.WriteHeader]; once the status line is written, header
 // mutations are silently dropped.
-func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticateOverride string) {
-	override := wwwAuthenticateOverride != "" &&
+func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticate string) {
+	replaceChallenge := wwwAuthenticate != "" &&
 		(remoteResp.StatusCode == http.StatusUnauthorized || remoteResp.StatusCode == http.StatusForbidden)
 	for name, values := range remoteResp.Header {
 		if isSkippedResponseHeader(name) {
 			continue
 		}
-		if override && strings.EqualFold(name, "WWW-Authenticate") {
+		if replaceChallenge && strings.EqualFold(name, "WWW-Authenticate") {
 			continue
 		}
 		for _, v := range values {
 			w.Header().Add(name, v)
 		}
 	}
-	if override {
-		w.Header().Set("WWW-Authenticate", wwwAuthenticateOverride)
+	if replaceChallenge {
+		w.Header().Set("WWW-Authenticate", wwwAuthenticate)
 	}
 }
 
