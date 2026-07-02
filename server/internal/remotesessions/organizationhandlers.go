@@ -38,6 +38,26 @@ func orgDisplayName(name *string, url string) string {
 	return url
 }
 
+// clientUpstreamResource derives the RFC 8707 resource for a client's
+// sessions from its attached MCP servers. Exactly one distinct upstream URL
+// binds the audience; zero or multiple return "" so the parameter is omitted
+// (matching pre-resource behavior — an ambiguous multi-upstream client can't
+// be bound to a single audience). Url is empty for non-remote backends.
+func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
+	resource := ""
+	for _, row := range rows {
+		url := strings.TrimRight(row.Url, "/")
+		if url == "" {
+			continue
+		}
+		if resource != "" && resource != url {
+			return ""
+		}
+		resource = url
+	}
+	return resource
+}
+
 // CreateIssuer creates an issuer in the caller's organization. With no
 // project_id the issuer is organization-level (project_id NULL); with a
 // project_id (validated to belong to the org) it is project-specific. Gated on
@@ -1406,8 +1426,15 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgissuersgen.Ref
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 
+	// Recover the session's RFC 8707 audience binding from the client's
+	// attached MCP servers so the refreshed token keeps it.
+	mcpRows, err := repo.New(s.db).ListOrganizationMcpServersForClient(ctx, row.RemoteSession.RemoteSessionClientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
+	}
+
 	// Refresh on the pool — the upstream token POST must not run inside a tx.
-	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, "")
+	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, clientUpstreamResource(mcpRows))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.

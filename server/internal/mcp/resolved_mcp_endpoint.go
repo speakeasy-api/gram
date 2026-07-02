@@ -338,7 +338,13 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
-		return NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID), nil
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
+		if err != nil {
+			return nil, err
+		}
+		endpoint.UpstreamResource = upstreamResource
+		return endpoint, nil
 	}
 
 	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
