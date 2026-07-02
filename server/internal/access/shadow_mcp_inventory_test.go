@@ -251,6 +251,41 @@ func TestService_ListShadowMCPInventory_RequiresOrgAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestService_ListShadowMCPInventory_BackendFailureIsUnexpected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	require.NoError(t, ti.chConn.Close())
+
+	_, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		Limit:     10,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+}
+
+func TestService_ListShadowMCPInventory_InvalidCursorIsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	cursor := "not-a-valid-cursor"
+
+	_, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		Limit:     10,
+		Cursor:    &cursor,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 type shadowMCPInventoryTelemetryInput struct {
 	ProjectID  string
 	ServerURL  string

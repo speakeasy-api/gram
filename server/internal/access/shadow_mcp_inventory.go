@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"errors"
 	"math"
 
 	"github.com/google/uuid"
@@ -44,7 +45,10 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		Cursor:        pointerStringValue(payload.Cursor),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "list shadow mcp inventory urls").LogError(ctx, s.logger)
+		if errors.Is(err, telemetryrepo.ErrInvalidShadowMCPInventoryURLCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory urls").LogError(ctx, s.logger)
 	}
 
 	var nextCursor *string
