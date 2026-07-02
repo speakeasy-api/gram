@@ -1388,8 +1388,14 @@ printf '{}\n200'
 	output, err = byURL.CombinedOutput()
 	require.NoError(t, err, string(output))
 
+	secretCmd := exec.Command("bash", hookPath)
+	secretCmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution","conversation_id":"sess-mcp-id","mcp_server_name":"bar","command":"npx server-bar --api-key sk-verysecret123","tool_name":"lookup"}`)
+	secretCmd.Env = env
+	output, err = secretCmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
 	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
-	require.Len(t, chunks, 3, "expected two captured ingest payloads")
+	require.Len(t, chunks, 4, "expected three captured ingest payloads")
 
 	var stdioPayload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &stdioPayload))
@@ -1403,6 +1409,16 @@ printf '{}\n200'
 	urlMCP := requireMapValue(t, requireMapValue(t, urlPayload, "data"), "mcp")
 	require.Equal(t, "foo", urlMCP["server_identity"])
 	require.Equal(t, "https://mcp.example.com/x", urlMCP["url"])
+
+	// Provider-supplied commands carry the server's launch argv; credentials
+	// in it must be redacted before becoming telemetry or identity.
+	var secretPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[2])), &secretPayload))
+	secretMCP := requireMapValue(t, requireMapValue(t, secretPayload, "data"), "mcp")
+	require.NotContains(t, secretMCP["command"], "sk-verysecret123")
+	require.NotContains(t, secretMCP["server_identity"], "sk-verysecret123")
+	require.Equal(t, "npx server-bar --api-key ***", secretMCP["command"])
+	require.Equal(t, "npx server-bar --api-key ***", secretMCP["server_identity"])
 }
 
 // TestRenderHookScriptClaudeStdioMCPIdentityFromSanitizedMCPJSONName verifies

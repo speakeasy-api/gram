@@ -480,6 +480,43 @@ gram_hooks_codex_mcp_metadata() {
   ' | head -n 2
 }
 
+# gram_hooks_redact_command_string applies the same argument redaction as the
+# config-discovery paths to a provider-supplied command line, so credentials
+# passed as stdio server arguments never reach telemetry or block evidence.
+# Without jq only the binary token is kept — over-redaction beats leaking.
+gram_hooks_redact_command_string() {
+  local command="$1"
+  [ -n "$command" ] || return 0
+  if command -v jq >/dev/null 2>&1; then
+    local redacted
+    redacted="$(printf '%%s' "$command" | jq -Rr '
+    def redact_args: reduce .[] as $arg ({out: [], next: false};
+      if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
+      elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
+        {out: (.out + [$arg]), next: true}
+      elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
+        {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("bearer +[^ ]"; "i")) then
+        {out: (.out + ["***"]), next: false}
+      elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
+        {out: (.out + ["***"]), next: false}
+      else {out: (.out + [$arg]), next: false} end) | .out;
+    (split(" ") | map(select(. != ""))) as $t |
+    if ($t | length) == 0 then ""
+    elif ($t | length) == 1 then $t[0]
+    else ([$t[0]] + ($t[1:] | redact_args)) | join(" ")
+    end
+    ' 2>/dev/null)"
+    if [ -n "$redacted" ]; then
+      printf '%%s' "$redacted"
+      return 0
+    fi
+  fi
+  printf '%%s' "${command%%%% *}"
+}
+
 # Claude's mcp__<server>__<tool> prefixes carry a sanitized form of the config
 # display name, so the lookup falls back to comparing sanitized keys. The jq
 # sanitize def below must stay in lockstep with
@@ -762,7 +799,10 @@ gram_hooks_canonical_data_members() {
   mcp_server_name="$(gram_hooks_mcp_server_from_payload "$payload")"
   mcp_server_identity="$(gram_hooks_json_string_value "$payload" "server_identity")"
   mcp_url="$(gram_hooks_first_string "$payload" "url" "mcp_server_url")"
-  mcp_command="$(gram_hooks_json_string_value "$payload" "command")"
+  # Provider-supplied commands carry whatever argv the server was launched
+  # with; redact like the config-discovery paths before this string becomes
+  # telemetry or the Shadow MCP identity.
+  mcp_command="$(gram_hooks_redact_command_string "$(gram_hooks_json_string_value "$payload" "command")")"
   if [ -n "$mcp_server_name" ] && { [ -z "$mcp_url" ] || [ -z "$mcp_command" ]; }; then
     mcp_metadata="$(gram_hooks_local_mcp_metadata "$mcp_server_name")"
     [ -n "$mcp_metadata" ] || mcp_metadata="$(gram_hooks_codex_mcp_metadata "$mcp_server_name")"
