@@ -114,7 +114,7 @@ The server's design authors the contract; clients receive it through generated O
 
 **HTTP routes.** `/rpc/<service>.<method>`. Method names are derived from the Goa `Service`/`Method` names — renaming them is a breaking change for CLI and any direct HTTP callers.
 
-**OpenAPI.** `server/gen/http/openapi3.yaml` and `openapi3.json` are the raw Goa outputs. `.speakeasy/workflow.yaml` defines two sources (`Gram-Internal`, `Gram-Public`) that apply overlays from `.speakeasy/overlays/` to produce `.speakeasy/out.openapi.yaml` and `.speakeasy/openapi-public.yaml`. The TypeScript SDK is generated from the internal spec.
+**OpenAPI.** `server/gen/http/openapi3.yaml` is the raw Goa output (Goa also emits a sibling `openapi3.json`, but it is gitignored — nothing consumes it). `.speakeasy/workflow.yaml` defines two sources (`Gram-Internal`, `Gram-Public`) that apply overlays from `.speakeasy/overlays/` to produce `.speakeasy/out.openapi.yaml` and `.speakeasy/openapi-public.yaml`. The TypeScript SDK is generated from the internal spec.
 
 **TypeScript SDK.** `client/sdk/` — per-operation modules under `src/funcs/`, a per-service class under `src/sdk/`, React Query hooks under `src/react-query/`, and model types under `src/models/{components,operations}/`.
 
