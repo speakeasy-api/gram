@@ -146,17 +146,3 @@ var attributeDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimens
 var sessionDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimension) string {
 	return dim.rawExpr
 })
-
-var chatTurnDimensionRegistry = func() map[string]attributeDimension {
-	out := buildDimensionRegistry(func(dim telemetryDimension) string {
-		return dim.aggregateColumn
-	})
-	out["chat_id"] = attributeDimension{column: "chat_id", kind: attributeDimScalar}
-	out["turn_id"] = attributeDimension{column: "turn_id", kind: attributeDimScalar}
-	out["query_source"] = attributeDimension{column: "query_source", kind: attributeDimScalar}
-	out["skill_name"] = attributeDimension{column: "skill_name", kind: attributeDimScalar}
-	out["agent_name"] = attributeDimension{column: "agent_name", kind: attributeDimScalar}
-	out["mcp_server_name"] = attributeDimension{column: "mcp_server_name", kind: attributeDimScalar}
-	out["mcp_tool_name"] = attributeDimension{column: "mcp_tool_name", kind: attributeDimScalar}
-	return out
-}()

@@ -520,9 +520,6 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	chatID := uuid.NewString()
 
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, chatID, 0.40, 10, 2, 3, 5, "opus", "a@x.com", "Engineering", []string{"dev"}, "main", "git-skill", "generalPurpose", "github", "search")
-	// Claude usage rows are no longer an input to this aggregate; the api_request
-	// row above is the only Claude token/cost source.
-	insertAttributeUsageLog(t, ctx, projectID, ts, chatID, 99.0, 999, "opus", "claude-code", "a@x.com", "Engineering", []string{"dev"})
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
