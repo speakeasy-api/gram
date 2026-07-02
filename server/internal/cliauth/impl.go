@@ -242,7 +242,7 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if record.UserID == "" || record.OrgID == "" || record.ProjectID == "" {
+	if record.UserID == "" || record.OrgID == "" || record.ProjectID == "" || len(record.Scopes) == 0 {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized").LogError(ctx, s.logger)
 	}
 	projectID, err := uuid.Parse(record.ProjectID)
@@ -252,7 +252,11 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 
 	rawKey, err := s.mintKey(ctx, record, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "mint device-agent api key").LogError(ctx, s.logger)
+		// The code was already consumed (GETDEL above), so a mint failure is
+		// unrecoverable for the caller — they must re-enroll regardless. Fail
+		// closed like every other path (the internal error stays in the logs);
+		// a distinct 5xx here would leak that the code+verifier was valid.
+		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "redeemed cliauth one-time code",
@@ -313,11 +317,9 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("hash api key: %w", err)
 	}
 
-	scopes := record.Scopes
-	if len(scopes) == 0 {
-		scopes = []string{auth.APIKeyScopeAgent.String(), auth.APIKeyScopeHooks.String()}
-	}
-
+	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
+	// is used directly here — no default, so an unexpectedly empty scope set
+	// surfaces as an integrity failure upstream rather than a silently broken key.
 	if _, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  record.OrgID,
 		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
@@ -325,7 +327,7 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		Name:            deviceAgentKeyName,
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
-		Scopes:          scopes,
+		Scopes:          record.Scopes,
 	}); err != nil {
 		return "", fmt.Errorf("create api key: %w", err)
 	}
