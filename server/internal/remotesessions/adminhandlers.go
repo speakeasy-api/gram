@@ -99,8 +99,8 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                    pgtype.Text{String: "", Valid: false},
-		Slug:                              payload.Slug,
-		Issuer:                            payload.Issuer,
+		Slug:                              strings.TrimSpace(payload.Slug),
+		Issuer:                            strings.TrimSpace(payload.Issuer),
 		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
 		LogoAssetID:                       logoAssetID,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
@@ -223,8 +223,11 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
-		Slug:                              conv.PtrToPGText(payload.Slug),
-		Issuer:                            conv.PtrToPGText(payload.Issuer),
+		// Trimmed so the stored slug/issuer match what the emptiness validation
+		// above saw; whitespace-only never reaches here, so the trimmed-empty →
+		// NULL (keep) behavior of PtrToPGTextTrimmed cannot trigger.
+		Slug:                              conv.PtrToPGTextTrimmed(payload.Slug),
+		Issuer:                            conv.PtrToPGTextTrimmed(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
 		LogoAssetID:                       logoAssetID,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),

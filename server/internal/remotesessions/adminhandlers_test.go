@@ -129,6 +129,54 @@ func TestAdminRemoteSessions_UpdateGlobalIssuer(t *testing.T) {
 	require.Equal(t, "renamed", updated.Slug)
 }
 
+func TestAdminRemoteSessions_IssuerFieldsStoredTrimmed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	// Create persists the trimmed slug/issuer, not the padded input.
+	payload := createGlobalIssuer(t, "padded")
+	payload.Slug = "  padded  "
+	payload.Issuer = "\thttps://padded.example.com \n"
+	created, err := ti.service.CreateGlobalIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "padded", created.Slug)
+	require.Equal(t, "https://padded.example.com", created.Issuer)
+
+	// Update persists trimmed values too.
+	newSlug := "  renamed-padded  "
+	newIssuer := " https://renamed.example.com "
+	updated, err := ti.service.UpdateGlobalIssuer(ctx, &adminrsgen.UpdateGlobalIssuerPayload{
+		SessionToken:                      nil,
+		ID:                                created.ID,
+		Slug:                              &newSlug,
+		Issuer:                            &newIssuer,
+		Name:                              nil,
+		LogoAssetID:                       nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+		ClientIDMetadataDocumentSupported: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "renamed-padded", updated.Slug)
+	require.Equal(t, "https://renamed.example.com", updated.Issuer)
+
+	// A padded variant of an existing slug now collides instead of slipping
+	// past the unique index as a visually identical duplicate.
+	dupe := createGlobalIssuer(t, "renamed-padded")
+	dupe.Slug = " renamed-padded "
+	_, err = ti.service.CreateGlobalIssuer(ctx, dupe)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
