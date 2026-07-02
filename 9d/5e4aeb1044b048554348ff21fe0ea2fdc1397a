@@ -1,0 +1,39 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_8860283851235f::t_dc090f3cc94042 857-863
+  s_8860283851235f::t_9d0f30e4d1d4cb 1288-1294,1631-1635
+  s_8860283851235f::t_e81f80bfccfe2b 49-56
+  s_8860283851235f::t_1a973ed09afb7e 91-93,95-102
+  s_8860283851235f::t_48f509a284ae94 1599-1603
+  s_8860283851235f::t_038fb40d166af7 1674-1681
+  s_8860283851235f::t_e234526d358719 1454-1461,1463,1467,1469,1473-1490,1492,1494-1500,1511,1541-1545,1550-1562,1567,1569-1572,1580-1598,1604-1630,1636-1661,1663-1664,1668-1669,1673,1682-1690,1693-1701,1704-1723,1751-1800,1805,1811-1812,1814,1818-1825,1827-1829,1831,1843,1846
+  s_8860283851235f::t_755511de871460 1221-1235,1238,1241-1287,1295-1334,1338,1340,1342,1344,1346-1349,1355,1361-1365
+  s_8860283851235f::t_520d1ffa06466a 792-806
+server/design/risk/design.go
+  s_8860283851235f::t_288dc7c39d1bc0 1161-1164
+.changeset/policy-eval-real-hooks.md
+  s_8860283851235f::t_b61940e85e6df7 1-12
+.speakeasy/out.openapi.yaml
+  s_8860283851235f::t_10e20f7b3ade0b 24129
+client/sdk/.speakeasy/gen.lock
+  s_8860283851235f::t_5a6cb2257303e5 4,3554,6813-6814,6816
+server/gen/http/openapi3.json
+  s_8860283851235f::t_1ebc5410f7e5e0 1
+server/gen/http/openapi3.yaml
+  s_8860283851235f::t_37cbe56bb3be52 24652
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "9d5e4aeb1044b048554348ff21fe0ea2fdc1397a",
+  "prompts": {},
+  "sessions": {
+    "s_8860283851235f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
