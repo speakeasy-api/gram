@@ -71,9 +71,15 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	authFile := filepath.Join(dir, "auth.env")
 	urlFile := filepath.Join(dir, "auth-url")
+	argvFile := filepath.Join(dir, "auth-argv")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
-	// Stub both browser openers; whichever the host OS selects writes the URL.
-	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	// Stub both browser openers; whichever the host OS selects records its
+	// raw argument and the resolved content (the opener receives a file://
+	// redirect page so the state token stays out of process arguments).
+	opener := []byte(`#!/usr/bin/env bash
+printf '%s' "$1" > "$GRAM_TEST_ARGV_FILE"
+if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "$GRAM_TEST_URL_FILE"; fi
+`)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
 
@@ -92,6 +98,7 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	env = append(env,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
 		"GRAM_TEST_URL_FILE="+urlFile,
+		"GRAM_TEST_ARGV_FILE="+argvFile,
 		"GRAM_HOOKS_INTERACTIVE=1",
 		"GRAM_HOOKS_LOGIN_FORCE=1",
 		"GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS=60",
@@ -124,6 +131,11 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 			state = match[2]
 		}
 	}, 30*time.Second, 100*time.Millisecond, "browser opener was never invoked: %s", output.String())
+
+	// Process arguments are world-readable; the state token must reach the
+	// opener only through the 0600 redirect file.
+	argv := string(requireFileBytes(t, argvFile))
+	require.NotContains(t, argv, "state", "opener argv must not carry the state token")
 
 	// A callback without the per-attempt state token is an injection attempt
 	// by something else on this machine: rejected, and the listener keeps
@@ -1246,6 +1258,71 @@ printf '{}\n200'
 		"nested tool_input url/command must not produce MCP evidence")
 	tool := requireMapValue(t, data, "tool_call")
 	require.Equal(t, "Bash", tool["name"])
+}
+
+// TestRenderHookPayloadNormalizationParsesExponentNumbers verifies the no-jq
+// number extractor accepts the full JSON number grammar: exponent forms
+// (1.5e3) silently dropping would lose durations, token counts, and costs.
+func TestRenderHookPayloadNormalizationParsesExponentNumbers(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"sess-exp","last_assistant_message":"done","duration_ms":1.5e3}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	message := requireMapValue(t, requireMapValue(t, parsed, "data"), "message")
+	require.InDelta(t, 1500.0, message["duration_ms"], 0.001,
+		"exponent-form numbers must survive extraction")
 }
 
 // TestRenderHookScriptCursorPinsStdioMCPIdentityToCommand verifies that a

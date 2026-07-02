@@ -148,7 +148,10 @@ gram_hooks_json_number_value() {
   local input="$1"
   local key="$2"
   # Top-level only: a greedy scan would also match same-named nested keys.
-  gram_hooks_json_top_level_value "$input" "$key" | sed -n 's/^\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\)$/\1/p'
+  # The shape check covers the JSON number grammar including exponents (a
+  # dropped 1e3 would silently lose token counts or costs); POSIX BRE only,
+  # so no \| alternation (BSD sed).
+  gram_hooks_json_top_level_value "$input" "$key" | sed -n 's/^\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\([eE][+-]\{0,1\}[0-9][0-9]*\)\{0,1\}\)$/\1/p'
 }
 
 gram_hooks_json_bool_value() {

@@ -1426,7 +1426,18 @@ gram_hooks_login() {
   esac
   echo "Speakeasy hooks: opening your browser to connect observability hooks." >&2
   echo "If nothing opens, visit: $auth_url" >&2
-  gram_hooks_open_browser "$auth_url" || true
+  # Hand the opener a 0600 file:// redirect instead of the URL itself:
+  # process arguments are world-readable (ps, /proc/<pid>/cmdline), and the
+  # state token must not leak to other local users who can also reach the
+  # loopback listener. The stderr copy above is same-user-only and is the
+  # manual completion path, which needs the token to work.
+  local launch_url="$auth_url"
+  local escaped_url="${auth_url//&/&amp;}"
+  if printf '<!doctype html><meta http-equiv="refresh" content="0;url=%s"><title>Speakeasy sign-in</title><a href="%s">Continue to Speakeasy sign-in</a>\n' "$escaped_url" "$escaped_url" >"$dir/open.html" 2>/dev/null; then
+    chmod 600 "$dir/open.html" 2>/dev/null || true
+    launch_url="$dir/open.html"
+  fi
+  gram_hooks_open_browser "$launch_url" || true
 
   local waited=0
   local wait_limit="${GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS:-240}"
