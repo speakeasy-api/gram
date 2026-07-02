@@ -2011,6 +2011,32 @@ func TestGenerateCursorObservabilityPluginRegistersBlockingSessionStartAuth(t *t
 	}
 }
 
+// TestGenerateCursorObservabilityModeNeverFailsClosed verifies that
+// ObservabilityMode — documented as fully non-blocking — disables failClosed
+// on every cursor hook entry, preflight included.
+func TestGenerateCursorObservabilityModeNeverFailsClosed(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:           "Acme",
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	slug := "cursor-plugins/" + CursorObservabilitySlug(cfg)
+	var parsed cursorHooksConfig
+	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
+
+	for event, commands := range parsed.Hooks {
+		for i, command := range commands {
+			require.Nil(t, command.FailClosed, "observability mode must not fail closed: event %q entry %d", event, i)
+		}
+	}
+}
+
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{

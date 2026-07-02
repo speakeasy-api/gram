@@ -677,14 +677,25 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	// same convention as Claude Code; flat-layout plugins register but their
 	// hooks never fire.
 	authPreflightTimeout := 330
-	authPreflightFailClosed := true
+	// Cursor fails hooks open by default: a crashed or timed-out hook allows
+	// the action unless the entry opts into failClosed. Decision-capable
+	// events must not silently allow when the sender exits 2 (established
+	// machine with broken auth, unreachable server). The never-authenticated
+	// ratchet is unaffected — that path exits 0 with a pass-through body.
+	// ObservabilityMode is documented as fully non-blocking, so no entry
+	// (preflight included) may fail closed there.
+	var hookFailClosed *bool
+	if !cfg.ObservabilityMode {
+		enforced := true
+		hookFailClosed = &enforced
+	}
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
 	hookEvents["sessionStart"] = []cursorHookCommand{
 		{
 			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh"`,
 			Matcher:    "",
 			Timeout:    &authPreflightTimeout,
-			FailClosed: &authPreflightFailClosed,
+			FailClosed: hookFailClosed,
 		},
 		{
 			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
@@ -693,21 +704,15 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 			FailClosed: nil,
 		},
 	}
-	// Cursor fails hooks open by default: a crashed or timed-out hook allows
-	// the action unless the entry opts into failClosed. Decision-capable
-	// events must not silently allow when the sender exits 2 (established
-	// machine with broken auth, unreachable server). The never-authenticated
-	// ratchet is unaffected — that path exits 0 with a pass-through body.
 	cursorBlockingEvents := map[string]bool{
 		"beforeSubmitPrompt": true,
 		"preToolUse":         true,
 		"beforeMCPExecution": true,
 	}
-	cursorHookFailClosed := true
 	for _, event := range CursorObservabilityHookEvents {
 		var failClosed *bool
 		if cursorBlockingEvents[event] {
-			failClosed = &cursorHookFailClosed
+			failClosed = hookFailClosed
 		}
 		hookEvents[event] = []cursorHookCommand{{
 			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
