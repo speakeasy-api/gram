@@ -16,16 +16,14 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                string
-		rules               func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string)
-		rawURL              string
-		wantExplicit        string
-		wantEffective       string
-		wantEffectiveRule   string
-		wantExplanatoryRule string
+		name         string
+		rules        func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string)
+		rawURL       string
+		wantAccess   string
+		wantRuleName string
 	}{
 		{
-			name: "exact project full url allow is explicit and effective",
+			name: "exact project full url allow sets access state",
 			rules: func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string) {
 				t.Helper()
 
@@ -42,13 +40,12 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:            "https://mcp.example.com/mcp?token=secret",
-			wantExplicit:      shadowMCPInventoryAccessAllowed,
-			wantEffective:     shadowMCPInventoryAccessAllowed,
-			wantEffectiveRule: "Project allow",
+			rawURL:       "https://mcp.example.com/mcp?token=secret",
+			wantAccess:   shadowMCPInventoryAccessAllowed,
+			wantRuleName: "Project allow",
 		},
 		{
-			name: "exact project full url deny is explicit and effective",
+			name: "exact project full url deny sets access state",
 			rules: func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string) {
 				t.Helper()
 
@@ -65,13 +62,12 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:            "https://mcp.example.com/mcp",
-			wantExplicit:      shadowMCPInventoryAccessDenied,
-			wantEffective:     shadowMCPInventoryAccessDenied,
-			wantEffectiveRule: "Project deny",
+			rawURL:       "https://mcp.example.com/mcp",
+			wantAccess:   shadowMCPInventoryAccessDenied,
+			wantRuleName: "Project deny",
 		},
 		{
-			name: "host level organization deny is effective inherited state",
+			name: "host rule does not set inventory url access state",
 			rules: func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string) {
 				t.Helper()
 
@@ -88,10 +84,8 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:            "https://mcp.example.com/mcp",
-			wantExplicit:      shadowMCPInventoryAccessNone,
-			wantEffective:     shadowMCPInventoryAccessDenied,
-			wantEffectiveRule: "Org host deny",
+			rawURL:     "https://mcp.example.com/mcp",
+			wantAccess: shadowMCPInventoryAccessNone,
 		},
 		{
 			name: "no matching url rule returns no access state",
@@ -111,12 +105,11 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:        "https://mcp.example.com/mcp",
-			wantExplicit:  shadowMCPInventoryAccessNone,
-			wantEffective: shadowMCPInventoryAccessNone,
+			rawURL:     "https://mcp.example.com/mcp",
+			wantAccess: shadowMCPInventoryAccessNone,
 		},
 		{
-			name: "server identity rule with matching observed url is explanatory only",
+			name: "server identity rule does not set inventory url access state",
 			rules: func(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID string) {
 				t.Helper()
 
@@ -133,10 +126,8 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:              "https://mcp.example.com/mcp",
-			wantExplicit:        shadowMCPInventoryAccessNone,
-			wantEffective:       shadowMCPInventoryAccessNone,
-			wantExplanatoryRule: "Notion identity allow",
+			rawURL:     "https://mcp.example.com/mcp",
+			wantAccess: shadowMCPInventoryAccessNone,
 		},
 		{
 			name: "deny wins over matching allow",
@@ -168,10 +159,9 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 					},
 				})
 			},
-			rawURL:            "https://mcp.example.com/mcp",
-			wantExplicit:      shadowMCPInventoryAccessAllowed,
-			wantEffective:     shadowMCPInventoryAccessDenied,
-			wantEffectiveRule: "Org host deny",
+			rawURL:       "https://mcp.example.com/mcp",
+			wantAccess:   shadowMCPInventoryAccessAllowed,
+			wantRuleName: "Project allow",
 		},
 	}
 
@@ -189,19 +179,12 @@ func TestResolveShadowMCPInventoryAccessState(t *testing.T) {
 
 			got, err := ti.service.resolveShadowMCPInventoryAccessState(ctx, authCtx.ActiveOrganizationID, projectID, inventoryURL)
 			require.NoError(t, err)
-			require.Equal(t, tt.wantExplicit, got.ExplicitDisposition)
-			require.Equal(t, tt.wantEffective, got.EffectiveDisposition)
-			if tt.wantEffectiveRule == "" {
-				require.Nil(t, got.EffectiveRule)
+			require.Equal(t, tt.wantAccess, got.Access)
+			if tt.wantRuleName == "" {
+				require.Nil(t, got.Rule)
 			} else {
-				require.NotNil(t, got.EffectiveRule)
-				require.Equal(t, tt.wantEffectiveRule, got.EffectiveRule.DisplayName)
-			}
-			if tt.wantExplanatoryRule == "" {
-				require.Empty(t, got.ExplanatoryRules)
-			} else {
-				require.Len(t, got.ExplanatoryRules, 1)
-				require.Equal(t, tt.wantExplanatoryRule, got.ExplanatoryRules[0].DisplayName)
+				require.NotNil(t, got.Rule)
+				require.Equal(t, tt.wantRuleName, got.Rule.DisplayName)
 			}
 		})
 	}
