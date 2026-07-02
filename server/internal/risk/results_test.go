@@ -141,11 +141,13 @@ func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testi
 	require.NoError(t, err)
 	require.Len(t, byPolicy.Results, 1, "disabled policy should still show its historical findings when filtered")
 	require.Equal(t, "aws-access-key-id", *byPolicy.Results[0].RuleID)
+	require.Equal(t, int64(1), byPolicy.TotalCount, "by-policy total count should match the listing, not the enabled-only aggregate")
 
 	// The default unfiltered view keeps excluding disabled-policy findings.
 	unfiltered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
 	require.Empty(t, unfiltered.Results, "unfiltered view should not include disabled-policy findings")
+	require.Equal(t, int64(0), unfiltered.TotalCount, "unfiltered total count should not include disabled-policy findings")
 }
 
 func TestListRiskResults_ByChatID(t *testing.T) {

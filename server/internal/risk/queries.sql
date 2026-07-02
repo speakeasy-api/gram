@@ -341,6 +341,17 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
 
+-- name: CountRiskResultsByProjectAndPolicy :one
+-- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
+-- disabled policy still counts its historical findings, only deleted policies
+-- are excluded.
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+WHERE rr.project_id = @project_id
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+
 -- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
