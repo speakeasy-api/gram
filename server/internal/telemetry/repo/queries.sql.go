@@ -31,6 +31,25 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// withAccountTypeFilter applies the shared account-type filter semantics:
+// "personal" is an exact match, while "team" matches everything not personal —
+// unclassified (empty) rows count as team so the team view keeps
+// pre-classification and non-attributed data (same convention as the chats
+// list filter and the schema comment on attribute_metrics_summaries). An empty
+// filter is a no-op.
+func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirrel.SelectBuilder {
+	switch accountType {
+	case "":
+		return sb
+	case "team":
+		// ifNull is a no-op on the non-nullable String columns and keeps
+		// NULL-projected CTE paths counting as team.
+		return sb.Where("ifNull(account_type, '') != 'personal'")
+	default:
+		return sb.Where(squirrel.Eq{"account_type": accountType})
+	}
+}
+
 // SearchUsers powers employee enrollment lists, so internal users are grouped by
 // email first to collapse rows that mix email-only and opaque user.id identity.
 func searchUsersGroupExpr(groupBy string) string {
@@ -700,9 +719,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
@@ -803,9 +820,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
@@ -993,9 +1008,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
@@ -1491,9 +1504,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where("account_type = ?", arg.AccountType)
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
@@ -1627,9 +1638,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
@@ -1823,9 +1832,7 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
@@ -2355,16 +2362,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 	// account_type is carried on trace_summaries (fast path) and materialized on
 	// telemetry_logs (raw path), so this filters on the projected column either
-	// way. "team" includes unclassified traces (matches the /logs behavior);
-	// "personal" is an exact match.
-	switch arg.AccountType {
-	case "personal":
-		sb = sb.Where(squirrel.Eq{"account_type": "personal"})
-	case "team":
-		// ifNull so unclassified (NULL) traces count as team — `!= 'personal'`
-		// alone would drop NULLs.
-		sb = sb.Where("ifNull(account_type, '') != ?", "personal")
-	}
+	// way.
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 
 	if len(arg.UserFilters) > 0 {
 		userFilters := squirrel.Or{}
@@ -2916,9 +2915,7 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 	}
 
 	// account_type is carried on trace_summaries and projected through the CTE.
-	if arg.AccountType != "" {
-		sb = sb.Where(squirrel.Eq{"account_type": arg.AccountType})
-	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 
 	return sb, nil
 }
