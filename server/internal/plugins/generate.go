@@ -1187,21 +1187,22 @@ gram_hooks_login_handle_request() {
 }
 
 # gram_hooks_login_serve accepts connections one at a time until the callback
-# query is captured, a stop file appears, or the request budget runs out.
-# fd 4 holds the fifo open read-write so neither nc nor the handler can
-# deadlock opening it, and a failed nc bind degrades to a fast, bounded loop
-# that the probe below detects instead of a hung orphan process.
+# query is captured, a stop file appears, or the request budget runs out. The
+# fifo's read (nc stdin) and write (handler stdout) ends open symmetrically
+# within each pipeline, and the handler exiting closes the write end — that
+# EOF is what makes netcat flavors without socket-close exit (busybox) finish
+# the cycle so the next iteration can listen again. A failed nc bind degrades
+# to a fast, bounded loop that the probe below detects instead of a hung
+# orphan process.
 gram_hooks_login_serve() {
   local style="$1"
   local dir="$2"
   local port="$3"
   local requests=0
-  exec 4<>"$dir/fifo"
   while [ "$requests" -lt 32 ] && [ ! -e "$dir/stop" ] && [ ! -s "$dir/query" ]; do
     gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" >"$dir/fifo"
     requests=$((requests + 1))
   done
-  exec 4>&-
 }
 
 gram_hooks_login_probe() {
