@@ -38,9 +38,9 @@ export function ExternalOAuthForm({
             </Type>
             <Type small className="mt-1 text-yellow-700 dark:text-yellow-400">
               This MCP server has {oauth2SecurityCount} OAuth2 security schemes.
-              Speakeasy can't determine which one applies, so double-check that
-              the configuration below matches the scheme you intend to use
-              before continuing.
+              The applicable scheme can't be determined automatically.
+              Double-check that the configuration below matches the scheme you
+              intend to use before continuing.
             </Type>
           </div>
         )}
