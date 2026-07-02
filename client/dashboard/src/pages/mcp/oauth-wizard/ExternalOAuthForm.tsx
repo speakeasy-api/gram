@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
@@ -29,20 +30,15 @@ export function ExternalOAuthForm({
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         {hasMultipleOAuth2AuthCode && (
-          <div className="mb-4 rounded-md border border-yellow-500/50 bg-yellow-50 p-4 dark:bg-yellow-950/20">
-            <Type
-              small
-              className="font-medium text-yellow-700 dark:text-yellow-400"
-            >
-              Multiple OAuth2 security schemes detected
-            </Type>
-            <Type small className="mt-1 text-yellow-700 dark:text-yellow-400">
+          <Alert variant="warning">
+            <AlertTitle>Multiple OAuth2 security schemes detected</AlertTitle>
+            <AlertDescription>
               This MCP server has {oauth2SecurityCount} OAuth2 security schemes.
               The applicable scheme can't be determined automatically.
               Double-check that the configuration below matches the scheme you
               intend to use before continuing.
-            </Type>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
         {discovered && !external.prefilled && (
           <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
