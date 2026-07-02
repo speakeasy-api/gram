@@ -111,20 +111,38 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	cmd.Stderr = &output
 	require.NoError(t, cmd.Start())
 
-	var port string
-	portPattern := regexp.MustCompile(`127\.0\.0\.1%3A(\d+)%2Fcallback`)
+	var port, state string
+	portPattern := regexp.MustCompile(`127\.0\.0\.1%3A(\d+)%2Fcallback%3Fstate%3D([A-Za-z0-9-]+)`)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		raw, err := os.ReadFile(urlFile)
 		if !assert.NoError(c, err) {
 			return
 		}
 		match := portPattern.FindStringSubmatch(string(raw))
-		if assert.NotNil(c, match, "auth URL missing callback port: %s", string(raw)) {
+		if assert.NotNil(c, match, "auth URL missing callback port and state token: %s", string(raw)) {
 			port = match[1]
+			state = match[2]
 		}
 	}, 30*time.Second, 100*time.Millisecond, "browser opener was never invoked: %s", output.String())
 
-	callback := "http://127.0.0.1:" + port + "/callback?api_key=test-key-123&project=default&email=a%40b.c"
+	// A callback without the per-attempt state token is an injection attempt
+	// by something else on this machine: rejected, and the listener keeps
+	// waiting for the real redirect.
+	forged := "http://127.0.0.1:" + port + "/callback?api_key=attacker-key&project=evil"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, forged, nil)
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusForbidden, resp.StatusCode)
+	}, 30*time.Second, 200*time.Millisecond, "forged callback was never rejected: %s", output.String())
+
+	callback := "http://127.0.0.1:" + port + "/callback?state=" + state + "&api_key=test-key-123&project=default&email=a%40b.c"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, callback, nil)
 		if !assert.NoError(c, err) {
@@ -146,6 +164,7 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	cached := string(requireFileBytes(t, authFile))
 	require.Contains(t, cached, "server_url=https://gram.test\n")
 	require.Contains(t, cached, "api_key=test-key-123\n")
+	require.NotContains(t, cached, "attacker-key")
 	require.Contains(t, cached, "project=default\n")
 	require.Contains(t, cached, "email=a@b.c\n")
 	require.NoFileExists(t, authFile+".login-attempt", "successful login must clear the attempt cooldown marker")
@@ -1160,6 +1179,75 @@ printf '{}\n200'
 	require.Equal(t, "grame2e", metaMCP["server_name"])
 }
 
+// TestRenderHookScriptClaudeNestedURLCommandNotClassifiedAsMCP verifies that
+// url/command keys nested inside tool_input (a fetch tool's url, a shell
+// tool's command) never surface as data.mcp: only top-level payload fields
+// carry MCP evidence, otherwise ordinary tools land under Shadow MCP
+// enforcement.
+func TestRenderHookScriptClaudeNestedURLCommandNotClassifiedAsMCP(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-nested","tool_name":"Bash","tool_input":{"command":"curl https://example.com","url":"https://example.com"}}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	data := requireMapValue(t, parsed, "data")
+	require.NotContains(t, data, "mcp",
+		"nested tool_input url/command must not produce MCP evidence")
+	tool := requireMapValue(t, data, "tool_call")
+	require.Equal(t, "Bash", tool["name"])
+}
+
 // TestRenderHookScriptCursorPinsStdioMCPIdentityToCommand verifies that a
 // stdio MCP server's identity — what Shadow MCP approvals are scoped to — is
 // the launch command, not the mutable server alias, while URL servers keep
@@ -1314,6 +1402,83 @@ printf '{}\n200'
 		"sanitized prefix must still resolve the .mcp.json launch command")
 	require.Equal(t, "npx linear-mcp", mcp["server_identity"],
 		"stdio MCP identity must be pinned to the launch command, not the alias")
+}
+
+// TestRenderHookScriptClaudeEnrichesURLFromSiblingPluginConfig verifies the
+// Claude MCP URL enrichment scans sibling feature plugins' .mcp.json: in a
+// generated marketplace the observability plugin runs the hook while the
+// sanctioned Gram MCP URLs live in the feature plugins, and a
+// mcp__plugin_<feature>_<server>__ call without its URL would be treated as
+// non-Gram-hosted by Shadow MCP blocking policies.
+func TestRenderHookScriptClaudeEnrichesURLFromSiblingPluginConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Claude MCP URL enrichment")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	obsHooksDir := filepath.Join(dir, "market", "observability", "hooks")
+	siblingDir := filepath.Join(dir, "market", "acme-tools")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.MkdirAll(obsHooksDir, 0o755))
+	require.NoError(t, os.MkdirAll(siblingDir, 0o755))
+	hookPath := filepath.Join(obsHooksDir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(obsHooksDir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(obsHooksDir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(siblingDir, ".mcp.json"), []byte(`{"mcpServers":{"Acme Tools":{"type":"http","url":"https://app.getgram.ai/mcp/acme-tools"}}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"CLAUDE_PLUGIN_ROOT="+filepath.Join(dir, "market", "observability"),
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-sibling","tool_name":"mcp__plugin_acme-tools_Acme_Tools__do_thing","tool_input":{"q":"x"}}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	mcp := requireMapValue(t, requireMapValue(t, parsed, "data"), "mcp")
+	require.Equal(t, "https://app.getgram.ai/mcp/acme-tools", mcp["url"],
+		"sibling feature plugin URLs must be discovered for plugin-prefixed MCP calls")
 }
 
 // TestRenderAuthPreflightScriptObservabilityModeFailsOpen verifies the
@@ -1822,6 +1987,15 @@ func TestSharedAuthScriptEscapesCurlConfigValues(t *testing.T) {
 	require.NoError(t, err, string(output))
 	require.Contains(t, string(output), `header = "Gram-Key: k\"ey\\1"`)
 	require.Contains(t, string(output), `header = "Gram-Project: pro\"j\\2"`)
+
+	// The config file is line-oriented: embedded CR/LF would end the header
+	// directive and let the remainder parse as additional curl options.
+	inject := exec.Command("bash", "-c", `. "$GRAM_TEST_AUTH_SH"; gram_hooks_write_curl_config $'ke\ny\rz' $'sl\nug'; cat "$auth_config"`)
+	inject.Env = hookAuthTestEnv(dir, "GRAM_TEST_AUTH_SH="+authPath)
+	output, err = inject.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), `header = "Gram-Key: keyz"`)
+	require.Contains(t, string(output), `header = "Gram-Project: slug"`)
 }
 
 // TestRenderHookPayloadNormalizationDecodesEscapedPromptWithoutJQ verifies

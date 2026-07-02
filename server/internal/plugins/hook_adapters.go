@@ -98,15 +98,9 @@ gram_hooks_json_string_value() {
       return 0
     fi
   fi
-  value="$(printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-  if [ -n "$value" ]; then
-    printf '%%s' "$value"
-    return 0
-  fi
-  # The fast sed path cannot represent strings containing escapes; fall back
-  # to the balanced extractor plus decoder so multiline or quoted values
-  # (e.g. prompts under policy enforcement) are not silently dropped when jq
-  # is unavailable.
+  # Only the balanced top-level extractor is safe here: a greedy whole-payload
+  # scan would also match nested keys (e.g. tool_input.url or
+  # tool_input.command) and misclassify ordinary tool calls as MCP.
   value="$(gram_hooks_json_top_level_value "$input" "$key")"
   case "$value" in
     \"*\")
@@ -153,13 +147,18 @@ gram_hooks_json_decode_string() {
 gram_hooks_json_number_value() {
   local input="$1"
   local key="$2"
-  printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\).*/\1/p'
+  # Top-level only: a greedy scan would also match same-named nested keys.
+  gram_hooks_json_top_level_value "$input" "$key" | sed -n 's/^\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\)$/\1/p'
 }
 
 gram_hooks_json_bool_value() {
   local input="$1"
   local key="$2"
-  printf '%%s' "$input" | tr '\n' ' ' | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p'
+  local value
+  value="$(gram_hooks_json_top_level_value "$input" "$key")"
+  case "$value" in
+    true | false) printf '%%s' "$value" ;;
+  esac
 }
 
 gram_hooks_json_value() {
@@ -247,34 +246,44 @@ function trim(s) {
   json = json $0 "\n"
 }
 END {
+  # Depth-tracked scan: only keys of the root object (depth 1) may match, so
+  # a same-named key nested inside tool_input can never be returned.
   n = length(json)
-  for (i = 1; i <= n; i++) {
-    if (substr(json, i, 1) != "\"") continue
-    key_end = quoted_end(json, i)
-    if (key_end == 0) exit
-    raw_key = substr(json, i + 1, key_end - i - 1)
-    colon = skip_ws(json, key_end + 1)
-    if (substr(json, colon, 1) != ":") {
-      i = key_end
-      continue
-    }
-    if (raw_key != target) {
-      i = key_end
-      continue
-    }
-    start = skip_ws(json, colon + 1)
-    c = substr(json, start, 1)
+  depth = 0
+  i = 1
+  while (i <= n) {
+    c = substr(json, i, 1)
     if (c == "\"") {
-      stop = quoted_end(json, start)
-    } else if (c == "{") {
-      stop = balanced_end(json, start, "{", "}")
-    } else if (c == "[") {
-      stop = balanced_end(json, start, "[", "]")
-    } else {
-      stop = bare_end(json, start)
+      key_end = quoted_end(json, i)
+      if (key_end == 0) exit
+      if (depth == 1) {
+        raw_key = substr(json, i + 1, key_end - i - 1)
+        colon = skip_ws(json, key_end + 1)
+        if (substr(json, colon, 1) == ":" && raw_key == target) {
+          start = skip_ws(json, colon + 1)
+          c = substr(json, start, 1)
+          if (c == "\"") {
+            stop = quoted_end(json, start)
+          } else if (c == "{") {
+            stop = balanced_end(json, start, "{", "}")
+          } else if (c == "[") {
+            stop = balanced_end(json, start, "[", "]")
+          } else {
+            stop = bare_end(json, start)
+          }
+          if (stop > 0) print trim(substr(json, start, stop - start + 1))
+          exit
+        }
+      }
+      i = key_end + 1
+      continue
     }
-    if (stop > 0) print trim(substr(json, start, stop - start + 1))
-    exit
+    if (c == "{" || c == "[") {
+      depth++
+    } else if (c == "}" || c == "]") {
+      depth--
+    }
+    i++
   }
 }'
 }

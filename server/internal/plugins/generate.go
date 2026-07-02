@@ -1172,6 +1172,8 @@ gram_hooks_login_http_response() {
   local reason="OK"
   if [ "$status" = "204" ]; then
     reason="No Content"
+  elif [ "$status" = "403" ]; then
+    reason="Forbidden"
   fi
   printf 'HTTP/1.1 %s %s\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' \
     "$status" "$reason" "${#body}" "$body"
@@ -1185,9 +1187,13 @@ gram_hooks_login_success_html() {
 # pipe), captures the /callback query string into a file, and writes the
 # response to stdout (piped back to the client through the fifo). Requests
 # without api_key (favicon, probes) get a 204 so the serve loop keeps waiting
-# for the dashboard's real redirect.
+# for the dashboard's real redirect. The callback must echo the unguessable
+# state token minted for this attempt — anyone on this machine can reach the
+# listener, and without the token a racing local process could inject its own
+# key and reroute telemetry to an attacker-controlled project.
 gram_hooks_login_handle_request() {
   local dir="$1"
+  local state="$2"
   local request_line="" line="" path_query=""
   IFS= read -r -t 10 request_line || request_line=""
   request_line="${request_line%$'\r'}"
@@ -1204,9 +1210,16 @@ gram_hooks_login_handle_request() {
   path_query="${path_query%% *}"
   case "$path_query" in
     /callback\?*api_key=*)
-      printf '%s' "${path_query#*\?}" >"$dir/query.tmp"
-      mv "$dir/query.tmp" "$dir/query"
-      gram_hooks_login_http_response 200 "$(gram_hooks_login_success_html)"
+      case "&${path_query#*\?}&" in
+        *"&state=${state}&"*)
+          printf '%s' "${path_query#*\?}" >"$dir/query.tmp"
+          mv "$dir/query.tmp" "$dir/query"
+          gram_hooks_login_http_response 200 "$(gram_hooks_login_success_html)"
+          ;;
+        *)
+          gram_hooks_login_http_response 403 ""
+          ;;
+      esac
       ;;
     *)
       gram_hooks_login_http_response 204 ""
@@ -1226,9 +1239,10 @@ gram_hooks_login_serve() {
   local style="$1"
   local dir="$2"
   local port="$3"
+  local state="$4"
   local requests=0
   while [ "$requests" -lt 32 ] && [ ! -e "$dir/stop" ] && [ ! -s "$dir/query" ]; do
-    gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" >"$dir/fifo"
+    gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" "$state" >"$dir/fifo"
     requests=$((requests + 1))
   done
 }
@@ -1355,6 +1369,15 @@ gram_hooks_login() {
     return 1
   fi
 
+  # Unguessable per-attempt token: the dashboard echoes it back on the
+  # callback and the listener rejects anything without it, so a local
+  # process racing the redirect cannot inject its own credentials.
+  local state
+  state="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  if [ -z "$state" ]; then
+    state="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
+  fi
+
   local style port tries started=""
   for style in $(gram_hooks_nc_listen_styles); do
     tries=0
@@ -1362,7 +1385,7 @@ gram_hooks_login() {
       tries=$((tries + 1))
       port=$(( (${RANDOM:-17} % 45000) + 20000 ))
       rm -f "$dir/query" "$dir/stop"
-      gram_hooks_login_serve "$style" "$dir" "$port" &
+      gram_hooks_login_serve "$style" "$dir" "$port" "$state" &
       GRAM_HOOKS_LOGIN_SERVER_PID=$!
       GRAM_HOOKS_LOGIN_PORT="$port"
       if gram_hooks_login_probe "$port"; then
@@ -1382,7 +1405,9 @@ gram_hooks_login() {
     return 1
   fi
 
-  local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback&key_scope=hooks"
+  # The callback URL carries the state token as its own query parameter; the
+  # dashboard preserves existing parameters when appending the credentials.
+  local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback%3Fstate%3D${state}&key_scope=hooks"
   # Project slugs are URL-safe by construction; anything else would need
   # percent-encoding, so it is dropped rather than corrupt the query string.
   case "$project_hint" in
@@ -1448,13 +1473,18 @@ gram_hooks_write_curl_config() {
   auth_config_arg=()
   auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || return 1
   chmod 600 "$auth_config" || true
-  # curl config quoted strings treat backslash and double quote specially;
-  # escape them so a hostile or corrupted cached value cannot break out of
-  # the header directive.
+  # curl config quoted strings treat backslash and double quote specially,
+  # and the config file is line-oriented; escape the metacharacters and strip
+  # CR/LF so a hostile or corrupted cached value cannot break out of the
+  # header directive or inject additional config lines.
   api_key="${api_key//\\/\\\\}"
   api_key="${api_key//\"/\\\"}"
+  api_key="${api_key//$'\n'/}"
+  api_key="${api_key//$'\r'/}"
   project="${project//\\/\\\\}"
   project="${project//\"/\\\"}"
+  project="${project//$'\n'/}"
+  project="${project//$'\r'/}"
   printf 'header = "Gram-Key: %s"\n' "$api_key" >"$auth_config"
   printf 'header = "Gram-Project: %s"\n' "$project" >>"$auth_config"
   auth_config_arg=(--config "$auth_config")
@@ -1987,31 +2017,35 @@ gram_hooks_enrich_claude_mcp_payload() {
     return
   fi
 
-  local candidates=()
+  # Marketplace installs put the sanctioned Gram MCP URLs in sibling feature
+  # plugins' .mcp.json, not in the observability plugin running this hook, so
+  # the sibling configs must be scanned too — otherwise plugin-prefixed calls
+  # lose their URL evidence and Shadow MCP treats them as non-Gram-hosted.
+  local plugin_root=""
   if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-    candidates+=("${CLAUDE_PLUGIN_ROOT}/.mcp.json")
-  fi
-  candidates+=("${script_dir}/../.mcp.json")
-
-  local plugin_name=""
-  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-    plugin_name=$(basename "$CLAUDE_PLUGIN_ROOT")
+    plugin_root="$CLAUDE_PLUGIN_ROOT"
   else
-    plugin_name=$(basename "$(cd "$script_dir/.." 2>/dev/null && pwd)")
+    plugin_root="$(cd "$script_dir/.." 2>/dev/null && pwd)"
   fi
-  local plugin_prefix="plugin_$(gram_hooks_sanitize_claude_mcp_name "$plugin_name")_"
+  local candidates=("${plugin_root}/.mcp.json")
+  local sibling
+  for sibling in "$(dirname "$plugin_root")"/*/.mcp.json; do
+    [ "$sibling" = "${plugin_root}/.mcp.json" ] && continue
+    candidates+=("$sibling")
+  done
 
   local matched_name=""
   local matched_url=""
   local ambiguous=0
-  local mcp_file rows name url prefix
+  local mcp_file rows name url prefix file_plugin_prefix
   for mcp_file in "${candidates[@]}"; do
     [ -f "$mcp_file" ] || continue
+    file_plugin_prefix="plugin_$(gram_hooks_sanitize_claude_mcp_name "$(basename "$(dirname "$mcp_file")")")_"
     rows=$(jq -r '.mcpServers // {} | to_entries[] | [.key, (.value.url // "")] | @tsv' "$mcp_file" 2>/dev/null) || continue
     while IFS=$'\t' read -r name url; do
       [ -n "$name" ] && [ -n "$url" ] || continue
       prefix="$(gram_hooks_sanitize_claude_mcp_name "$name")"
-      if [ "$prefix" != "$server_identity" ] && [ "${plugin_prefix}${prefix}" != "$server_identity" ]; then
+      if [ "$prefix" != "$server_identity" ] && [ "${file_plugin_prefix}${prefix}" != "$server_identity" ]; then
         continue
       fi
       if [ -z "$matched_url" ]; then

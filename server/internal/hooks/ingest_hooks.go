@@ -217,19 +217,23 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			ToolInput:       toolInput,
 			RiskPolicyID:    policy.ID,
 		})
-		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-			Provider:       strings.TrimSpace(payload.Source.Adapter),
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ProjectID:      *authCtx.ProjectID,
-			Reason:         auditReason,
-			ToolName:       toolName,
-			UserID:         authCtx.UserID,
-			RiskPolicyID:   conv.StringToNullUUID(policy.ID),
-			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		}); bURL != "" {
-			userReason = appendBlockURL(userReason, bURL)
+		// Retried deliveries still get the deny decision, but must not mint
+		// another block row (and a second block URL) for the same call.
+		if !s.isHookDuplicate(ctx) {
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       strings.TrimSpace(payload.Source.Adapter),
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				UserID:         authCtx.UserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 		}
 		return auditReason, userReason
 	}

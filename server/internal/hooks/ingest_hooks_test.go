@@ -125,6 +125,47 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	require.Equal(t, authCtx.UserID, block.UserID)
 }
 
+func TestIngest_DuplicateDeliveryDoesNotMintSecondBlockRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	idempotencyKey := "dup-" + uuid.NewString()
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "canonical-shadow-mcp-dup")
+	toolCallID := "call-dup-1"
+	payload.IdempotencyKey = &idempotencyKey
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	first, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "deny", first.Decision)
+	require.NotNil(t, first.Message)
+	require.Contains(t, *first.Message, "/blocks/")
+
+	retry, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "deny", retry.Decision, "retried delivery must still be denied")
+	require.NotNil(t, retry.Message)
+	require.NotContains(t, *retry.Message, "/blocks/",
+		"a duplicate delivery must not mint a second block row and URL")
+}
+
 func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
 	t.Parallel()
 
