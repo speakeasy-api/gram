@@ -316,12 +316,9 @@ function DetectorCard({
         </p>
         <div className="mt-2 flex items-center gap-3 text-xs">
           {needsHook ? (
-            <SimpleTooltip tooltip="Enforcement-only. This detector runs when agents make tool calls through Speakeasy hooks, so it never surfaces in scans. Install the hooks on each agent to enforce it.">
-              <span className="text-warning flex items-center gap-1">
-                <Info className="size-3 shrink-0" />
-                Enforcement-only · requires Speakeasy hooks
-              </span>
-            </SimpleTooltip>
+            <span className="text-warning">
+              Enforcement-only · requires Speakeasy hooks
+            </span>
           ) : (
             rules.length > 0 && (
               <span
