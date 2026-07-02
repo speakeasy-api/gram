@@ -171,12 +171,13 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 	pii := &instrumentedPIIScanner{delay: 200 * time.Millisecond}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -206,12 +207,13 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -242,12 +244,13 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -312,12 +315,13 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -340,12 +344,13 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)

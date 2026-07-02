@@ -180,12 +180,13 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -223,12 +224,13 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -270,12 +272,13 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
 		testCELEngine(t),
 	)
 	require.NoError(t, err)

@@ -981,7 +981,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
