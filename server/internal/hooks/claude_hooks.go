@@ -735,6 +735,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountID:   "",
 			DeviceID:            "",
 			AccountType:         "",
+			BillingMode:         "",
 			UserAccountID:       "",
 			GramOrgID:           "",
 			ProjectID:           "",
@@ -752,6 +753,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		AccountType:         "",
+		BillingMode:         "",
 		UserAccountID:       "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
@@ -1151,6 +1153,7 @@ func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata S
 	metadata.ExternalAccountID = cached.ExternalAccountID
 	metadata.DeviceID = cached.DeviceID
 	metadata.AccountType = cached.AccountType
+	metadata.BillingMode = cached.BillingMode
 	metadata.UserAccountID = cached.UserAccountID
 	return metadata
 }

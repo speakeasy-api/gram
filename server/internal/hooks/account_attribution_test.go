@@ -562,13 +562,66 @@ func TestStampAccountAttribution_StampsAllNonEmptyFields(t *testing.T) {
 		Provider:      providerAnthropic,
 		ExternalOrgID: "ext-org-1",
 		AccountType:   accountTypePersonal,
+		BillingMode:   "flat_rate",
 		DeviceID:      "device-1",
 	})
 
 	require.Equal(t, providerAnthropic, attrs[attr.ProviderKey])
 	require.Equal(t, "ext-org-1", attrs[attr.ExternalOrgIDKey])
 	require.Equal(t, accountTypePersonal, attrs[attr.AccountTypeKey])
+	require.Equal(t, "flat_rate", attrs[attr.BillingModeKey])
 	require.Equal(t, "device-1", attrs[attr.DeviceIDKey])
+}
+
+// TestResolveBillingMode_AccountOverrideWins verifies the per-account override is
+// authoritative and short-circuits the org-level lookup.
+func TestResolveBillingMode_AccountOverrideWins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	meta := &SessionMetadata{
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		Provider:      providerAnthropic,
+		ExternalOrgID: "ent-org",
+	}
+	mode, err := ti.service.resolveBillingMode(ctx, meta, "metered")
+	require.NoError(t, err)
+	require.Equal(t, "metered", mode)
+}
+
+// TestResolveBillingMode_EmptyWhenNoDeclaration verifies that with no account
+// override and no org-level declaration, resolution returns empty (treated as
+// unknown upstream — never assume real cost). Exercises the ErrNoRows path of
+// GetProviderOrgBillingMode against a real DB.
+func TestResolveBillingMode_EmptyWhenNoDeclaration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	meta := &SessionMetadata{
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		Provider:      providerAnthropic,
+		ExternalOrgID: "ent-org",
+	}
+	mode, err := ti.service.resolveBillingMode(ctx, meta, "")
+	require.NoError(t, err)
+	require.Empty(t, mode)
+}
+
+// TestProviderBillingConfigProvider verifies the mapping from a session provider
+// tag to the ai_integration_configs provider identifier where org-level billing
+// modes are declared. Claude sessions tag 'anthropic' but the config lives under
+// 'anthropic_compliance'; other providers map to themselves.
+func TestProviderBillingConfigProvider(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "anthropic_compliance", providerBillingConfigProvider(providerAnthropic))
+	require.Equal(t, providerCursor, providerBillingConfigProvider(providerCursor))
+	require.Equal(t, providerOpenAI, providerBillingConfigProvider(providerOpenAI))
+	require.Empty(t, providerBillingConfigProvider(""))
 }
 
 // TestStampAccountAttribution_SkipsEmptyFields verifies an unclassified or
@@ -590,5 +643,6 @@ func TestStampAccountAttribution_SkipsEmptyFields(t *testing.T) {
 	require.Equal(t, providerOpenAI, partial[attr.ProviderKey])
 	require.NotContains(t, partial, attr.AccountTypeKey)
 	require.NotContains(t, partial, attr.ExternalOrgIDKey)
+	require.NotContains(t, partial, attr.BillingModeKey)
 	require.NotContains(t, partial, attr.DeviceIDKey)
 }

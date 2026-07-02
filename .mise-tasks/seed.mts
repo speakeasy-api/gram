@@ -2248,9 +2248,12 @@ async function seedPersonalAccounts(init: {
   });
 
   // Hook tool-call traces tagged with gram.account_type, so the Tool Logs page
-  // (/logs) has team/personal data to filter on. These are PreToolUse hook
-  // events (what the logs view groups into traces), attributed to the owning
-  // employee and stamped with the account's provider/account_type.
+  // (/logs) has team/personal data to filter on. Each call is a complete trace
+  // — a PreToolUse plus a PostToolUse/PostToolUseFailure sharing the trace id —
+  // so trace_summaries derives a real success/failure status instead of leaving
+  // the trace pending (status comes from gen_ai.tool.call.result /
+  // gram.hook.error; a Pre-only trace never resolves). Rows are attributed to
+  // the owning employee and stamped with the account's provider/account_type.
   const TOOL_NAMES = [
     "search_products",
     "create_order",
@@ -2276,9 +2279,29 @@ async function seedPersonalAccounts(init: {
       const daysAgo = (acctIdx + k * 2) % 30;
       const eventTime = new Date(now - daysAgo * msPerDay - k * 1200 * 1000);
       const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
-      const attrs = `{"gram.event.source": "hook", "gram.tool.name": "${toolName}", "gram.hook.event": "PreToolUse", "gram.hook.source": "${svc}", "gram.account_type": "${acct.type}", "gram.provider": "${acct.provider}", "gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", "gram.project.id": "${projectId}", "gen_ai.conversation.id": "${sessionId}", "gen_ai.tool_call.id": "${toolUseId}", "user.id": "${acct.ownerUserId}", "user.email": "${acct.email}"}`;
+      // Deterministic ~1-in-5 failure so both statuses show up in the UI.
+      const isFailure = (acctIdx + k) % 5 === 4;
+
+      // Attributes shared by the Pre and Post rows of this trace.
+      const baseAttrs =
+        `"gram.event.source": "hook", "gram.tool.name": "${toolName}", ` +
+        `"gram.hook.source": "${svc}", "gram.tool_call.source": "ecommerce", ` +
+        `"gram.account_type": "${acct.type}", "gram.provider": "${acct.provider}", ` +
+        `"gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", ` +
+        `"gram.project.id": "${projectId}", "gen_ai.conversation.id": "${sessionId}", ` +
+        `"gen_ai.tool_call.id": "${toolUseId}", "user.id": "${acct.ownerUserId}", "user.email": "${acct.email}"`;
+
       toolRows.push(
-        `(${timeNano}, ${timeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${attrs}', '{}', '${projectId}', '${toolName}', '${svc}', '${sessionId}')`,
+        `(${timeNano}, ${timeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '{"gram.hook.event": "PreToolUse", ${baseAttrs}}', '{}', '${projectId}', '${toolName}', '${svc}', '${sessionId}')`,
+      );
+
+      const postHookEvent = isFailure ? "PostToolUseFailure" : "PostToolUse";
+      const outcomeAttr = isFailure
+        ? `"gram.hook.error": "Tool execution failed"`
+        : `"gen_ai.tool.call.result": "ok"`;
+      const postTimeNano = timeNano + BigInt((1 + (k % 4)) * 1000000); // 1-4ms later
+      toolRows.push(
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '{"gram.hook.event": "${postHookEvent}", ${outcomeAttr}, ${baseAttrs}}', '{}', '${projectId}', '${toolName}', '${svc}', '${sessionId}')`,
       );
     }
   });
@@ -2308,7 +2331,7 @@ async function seedPersonalAccounts(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      `Seeded ${chRows.length} usage + ${toolRows.length} tool-call telemetry rows (team/personal) into ClickHouse.`,
+      `Seeded ${chRows.length} usage rows + ${toolRows.length / 2} tool-call traces (team/personal) into ClickHouse.`,
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };

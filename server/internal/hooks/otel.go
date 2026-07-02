@@ -113,6 +113,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
 			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
 			AccountType:         "",
+			BillingMode:         "",
 			UserAccountID:       "",
 			GramOrgID:           orgID,
 			ProjectID:           projectID,

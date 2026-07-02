@@ -25,6 +25,10 @@ type AIIntegrationSnapshot struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	Enabled   bool      `json:"enabled"`
 	HasAPIKey bool      `json:"has_api_key"`
+	// BillingMode records the declared billing mode ("metered", "flat_rate",
+	// "unknown", or empty when undeclared). Changing it flips whether dashboard
+	// cost reads as real spend or an estimate, so declarations must be auditable.
+	BillingMode string `json:"billing_mode"`
 }
 
 type LogAIIntegrationUpsertEvent struct {
