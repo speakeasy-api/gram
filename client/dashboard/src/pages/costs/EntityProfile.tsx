@@ -268,8 +268,14 @@ export type EntityProfileProps = {
   // its selectable options, plus the change handler.
   axisValue: string;
   axisOptions: { value: string; label: string }[];
+  // The Claude attribution cuts (MCP Server/Tool, Skill, Subagent) — surfaced in
+  // a separate "MCP breakdown" dropdown next to the time range rather than mixed
+  // into the main "Breakdown by" control. Shares axisValue/onAxisChange with it;
+  // empty when the org has no attribution data (dropdown hidden).
+  mcpAxisOptions: { value: string; label: string }[];
   // Optional caveat for the current breakdown axis, shown as an info tooltip
-  // beside the select (e.g. the root Skill cut excludes subagent-run skills).
+  // beside the MCP breakdown select (e.g. the root Skill cut excludes
+  // subagent-run skills).
   axisHint?: string;
   onAxisChange: (value: string) => void;
   // The child rows + drill handler.
@@ -316,6 +322,7 @@ export function EntityProfile({
   canDrill,
   axisValue,
   axisOptions,
+  mcpAxisOptions,
   axisHint,
   onAxisChange,
   rows,
@@ -432,9 +439,42 @@ export function EntityProfile({
               </span>
             </button>
           </div>
-          {/* Date-range picker pinned to the top-right of the header, in line
-              with the back controls on the left — it scopes every number below. */}
-          <div className="absolute top-5 right-8 z-10">{rangePicker}</div>
+          {/* Top-right header controls, in line with the back controls on the
+              left: the MCP breakdown dropdown (Claude attribution cuts, split out
+              of the main "Breakdown by" control) and the date-range picker that
+              scopes every number below. */}
+          <div className="absolute top-5 right-8 z-10 flex items-center gap-2">
+            {mcpAxisOptions.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Select value={axisValue} onValueChange={onAxisChange}>
+                  <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto cursor-pointer gap-1.5 rounded-md border bg-background py-1.5 pr-2.5 pl-3 text-sm font-medium shadow-none transition-colors focus-visible:ring-0">
+                    <SelectValue placeholder="MCP breakdown" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mcpAxisOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {axisHint && (
+                  <Tooltip>
+                    <TooltipTrigger
+                      aria-label={axisHint}
+                      className="text-muted-foreground inline-flex cursor-help"
+                    >
+                      <Info className="size-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-64">
+                      {axisHint}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+            {rangePicker}
+          </div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
@@ -494,7 +534,9 @@ export function EntityProfile({
               Breakdown by
               <Select value={axisValue} onValueChange={onAxisChange}>
                 <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                  <SelectValue />
+                  {/* Placeholder shows when the active axis lives in the MCP
+                      breakdown dropdown instead (no matching item here). */}
+                  <SelectValue placeholder="Select…" />
                 </SelectTrigger>
                 <SelectContent>
                   {axisOptions.map((o) => (
@@ -504,19 +546,6 @@ export function EntityProfile({
                   ))}
                 </SelectContent>
               </Select>
-              {axisHint && (
-                <Tooltip>
-                  <TooltipTrigger
-                    aria-label={axisHint}
-                    className="text-muted-foreground inline-flex cursor-help"
-                  >
-                    <Info className="size-3.5" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-64">
-                    {axisHint}
-                  </TooltipContent>
-                </Tooltip>
-              )}
             </h2>
             {/* CSV export covers the dimension table only; the session list owns
                 its own affordances. */}

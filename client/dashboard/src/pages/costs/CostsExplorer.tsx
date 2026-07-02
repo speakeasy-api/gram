@@ -754,18 +754,32 @@ export function CostsExplorer(): JSX.Element {
     return (attributes[p.dim]?.length ?? 0) > 1;
   });
 
-  // The breakdown <Select> options: dimension pivots plus the always-available
-  // sessions sentinel. At a session leaf (Agent/Model) the only option is
-  // Sessions — no further dimension breakdown. `axisValue` is the current
-  // selection; `onViewSessions` is the header entry point, omitted while already
-  // viewing the list.
+  // The breakdown axes split across two controls. The organizational pivots (plus
+  // the always-available sessions sentinel) stay in the main "Breakdown by"
+  // dropdown; the Claude attribution cuts (MCP Server/Tool, Skill, Subagent) move
+  // to a dedicated "MCP breakdown" dropdown next to the time range. Attribution
+  // cuts group a different dataset (api_request attribution rows) and don't roll
+  // up to the same total as the org breakdowns, so mixing them into one control
+  // read as a broken breakdown — hence the separation (DNO-392). Both dropdowns
+  // drive the same `axisValue`/`onAxisChange`, so only one is ever active at a
+  // time; the inactive one shows its category placeholder.
+  // At a session leaf (Agent/Model) the only option is Sessions — no further
+  // dimension breakdown. `axisValue` is the current selection; `onViewSessions`
+  // is the header entry point, omitted while already viewing the list.
   const dimensionAxisOptions = atSessionLeaf
     ? []
-    : pivotOptions.map((p) => ({ value: p.dim as string, label: p.label }));
+    : pivotOptions
+        .filter((p) => !isAttributionDim(p.dim))
+        .map((p) => ({ value: p.dim as string, label: p.label }));
   const axisOptions: { value: string; label: string }[] = [
     ...dimensionAxisOptions,
     { value: SESSIONS_AXIS, label: LABELS[SESSIONS_AXIS]! },
   ];
+  const mcpAxisOptions: { value: string; label: string }[] = atSessionLeaf
+    ? []
+    : pivotOptions
+        .filter((p) => isAttributionDim(p.dim))
+        .map((p) => ({ value: p.dim as string, label: p.label }));
   const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
   const onViewSessions = sessionsMode
     ? undefined
@@ -940,6 +954,7 @@ export function CostsExplorer(): JSX.Element {
         canDrill={canDrill}
         axisValue={axisValue}
         axisOptions={axisOptions}
+        mcpAxisOptions={mcpAxisOptions}
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
         rows={visibleRows}
