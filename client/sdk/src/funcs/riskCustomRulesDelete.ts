@@ -96,7 +96,7 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON("body", payload.RiskIDRequestBody, { explode: true });
 
-  const path = pathToFunc("/rpc/risk.customRules.delete")();
+  const path = pathToFunc("/rpc/risk.deleteCustomRule")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

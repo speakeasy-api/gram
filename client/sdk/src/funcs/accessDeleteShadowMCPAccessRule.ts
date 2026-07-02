@@ -96,7 +96,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.shadowMcp.rules.delete")();
+  const path = pathToFunc("/rpc/access.deleteShadowMcpRule")();
 
   const query = encodeFormQuery({
     "id": payload.id,

@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.shadowMcp.rules.list")();
+  const path = pathToFunc("/rpc/access.listShadowMcpRules")();
 
   const query = encodeFormQuery({
     "access_scope": payload?.access_scope,

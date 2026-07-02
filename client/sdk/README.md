@@ -106,15 +106,13 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.access.createRole({
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
+  const result = await gram.access.approveShadowMCPApprovalRequest({
+    approveShadowMCPApprovalRequestForm: {
+      accessScope: "organization",
+      displayName: "Danny75",
+      id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+      matchBreadth: "full_url",
+      matchValue: "<value>",
     },
   });
 
@@ -134,8 +132,13 @@ run();
 
 ### [Access](docs/sdks/access/README.md)
 
+* [approveShadowMCPApprovalRequest](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 * [createRole](docs/sdks/access/README.md#createrole) - createRole access
+* [createShadowMCPApprovalRequest](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
+* [createShadowMCPAccessRule](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
 * [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
+* [deleteShadowMCPAccessRule](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
+* [denyShadowMCPApprovalRequest](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 * [disableRBAC](docs/sdks/access/README.md#disablerbac) - disableRBAC access
 * [enableRBAC](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 * [getRBACStatus](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
@@ -146,17 +149,12 @@ run();
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
-* [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
-* [approveShadowMCPApprovalRequest](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
-* [createShadowMCPApprovalRequest](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
-* [denyShadowMCPApprovalRequest](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 * [listShadowMCPApprovalRequests](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
-* [createShadowMCPAccessRule](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
-* [deleteShadowMCPAccessRule](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
 * [listShadowMCPAccessRules](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
-* [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
+* [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 * [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
+* [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 
 ### [Agent](docs/sdks/agent/README.md)
 
@@ -508,8 +506,8 @@ run();
 * [create](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 * [delete](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 * [get](docs/sdks/policies/README.md#get) - getRiskPolicy risk
-* [list](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 * [status](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
+* [list](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 * [trigger](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 * [update](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 
@@ -523,8 +521,8 @@ run();
 
 ### [Risk.Results](docs/sdks/results/README.md)
 
-* [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
+* [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [listForAgent](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 * [unmask](docs/sdks/results/README.md#unmask) - unmaskRiskResult risk
 
@@ -589,10 +587,10 @@ run();
 ### [Triggers](docs/sdks/triggers/README.md)
 
 * [create](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
-* [listDefinitions](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 * [delete](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
 * [get](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 * [list](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+* [listDefinitions](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 * [pause](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 * [resume](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 * [update](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
@@ -1443,16 +1441,14 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.access.createRole(
+  const result = await gram.access.approveShadowMCPApprovalRequest(
     {
-      createRoleForm: {
-        description: "swerve hm receptor how",
-        grants: [
-          {
-            scope: "environment:write",
-          },
-        ],
-        name: "<value>",
+      approveShadowMCPApprovalRequestForm: {
+        accessScope: "organization",
+        displayName: "Danny75",
+        id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+        matchBreadth: "full_url",
+        matchValue: "<value>",
       },
     },
     undefined,
@@ -1495,15 +1491,13 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.access.createRole({
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
+  const result = await gram.access.approveShadowMCPApprovalRequest({
+    approveShadowMCPApprovalRequestForm: {
+      accessScope: "organization",
+      displayName: "Danny75",
+      id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+      matchBreadth: "full_url",
+      matchValue: "<value>",
     },
   });
 
@@ -1538,15 +1532,13 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.access.createRole({
-      createRoleForm: {
-        description: "swerve hm receptor how",
-        grants: [
-          {
-            scope: "environment:write",
-          },
-        ],
-        name: "<value>",
+    const result = await gram.access.approveShadowMCPApprovalRequest({
+      approveShadowMCPApprovalRequestForm: {
+        accessScope: "organization",
+        displayName: "Danny75",
+        id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+        matchBreadth: "full_url",
+        matchValue: "<value>",
       },
     });
 
@@ -1614,15 +1606,13 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.access.createRole({
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
+  const result = await gram.access.approveShadowMCPApprovalRequest({
+    approveShadowMCPApprovalRequestForm: {
+      accessScope: "organization",
+      displayName: "Danny75",
+      id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+      matchBreadth: "full_url",
+      matchValue: "<value>",
     },
   });
 

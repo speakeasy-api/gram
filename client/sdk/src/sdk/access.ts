@@ -32,6 +32,25 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
   /**
+   * approveShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
+   */
+  async approveShadowMCPApprovalRequest(
+    request: operations.ApproveShadowMCPApprovalRequestRequest,
+    security?: operations.ApproveShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ShadowMCPApprovalDecisionResult> {
+    return unwrapAsync(accessApproveShadowMCPApprovalRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * createRole access
    *
    * @remarks
@@ -51,6 +70,44 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * createShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Create or return an active Shadow MCP approval request.
+   */
+  async createShadowMCPApprovalRequest(
+    request: operations.CreateShadowMCPApprovalRequestRequest,
+    security?: operations.CreateShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ShadowMCPApprovalRequest> {
+    return unwrapAsync(accessCreateShadowMCPApprovalRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createShadowMCPAccessRule access
+   *
+   * @remarks
+   * Create a managed Shadow MCP access rule.
+   */
+  async createShadowMCPAccessRule(
+    request: operations.CreateShadowMCPAccessRuleRequest,
+    security?: operations.CreateShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CreateShadowMCPAccessRuleResult> {
+    return unwrapAsync(accessCreateShadowMCPAccessRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteRole access
    *
    * @remarks
@@ -62,6 +119,44 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteShadowMCPAccessRule access
+   *
+   * @remarks
+   * Delete a managed Shadow MCP access rule.
+   */
+  async deleteShadowMCPAccessRule(
+    request: operations.DeleteShadowMCPAccessRuleRequest,
+    security?: operations.DeleteShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessDeleteShadowMCPAccessRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * denyShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Deny a Shadow MCP request and optionally create a deny rule.
+   */
+  async denyShadowMCPApprovalRequest(
+    request: operations.DenyShadowMCPApprovalRequestRequest,
+    security?: operations.DenyShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ShadowMCPApprovalDecisionResult> {
+    return unwrapAsync(accessDenyShadowMCPApprovalRequest(
       this,
       request,
       security,
@@ -260,82 +355,6 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * resolveChallenge access
-   *
-   * @remarks
-   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
-   */
-  async resolveChallenge(
-    request: operations.ResolveChallengeRequest,
-    security?: operations.ResolveChallengeSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ResolveChallengesResult> {
-    return unwrapAsync(accessResolveChallenge(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * approveShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
-   */
-  async approveShadowMCPApprovalRequest(
-    request: operations.ApproveShadowMCPApprovalRequestRequest,
-    security?: operations.ApproveShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalDecisionResult> {
-    return unwrapAsync(accessApproveShadowMCPApprovalRequest(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * createShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Create or return an active Shadow MCP approval request.
-   */
-  async createShadowMCPApprovalRequest(
-    request: operations.CreateShadowMCPApprovalRequestRequest,
-    security?: operations.CreateShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalRequest> {
-    return unwrapAsync(accessCreateShadowMCPApprovalRequest(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * denyShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Deny a Shadow MCP request and optionally create a deny rule.
-   */
-  async denyShadowMCPApprovalRequest(
-    request: operations.DenyShadowMCPApprovalRequestRequest,
-    security?: operations.DenyShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalDecisionResult> {
-    return unwrapAsync(accessDenyShadowMCPApprovalRequest(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * listShadowMCPApprovalRequests access
    *
    * @remarks
@@ -347,44 +366,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListShadowMCPApprovalRequestsResult> {
     return unwrapAsync(accessListShadowMCPApprovalRequests(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * createShadowMCPAccessRule access
-   *
-   * @remarks
-   * Create a managed Shadow MCP access rule.
-   */
-  async createShadowMCPAccessRule(
-    request: operations.CreateShadowMCPAccessRuleRequest,
-    security?: operations.CreateShadowMCPAccessRuleSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.CreateShadowMCPAccessRuleResult> {
-    return unwrapAsync(accessCreateShadowMCPAccessRule(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * deleteShadowMCPAccessRule access
-   *
-   * @remarks
-   * Delete a managed Shadow MCP access rule.
-   */
-  async deleteShadowMCPAccessRule(
-    request: operations.DeleteShadowMCPAccessRuleRequest,
-    security?: operations.DeleteShadowMCPAccessRuleSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessDeleteShadowMCPAccessRule(
       this,
       request,
       security,
@@ -412,17 +393,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * updateShadowMCPAccessRule access
+   * resolveChallenge access
    *
    * @remarks
-   * Update a managed Shadow MCP access rule.
+   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
    */
-  async updateShadowMCPAccessRule(
-    request: operations.UpdateShadowMCPAccessRuleRequest,
-    security?: operations.UpdateShadowMCPAccessRuleSecurity | undefined,
+  async resolveChallenge(
+    request: operations.ResolveChallengeRequest,
+    security?: operations.ResolveChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ShadowMCPAccessRule> {
-    return unwrapAsync(accessUpdateShadowMCPAccessRule(
+  ): Promise<components.ResolveChallengesResult> {
+    return unwrapAsync(accessResolveChallenge(
       this,
       request,
       security,
@@ -461,6 +442,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Role> {
     return unwrapAsync(accessUpdateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateShadowMCPAccessRule access
+   *
+   * @remarks
+   * Update a managed Shadow MCP access rule.
+   */
+  async updateShadowMCPAccessRule(
+    request: operations.UpdateShadowMCPAccessRuleRequest,
+    security?: operations.UpdateShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ShadowMCPAccessRule> {
+    return unwrapAsync(accessUpdateShadowMCPAccessRule(
       this,
       request,
       security,

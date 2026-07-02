@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -209,6 +210,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create gitleaks handler: %w", err)
 			}
 
+			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
+			// detection rules from the read replica (caching their compilation) and
+			// publishes any matches into the shared Finding topic.
+			customRulesHandler, err := customruleanalyzer.NewHandler(logger, replicaDB, findingsPub)
+			if err != nil {
+				return fmt.Errorf("failed to create custom rules handler: %w", err)
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -254,6 +263,7 @@ func newStreamsCommand() *cli.Command {
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceiveBatch(
 					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},
