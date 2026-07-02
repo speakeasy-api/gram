@@ -52,6 +52,19 @@ const (
 	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
 )
 
+const (
+	// httpToolCallTimeout bounds a single outbound HTTP-tool request attempt.
+	httpToolCallTimeout = 60 * time.Second
+
+	// functionRunnerCallTimeout bounds a single function-runner request attempt.
+	// It sits above the runner's 5-minute per-tool-call execution budget (see
+	// functions/internal/runner/handle_tool_call.go) plus slack so the runner's
+	// own timeout fires first and returns a proper response, rather than the
+	// caller cancelling mid-execution (which yields a non-retryable
+	// context.DeadlineExceeded and a PP03 at the Fly edge).
+	functionRunnerCallTimeout = 6 * time.Minute
+)
+
 var proxiedHeaders = []string{
 	"Cache-Control",
 	"Content-Language",
@@ -466,14 +479,16 @@ func (tp *ToolProxy) doFunction(
 			}
 			return nil
 		},
-		RetryConfig:      functionRunnerRetryConfig(),
-		ID:               descriptor.ID,
-		Name:             descriptor.Name,
-		DeploymentID:     descriptor.DeploymentID,
-		ProjectID:        descriptor.ProjectID,
-		ProjectSlug:      descriptor.ProjectSlug,
-		OrganizationID:   descriptor.OrganizationID,
-		OrganizationSlug: descriptor.OrganizationSlug,
+		RetryConfig:       functionRunnerRetryConfig(),
+		Timeout:           functionRunnerCallTimeout,
+		DisableKeepAlives: true,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
 }
 
@@ -736,6 +751,7 @@ func (tp *ToolProxy) doHTTP(
 		Attributes:                attrRecorder,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
 		RetryConfig:               httpToolRetryConfig(),
+		Timeout:                   httpToolCallTimeout,
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
 		DeploymentID:              descriptor.DeploymentID,
@@ -847,6 +863,19 @@ type ReverseProxyOptions struct {
 	// 429/503 set) for function-runner calls and httpToolRetryConfig (GET-only
 	// broad preset) for outbound HTTP tool calls.
 	RetryConfig retryConfig
+	// Timeout bounds the whole request/response (including body read) for a
+	// single attempt. It must be set per path: the outbound HTTP-tool path uses
+	// a short caller timeout, while the function-runner path must allow up to the
+	// runner's full execution budget (5 min, see handle_tool_call.go) plus slack
+	// so a legitimately long tool call is not cancelled mid-flight (which would
+	// surface as a non-retryable context.DeadlineExceeded).
+	Timeout time.Duration
+	// DisableKeepAlives turns off HTTP connection reuse for this path. The
+	// function-runner path sets this so every attempt dials a fresh connection
+	// rather than re-drawing a pooled keep-alive to a Fly machine that may have
+	// been idled/suspended out from under us (which surfaces as an instant EOF).
+	// See FLY_CONN_ISSUES.md.
+	DisableKeepAlives bool
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -882,6 +911,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
+		DisableKeepAlives:     opts.DisableKeepAlives,
 	}
 
 	var baseTransport http.RoundTripper = transport
@@ -899,7 +929,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	)
 
 	client := &http.Client{
-		Timeout:   60 * time.Second,
+		Timeout:   opts.Timeout,
 		Transport: otelTransport,
 	}
 
