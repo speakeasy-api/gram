@@ -1482,8 +1482,9 @@ printf '{}\n200'
 }
 
 // TestRenderAuthPreflightScriptObservabilityModeFailsOpen verifies the
-// established-but-broken side of the ratchet never blocks session start in
-// observability mode: the mode is documented as fully non-blocking.
+// observability-mode preflight neither blocks nor stalls session start: a
+// fresh machine exits 0 without opening a browser (no interactive login
+// wait), and an established machine with broken credentials also exits 0.
 func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -1494,18 +1495,42 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 	}
 	dir := t.TempDir()
 	preflightPath := filepath.Join(dir, "auth_preflight.sh")
+	urlFile := filepath.Join(dir, "auth-url")
 	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
 
 	authFile := filepath.Join(dir, "auth.env")
-	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_TEST_URL_FILE="+urlFile,
+		"DISPLAY=:0",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
 
+	fresh := exec.Command("bash", preflightPath)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	require.NoError(t, fresh.Run(),
+		"observability mode must not block session start on a fresh machine: %s", freshErr.String())
+	require.NoFileExists(t, urlFile,
+		"observability mode must not stall session start on an interactive browser login")
+
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
 	broken := exec.Command("bash", preflightPath)
-	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+authFile, "CI=1")
+	broken.Env = env
 	var brokenErr bytes.Buffer
 	broken.Stderr = &brokenErr
 	require.NoError(t, broken.Run(),
 		"observability mode must not block session start on broken established auth: %s", brokenErr.String())
+	require.NoFileExists(t, urlFile)
 }
 
 // checkedInSenderCapturedRequest runs a checked-in per-event sender with no

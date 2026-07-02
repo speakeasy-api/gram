@@ -313,21 +313,28 @@ gram_hooks_login() {
   mkdir -p "$(dirname "$attempt_marker")" 2>/dev/null || true
   printf '%s' "$now" >"$attempt_marker" 2>/dev/null || true
 
+  # Unguessable per-attempt token: the dashboard echoes it back on the
+  # callback and the listener rejects anything without it, so a local
+  # process racing the redirect cannot inject its own credentials. Without a
+  # cryptographic source the guard would be enumerable, so browser login is
+  # refused entirely rather than run with a guessable token.
+  local state
+  state="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  if [ -z "$state" ]; then
+    state="$(openssl rand -hex 16 2>/dev/null)"
+  fi
+  if [ -z "$state" ]; then
+    echo "Speakeasy hooks: no secure random source for browser login on this machine." >&2
+    gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
+    return 1
+  fi
+
   GRAM_HOOKS_LOGIN_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/gram-hooks-login.XXXXXX")" || return 1
   local dir="$GRAM_HOOKS_LOGIN_TMPDIR"
   if ! mkfifo "$dir/fifo"; then
     rm -rf "$dir"
     GRAM_HOOKS_LOGIN_TMPDIR=""
     return 1
-  fi
-
-  # Unguessable per-attempt token: the dashboard echoes it back on the
-  # callback and the listener rejects anything without it, so a local
-  # process racing the redirect cannot inject its own credentials.
-  local state
-  state="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
-  if [ -z "$state" ]; then
-    state="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
   fi
 
   local style port tries started=""
