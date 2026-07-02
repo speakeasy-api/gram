@@ -382,6 +382,12 @@ gram_hooks_synth_tool_id() {
   [ -n "$conv_id" ] || conv_id="$(gram_hooks_json_string_value "$payload" "session_id")"
   gen_id="$(gram_hooks_json_string_value "$payload" "generation_id")"
   tool_name="${tool_name#MCP:}"
+  # Codex omits tool_input on PostToolUse (it is PreToolUse-only there), so
+  # keying the id on input would give a request and its result different
+  # synthetic ids and break correlation.
+  if [ "%s" = "codex" ]; then
+    tool_input=""
+  fi
   if [ -z "$conv_id" ] && [ -z "$gen_id" ] && [ -z "$tool_name" ] && [ -z "$tool_input" ]; then
     return 0
   fi
@@ -459,12 +465,16 @@ gram_hooks_codex_mcp_metadata() {
     def clean: map(select(. != null and . != "") | tostring);
     def redact_args: reduce .[] as $arg ({out: [], next: false};
       if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^[A-Za-z_][A-Za-z0-9_]*(key|token|secret|password|passwd|credential|auth)[A-Za-z0-9_]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
         {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
         {out: (.out + [$arg]), next: true}
       elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
         {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("^bearer$"; "i")) then
+        {out: (.out + [$arg]), next: true}
       elif ($arg | test("bearer +[^ ]"; "i")) then
         {out: (.out + ["***"]), next: false}
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
@@ -483,38 +493,39 @@ gram_hooks_codex_mcp_metadata() {
 # gram_hooks_redact_command_string applies the same argument redaction as the
 # config-discovery paths to a provider-supplied command line, so credentials
 # passed as stdio server arguments never reach telemetry or block evidence.
-# Without jq only the binary token is kept — over-redaction beats leaking.
+# Without jq nothing is returned: a truncated command (e.g. bare "npx") would
+# collapse distinct servers into one Shadow MCP identity, so identity falls
+# back to the server alias instead. Tokenization splits on spaces and cannot
+# see through shell quoting; the patterns cover the common unquoted shapes.
 gram_hooks_redact_command_string() {
   local command="$1"
   [ -n "$command" ] || return 0
-  if command -v jq >/dev/null 2>&1; then
-    local redacted
-    redacted="$(printf '%%s' "$command" | jq -Rr '
+  command -v jq >/dev/null 2>&1 || return 0
+  # Quote characters hide flags from the token patterns; strip them so
+  # quoted arguments still match. Values are redacted, never re-executed.
+  command="${command//\"/}"
+  command="${command//\'/}"
+  printf '%%s' "$command" | jq -Rr '
     def redact_args: reduce .[] as $arg ({out: [], next: false};
       if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^[A-Za-z_][A-Za-z0-9_]*(key|token|secret|password|passwd|credential|auth)[A-Za-z0-9_]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
         {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
         {out: (.out + [$arg]), next: true}
       elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
         {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("^bearer$"; "i")) then
+        {out: (.out + [$arg]), next: true}
       elif ($arg | test("bearer +[^ ]"; "i")) then
         {out: (.out + ["***"]), next: false}
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
         {out: (.out + ["***"]), next: false}
       else {out: (.out + [$arg]), next: false} end) | .out;
     (split(" ") | map(select(. != ""))) as $t |
-    if ($t | length) == 0 then ""
-    elif ($t | length) == 1 then $t[0]
-    else ([$t[0]] + ($t[1:] | redact_args)) | join(" ")
-    end
-    ' 2>/dev/null)"
-    if [ -n "$redacted" ]; then
-      printf '%%s' "$redacted"
-      return 0
-    fi
-  fi
-  printf '%%s' "${command%%%% *}"
+    if ($t | length) == 0 then "" else ($t | redact_args | join(" ")) end
+    ' 2>/dev/null
 }
 
 # Claude's mcp__<server>__<tool> prefixes carry a sanitized form of the config
@@ -532,12 +543,16 @@ gram_hooks_mcp_metadata_from_file() {
     def sanitize: gsub(" "; "_") | gsub("[()]"; "") | gsub("_{2,}"; "_") | sub("^_+"; "") | sub("_+$"; "");
     def redact_args: reduce .[] as $arg ({out: [], next: false};
       if .next then {out: (.out + ["***"]), next: false}
+      elif ($arg | test("^[A-Za-z_][A-Za-z0-9_]*(key|token|secret|password|passwd|credential|auth)[A-Za-z0-9_]*="; "i")) then
+        {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*="; "i")) then
         {out: (.out + [($arg | sub("=.*"; "=***"))]), next: false}
       elif ($arg | test("^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$"; "i")) then
         {out: (.out + [$arg]), next: true}
       elif ($arg | test("^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:"; "i")) then
         {out: (.out + [($arg | sub(":.*"; ": ***"))]), next: false}
+      elif ($arg | test("^bearer$"; "i")) then
+        {out: (.out + [$arg]), next: true}
       elif ($arg | test("bearer +[^ ]"; "i")) then
         {out: (.out + ["***"]), next: false}
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
@@ -681,8 +696,15 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
     # Surface the server's verdict on the backfilled prompt: a deny would have
     # fired at beforeSubmitPrompt had that delivery not been missed, so the
     # caller can still relay it on the current decision event.
+    GRAM_HOOKS_BACKFILL_STATUS="ok"
     GRAM_HOOKS_BACKFILL_DECISION="$(gram_hooks_json_string_value "$GRAM_HTTP_BODY" "decision")"
     GRAM_HOOKS_BACKFILL_BODY="$GRAM_HTTP_BODY"
+  elif [ -n "$http_code" ]; then
+    # A real attempt failed: this backfill was the turn's only prompt-policy
+    # check, so decision events must not proceed on an unverified prompt.
+    # An empty code is the never-authenticated pass-through and keeps the
+    # ratchet's fail-open behavior.
+    GRAM_HOOKS_BACKFILL_STATUS="failed"
   fi
 }
 
@@ -925,5 +947,5 @@ gram_hooks_provider_response() {
       ;;
   esac
 }
-`, spec.Platform, cases.String(), spec.Platform, spec.Platform)
+`, spec.Platform, cases.String(), spec.Platform, spec.Platform, spec.Platform)
 }

@@ -106,7 +106,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			})
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
 				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 		}
 		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) {
@@ -116,7 +117,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			})
 			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
 				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 			return s.evaluateCanonicalShadowMCP(ctx, authCtx, payload, toolName, toolInput)
 		}
@@ -126,10 +128,37 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		})
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 		}
 	}
 	return "", ""
+}
+
+// appendCanonicalBlockURL mints the durable block row for a policy-denied
+// tool call and attaches its URL to the agent-facing reason, matching the
+// legacy per-provider handlers. Retried deliveries keep the deny but must not
+// mint a second row.
+func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
+	if s.isHookDuplicate(ctx) {
+		return userReason
+	}
+	bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+		Provider:       strings.TrimSpace(payload.Source.Adapter),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Reason:         auditReason,
+		ToolName:       toolName,
+		UserID:         authCtx.UserID,
+		RiskPolicyID:   conv.StringToNullUUID(policyID),
+		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ChatID:         chatIDForBlock(canonicalSessionID(payload)),
+		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if bURL == "" {
+		return userReason
+	}
+	return appendBlockURL(userReason, bURL)
 }
 
 func canonicalHookEvent(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time) hookevents.Event {
@@ -410,6 +439,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		AccountType:         "",
+		BillingMode:         "",
 		UserAccountID:       "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),

@@ -1926,22 +1926,38 @@ if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
   gram_hooks_cursor_backfill_prompt_if_missing "$provider_payload" "$hook_hostname" "$server_url" "$project_slug"
   # A denied backfilled prompt would have blocked at beforeSubmitPrompt had
   # that delivery not been missed; relay the deny on this turn's decision
-  # event instead of letting the turn keep executing.
-  if [ -z "$gram_hooks_nonblocking" ] && [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
+  # event instead of letting the turn keep executing. A failed backfill also
+  # blocks: it was the turn's only prompt-policy check, so proceeding would
+  # skip prompt blocking exactly on the recovery path.
+  if [ -z "$gram_hooks_nonblocking" ]; then
     case "$native_event" in
       preToolUse | beforeMCPExecution)
-        gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
-        exit 0
+        if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
+          gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
+          exit 0
+        fi
+        if [ "${GRAM_HOOKS_BACKFILL_STATUS:-}" = "failed" ]; then
+          gram_hooks_provider_response "cursor" "$native_event" '{"decision":"deny","message":"Speakeasy could not verify this turn'"'"'s prompt against policy, so the tool call was blocked. Retry in a moment."}'
+          exit 0
+        fi
         ;;
     esac
   fi
 fi
-if [ "%s" = "cursor" ] && [ "$native_event" = "preToolUse" ]; then
-  cursor_tool_name="$(gram_hooks_json_string_value "$provider_payload" "tool_name")"
-  case "$cursor_tool_name" in
-    MCP:*)
-      gram_hooks_provider_response "%s" "$native_event" '{}'
-      exit 0
+if [ "%s" = "cursor" ]; then
+  # Cursor also fires the generic pre/post/failure hooks around MCP calls;
+  # the dedicated before/afterMCPExecution events carry the same call, so
+  # the generic echoes are skipped to avoid duplicate telemetry and
+  # duplicate chat tool rows under the same synthetic tool id.
+  case "$native_event" in
+    preToolUse | postToolUse | postToolUseFailure)
+      cursor_tool_name="$(gram_hooks_json_string_value "$provider_payload" "tool_name")"
+      case "$cursor_tool_name" in
+        MCP:*)
+          gram_hooks_provider_response "%s" "$native_event" '{}'
+          exit 0
+          ;;
+      esac
       ;;
   esac
 fi
