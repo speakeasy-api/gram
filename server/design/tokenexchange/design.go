@@ -9,7 +9,7 @@ import (
 
 // --- Service ---
 
-// tokenExchange is the device-agent token surface (DNO-383, ADR-0011). The
+// tokenExchange is the device-agent token surface (DNO-383). The
 // Speakeasy device agent holds an org-scoped API key with the `agent` scope. It
 // exchanges a vouched user email for a long-lived, per-user API key carrying the
 // `agent` and `hooks` scopes. The minted key is the credential the agent

@@ -1,5 +1,5 @@
-// Package tokenexchange implements the device-agent token surface (DNO-383,
-// ADR-0011). The Speakeasy device agent authenticates with an org-scoped API
+// Package tokenexchange implements the device-agent token surface (DNO-383).
+// The Speakeasy device agent authenticates with an org-scoped API
 // key carrying the `agent` scope and exchanges a vouched user email for a
 // long-lived, per-user API key carrying the `agent` and `hooks` scopes.
 //
