@@ -116,6 +116,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
 	var upstreamTokens map[uuid.UUID]string
+	var wwwAuthenticate string
 	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
@@ -128,6 +129,16 @@ func (s *Service) serveResolvedMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		upstreamTokens = tokens
+
+		// Issuer-gated clients authenticate with this server's AS, so an
+		// upstream 401/403 relayed by the proxy must challenge them with
+		// this endpoint's resource metadata — the upstream's own challenge
+		// would misdirect their re-auth at the upstream's AS.
+		protectedResourceURL, err := resolvedEndpoint.ProtectedResourceURL(s.BaseURLForRequest(r))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, logger)
+		}
+		wwwAuthenticate = AuthenticateChallengeHeader(protectedResourceURL)
 	}
 
 	switch {
@@ -136,7 +147,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
 		}
-		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
+		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
 	case mcpServer.TunneledMcpServerID.Valid:
 		upstreamToken, err := singleUpstreamToken(upstreamTokens)
 		if err != nil {
@@ -336,6 +347,7 @@ func (s *Service) serveRemoteBackend(
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
@@ -366,7 +378,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }

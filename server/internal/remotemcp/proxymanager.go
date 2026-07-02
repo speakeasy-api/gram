@@ -111,6 +111,7 @@ func (f *ProxyManager) Build(
 	visibility string,
 	projectID string,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
@@ -126,7 +127,7 @@ func (f *ProxyManager) Build(
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
-	}, server.Url, configured, visibility, projectID, upstreamAuth)
+	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate)
 }
 
 func (f *ProxyManager) BuildTarget(
@@ -137,6 +138,7 @@ func (f *ProxyManager) BuildTarget(
 	visibility string,
 	projectID string,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) *proxy.Proxy {
 	backendID := identity.SourceID()
 
@@ -215,6 +217,7 @@ func (f *ProxyManager) BuildTarget(
 		Headers:                 headers,
 		AuthorizationOverride:   upstreamAuth,
 		UpstreamResponseRetryer: nil,
+		WWWAuthenticateOverride: wwwAuthenticate,
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),

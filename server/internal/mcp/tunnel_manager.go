@@ -81,6 +81,7 @@ func (m *tunnelManager) buildProxy(
 		mcpServer.Visibility,
 		endpoint.ProjectID.String(),
 		upstreamAuth,
+		"",
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	if len(m.gatewayCIDRs) > 0 {
