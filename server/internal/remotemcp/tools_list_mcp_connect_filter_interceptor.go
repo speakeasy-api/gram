@@ -78,9 +78,10 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
 		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: "",
-			ProjectID:   i.projectID,
+			Tool:            t.Name,
+			Disposition:     "",
+			ProjectID:       i.projectID,
+			ToolAnnotations: "",
 		})
 	}
 

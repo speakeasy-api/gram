@@ -223,9 +223,10 @@ func handleToolsCall(
 			}
 		}
 		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
+			Tool:            params.Name,
+			Disposition:     disposition,
+			ProjectID:       payload.projectID.String(),
+			ToolAnnotations: conv.Ternary(disposition != "", authz.ToolAnnotationsKnown, authz.ToolAnnotationsNone),
 		})); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}

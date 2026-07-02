@@ -21,7 +21,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). The mapping lives in `scopeExpansions` in `authz/scopes.go` — key = required scope, value = higher-privilege scopes that also satisfy it.
 
-**Selector.** A `map[string]string` of constraints attached to a grant or check. Always carries `resource_kind` and `resource_id` (both required); MCP scopes additionally allow `tool` and `disposition`. Wildcards are explicit values — `{"resource_kind":"*","resource_id":"*"}`, never empty `{}`. Defined in [server/internal/authz/selector.go](server/internal/authz/selector.go).
+**Selector.** A `map[string]string` of constraints attached to a grant or check. Always carries `resource_kind` and `resource_id` (both required); MCP scopes additionally allow `tool`, `disposition`, `tool_annotations`, and `project_id`. Wildcards are explicit values — `{"resource_kind":"*","resource_id":"*"}`, never empty `{}`. Defined in [server/internal/authz/selector.go](server/internal/authz/selector.go).
 
 **Selector matching.** A grant selector satisfies a check selector when, for every key the grant constrains, either the values are equal or the grant value is `"*"`. Keys present on the grant but absent from the check are skipped — this is what lets a disposition-scoped grant (`{"disposition":"read_only"}`) still satisfy a connection-level check that doesn't constrain disposition.
 
@@ -29,7 +29,9 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
 
-**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
+**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool`, `disposition`, `project_id`, and `tool_annotations` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
+
+**Tool annotations.** The `tool_annotations` dimension describes what is known about a tool's disposition, with three values (the SQL NULL-vs-empty-set lattice): `known` — disposition tokens are recorded; `none` — the tool was affirmatively recorded with zero tokens (a materialized remote-MCP metadata row with no dispositions, or a toolset definition without annotations); `unknown` — no information exists. Two policy strengths follow, and because deny grants accept no allow-side exceptions (deny always wins — see `evaluateGrants` in `authz/grants.go`) the escape hatches are data-level by design: `deny {tool_annotations: "unknown"}` is the **review gate** (recording a zero-token metadata row moves a tool to `none`), and adding `deny {tool_annotations: "none"}` makes the **classification gate** (only `known` survives). Read paths that populate `MCPToolCallDimensions.ToolAnnotations` must always set one of the three values: deny grants strict-match only when the check carries the key, so neither `unknown` nor `none` can ride the zero-value-omitted convention. The toolset MCP paths (`mcp/rpc_tools_call.go`, `mcp/rpc_tools_list.go`) emit `known` iff the computed `disposition` is non-empty and `none` otherwise — never `unknown`, since their definitions are org-authored and have no materialization mechanism to escape a review gate with. The remote-MCP interceptors don't emit the dimension until the materialized-metadata read path lands. The key is not exposed on `SelectorModel` in the design file yet.
 
 **Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
 
@@ -81,22 +83,22 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 ### Non-generated files
 
-| File                                   | Purpose                                                                                                                                                   |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                        |
-| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                                 |
-| `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                               |
-| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                              |
-| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                                    |
-| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                                 |
-| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.               |
-| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                                |
-| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
-| `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                                               |
-| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition vocabulary, `SelectorFromRow`. |
-| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup (`WithExactGrants`, `RBACAlwaysEnabled`, `RBACAlwaysDisabled`).                                          |
-| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
-| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                       |
+| File                                   | Purpose                                                                                                                                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                                               |
+| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                                                        |
+| `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                                                      |
+| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                                                     |
+| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                                                           |
+| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                                                        |
+| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.                                      |
+| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                                                       |
+| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                                         |
+| `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                                                                      |
+| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition and tool_annotations vocabularies, `SelectorFromRow`. |
+| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup (`WithExactGrants`, `RBACAlwaysEnabled`, `RBACAlwaysDisabled`).                                                                 |
+| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                                               |
+| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                                              |
 
 ### Generated files
 
@@ -279,7 +281,7 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 - Replacing `authz.Engine` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, `PrepareContext`, `ShouldEnforce`, etc.) or constructor signature.
 - Moving authorization primitives back into `access` or into a new package — the `authz` / `access` split is deliberate and load-bearing for import-cycle reasons.
 - Changing the `Check` struct shape (currently `{Scope, ResourceKind, ResourceID, Dimensions}`) or the `Selector` type's matching rules.
-- Adding a new selector dimension key (currently `tool`, `disposition` for MCP) — including changes to `allowedSelectorKeys` or `validDispositions` in `authz/selector.go`, or to the matching `SelectorModel` enums in the design file.
+- Adding a new selector dimension key (currently `tool`, `disposition`, `tool_annotations`, `project_id` for MCP) — including changes to `allowedSelectorKeys`, `validDispositions`, or `validToolAnnotations` in `authz/selector.go`, or to the matching `SelectorModel` enums in the design file.
 - Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion). The expansion algorithm currently emits one entry per scope level (relying on selector matching to handle wildcards) — switching back to per-scope×per-resource enumeration would change the perf profile and is worth re-documenting.
 - Changing where the full-access scope catalogue lives (currently inline in `access.ListGrants` and mirrored by `expectedFullAccessScopes` in tests), or where `ListScopes` is populated.
 - Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file. Same applies if the `ANNOTATION_TO_DISPOSITION` / `DISPOSITION_TO_ANNOTATION` maps move out of that file.
