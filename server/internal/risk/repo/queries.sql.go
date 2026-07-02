@@ -875,6 +875,85 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 	return items, nil
 }
 
+const getBatchChatIdentities = `-- name: GetBatchChatIdentities :many
+SELECT earliest_message_id, account_type, email
+FROM (
+  SELECT DISTINCT ON (cm.chat_id)
+      cm.id AS earliest_message_id
+    , ua.account_type
+    , ua.email
+  FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+  WHERE cm.id = ANY($1::uuid[])
+    AND cm.project_id = $2::uuid
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN chat_messages prior ON prior.id = rr.chat_message_id
+      WHERE rr.project_id = $2::uuid
+        AND rr.risk_policy_id = $3
+        AND rr.risk_policy_version = $4
+        AND rr.source = 'account_identity'
+        AND rr.found IS TRUE
+        AND prior.chat_id = cm.chat_id
+        AND rr.chat_message_id != ALL($1::uuid[])
+    )
+  ORDER BY cm.chat_id, cm.id ASC
+) batch_chats
+ORDER BY earliest_message_id ASC
+`
+
+type GetBatchChatIdentitiesParams struct {
+	Ids               []uuid.UUID
+	ProjectID         uuid.UUID
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+}
+
+type GetBatchChatIdentitiesRow struct {
+	EarliestMessageID uuid.UUID
+	AccountType       pgtype.Text
+	Email             pgtype.Text
+}
+
+// One row per chat represented in a batch of messages, for the session-scoped
+// account_identity scanner: the chat's earliest in-batch message (UUIDv7
+// order = creation order, the message the finding attaches to) plus the
+// chat's AI-account identity from personal-account tracking (NULL
+// account_type/email for unattributed chats — the scanner emits nothing for
+// those).
+//
+// Chats that already carry an account_identity finding for this policy
+// version on a message OUTSIDE the batch are omitted: session-scoped findings
+// dedupe to one per chat per policy version. Findings on in-batch messages do
+// not block re-emission because the writer deletes and re-inserts results for
+// the batch's messages.
+func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatIdentitiesParams) ([]GetBatchChatIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, getBatchChatIdentities,
+		arg.Ids,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBatchChatIdentitiesRow
+	for rows.Next() {
+		var i GetBatchChatIdentitiesRow
+		if err := rows.Scan(&i.EarliestMessageID, &i.AccountType, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCustomDetectionRule = `-- name: GetCustomDetectionRule :one
 SELECT id, project_id, organization_id, rule_id, title, description, regex, match_config, detection_expr, severity, created_at, updated_at, deleted_at, deleted
 FROM risk_custom_detection_rules

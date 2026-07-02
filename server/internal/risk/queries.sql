@@ -671,6 +671,46 @@ FROM chat_messages
 WHERE id = ANY(@ids::uuid[])
   AND project_id = @project_id;
 
+-- name: GetBatchChatIdentities :many
+-- One row per chat represented in a batch of messages, for the session-scoped
+-- account_identity scanner: the chat's earliest in-batch message (UUIDv7
+-- order = creation order, the message the finding attaches to) plus the
+-- chat's AI-account identity from personal-account tracking (NULL
+-- account_type/email for unattributed chats — the scanner emits nothing for
+-- those).
+--
+-- Chats that already carry an account_identity finding for this policy
+-- version on a message OUTSIDE the batch are omitted: session-scoped findings
+-- dedupe to one per chat per policy version. Findings on in-batch messages do
+-- not block re-emission because the writer deletes and re-inserts results for
+-- the batch's messages.
+SELECT earliest_message_id, account_type, email
+FROM (
+  SELECT DISTINCT ON (cm.chat_id)
+      cm.id AS earliest_message_id
+    , ua.account_type
+    , ua.email
+  FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+  WHERE cm.id = ANY(@ids::uuid[])
+    AND cm.project_id = @project_id::uuid
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN chat_messages prior ON prior.id = rr.chat_message_id
+      WHERE rr.project_id = @project_id::uuid
+        AND rr.risk_policy_id = @risk_policy_id
+        AND rr.risk_policy_version = @risk_policy_version
+        AND rr.source = 'account_identity'
+        AND rr.found IS TRUE
+        AND prior.chat_id = cm.chat_id
+        AND rr.chat_message_id != ALL(@ids::uuid[])
+    )
+  ORDER BY cm.chat_id, cm.id ASC
+) batch_chats
+ORDER BY earliest_message_id ASC;
+
 -- name: InsertRiskResults :copyfrom
 INSERT INTO risk_results (
     id

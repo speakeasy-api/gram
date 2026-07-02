@@ -233,6 +233,10 @@ type CreateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty/omitted leaves the domain rule inert.
+	ApprovedEmailDomains []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -954,6 +958,9 @@ type UpdateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
+	// For the account_identity source: corporate email domains considered
+	// approved. Omit to preserve the current list; send an empty array to clear it.
+	ApprovedEmailDomains []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string

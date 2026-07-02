@@ -53,6 +53,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   action?: Action | undefined;
   /**
+   * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.
+   */
+  approvedEmailDomains?: Array<string> | undefined;
+  /**
    * Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
    */
   audiencePrincipalUrns?: Array<string> | undefined;
@@ -139,6 +143,7 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
+  approved_email_domains?: Array<string> | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type: string;
   auto_name?: boolean | undefined;
@@ -166,6 +171,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
+    approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
@@ -187,6 +193,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      approvedEmailDomains: "approved_email_domains",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
       autoName: "auto_name",

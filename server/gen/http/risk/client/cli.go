@@ -25,7 +25,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -81,6 +81,12 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.ApprovedEmailDomains != nil {
+		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
+		for i, val := range body.ApprovedEmailDomains {
+			v.ApprovedEmailDomains[i] = val
 		}
 	}
 	if body.DisabledRules != nil {
@@ -205,7 +211,7 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.PresidioScoreThreshold != nil {
@@ -279,6 +285,12 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.ApprovedEmailDomains != nil {
+		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
+		for i, val := range body.ApprovedEmailDomains {
+			v.ApprovedEmailDomains[i] = val
 		}
 	}
 	if body.DisabledRules != nil {

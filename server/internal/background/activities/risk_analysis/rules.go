@@ -19,6 +19,7 @@ import (
 //	destructive.tool                 — MCP tool annotated as destructive
 //	destructive.<cat>.<name>         — destructive shell / git / db / cloud command
 //	prompt_injection                 — prompt injection (engine selected per-org)
+//	identity.<check>                 — session authenticated with a non-corporate AI account
 //	custom.<rule_slug>               — project-defined custom detection rule
 //
 // The pair (source, rule_id) is the stable composite identity for downstream
@@ -34,6 +35,7 @@ import (
 const (
 	prefixPII         = "pii."
 	prefixDestructive = "destructive."
+	prefixIdentity    = "identity."
 
 	// RuleShadowMCP is the canonical rule id emitted for every shadow_mcp
 	// finding. The detection mechanism (missing toolset id, unknown
@@ -54,6 +56,14 @@ const (
 	// DeadLetterRuleID is the rule id emitted for Presidio dead-letter
 	// sentinel rows when a message could not be analyzed.
 	DeadLetterRuleID = prefixPII + "dead_letter"
+
+	// RuleIdentityPersonalAccount fires when a session's AI account is
+	// classified as a personal (non-team) account.
+	RuleIdentityPersonalAccount = prefixIdentity + "personal_account"
+
+	// RuleIdentityUnapprovedDomain fires when a session's AI-account email
+	// domain is not on the policy's approved corporate domain list.
+	RuleIdentityUnapprovedDomain = prefixIdentity + "unapproved_domain"
 )
 
 // guard validates the rule id against the canonical grammar and panics in
