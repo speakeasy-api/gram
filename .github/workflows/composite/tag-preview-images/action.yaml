@@ -1,0 +1,77 @@
+name: "Tag preview images"
+description: >
+  Composite action that gives unchanged components a preview image tag.
+  Preview environments deploy images tagged pr-<number>-<8-char head sha>;
+  components with changes get that tag from their docker build jobs, and this
+  action covers the rest by aliasing the image of the newest main commit whose
+  watched paths (from .github/filters.yaml) match the PR merge commit. Must
+  run after a full-history checkout (fetch-depth: 0).
+
+inputs:
+  registry:
+    description: "Image registry, e.g. gcr.io/linen-analyst-344721"
+    required: true
+  image-owner:
+    description: "Image repository owner, e.g. speakeasy-api"
+    required: true
+  username:
+    description: "Username for the image registry"
+    required: true
+  password:
+    description: "Password for the image registry"
+    required: true
+  pr-number:
+    description: "Pull request number"
+    required: true
+  head-sha:
+    description: "Head commit SHA of the pull request"
+    required: true
+  server-changed:
+    description: "Whether the changes job decided server builds run ('true' to skip retagging gram and gram-dashboard)"
+    required: false
+    default: ""
+  client-changed:
+    description: "Whether the changes job decided client builds run ('true' to skip retagging gram-dashboard)"
+    required: false
+    default: ""
+  pystreams-changed:
+    description: "Whether the changes job decided pystreams builds run ('true' to skip retagging gram-pystreams)"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Login to registry
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+      run: |
+        max_attempts=3
+        for ((i=1; i<=max_attempts; i++)); do
+          echo "Docker login attempt $i/$max_attempts..."
+          if docker login -u "$REGISTRY_USERNAME" --password-stdin "$REGISTRY" <<< "$REGISTRY_PASSWORD"; then
+            echo "Login successful"
+            exit 0
+          fi
+          if [ $i -lt $max_attempts ]; then
+            echo "Login failed, waiting 5s before retry..."
+            sleep 5
+          fi
+        done
+        echo "All login attempts failed"
+        exit 1
+
+    - name: Tag preview images for unchanged components
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        DOCKER_REPOSITORY_OWNER: ${{ inputs.image-owner }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        SERVER_CHANGED: ${{ inputs.server-changed }}
+        CLIENT_CHANGED: ${{ inputs.client-changed }}
+        PYSTREAMS_CHANGED: ${{ inputs.pystreams-changed }}
+      run: bash "${{ github.action_path }}/tag-preview-images.sh"

@@ -186,33 +186,19 @@ jobs:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
-      - name: Login to GCR
-        env:
-          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
-        run: |
-          max_attempts=3
-          for ((i=1; i<=max_attempts; i++)); do
-            echo "Docker login attempt $i/$max_attempts..."
-            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
-              echo "Login successful"
-              exit 0
-            fi
-            if [ $i -lt $max_attempts ]; then
-              echo "Login failed, waiting 5s before retry..."
-              sleep 5
-            fi
-          done
-          echo "All login attempts failed"
-          exit 1
 
       - name: Tag preview images for unchanged components
-        env:
-          SERVER_CHANGED: ${{ needs.changes.outputs.server }}
-          CLIENT_CHANGED: ${{ needs.changes.outputs.client }}
-          PYSTREAMS_CHANGED: ${{ needs.changes.outputs.pystreams }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash .github/scripts/tag-preview-images.sh
+        uses: ./.github/workflows/composite/tag-preview-images
+        with:
+          registry: ${{ env.REGISTRY }}
+          image-owner: ${{ env.DOCKER_REPOSITORY_OWNER }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          server-changed: ${{ needs.changes.outputs.server }}
+          client-changed: ${{ needs.changes.outputs.client }}
+          pystreams-changed: ${{ needs.changes.outputs.pystreams }}
 
   format-check:
     name: Check formatting with hk
