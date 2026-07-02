@@ -138,6 +138,7 @@ export * from "./hooksHooksNumberMetrics.js";
 export * from "./hooksServerNamesDeleteServerNameOverride.js";
 export * from "./hooksServerNamesListServerNameOverrides.js";
 export * from "./hooksServerNamesUpsertServerNameOverride.js";
+export * from "./ingestHookEvent.js";
 export * from "./instance.js";
 export * from "./integrationsIntegrationsNumberGet.js";
 export * from "./latestDeployment.js";
