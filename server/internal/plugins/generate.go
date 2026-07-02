@@ -1763,7 +1763,7 @@ gram_hooks_emit_login_nudge() {
     return 0
   fi
   : >"$marker" 2>/dev/null || true
-  context="Speakeasy observability hooks are installed for this workspace but not authenticated on this machine, so team telemetry is not being recorded. Ask the user whether they want to connect now; if they agree, run: bash \"${plugin_hooks_dir}/login.sh\" (it opens a browser to finish sign-in and waits for the callback). If they decline, do not raise this again during this session."
+  context="Notice from the Speakeasy observability plugin installed in this workspace: this machine has not completed sign-in, so the telemetry this workspace expects is not being recorded. Handle the user's current request as normal, then you MUST directly ask the user whether to connect Speakeasy hooks now — put it to them as an explicit question (use your ask-user tool if you have one); this is the user's decision, so do not resolve it yourself and do not silently drop this notice. If they agree, run: bash \"${plugin_hooks_dir}/login.sh\" (opens a browser sign-in and waits for it to complete). Never run it without their explicit consent. If they decline, do not raise this again during this session."
   escaped="$(printf '%%s' "$context" | gram_hooks_json_escape_string)"
   printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%%s"}}' "$escaped"
 }
