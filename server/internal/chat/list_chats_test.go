@@ -801,3 +801,49 @@ func TestListSources(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
 }
+
+// TestListSources_CanonicalizesAndDropsEmpty covers AIS-233: legacy chats
+// recorded Claude Code as "ClaudeCode" alongside the standardized "claude-code",
+// and some chats have an empty-string source. The filter list must collapse the
+// Claude Code aliases into one entry and never surface a blank option.
+func TestListSources_CanonicalizesAndDropsEmpty(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	seedChatWithSource(t, ctx, ti, "ext-src", "ClaudeCode") // legacy alias collapses
+	seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+	seedChatWithSource(t, ctx, ti, "ext-src", "") // empty is dropped
+
+	result, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
+}
+
+// TestListChats_Filter_Source_ExpandsAliases verifies that filtering by the
+// canonical "claude-code" also matches sessions stored under the legacy
+// "ClaudeCode" alias.
+func TestListChats_Filter_Source_ExpandsAliases(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	newStyle := seedChatWithSource(t, ctx, ti, "ext-src", "claude-code")
+	legacy := seedChatWithSource(t, ctx, ti, "ext-src", "ClaudeCode")
+	_ = seedChatWithSource(t, ctx, ti, "ext-src", "Codex")
+
+	source := "claude-code"
+	payload := defaultPayload()
+	payload.Source = &source
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	got := map[string]bool{}
+	for _, c := range result.Chats {
+		got[c.ID] = true
+	}
+	require.True(t, got[newStyle.String()], "expected claude-code chat in results")
+	require.True(t, got[legacy.String()], "expected legacy ClaudeCode chat in results")
+}

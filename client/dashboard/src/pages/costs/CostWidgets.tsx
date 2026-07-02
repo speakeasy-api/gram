@@ -432,6 +432,7 @@ export type WidgetSeries = {
   chats: number[];
   tools: number[];
   tokens: number[];
+  cacheCreation: number[];
 };
 
 // A single big-number stat (e.g. cost per session).
@@ -544,6 +545,7 @@ export function CostWidgets({
   prevTotals,
   cards,
   rangeLabel,
+  cacheMetric,
   onDrill,
   onOpenSession,
   loading,
@@ -556,6 +558,8 @@ export function CostWidgets({
   cards: CardSpec[];
   // Human date-range label shown beside the headline metric titles.
   rangeLabel: string;
+  // Attribution lens: swap the "Tool calls" KPI tile for "Tokens added".
+  cacheMetric?: boolean;
   // Drill into a mix-card row by its (dimension, value).
   onDrill?: (dim: Dimension, value: string) => void;
   // Open a session's detail from the "Most costly sessions" widget.
@@ -594,14 +598,25 @@ export function CostWidgets({
           range={rangeLabel}
           loading={loading}
         />
-        <KpiTile
-          label="Tool calls"
-          value={formatCompact(totals.tools)}
-          series={series.tools}
-          delta={relDelta(totals.tools, prevTotals.tools)}
-          range={rangeLabel}
-          loading={loading}
-        />
+        {cacheMetric ? (
+          <KpiTile
+            label="Tokens added"
+            value={formatCompact(totals.cacheCreation)}
+            series={series.cacheCreation}
+            delta={relDelta(totals.cacheCreation, prevTotals.cacheCreation)}
+            range={rangeLabel}
+            loading={loading}
+          />
+        ) : (
+          <KpiTile
+            label="Tool calls"
+            value={formatCompact(totals.tools)}
+            series={series.tools}
+            delta={relDelta(totals.tools, prevTotals.tools)}
+            range={rangeLabel}
+            loading={loading}
+          />
+        )}
         <KpiTile
           label="Tokens"
           value={formatCompact(totals.tokens)}

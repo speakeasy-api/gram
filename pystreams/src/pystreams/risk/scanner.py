@@ -56,6 +56,16 @@ SPACY_MODEL = "en_core_web_lg"
 # DefaultPresidioScoreThreshold so both paths agree on the floor.
 DEFAULT_SCORE_THRESHOLD = 0.5
 
+# Presidio entity types dropped after the scan regardless of how it was scoped.
+# Mirrors the Go scanner's findingLevelDropEntities.
+#
+# A policy that pins no entities makes Presidio scan its full default set, so
+# scan-scoping alone cannot keep US_DRIVER_LICENSE out — its recognizer is pure
+# noise (microsoft/presidio#1063), so it is dropped here (see
+# _scan_to_detections). PERSON is deliberately not included: person-name
+# detection on unpinned scans is intended behaviour, matching the Go path.
+_FINDING_LEVEL_DROP = frozenset({"US_DRIVER_LICENSE"})
+
 _T = TypeVar("_T")
 
 
@@ -408,6 +418,11 @@ def _scan_to_detections(
     # works in character offsets, so a discarded match never costs byte conversion.
     spans: list[tuple[Recognized, int, int, str]] = []
     for r in results:
+        # Drop US_DRIVER_LICENSE regardless of how the scan was scoped: an
+        # unpinned request scans Presidio's full default set, so this gate is
+        # what keeps its noisy license-number matches out (AIS-158).
+        if r.entity_type in _FINDING_LEVEL_DROP:
+            continue
         start = max(0, min(r.start, n))
         end = max(start, min(r.end, n))
         match = content[start:end]

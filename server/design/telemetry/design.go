@@ -1335,6 +1335,11 @@ var queryDimensions = []any{
 	"account_type", // AI account classification (team | personal | unclassified)
 	"provider",     // AI provider for the account (anthropic | openai | cursor)
 	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",
