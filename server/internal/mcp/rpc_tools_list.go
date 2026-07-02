@@ -119,9 +119,10 @@ func handleToolsList(
 		for _, t := range tools {
 			disposition := dispositionFromAnnotations(t.Annotations)
 			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-				Tool:        t.Name,
-				Disposition: disposition,
-				ProjectID:   payload.projectID.String(),
+				Tool:            t.Name,
+				Disposition:     disposition,
+				ProjectID:       payload.projectID.String(),
+				ToolAnnotations: conv.Ternary(disposition != "", authz.ToolAnnotationsKnown, authz.ToolAnnotationsNone),
 			})); err != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {

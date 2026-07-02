@@ -6,6 +6,13 @@ type MCPToolCallDimensions struct {
 	Tool        string
 	Disposition string
 	ProjectID   string
+	// ToolAnnotations is one of ToolAnnotationsKnown, ToolAnnotationsNone, or
+	// ToolAnnotationsUnknown — what is known about the tool's disposition.
+	// Read paths that populate it must always set one of the three: deny
+	// grants on {tool_annotations:"unknown"} or {tool_annotations:"none"}
+	// strict-match only when the key is emitted, so neither state can ride
+	// the zero-value-omitted convention.
+	ToolAnnotations string
 }
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
@@ -19,6 +26,9 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	}
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
+	}
+	if dims.ToolAnnotations != "" {
+		dimensions[SelectorKeyToolAnnotations] = dims.ToolAnnotations
 	}
 	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
 }
