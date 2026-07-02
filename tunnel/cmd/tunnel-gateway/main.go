@@ -34,14 +34,10 @@ func main() {
 		os.Exit(2)
 	}
 	// Zero falls back to the benchmarked default in gateway.New.
-	maxSessions := 0
-	if raw := strings.TrimSpace(os.Getenv("TUNNEL_GATEWAY_MAX_SESSIONS")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 {
-			logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_MAX_SESSIONS must be a positive integer")
-			os.Exit(2)
-		}
-		maxSessions = parsed
+	maxSessions, err := parseMaxSessions(os.Getenv("TUNNEL_GATEWAY_MAX_SESSIONS"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "TUNNEL_GATEWAY_MAX_SESSIONS must be a non-negative integer")
+		os.Exit(2)
 	}
 
 	routes, err := buildRouteStore(logger)
@@ -153,4 +149,19 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func parseMaxSessions(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	if parsed < 0 {
+		return 0, errors.New("max sessions must be non-negative")
+	}
+	return parsed, nil
 }
