@@ -1,6 +1,7 @@
 package shadowmcp
 
 import (
+	"net"
 	"net/url"
 	"strings"
 )
@@ -28,9 +29,14 @@ func CanonicalizeInventoryURL(raw string) (InventoryURL, bool) {
 	}
 
 	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	parsed.Host = NormalizeURLHost(parsed.Scheme, parsed.Host)
+	normalizedHost := NormalizeURLHost(parsed.Scheme, parsed.Host)
+	parsed.Host = normalizedHost
+	if strings.Contains(normalizedHost, ":") && net.ParseIP(normalizedHost) != nil {
+		parsed.Host = "[" + normalizedHost + "]"
+	}
 	parsed.User = nil
 	parsed.RawQuery = ""
+	parsed.ForceQuery = false
 	parsed.Fragment = ""
 	sanitized := parsed.String()
 
@@ -44,7 +50,7 @@ func CanonicalizeInventoryURL(raw string) (InventoryURL, bool) {
 
 	return InventoryURL{
 		CanonicalURL: canonical,
-		URLHost:      NormalizeURLHost(parsed.Scheme, parsed.Host),
+		URLHost:      normalizedHost,
 	}, true
 }
 
