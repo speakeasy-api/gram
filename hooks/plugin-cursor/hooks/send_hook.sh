@@ -40,16 +40,30 @@ emit_deny() {
     "$(json_string "$1")" "$(json_string "$1")"
 }
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# No env key: fall back to the credentials the browser login flow cached
+# (auth_preflight.sh / login.sh). auth.sh installs an EXIT trap when sourced;
+# the trap set later in this script deliberately replaces it and covers the
+# only resource created here (the curl auth config).
+if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
+  # shellcheck source=/dev/null
+  if . "$script_dir/auth.sh" 2>/dev/null && type gram_hooks_read_auth >/dev/null 2>&1; then
+    if gram_hooks_read_auth "$server_url" 2>/dev/null; then
+      api_key="$GRAM_HOOKS_CACHED_API_KEY"
+      [ -n "$project_slug" ] || project_slug="$GRAM_HOOKS_CACHED_PROJECT"
+    fi
+  fi
+fi
+
 # Not configured: this is a setup problem, not a policy decision. Allow the
 # action (emit no decision) but surface the misconfiguration instead of failing
 # silently — the single most common "my hook isn't firing" cause.
 if [ -z "$api_key" ] || [ -z "$project_slug" ]; then
   echo '{}'
-  echo "gram-hooks(cursor): not sending hook — set GRAM_HOOKS_API_KEY (or GRAM_API_KEY) and GRAM_HOOKS_PROJECT_SLUG (or GRAM_PROJECT_SLUG) to enable Speakeasy hooks." >&2
+  echo "gram-hooks(cursor): not sending hook — run the plugin's hooks/login.sh to connect, or set GRAM_HOOKS_API_KEY (or GRAM_API_KEY) and GRAM_HOOKS_PROJECT_SLUG (or GRAM_PROJECT_SLUG)." >&2
   exit 0
 fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi

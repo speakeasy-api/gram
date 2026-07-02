@@ -636,8 +636,7 @@ gram_hooks_canonical_data_members() {
 
   local mcp_server_name mcp_server_identity mcp_url mcp_command mcp_metadata
   mcp_server_name="$(gram_hooks_mcp_server_from_payload "$payload")"
-  mcp_server_identity="$(gram_hooks_first_string "$payload" "server_identity" "mcp_server_name" "command")"
-  [ -n "$mcp_server_identity" ] || mcp_server_identity="$mcp_server_name"
+  mcp_server_identity="$(gram_hooks_json_string_value "$payload" "server_identity")"
   mcp_url="$(gram_hooks_first_string "$payload" "url" "mcp_server_url")"
   mcp_command="$(gram_hooks_json_string_value "$payload" "command")"
   if [ -n "$mcp_server_name" ] && { [ -z "$mcp_url" ] || [ -z "$mcp_command" ]; }; then
@@ -646,6 +645,17 @@ gram_hooks_canonical_data_members() {
     if [ -n "$mcp_metadata" ]; then
       [ -n "$mcp_url" ] || mcp_url="$(printf '%%s\n' "$mcp_metadata" | sed -n 's/^url=//p')"
       [ -n "$mcp_command" ] || mcp_command="$(printf '%%s\n' "$mcp_metadata" | sed -n 's/^command=//p')"
+    fi
+  fi
+  # Identity is what Shadow MCP approvals are scoped to. Pin stdio servers to
+  # their launch command — the server alias is mutable and must not inherit an
+  # approval after being repointed at a different command. URL servers carry
+  # their URL as separate evidence, so the alias suffices there.
+  if [ -z "$mcp_server_identity" ]; then
+    if [ -z "$mcp_url" ] && [ -n "$mcp_command" ]; then
+      mcp_server_identity="$mcp_command"
+    else
+      mcp_server_identity="$mcp_server_name"
     fi
   fi
 

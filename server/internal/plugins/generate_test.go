@@ -1080,6 +1080,140 @@ printf '{}\n200'
 	require.Equal(t, "grame2e", metaMCP["server_name"])
 }
 
+// TestRenderHookScriptCursorPinsStdioMCPIdentityToCommand verifies that a
+// stdio MCP server's identity — what Shadow MCP approvals are scoped to — is
+// the launch command, not the mutable server alias, while URL servers keep
+// the alias identity alongside their URL evidence.
+func TestRenderHookScriptCursorPinsStdioMCPIdentityToCommand(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	stdio := exec.Command("bash", hookPath)
+	stdio.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution","conversation_id":"sess-mcp-id","mcp_server_name":"foo","command":"npx server-foo","tool_name":"lookup"}`)
+	stdio.Env = env
+	output, err := stdio.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	byURL := exec.Command("bash", hookPath)
+	byURL.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution","conversation_id":"sess-mcp-id","mcp_server_name":"foo","url":"https://mcp.example.com/x","tool_name":"lookup"}`)
+	byURL.Env = env
+	output, err = byURL.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 3, "expected two captured ingest payloads")
+
+	var stdioPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &stdioPayload))
+	stdioMCP := requireMapValue(t, requireMapValue(t, stdioPayload, "data"), "mcp")
+	require.Equal(t, "npx server-foo", stdioMCP["server_identity"],
+		"stdio MCP identity must be pinned to the launch command, not the alias")
+	require.Equal(t, "foo", stdioMCP["server_name"])
+
+	var urlPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[1])), &urlPayload))
+	urlMCP := requireMapValue(t, requireMapValue(t, urlPayload, "data"), "mcp")
+	require.Equal(t, "foo", urlMCP["server_identity"])
+	require.Equal(t, "https://mcp.example.com/x", urlMCP["url"])
+}
+
+// TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
+// Cursor plugin's per-event sender falls back to the credentials cached by
+// the browser login flow (auth_preflight.sh / login.sh) when no env key is
+// set, instead of silently skipping the send.
+func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-cursor", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	headersPath := filepath.Join(dir, "headers.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_HEADERS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_HEADERS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_browser_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_HEADERS="+headersPath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	headers := string(requireFileBytes(t, headersPath))
+	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
+	require.Contains(t, headers, "Gram-Project: acme-prod")
+	require.Contains(t, headers, "/rpc/hooks.cursor")
+}
+
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
