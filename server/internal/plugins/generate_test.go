@@ -824,6 +824,134 @@ func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	require.Equal(t, "acme-speakeasy", defManifest.Name)
 }
 
+// hookAuthTestEnv builds a scrubbed environment for exercising rendered hook
+// scripts against a controlled auth state: no ambient Gram credentials, no
+// CI/SSH markers, and TMPDIR pinned inside the test dir so nudge markers are
+// isolated per test.
+func hookAuthTestEnv(dir string, extra ...string) []string {
+	env := []string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + dir}
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "CI=") || strings.HasPrefix(kv, "SSH_CONNECTION=") ||
+			strings.HasPrefix(kv, "SSH_TTY=") || strings.HasPrefix(kv, "PATH=") ||
+			strings.HasPrefix(kv, "TMPDIR=") || strings.HasPrefix(kv, "GRAM_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, extra...)
+}
+
+// TestRenderHookScriptClaudeUnauthenticatedNudgesLoginOnce verifies the
+// never-authenticated ratchet on Claude prompt submission: the hook must not
+// block (exit 0), must inject an additionalContext nudge pointing at the
+// plugin's login helper, and must inject it at most once per session.
+func TestRenderHookScriptClaudeUnauthenticatedNudgesLoginOnce(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	env := hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"))
+	payload := `{"hook_event_name":"UserPromptSubmit","session_id":"sess-nudge","prompt":"hi"}`
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(payload)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "unauthenticated UserPromptSubmit must fail open: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"additionalContext"`)
+	require.Contains(t, stdout.String(), "login.sh")
+	require.Contains(t, stderr.String(), "not connected on this machine yet")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(payload)
+	repeat.Env = env
+	var repeatOut bytes.Buffer
+	repeat.Stdout = &repeatOut
+	repeat.Stderr = &stderr
+	require.NoError(t, repeat.Run(), stderr.String())
+	require.Empty(t, repeatOut.String(), "nudge must be injected at most once per session")
+}
+
+// TestRenderHookScriptClaudeEstablishedFailsClosed verifies the other side of
+// the ratchet: once credentials have ever been cached on a machine, a missing
+// or invalidated key blocks the hook (exit 2) instead of failing open.
+func TestRenderHookScriptClaudeEstablishedFailsClosed(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-closed","tool_name":"Bash"}`)
+	cmd.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+authFile)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "established machine without credentials must block")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "could not authenticate")
+}
+
+// TestRenderAuthPreflightScriptRatchet verifies SessionStart preflight
+// behavior on both sides of the ratchet: never-authenticated machines start
+// the session (exit 0, after the login attempt is skipped in CI), while
+// established machines with broken credentials block session start (exit 2).
+func TestRenderAuthPreflightScriptRatchet(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	preflightPath := filepath.Join(dir, "auth_preflight.sh")
+	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	// CI=1 makes the interactive login path decline immediately instead of
+	// opening a browser, exercising the same fallthrough real headless
+	// machines hit.
+	env := hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+authFile, "CI=1")
+
+	fresh := exec.Command("bash", preflightPath)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	require.NoError(t, fresh.Run(), "never-authenticated preflight must not block session start: %s", freshErr.String())
+
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	broken := exec.Command("bash", preflightPath)
+	broken.Env = env
+	var brokenErr bytes.Buffer
+	broken.Stderr = &brokenErr
+	err := broken.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "established machine with broken credentials must block session start")
+	require.Equal(t, 2, exitErr.ExitCode(), brokenErr.String())
+}
+
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{

@@ -951,7 +951,10 @@ fi
 
 export GRAM_HOOKS_INTERACTIVE=1
 
-gram_hooks_prepare_auth "$server_url" "$project_slug" 2
+# Never-authenticated machines fail open (prepare_auth returns 3 after
+# warning); once credentials have been established, a broken auth state
+# still exits 2 from inside prepare_auth and blocks the session start.
+gram_hooks_prepare_auth "$server_url" "$project_slug" 2 || true
 exit 0
 `, cfg.ServerURL, cfg.ProjectSlug)
 }
@@ -1068,13 +1071,28 @@ gram_hooks_write_auth() {
     return 1
   }
   umask "$old_umask"
-  mv "$tmp" "$path"
+  mv "$tmp" "$path" || return 1
+  gram_hooks_mark_auth_established
 }
 
 gram_hooks_forget_auth() {
   local path
   path="$(gram_hooks_auth_file)"
   rm -f "$path"
+}
+
+# gram_hooks_auth_established reports whether this machine has EVER cached
+# hook credentials — the fail-closed ratchet: before the first successful
+# auth, blocking hook paths warn and fail open; afterwards they fail closed.
+# The marker survives gram_hooks_forget_auth so a forgotten or invalidated
+# key cannot silently disable enforcement.
+gram_hooks_auth_established() {
+  [ -e "$(gram_hooks_auth_file).established" ] && return 0
+  [ -r "$(gram_hooks_auth_file)" ]
+}
+
+gram_hooks_mark_auth_established() {
+  : >"$(gram_hooks_auth_file).established" 2>/dev/null || true
 }
 
 gram_hooks_manual_auth_instructions() {
@@ -1430,8 +1448,12 @@ gram_hooks_prepare_auth() {
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
-        echo "Speakeasy hooks could not authenticate with Gram." >&2
-        exit "$failure_exit"
+        if gram_hooks_auth_established; then
+          echo "Speakeasy hooks could not authenticate with Gram. Run the plugin's hooks/login.sh to reconnect, or set GRAM_HOOKS_API_KEY." >&2
+          exit "$failure_exit"
+        fi
+        echo "Speakeasy hooks are not connected on this machine yet; events are not being recorded. Run the plugin's hooks/login.sh to connect." >&2
+        return 3
       fi
       if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
         echo "Speakeasy hooks could not read Gram authentication after login." >&2
@@ -1469,14 +1491,24 @@ gram_hooks_post_authenticated() {
   local failure_exit="$5"
   shift 5
 
-  gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"
+  # Return 78 when this machine has never authenticated (ratchet fail-open):
+  # callers emit a pass-through response instead of blocking. Once auth has
+  # been established, prepare_auth fails closed by exiting from within.
+  if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"; then
+    GRAM_HTTP_CODE=""
+    GRAM_HTTP_BODY=""
+    return 78
+  fi
   gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
     "$@" \
     ${auth_config_arg[@]+"${auth_config_arg[@]}"}
   local first_status="$GRAM_HTTP_CODE"
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
-    gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force
+    if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
+      GRAM_HTTP_CODE="$first_status"
+      return 78
+    fi
     gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
       "$@" \
       ${auth_config_arg[@]+"${auth_config_arg[@]}"}
@@ -1659,6 +1691,12 @@ payload="$(gram_hooks_build_canonical_payload "$provider_payload" "$hook_hostnam
 # gram_http_post (http.sh) retries transient resets so a single reset no
 # longer blocks the tool call; the server still decides allow/block.
 gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2
+post_status=$?
+# 78 = never-authenticated ratchet fail-open: allow (empty stdout) instead of
+# blocking a machine that has no way to hold credentials yet.
+if [ "$post_status" -eq 78 ]; then
+  exit 0
+fi
 
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
@@ -1707,6 +1745,24 @@ fi
 
 %s
 
+# gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
+# additionalContext telling Claude the hooks are unauthenticated and where the
+# login helper lives, so it can offer to run it for the user.
+gram_hooks_emit_login_nudge() {
+  local payload="$1"
+  local plugin_hooks_dir="$2"
+  local session_id marker context escaped
+  session_id="$(gram_hooks_json_string_value "$payload" "session_id")"
+  marker="${TMPDIR:-/tmp}/gram-hooks-login-nudge-${session_id:-$(date +%%Y%%m%%d)}"
+  if [ -e "$marker" ]; then
+    return 0
+  fi
+  : >"$marker" 2>/dev/null || true
+  context="Speakeasy observability hooks are installed for this workspace but not authenticated on this machine, so team telemetry is not being recorded. Ask the user whether they want to connect now; if they agree, run: bash \"${plugin_hooks_dir}/login.sh\" (it opens a browser to finish sign-in and waits for the callback). If they decline, do not raise this again during this session."
+  escaped="$(printf '%%s' "$context" | gram_hooks_json_escape_string)"
+  printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%%s"}}' "$escaped"
+}
+
 hook_hostname=$(hostname 2>/dev/null || true)
 native_event="$(gram_hooks_native_event_name "$provider_payload")"
 if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
@@ -1726,6 +1782,18 @@ payload="$(gram_hooks_build_canonical_payload "$provider_payload" "$hook_hostnam
 # gram_http_post (http.sh) retries transient resets so a single reset no
 # longer blocks the tool call; the server still decides allow/block.
 gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" 2
+post_status=$?
+# 78 = never-authenticated ratchet fail-open: emit a pass-through response
+# instead of blocking a machine that has no way to hold credentials yet. On
+# Claude prompt submission, additionally nudge the agent to offer login.
+if [ "$post_status" -eq 78 ]; then
+  if [ "%s" = "claude" ] && [ "$native_event" = "UserPromptSubmit" ]; then
+    gram_hooks_emit_login_nudge "$provider_payload" "$script_dir"
+  else
+    gram_hooks_provider_response "%s" "$native_event" '{}'
+  fi
+  exit 0
+fi
 
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
@@ -1743,7 +1811,7 @@ fi
 reason="$(gram_hooks_json_string_value "$body" "message")"
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

@@ -55,13 +55,28 @@ gram_hooks_write_auth() {
     return 1
   }
   umask "$old_umask"
-  mv "$tmp" "$path"
+  mv "$tmp" "$path" || return 1
+  gram_hooks_mark_auth_established
 }
 
 gram_hooks_forget_auth() {
   local path
   path="$(gram_hooks_auth_file)"
   rm -f "$path"
+}
+
+# gram_hooks_auth_established reports whether this machine has EVER cached
+# hook credentials — the fail-closed ratchet: before the first successful
+# auth, blocking hook paths warn and fail open; afterwards they fail closed.
+# The marker survives gram_hooks_forget_auth so a forgotten or invalidated
+# key cannot silently disable enforcement.
+gram_hooks_auth_established() {
+  [ -e "$(gram_hooks_auth_file).established" ] && return 0
+  [ -r "$(gram_hooks_auth_file)" ]
+}
+
+gram_hooks_mark_auth_established() {
+  : >"$(gram_hooks_auth_file).established" 2>/dev/null || true
 }
 
 gram_hooks_manual_auth_instructions() {
@@ -417,8 +432,12 @@ gram_hooks_prepare_auth() {
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
-        echo "Speakeasy hooks could not authenticate with Gram." >&2
-        exit "$failure_exit"
+        if gram_hooks_auth_established; then
+          echo "Speakeasy hooks could not authenticate with Gram. Run the plugin's hooks/login.sh to reconnect, or set GRAM_HOOKS_API_KEY." >&2
+          exit "$failure_exit"
+        fi
+        echo "Speakeasy hooks are not connected on this machine yet; events are not being recorded. Run the plugin's hooks/login.sh to connect." >&2
+        return 3
       fi
       if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
         echo "Speakeasy hooks could not read Gram authentication after login." >&2
@@ -456,14 +475,24 @@ gram_hooks_post_authenticated() {
   local failure_exit="$5"
   shift 5
 
-  gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"
+  # Return 78 when this machine has never authenticated (ratchet fail-open):
+  # callers emit a pass-through response instead of blocking. Once auth has
+  # been established, prepare_auth fails closed by exiting from within.
+  if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"; then
+    GRAM_HTTP_CODE=""
+    GRAM_HTTP_BODY=""
+    return 78
+  fi
   gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
     "$@" \
     ${auth_config_arg[@]+"${auth_config_arg[@]}"}
   local first_status="$GRAM_HTTP_CODE"
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
-    gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force
+    if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
+      GRAM_HTTP_CODE="$first_status"
+      return 78
+    fi
     gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
       "$@" \
       ${auth_config_arg[@]+"${auth_config_arg[@]}"}

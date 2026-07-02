@@ -16,5 +16,8 @@ fi
 
 export GRAM_HOOKS_INTERACTIVE=1
 
-gram_hooks_prepare_auth "$server_url" "$project_slug" 2
+# Never-authenticated machines fail open (prepare_auth returns 3 after
+# warning); once credentials have been established, a broken auth state
+# still exits 2 from inside prepare_auth and blocks the session start.
+gram_hooks_prepare_auth "$server_url" "$project_slug" 2 || true
 exit 0
