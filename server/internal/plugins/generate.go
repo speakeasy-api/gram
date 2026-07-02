@@ -616,10 +616,14 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// server-side inventory cache.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
-		hooks := []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}
+		hooks := []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode), Timeout: nil}}
 		if event == "SessionStart" {
 			f := false
-			hooks = append([]claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/auth_preflight.sh"`, Async: &f}}, hooks...)
+			// Claude's default 60s hook timeout is too short for the
+			// interactive browser login the preflight can run; the login's
+			// 240s inner wait must finish before the hook is killed.
+			preflightTimeout := 300
+			hooks = append([]claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/auth_preflight.sh"`, Async: &f, Timeout: &preflightTimeout}}, hooks...)
 		}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: hooks},
@@ -2567,6 +2571,10 @@ type claudeHookCommand struct {
 	// nil omits the field. false = blocking (PreToolUse, UserPromptSubmit);
 	// true = fire-and-forget (Stop, PostToolUse, etc.).
 	Async *bool `json:"async,omitempty"`
+	// Timeout in seconds before Claude kills the hook command. nil uses
+	// Claude's default (60s), which is too short for the interactive browser
+	// login the SessionStart preflight can run.
+	Timeout *int `json:"timeout,omitempty"`
 }
 
 type cursorHooksConfig struct {

@@ -3,7 +3,7 @@
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
 //USAGE flag "--providers <list>" default="claude,cursor,codex" help="Comma-separated providers to drive: claude,cursor,codex."
-//USAGE flag "--suites <list>" default="capture,shadow-mcp" help="Comma-separated feature suites to run: capture,shadow-mcp."
+//USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and downloaded plugin artifacts."
@@ -17,8 +17,9 @@ import { spawn } from "node:child_process";
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
+import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
-const VALID_SUITES = new Set(["capture", "shadow-mcp"]);
+const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
@@ -49,7 +50,7 @@ function parseArgs(argv) {
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  const suites = String(args.suites ?? "capture,shadow-mcp")
+  const suites = String(args.suites ?? "capture,shadow-mcp,ratchet")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -165,6 +166,37 @@ async function getSessionInfo(serverURL, projectSlug) {
     projectId: project.id,
     userEmail: session.userEmail,
   };
+}
+// provisionHooksAuth mints a hooks-scoped API key and writes it to a cache
+// file in the run's temp dir. Every provider spawn points GRAM_HOOKS_AUTH_FILE
+// at it so runs never depend on ambient credentials from the developer's
+// ~/.config/gram/hooks-auth.env — that ambient fallback is exactly how an
+// unauthenticatable plugin once passed E2E locally.
+async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
+  const gram = new GramCore({ serverURL });
+  const keyRes = await keysCreate(
+    gram,
+    {
+      createKeyForm: { name: `hooks-e2e-${Date.now()}`, scopes: ["hooks"] },
+    },
+    { sessionHeaderGramSession: session.sessionId },
+  );
+  if (!keyRes.ok) {
+    fail(`keys.create failed: ${JSON.stringify(keyRes.error)}`);
+  }
+  const authFile = path.join(rootDir, "hooks-auth.env");
+  await fs.writeFile(
+    authFile,
+    [
+      `server_url=${serverURL}`,
+      `api_key=${keyRes.value.key}`,
+      `project=${projectSlug}`,
+      `email=${session.userEmail}`,
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+  return authFile;
 }
 function psqlArgs(sql) {
   const databaseURL = process.env.GRAM_DATABASE_URL;
@@ -982,7 +1014,7 @@ async function runProviderScenario(args) {
         "-p",
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = args.provider;
     return res;
@@ -1805,6 +1837,69 @@ async function runClaudeSkillScenario(args) {
   res.provider = "claude";
   return res;
 }
+// runRatchetSuite verifies the never-authenticated fail-open ratchet: with no
+// cached credentials, no key env vars, and local browser auth disabled, a
+// Claude session must complete normally (hooks pass through instead of
+// blocking) and no hook events for the run may reach Gram.
+async function runRatchetSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  if (!args.providers.includes("claude")) {
+    return { checks, commandResults };
+  }
+  const runId = `${args.runId}-ratchet`;
+  const missingAuthFile = path.join(
+    args.rootDir,
+    "ratchet-missing",
+    "hooks-auth.env",
+  );
+  log.info("claude: running unauthenticated ratchet scenario");
+  const res = await runProviderScenario({
+    provider: "claude",
+    pluginDir: args.pluginDirs.get("claude"),
+    workdir: args.workdir,
+    runId,
+    scenario: "success",
+    env: {
+      GRAM_HOOKS_AUTH_FILE: missingAuthFile,
+      GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+    },
+    timeoutMs: args.timeoutSeconds * 1000,
+  });
+  commandResults.push(res);
+  await writeCommandArtifacts(
+    args.artifactsDir,
+    "claude",
+    "ratchet-unauthenticated",
+    res,
+  );
+  checks.push({
+    provider: "claude",
+    feature: "ratchet: unauthenticated session is not blocked",
+    status: res.exitCode === 0 ? "PASS" : "FAIL",
+    detail:
+      res.exitCode === 0
+        ? "claude completed without credentials"
+        : `claude exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`,
+  });
+  const evidence = await listHookEvidence(
+    args.session.projectId,
+    "claude",
+    args.startedUnixNano,
+  );
+  const leaked = evidence.filter((row) => JSON.stringify(row).includes(runId));
+  checks.push({
+    provider: "claude",
+    feature: "ratchet: no events ingested without credentials",
+    status: leaked.length === 0 ? "PASS" : "FAIL",
+    detail:
+      leaked.length === 0
+        ? "no hook telemetry for the unauthenticated run"
+        : `${leaked.length} events reached Gram without credentials`,
+  });
+  return { checks, commandResults };
+}
+
 async function runCaptureSuite(args) {
   const commandResults = [];
   let claudeSkillName = null;
@@ -2214,6 +2309,18 @@ async function main() {
     );
     await enableSessionCapture(session.organizationId);
     log.info("Enabled session_capture for the active org");
+    const hooksAuthFile = await provisionHooksAuth(
+      serverURL,
+      session,
+      args.project,
+      rootDir,
+    );
+    // Make the provisioned cache authoritative for every provider spawn:
+    // scrub ambient key env vars that would otherwise short-circuit it.
+    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuthFile;
+    delete process.env.GRAM_HOOKS_API_KEY;
+    delete process.env.GRAM_API_KEY;
+    log.info(`Provisioned hooks auth cache at ${hooksAuthFile}`);
     if (args.providers.includes("codex")) {
       codexEnv = await prepareCodexEnv(rootDir);
       log.info(`Prepared isolated Codex home at ${codexEnv.HOME}`);
@@ -2267,6 +2374,11 @@ async function main() {
     }
     if (args.suites.includes("shadow-mcp")) {
       const result = await runShadowMCPSuite(suiteArgs);
+      allChecks.push(...result.checks);
+      commandResults.push(...result.commandResults);
+    }
+    if (args.suites.includes("ratchet")) {
+      const result = await runRatchetSuite(suiteArgs);
       allChecks.push(...result.checks);
       commandResults.push(...result.commandResults);
     }

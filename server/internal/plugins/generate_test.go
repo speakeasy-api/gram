@@ -1397,6 +1397,8 @@ func TestGenerateClaudeObservabilityUsesUnifiedHookScriptForAllEvents(t *testing
 	require.Contains(t, sessionStart[0].Hooks[0].Command, "hooks/auth_preflight.sh", "SessionStart must block on auth before any telemetry hooks")
 	require.NotNil(t, sessionStart[0].Hooks[0].Async)
 	require.False(t, *sessionStart[0].Hooks[0].Async, "SessionStart auth preflight must be blocking")
+	require.NotNil(t, sessionStart[0].Hooks[0].Timeout, "preflight needs an explicit timeout: Claude's 60s default kills the interactive browser login")
+	require.Equal(t, 300, *sessionStart[0].Hooks[0].Timeout)
 	require.Contains(t, sessionStart[0].Hooks[1].Command, "hooks/hook.sh", "SessionStart must use the unified hook sender")
 
 	configChange, ok := parsed.Hooks["ConfigChange"]
