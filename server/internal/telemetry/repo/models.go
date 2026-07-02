@@ -231,6 +231,9 @@ type UserSummary struct {
 
 	// Hook source breakdowns (maps of hook source -> count)
 	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
+
+	// Distinct AI account types observed for this user ('team', 'personal').
+	AccountTypes []string `ch:"account_types"`
 }
 
 // EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.

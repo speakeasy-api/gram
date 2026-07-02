@@ -70,6 +70,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.HasRisk != nil {
 			values.Add("has_risk", *p.HasRisk)
 		}
+		if p.AccountType != nil {
+			values.Add("account_type", *p.AccountType)
+		}
 		if p.Pinned != nil {
 			values.Add("pinned", *p.Pinned)
 		}
@@ -1965,6 +1968,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
+		AccountType:          v.AccountType,
 	}
 
 	return res

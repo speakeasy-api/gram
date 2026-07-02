@@ -146,6 +146,18 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
+	// billing_mode is admin-declared and independent of the API key. Omit it to
+	// preserve the existing value (settings-only updates and key rotations must
+	// not wipe a declared mode).
+	billingMode := payload.BillingMode
+	if billingMode != nil {
+		trimmed := strings.TrimSpace(*billingMode)
+		billingMode = conv.PtrEmpty(trimmed)
+	}
+	if payload.BillingMode == nil && beforeRow != nil {
+		billingMode = conv.PtrEmpty(before.BillingMode)
+	}
+
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
 	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
@@ -161,7 +173,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, billingMode, resetPollWatermarkAt)
 	if err != nil {
 		return nil, err
 	}
@@ -258,10 +270,11 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 
 func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	return audit.AIIntegrationSnapshot{
-		Provider:  cfg.Provider,
-		ProjectID: cfg.ProjectID,
-		Enabled:   cfg.Enabled,
-		HasAPIKey: cfg.APIKey != "",
+		Provider:    cfg.Provider,
+		ProjectID:   cfg.ProjectID,
+		Enabled:     cfg.Enabled,
+		HasAPIKey:   cfg.APIKey != "",
+		BillingMode: cfg.BillingMode,
 	}
 }
 
@@ -282,6 +295,7 @@ func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 		Provider:               provider,
 		ProjectID:              nil,
 		ExternalOrganizationID: nil,
+		BillingMode:            nil,
 		Enabled:                false,
 		HasAPIKey:              false,
 		LastPolledAt:           nil,
@@ -325,6 +339,7 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		Provider:               cfg.Provider,
 		ProjectID:              &projectID,
 		ExternalOrganizationID: conv.PtrValOrEmpty(&cfg.ExternalOrganizationID, nil),
+		BillingMode:            conv.PtrEmpty(cfg.BillingMode),
 		Enabled:                cfg.Enabled,
 		HasAPIKey:              cfg.APIKey != "",
 		LastPolledAt:           lastPolledAt,

@@ -80,7 +80,10 @@ DO UPDATE SET
   , account_type        = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
   , last_seen_at        = clock_timestamp()
   , updated_at          = clock_timestamp()
-RETURNING id;
+-- billing_mode is intentionally not written here: it is an admin/out-of-band
+-- override, never set by ingest. Returning it lets attribution resolve the
+-- account-level tier of the billing-mode cascade without a second round trip.
+RETURNING id, billing_mode;
 
 -- name: CountEmployeesForExternalOrg :one
 -- Distinct employees (resolved Gram users) ever seen under a provider org. An
@@ -127,6 +130,43 @@ WHERE organization_id = @organization_id
   AND provider = @provider
   AND external_account_uuid = @external_account_uuid
   AND deleted_at IS NULL;
+
+-- name: ListUserAccountsByUsers :many
+-- Returns the linked AI accounts for a set of users within an org. Each
+-- (provider, email) row is a distinct account, so a user may have several across
+-- providers. Used to attach a per-user accounts breakdown to usage summaries on
+-- the employees list. Ordered team-first, then by provider for stable display.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
+-- name: GetProviderOrgBillingMode :one
+-- Resolves the org-level admin-declared billing mode for a provider org from the
+-- org's AI integration config (the org-level tier of the billing-mode cascade).
+-- A config scoped to a specific external_organization_id must match the session's
+-- provider org; a config with none applies provider-wide. Exact-org matches are
+-- preferred over provider-wide (NULLS LAST because the comparison is NULL for a
+-- NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
+-- Only one live config per (org, provider) can exist today, so the ordering is
+-- defensive. Only configs with a non-null billing_mode are considered, so an
+-- undeclared org returns no rows (treated as unknown upstream).
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+  AND (
+    external_organization_id IS NULL
+    OR external_organization_id = ''
+    OR external_organization_id = @external_org_id
+  )
+ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
+LIMIT 1;
 
 -- name: GetDeviceOwner :one
 SELECT * FROM device_owners

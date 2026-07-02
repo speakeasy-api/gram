@@ -117,6 +117,9 @@ type LoadChatResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Account type that produced the chat ('team', 'personal', or empty), resolved
+	// from the linked AI account.
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1629,6 +1632,9 @@ type ChatOverviewResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Account type that produced the chat ('team', 'personal', or empty), resolved
+	// from the linked AI account.
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1804,6 +1810,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		TotalCost:            res.TotalCost,
 		LastMessageTimestamp: res.LastMessageTimestamp,
 		RiskFindingsCount:    res.RiskFindingsCount,
+		AccountType:          res.AccountType,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
@@ -3010,13 +3017,14 @@ func NewListSourcesGatewayErrorResponseBody(res *goa.ServiceError) *ListSourcesG
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, source *string, assistantID *string, hasRisk *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, source *string, assistantID *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.Source = source
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.AccountType = accountType
 	v.Pinned = pinned
 	v.MinRiskScore = minRiskScore
 	v.From = from

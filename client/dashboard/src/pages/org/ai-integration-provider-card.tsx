@@ -2,6 +2,13 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -27,6 +34,7 @@ export function AIIntegrationProviderCard({
   const Icon = provider.icon;
   const apiKeyFieldId = `${provider.provider}-ai-integration-api-key`;
   const orgIdFieldId = `${provider.provider}-ai-integration-org-id`;
+  const billingModeFieldId = `${provider.provider}-ai-integration-billing-mode`;
 
   const handleDelete = () => {
     if (!form.isConfigured) return;
@@ -95,6 +103,31 @@ export function AIIntegrationProviderCard({
           />
         </Stack>
       ) : null}
+
+      <Stack gap={2}>
+        <Label htmlFor={billingModeFieldId}>Billing mode</Label>
+        <Select
+          value={form.billingMode || "unknown"}
+          onValueChange={(value) => form.setBillingMode(value)}
+          disabled={form.isLoading || form.isMutating}
+        >
+          <SelectTrigger id={billingModeFieldId}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unknown">Unknown</SelectItem>
+            <SelectItem value="metered">Metered (pay-per-token)</SelectItem>
+            <SelectItem value="flat_rate">
+              Flat rate (subscription seats)
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Type variant="body" className="text-muted-foreground text-xs">
+          Dashboard cost is estimated from token usage at API rates. Only
+          "Metered" accounts are billed per token, so their cost is shown as
+          real spend; subscription plans show it as an estimate.
+        </Type>
+      </Stack>
 
       <div className="border-border border-t" />
 

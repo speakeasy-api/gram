@@ -10,9 +10,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type GetUserMetricsSummaryPayload = {
   /**
+   * Optional account type filter ('team' or 'personal')
+   */
+  accountType?: string | undefined;
+  /**
    * Optional event source filter (e.g. 'hook')
    */
   eventSource?: string | undefined;
+  /**
+   * Optional filter to a single AI account by its provider org id; scopes metrics to that one account
+   */
+  externalOrgId?: string | undefined;
   /**
    * External user ID to get metrics for (mutually exclusive with user_id)
    */
@@ -37,7 +45,9 @@ export type GetUserMetricsSummaryPayload = {
 
 /** @internal */
 export type GetUserMetricsSummaryPayload$Outbound = {
+  account_type?: string | undefined;
   event_source?: string | undefined;
+  external_org_id?: string | undefined;
   external_user_id?: string | undefined;
   from: string;
   hook_source?: string | undefined;
@@ -51,7 +61,9 @@ export const GetUserMetricsSummaryPayload$outboundSchema: z.ZodMiniType<
   GetUserMetricsSummaryPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    externalOrgId: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
@@ -60,7 +72,9 @@ export const GetUserMetricsSummaryPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
       eventSource: "event_source",
+      externalOrgId: "external_org_id",
       externalUserId: "external_user_id",
       hookSource: "hook_source",
       userId: "user_id",

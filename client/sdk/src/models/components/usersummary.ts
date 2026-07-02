@@ -12,11 +12,20 @@ import {
   HookSourceUsage$inboundSchema,
 } from "./hooksourceusage.js";
 import { ToolUsage, ToolUsage$inboundSchema } from "./toolusage.js";
+import { UserAccount, UserAccount$inboundSchema } from "./useraccount.js";
 
 /**
  * Aggregated usage summary for a single user
  */
 export type UserSummary = {
+  /**
+   * Distinct account types observed for this user ('team', 'personal')
+   */
+  accountTypes?: Array<string> | undefined;
+  /**
+   * Linked AI accounts for this user (team and personal, across providers)
+   */
+  accounts?: Array<UserAccount> | undefined;
   /**
    * Average tokens per chat request
    */
@@ -95,6 +104,8 @@ export type UserSummary = {
 export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
   .pipe(
     z.object({
+      account_types: z.optional(z.array(z.string())),
+      accounts: z.optional(z.array(UserAccount$inboundSchema)),
       avg_tokens_per_request: z.number(),
       cache_creation_input_tokens: z.int(),
       cache_read_input_tokens: z.int(),
@@ -116,6 +127,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "account_types": "accountTypes",
         "avg_tokens_per_request": "avgTokensPerRequest",
         "cache_creation_input_tokens": "cacheCreationInputTokens",
         "cache_read_input_tokens": "cacheReadInputTokens",

@@ -12,6 +12,8 @@ import {
   SortHeader,
   SUBGRID_ROW_CLASS,
 } from "./gridTable";
+import { EstimatedCostIndicator } from "@/components/estimated-cost";
+import { costMeasureLabel } from "@/components/estimated-cost-utils";
 
 const PAGE_SIZE = 10;
 
@@ -168,7 +170,9 @@ const SESSION_COLUMNS: SessionColumn[] = [
   },
   {
     id: "cost",
-    header: "Cost",
+    // Base label; the header render swaps to "Cost" for a confidently metered
+    // view (see costMeasureLabel / billingMode).
+    header: "Est. cost",
     track: "minmax(max-content,1fr)",
     sortKey: "cost",
     render: (s) => (
@@ -227,6 +231,9 @@ export type SessionTableProps = {
   // single value (e.g. drilled into one agent → "agent" is redundant). The
   // remaining columns auto-size to reclaim the freed width.
   hiddenColumns?: SessionColumnId[];
+  // The view's resolved billing mode; "metered" shows real cost ("Cost") rather
+  // than the API-rate estimate ("Est. cost") on the cost column.
+  billingMode?: string;
 };
 
 /**
@@ -245,6 +252,7 @@ export function SessionTable({
   isError,
   onOpen,
   hiddenColumns,
+  billingMode,
 }: SessionTableProps): JSX.Element {
   // Server already ranks by cost; mirror that as the default header indicator.
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
@@ -308,20 +316,29 @@ export function SessionTable({
         )}
       >
         <Gutter />
-        {columns.map((c) => (
-          <span key={c.id} className="flex">
-            {c.sortKey ? (
-              <SortHeader
-                label={c.header}
-                active={sort.key === c.sortKey}
-                dir={sort.dir}
-                onClick={() => onSort(c.sortKey!)}
-              />
-            ) : (
-              c.header
-            )}
-          </span>
-        ))}
+        {columns.map((c) => {
+          // The cost column reads as real "Cost" for a confidently metered view,
+          // otherwise "Est. cost" + the API-rate-estimate disclaimer.
+          const label =
+            c.id === "cost" ? costMeasureLabel(billingMode) : c.header;
+          return (
+            <span key={c.id} className="flex items-center gap-1">
+              {c.sortKey ? (
+                <SortHeader
+                  label={label}
+                  active={sort.key === c.sortKey}
+                  dir={sort.dir}
+                  onClick={() => onSort(c.sortKey!)}
+                />
+              ) : (
+                label
+              )}
+              {c.id === "cost" && (
+                <EstimatedCostIndicator billingMode={billingMode} />
+              )}
+            </span>
+          );
+        })}
         <Gutter />
       </div>
 

@@ -10,6 +10,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type GetEmployeeDataFlowGraphPayload = {
   /**
+   * Optional account type filter ('team' or 'personal')
+   */
+  accountType?: string | undefined;
+  /**
+   * Optional filter to a single AI account by its provider org id; scopes the graph to that one account
+   */
+  externalOrgId?: string | undefined;
+  /**
    * External user ID to get the graph for (mutually exclusive with user_id)
    */
   externalUserId?: string | undefined;
@@ -29,6 +37,8 @@ export type GetEmployeeDataFlowGraphPayload = {
 
 /** @internal */
 export type GetEmployeeDataFlowGraphPayload$Outbound = {
+  account_type?: string | undefined;
+  external_org_id?: string | undefined;
   external_user_id?: string | undefined;
   from: string;
   to: string;
@@ -41,6 +51,8 @@ export const GetEmployeeDataFlowGraphPayload$outboundSchema: z.ZodMiniType<
   GetEmployeeDataFlowGraphPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
+    externalOrgId: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -48,6 +60,8 @@ export const GetEmployeeDataFlowGraphPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
+      externalOrgId: "external_org_id",
       externalUserId: "external_user_id",
       userId: "user_id",
     });

@@ -368,7 +368,36 @@ function useObserveFiltersImpl<
     [defaultTypes, setSearchParams, validTypes],
   );
 
+  // account_type filter (team | personal); empty string = no filter. Opt-in:
+  // only pages that pass these to ObserveFilterBar surface the control.
+  const urlAccountType = searchParams.get("account_type");
+  const accountType: string =
+    urlAccountType === "team" || urlAccountType === "personal"
+      ? urlAccountType
+      : "";
+  const handleAccountTypeChange = useCallback(
+    (value: string) => {
+      // Match the other filter handlers: replace (don't push) so toggling the
+      // filter doesn't stack history entries.
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   return {
+    accountType,
+    handleAccountTypeChange,
     activeFilters,
     selectedHookTypes,
     dateRange,
