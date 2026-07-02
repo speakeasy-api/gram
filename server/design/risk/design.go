@@ -58,7 +58,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.create")
+			POST("/rpc/risk.createPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -83,7 +83,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskPoliciesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.list")
+			GET("/rpc/risk.listPolicies")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -112,7 +112,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.get")
+			GET("/rpc/risk.getPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -167,7 +167,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			PUT("/rpc/risk.policies.update")
+			PUT("/rpc/risk.updatePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -193,7 +193,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/risk.policies.delete")
+			DELETE("/rpc/risk.deletePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -239,7 +239,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.list")
+			GET("/rpc/risk.listResults")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -295,7 +295,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsForAgentResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.listForAgent")
+			GET("/rpc/risk.listResultsForAgent")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -337,7 +337,7 @@ var _ = Service("risk", func() {
 			// POST, not GET: unmasking has a side effect (an audit log write
 			// per reveal), so it isn't a safe/idempotent request — a GET here
 			// would be cacheable/prefetchable by browsers and proxies.
-			POST("/rpc/risk.results.unmask")
+			POST("/rpc/risk.unmaskResult")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -368,7 +368,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsByChatResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.byChat")
+			GET("/rpc/risk.listResultsByChat")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -401,7 +401,7 @@ var _ = Service("risk", func() {
 		Result(RiskOverviewResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.get")
+			GET("/rpc/risk.getOverview")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -428,7 +428,7 @@ var _ = Service("risk", func() {
 		Result(RiskCategoriesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.categories")
+			GET("/rpc/risk.listCategories")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -456,7 +456,7 @@ var _ = Service("risk", func() {
 		Result(ExprCompileResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.compileExpr")
+			GET("/rpc/risk.compileCELExpression")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -490,7 +490,7 @@ var _ = Service("risk", func() {
 		Result(RiskUserBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.userBreakdown")
+			GET("/rpc/risk.getUserBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -526,7 +526,7 @@ var _ = Service("risk", func() {
 		Result(RiskRuleBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.rules")
+			GET("/rpc/risk.getRuleBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -558,7 +558,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicyStatus)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.status")
+			GET("/rpc/risk.getPolicyStatus")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -793,7 +793,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.trigger")
+			POST("/rpc/risk.triggerPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -827,7 +827,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.create")
+			POST("/rpc/risk.createCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -852,7 +852,7 @@ var _ = Service("risk", func() {
 		Result(ListCustomDetectionRulesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.list")
+			GET("/rpc/risk.listCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -881,7 +881,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.get")
+			GET("/rpc/risk.getCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -918,7 +918,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.update")
+			POST("/rpc/risk.updateCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -945,7 +945,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.delete")
+			POST("/rpc/risk.deleteCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1121,7 +1121,7 @@ var _ = Service("risk", func() {
 		Result(SuggestCustomDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.suggest")
+			POST("/rpc/risk.suggestCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1156,7 +1156,7 @@ var _ = Service("risk", func() {
 		Result(TestDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.rules.test")
+			POST("/rpc/risk.testRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()

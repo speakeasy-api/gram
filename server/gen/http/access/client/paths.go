@@ -54,42 +54,42 @@ func UpdateMemberRolesAccessPath() string {
 
 // ListShadowMCPApprovalRequestsAccessPath returns the URL path to the access service listShadowMCPApprovalRequests HTTP endpoint.
 func ListShadowMCPApprovalRequestsAccessPath() string {
-	return "/rpc/access.shadowMcp.requests.list"
+	return "/rpc/access.listShadowMcpRequests"
 }
 
 // CreateShadowMCPApprovalRequestAccessPath returns the URL path to the access service createShadowMCPApprovalRequest HTTP endpoint.
 func CreateShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.shadowMcp.requests.create"
+	return "/rpc/access.createShadowMcpRequest"
 }
 
 // ApproveShadowMCPApprovalRequestAccessPath returns the URL path to the access service approveShadowMCPApprovalRequest HTTP endpoint.
 func ApproveShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.shadowMcp.requests.approve"
+	return "/rpc/access.approveShadowMcpRequest"
 }
 
 // DenyShadowMCPApprovalRequestAccessPath returns the URL path to the access service denyShadowMCPApprovalRequest HTTP endpoint.
 func DenyShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.shadowMcp.requests.deny"
+	return "/rpc/access.denyShadowMcpRequest"
 }
 
 // ListShadowMCPAccessRulesAccessPath returns the URL path to the access service listShadowMCPAccessRules HTTP endpoint.
 func ListShadowMCPAccessRulesAccessPath() string {
-	return "/rpc/access.shadowMcp.rules.list"
+	return "/rpc/access.listShadowMcpRules"
 }
 
 // CreateShadowMCPAccessRuleAccessPath returns the URL path to the access service createShadowMCPAccessRule HTTP endpoint.
 func CreateShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.shadowMcp.rules.create"
+	return "/rpc/access.createShadowMcpRule"
 }
 
 // UpdateShadowMCPAccessRuleAccessPath returns the URL path to the access service updateShadowMCPAccessRule HTTP endpoint.
 func UpdateShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.shadowMcp.rules.update"
+	return "/rpc/access.updateShadowMcpRule"
 }
 
 // DeleteShadowMCPAccessRuleAccessPath returns the URL path to the access service deleteShadowMCPAccessRule HTTP endpoint.
 func DeleteShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.shadowMcp.rules.delete"
+	return "/rpc/access.deleteShadowMcpRule"
 }
 
 // GetRBACStatusAccessPath returns the URL path to the access service getRBACStatus HTTP endpoint.
