@@ -1,5 +1,20 @@
 # server
 
+## 0.80.0
+
+### Minor Changes
+
+- 9275f02: Adjust API endpoint paths to follow existing RPC API conventions
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- 59a1029: Drop US_DRIVER_LICENSE Presidio findings at the finding level so they never surface, even when a policy pins no entities and Presidio scans its full default recognizer set.
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- 4adc65b: Disable HTTP keep-alives on function-runner calls and give that path its own timeout, so retries dial fresh connections instead of reusing pooled connections to Fly machines that were autostopped mid-flight (which surfaced as instant EOFs). The function-runner timeout now sits above the runner's 5-minute execution budget so long tool calls are no longer cancelled by the caller.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- d09b418: Fix a nil pointer panic in telemetry SearchUsers when called without a filter.
+
 ## 0.79.0
 
 ### Minor Changes
