@@ -37720,6 +37720,8 @@ components:
         audience:
           type: string
           description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
         client_id:
           type: string
           description: client_id supplied by the caller.
@@ -37734,6 +37736,8 @@ components:
           type: array
           items:
             type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
           description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
