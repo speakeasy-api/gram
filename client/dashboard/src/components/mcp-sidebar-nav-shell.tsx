@@ -95,14 +95,14 @@ export function McpSidebarNavShell({
         <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
 
         {cardContent && (
-          <li className="px-2 pt-2 pb-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-card border-border dark:bg-neutral-800 flex flex-col gap-3 rounded-lg border p-3 shadow-md">
+          <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+            <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-3 rounded-lg border p-3 shadow-md">
               {cardContent}
             </div>
           </li>
         )}
 
-        <SidebarDivider className="mb-2 px-1 group-data-[collapsible=icon]:hidden" />
+        <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
 
         <SidebarEyebrow align="items">Configuration</SidebarEyebrow>
 

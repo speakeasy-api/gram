@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
 import { HostedServerRef } from "./MCPOverviewTab";
+import { Spinner } from "@/components/ui/spinner";
 
 function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
   return ref.kind === "toolset"
@@ -36,12 +37,12 @@ function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
 // supported clients.
 function ClientIconFan(): React.JSX.Element {
   return (
-    <div className="relative hidden h-32 shrink-0 sm:block" aria-hidden="true">
+    <div className="relative hidden h-36 shrink-0 sm:block" aria-hidden="true">
       <div className="absolute inset-6 rounded-full bg-black/15 blur-2xl" />
       <img
         src="/icons/decorative/plugin-clients.webp"
         alt=""
-        className="relative h-full w-full object-contain drop-shadow-xl"
+        className="relative h-full w-full mr-10 object-contain drop-shadow-xl"
       />
     </div>
   );
@@ -201,14 +202,14 @@ export function PluginStatusBanner({
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-opacity duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
+          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
           isPublished ? "opacity-0" : "opacity-100",
         )}
       />
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/70 transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/60",
+          "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 transition-colors transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
           isPublished ? "opacity-100" : "opacity-0",
         )}
       />
@@ -231,7 +232,7 @@ export function PluginStatusBanner({
                   ? `Published to ${memberPlugins.length} plugin${
                       memberPlugins.length > 1 ? "s" : ""
                     }`
-                  : "Not published"}
+                  : "Not published to any plugin"}
               </Type>
             </div>
             <Type variant="small" className="text-muted-foreground/90">
@@ -288,7 +289,15 @@ export function PluginStatusBanner({
                   disabled={!hasChanges || isSaving}
                   onClick={() => void handleSave()}
                 >
-                  {isSaving ? "Saving…" : isPublished ? "Update" : "Publish"}
+                  {isSaving ? (
+                    <>
+                      <Spinner /> Publishing
+                    </>
+                  ) : isPublished ? (
+                    "Update"
+                  ) : (
+                    "Publish"
+                  )}
                 </Button>
               </div>
             )}
