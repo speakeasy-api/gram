@@ -1,6 +1,12 @@
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { SidebarFooterAction } from "@/components/sidebar-footer-action";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar-context";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
@@ -70,6 +76,8 @@ export function McpSidebarNavShell({
   items: McpSidebarNavItem[];
 }): React.JSX.Element {
   const activeItemTitle = items.find((item) => item.active)?.title;
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
   return (
     <NavGroupProvider activeItem={activeItemTitle}>
@@ -88,18 +96,18 @@ export function McpSidebarNavShell({
 
         {cardContent && (
           <li className="px-2 pt-2 pb-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-card border-border flex flex-col gap-3 rounded-lg border p-3 shadow-md">
+            <div className="bg-card border-border dark:bg-neutral-800 flex flex-col gap-3 rounded-lg border p-3 shadow-md">
               {cardContent}
             </div>
           </li>
         )}
 
-        <SidebarDivider className="mb-2 px-1" />
+        <SidebarDivider className="mb-2 px-1 group-data-[collapsible=icon]:hidden" />
 
         <SidebarEyebrow align="items">Configuration</SidebarEyebrow>
 
-        {items.map((item) => (
-          <SidebarMenuItem key={item.key} className="pl-2">
+        {items.map((item) => {
+          const navButton = (
             <NavButton
               title={item.title}
               titleNode={item.titleNode}
@@ -107,8 +115,28 @@ export function McpSidebarNavShell({
               active={item.active}
               Icon={item.Icon}
             />
-          </SidebarMenuItem>
-        ))}
+          );
+
+          return (
+            <SidebarMenuItem
+              key={item.key}
+              className="pl-2 group-data-[collapsible=icon]:pl-0"
+            >
+              {isCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="mx-auto w-fit">{navButton}</div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={4}>
+                    {item.title}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                navButton
+              )}
+            </SidebarMenuItem>
+          );
+        })}
       </SidebarMenu>
     </NavGroupProvider>
   );

@@ -197,18 +197,18 @@ export function PluginStatusBanner({
   };
 
   return (
-    <div className="border-muted relative overflow-hidden rounded-xl border shadow-sm">
+    <div className="border border-border/70 relative overflow-hidden rounded-xl shadow-sm">
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-50 to-orange-100 transition-opacity duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/70",
+          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-opacity duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
           isPublished ? "opacity-0" : "opacity-100",
         )}
       />
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-emerald-50/10 via-slate-50 to-emerald-100/70 transition-opacity duration-700 ease-in-out dark:from-emerald-950/60 dark:via-neutral-800 dark:to-emerald-900/70",
+          "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/70 transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/60",
           isPublished ? "opacity-100" : "opacity-0",
         )}
       />

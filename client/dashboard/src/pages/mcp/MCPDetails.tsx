@@ -105,48 +105,37 @@ import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
+// Mirrors the sidenav'd shell (no hero, no top tab strip) and roughly the
+// shape of the Overview tab — the default landing tab — since exact content
+// varies per sub-page and this is only visible for a brief loading flash.
 function MCPLoading() {
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero skeleton */}
-        <div className="bg-muted/30 relative h-64 w-full animate-pulse">
-          <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
-            <Stack gap={2}>
-              <div className="bg-muted h-8 w-64 rounded" />
-              <div className="bg-muted h-4 w-96 rounded" />
-            </Stack>
-          </div>
-        </div>
+      <Page.Body fullWidth className="gap-0">
+        <div className="mx-auto w-full max-w-[1270px] flex-1">
+          <Stack gap={6} className="mb-4">
+            <div className="bg-muted/30 h-40 w-full animate-pulse rounded-xl" />
 
-        {/* Tabs skeleton */}
-        <div className="border-b">
-          <div className="mx-auto max-w-[1270px] px-8">
-            <div className="flex h-11 gap-6">
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+            <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-muted/30 h-[116px] w-full animate-pulse rounded-lg"
+                />
+              ))}
             </div>
-          </div>
-        </div>
 
-        {/* Content skeleton */}
-        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-          <Stack gap={6}>
-            <div className="space-y-4">
-              <div className="bg-muted h-6 w-48 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
-              <div className="bg-muted h-32 w-full animate-pulse rounded" />
+            <div className="bg-muted/30 h-64 w-full animate-pulse rounded-lg" />
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
+              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
             </div>
-            <div className="space-y-4">
-              <div className="bg-muted h-6 w-40 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
-              <div className="bg-muted h-24 w-full animate-pulse rounded" />
-            </div>
+
+            <div className="bg-muted/30 h-48 w-full animate-pulse rounded-lg" />
           </Stack>
         </div>
       </Page.Body>
