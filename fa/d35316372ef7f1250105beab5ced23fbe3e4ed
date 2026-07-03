@@ -1,0 +1,28 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_cf8bb6f8d7262a::t_4eb16a4108381c 1496-1501,1504,1523-1628,1631-1723,1939-1940
+  s_cf8bb6f8d7262a::t_2db968b25c47f1 1629-1630
+  s_cf8bb6f8d7262a::t_9addc41d1f3b37 51,57
+  s_cf8bb6f8d7262a::t_6be1cd5cc4615e 1773
+  s_cf8bb6f8d7262a::t_997a4bda528bfb 1874-1878,1909-1916,1921-1938
+  s_cf8bb6f8d7262a::t_162fee782dc294 1488,1502-1503
+  s_cf8bb6f8d7262a::t_fb9ea10269f8ca 1505-1522
+  s_cf8bb6f8d7262a::t_e6908330f3917c 1941
+.changeset/eval-session-search-suggestions.md
+  s_cf8bb6f8d7262a::t_fa9805d4c5c953 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fad35316372ef7f1250105beab5ced23fbe3e4ed",
+  "prompts": {},
+  "sessions": {
+    "s_cf8bb6f8d7262a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2996-9eca-72c0-8555-954b489695bf",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
