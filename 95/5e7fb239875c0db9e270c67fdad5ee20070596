@@ -1,0 +1,28 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_ecd3c0270d8258::t_9c3929e3d0256c 2075-2078,2086-2088,2091-2092
+  s_58b4c7f65edfc1::t_01504f667e8c4a 2093
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "955e7fb239875c0db9e270c67fdad5ee20070596",
+  "prompts": {},
+  "sessions": {
+    "s_58b4c7f65edfc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29e7-f43a-75b1-9ea3-825b64f28aa0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_ecd3c0270d8258": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29a5-b8ee-7410-adc0-75daeac1de45",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
