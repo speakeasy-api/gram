@@ -234,6 +234,7 @@ export * from "./revokeRemoteSession.js";
 export * from "./revokeUserSession.js";
 export * from "./revokeUserSessionClient.js";
 export * from "./revokeUserSessionConsent.js";
+export * from "./riskAcknowledgePolicyChallenge.js";
 export * from "./riskApprovePolicyBypassRequest.js";
 export * from "./riskCategories.js";
 export * from "./riskCompileExpr.js";

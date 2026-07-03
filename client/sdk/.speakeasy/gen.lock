@@ -39,6 +39,8 @@ trackedFiles:
   docs/lib/utils/retryconfig.md: {}
   docs/models/components/accessmember.md: {}
   docs/models/components/accessscope.md: {}
+  docs/models/components/acknowledgeriskpolicychallengerequestbody.md: {}
+  docs/models/components/acknowledgeriskpolicychallengeresponsebody.md: {}
   docs/models/components/action.md: {}
   docs/models/components/adddeploymentpackageform.md: {}
   docs/models/components/addexternalmcpform.md: {}
@@ -720,6 +722,8 @@ trackedFiles:
   docs/models/errors/serviceerror.md: {}
   docs/models/operations/accessscope.md: {}
   docs/models/operations/accounttype.md: {}
+  docs/models/operations/acknowledgeriskpolicychallengerequest.md: {}
+  docs/models/operations/acknowledgeriskpolicychallengesecurity.md: {}
   docs/models/operations/addexternaloauthserverrequest.md: {}
   docs/models/operations/addexternaloauthserversecurity.md: {}
   docs/models/operations/addexternaloauthserversecurityoption1.md: {}
@@ -1808,6 +1812,7 @@ trackedFiles:
   docs/sdks/plugins/README.md: {}
   docs/sdks/policies/README.md: {}
   docs/sdks/policybypassrequests/README.md: {}
+  docs/sdks/policychallenges/README.md: {}
   docs/sdks/projects/README.md: {}
   docs/sdks/remotemcp/README.md: {}
   docs/sdks/remotesessionclients/README.md: {}
@@ -2094,6 +2099,7 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsDeny.ts: {}
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
+  src/funcs/riskPolicyChallengesAcknowledge.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListForAgent.ts: {}
@@ -2195,6 +2201,8 @@ trackedFiles:
   src/lib/security.ts: {}
   src/lib/url.ts: {}
   src/models/components/accessmember.ts: {}
+  src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
+  src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
   src/models/components/adddeploymentpackageform.ts: {}
   src/models/components/addexternalmcpform.ts: {}
   src/models/components/addexternaloauthserverrequestbody.ts: {}
@@ -2732,6 +2740,7 @@ trackedFiles:
   src/models/errors/responsevalidationerror.ts: {}
   src/models/errors/sdkvalidationerror.ts: {}
   src/models/errors/serviceerror.ts: {}
+  src/models/operations/acknowledgeriskpolicychallenge.ts: {}
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
@@ -3412,6 +3421,7 @@ trackedFiles:
   src/react-query/revokeUserSession.ts: {}
   src/react-query/revokeUserSessionClient.ts: {}
   src/react-query/revokeUserSessionConsent.ts: {}
+  src/react-query/riskAcknowledgePolicyChallenge.ts: {}
   src/react-query/riskApprovePolicyBypassRequest.ts: {}
   src/react-query/riskCategories.core.ts: {}
   src/react-query/riskCategories.ts: {}
@@ -3605,6 +3615,7 @@ trackedFiles:
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
+  src/sdk/policychallenges.ts: {}
   src/sdk/projects.ts: {}
   src/sdk/remotemcp.ts: {}
   src/sdk/remotesessionclients.ts: {}
@@ -3638,6 +3649,17 @@ trackedFiles:
   src/types/unrecognized.ts: {}
   tsconfig.json: {}
 examples:
+  acknowledgeRiskPolicyChallenge:
+    speakeasy-default-acknowledge-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"acknowledged": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   addExternalOAuthServer:
     speakeasy-default-add-external-O-auth-server:
       parameters:

@@ -12,14 +12,15 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag or block.
+ * Policy action: flag, warn (challenge), or block.
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Block: "block",
+  Warn: "warn",
 } as const;
 /**
- * Policy action: flag or block.
+ * Policy action: flag, warn (challenge), or block.
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -41,7 +42,7 @@ export type UpdateRiskPolicyRequestBodyAudienceType = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag or block.
+   * Policy action: flag, warn (challenge), or block.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**

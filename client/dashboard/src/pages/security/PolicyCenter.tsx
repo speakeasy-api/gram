@@ -1305,10 +1305,14 @@ function PolicyCenterContent() {
         editingPolicy ? editingPolicy.presidioEntities : undefined,
       ),
     );
+    // Flag-only sources (destructive_tool, cli_destructive) reject any
+    // blocking-class action server-side (validateSourceAction), so downgrade
+    // both block and warn to flag before submitting. Mirrors the server rule.
+    const hasFlagOnlySource = [...FLAG_ONLY_CATEGORIES].some((c) =>
+      sources.includes(c),
+    );
     const action =
-      sources.includes("destructive_tool") && formAction === "block"
-        ? "flag"
-        : formAction;
+      hasFlagOnlySource && formAction !== "flag" ? "flag" : formAction;
     const audiencePrincipalUrns =
       formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     // Only persist the Presidio threshold when a Presidio category is active, so
@@ -2388,7 +2392,7 @@ function PromptPolicySheetBody({
               <SummaryRow label="Scope" chips={summaryScopes} />
               <SummaryRow
                 label="Action"
-                chips={[formAction === "block" ? "Block" : "Flag"]}
+                chips={[ACTION_BADGE_CONFIG[formAction].label]}
               />
             </div>
           </div>
@@ -2762,7 +2766,7 @@ function PolicySheetBody({
     for (const rule of rules) nextDisabled.delete(rule.id);
     setSelectedCategories(nextCats);
     setDisabledRules(nextDisabled);
-    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && formAction === "block") {
+    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && formAction !== "flag") {
       setFormAction("flag");
     }
   };
@@ -3042,20 +3046,37 @@ function PolicySheetBody({
               }
             />
 
-            {/* Custom message — only relevant for block-action policies that
-          surface a user-facing reason at deny time. Flag-action policies
-          record findings silently, so no message is needed. */}
-            {formAction === "block" && (
+            {/* Custom message — relevant for block- and warn-action policies
+          that surface a user-facing reason at deny/warn time. Flag-action
+          policies record findings silently, so no message is needed. */}
+            {formAction !== "flag" && (
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Custom Message</Label>
-                <p className="text-muted-foreground text-xs">
-                  Shown to the user when this policy blocks a tool call or
-                  prompt. Leave blank to use the default message.
-                </p>
+                <Label className="text-sm font-medium">
+                  {formAction === "warn" ? "Warning message" : "Custom Message"}
+                </Label>
+                {formAction === "warn" ? (
+                  <p className="text-muted-foreground text-xs">
+                    Shown to the user when this policy warns on a tool call or
+                    prompt, before they acknowledge to proceed. Leave blank to
+                    use the default message. Placeholders{" "}
+                    <code>%{"{match}"}</code>, <code>%{"{entity}"}</code>,{" "}
+                    <code>%{"{policy}"}</code>, and <code>%{"{rule}"}</code> are
+                    substituted at warn time.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Shown to the user when this policy blocks a tool call or
+                    prompt. Leave blank to use the default message.
+                  </p>
+                )}
                 <TextArea
                   value={formUserMessage}
                   onChange={setFormUserMessage}
-                  placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                  placeholder={
+                    formAction === "warn"
+                      ? "e.g. This action was flagged as risky. Acknowledge to proceed, then ask your agent to retry."
+                      : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                  }
                   rows={3}
                 />
               </div>
@@ -3120,7 +3141,7 @@ function PolicySheetBody({
                 <SummaryRow label="Scope" chips={summaryScopes} />
                 <SummaryRow
                   label="Action"
-                  chips={[formAction === "block" ? "Block" : "Flag"]}
+                  chips={[ACTION_BADGE_CONFIG[formAction].label]}
                 />
               </div>
             </div>
@@ -3701,6 +3722,7 @@ const ACTION_BADGE_CONFIG: Record<
   { label: string; variant: NonNullable<BadgeProps["variant"]> }
 > = {
   flag: { label: "Flag", variant: "neutral" },
+  warn: { label: "Warn", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
 };
 
@@ -3713,6 +3735,12 @@ const ACTION_OPTIONS: {
     value: "flag",
     title: "Log for review",
     description: "Log findings for review without interrupting the session",
+  },
+  {
+    value: "warn",
+    title: "Warn & confirm",
+    description:
+      "Warn the user and require them to acknowledge before the action proceeds. Falls back to blocking where confirmation isn't possible.",
   },
   {
     value: "block",
@@ -3772,14 +3800,16 @@ function ActionPicker({
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
 }) {
+  // Flag-only categories reject both block and warn (both are blocking-class
+  // actions server-side); force the picker back to flag when one is selected.
   const actionValue =
-    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction !== "flag" ? "flag" : formAction;
 
   return (
     <RadioGroup
       value={actionValue}
       onValueChange={(v) => {
-        if (flagOnlySelected && v === "block") {
+        if (flagOnlySelected && v !== "flag") {
           return;
         }
         setFormAction(v as PolicyAction);
@@ -3787,7 +3817,7 @@ function ActionPicker({
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const disabled = flagOnlySelected && opt.value === "block";
+        const disabled = flagOnlySelected && opt.value !== "flag";
         const selected = actionValue === opt.value;
 
         return (

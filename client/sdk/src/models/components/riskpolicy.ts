@@ -14,14 +14,15 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only) or block (deny in real-time).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).
  */
 export const RiskPolicyAction = {
   Flag: "flag",
   Block: "block",
+  Warn: "warn",
 } as const;
 /**
- * Policy action: flag (log only) or block (deny in real-time).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).
  */
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
@@ -51,7 +52,7 @@ export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only) or block (deny in real-time).
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).
    */
   action: RiskPolicyAction;
   /**

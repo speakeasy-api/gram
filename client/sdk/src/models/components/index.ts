@@ -3,6 +3,8 @@
  */
 
 export * from "./accessmember.js";
+export * from "./acknowledgeriskpolicychallengerequestbody.js";
+export * from "./acknowledgeriskpolicychallengeresponsebody.js";
 export * from "./adddeploymentpackageform.js";
 export * from "./addexternalmcpform.js";
 export * from "./addexternaloauthserverrequestbody.js";
