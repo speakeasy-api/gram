@@ -1,4 +1,4 @@
-h1:dGWh5MOJFD9JncRmLn7iPOghhltyJuqAzPpm/El7liA=
+h1:ZGfyZKYEpxcLbpqHtl+GO2Oqbtm89qJiB8OX9T+lmlU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -242,3 +242,4 @@ h1:dGWh5MOJFD9JncRmLn7iPOghhltyJuqAzPpm/El7liA=
 20260702131714_risk-policy-challenges.sql h1:f38+NYpcLxP3/EZAaz1uMUKUsswKlkTWwEMQzH5w+JM=
 20260703095550_risk-policy-challenges-fk-cascade-indexes.sql h1:aR2L9eT4Wfdh2L91ZoOLk43oANOAAUDqLjmABGm58RM=
 20260703142647_add-tunneled-mcp-columns.sql h1:7cl3GZFt/H3Jt9QOJqCb4Jpiw176iKP4Me9jOABeWI8=
+20260703143233_drop-tunnelled-mcp-columns.sql h1:nByJ1TBLbeB4RXid0PHzw2Y4RKjjHiBH5UDHaV9LD3Q=
