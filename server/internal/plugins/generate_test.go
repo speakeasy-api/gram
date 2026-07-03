@@ -3217,11 +3217,6 @@ func TestComputeCodexHookApprovalsIncludesSessionStartPreflight(t *testing.T) {
 func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (home string, callLog string) {
 	t.Helper()
 
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
-
 	home = t.TempDir()
 	callLog = filepath.Join(home, "codex-calls.log")
 	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + callLog + "\"\n"
@@ -3233,6 +3228,19 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 		require.NoError(t, os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(existingConfig), 0o644))
 	}
 
+	execCodexInstallScript(t, script, home)
+
+	return home, callLog
+}
+
+func execCodexInstallScript(t *testing.T, script []byte, home string) {
+	t.Helper()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
 	scriptPath := filepath.Join(t.TempDir(), "install.sh")
 	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
 
@@ -3243,8 +3251,6 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "install script failed: %s", out)
-
-	return home, callLog
 }
 
 func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {
@@ -3263,27 +3269,11 @@ func runCodexInstallScriptTimes(t *testing.T, script []byte, existingConfig stri
 	require.Positive(t, times)
 
 	home, _ := runCodexInstallScript(t, script, existingConfig)
-	configPath := filepath.Join(home, ".codex", "config.toml")
-
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err)
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err)
-
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
-	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
-
 	for range times - 1 {
-		cmd := exec.Command(bashPath, scriptPath)
-		cmd.Env = []string{
-			"HOME=" + home,
-			"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
-		}
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "install script failed on repeat run: %s", out)
+		execCodexInstallScript(t, script, home)
 	}
 
-	return string(requireFileBytes(t, configPath))
+	return string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
 }
 
 func countTableHeaderLines(config, header string) int {
@@ -3535,6 +3525,29 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	}
 
 	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
+}
+
+// A table header sitting at EOF without a trailing newline is still an
+// existing table — the script must insert its entries under that header
+// instead of appending a duplicate one, which would make Codex refuse to
+// load config.toml entirely.
+func TestGenerateCodexInstallScriptReusesTableHeaderAtEOFWithoutNewline(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	patched := runCodexInstallScriptTimes(t, script, "js_repl = true\n\n[features]", 2)
+
+	var decoded map[string]any
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err, "patched config.toml must remain valid TOML without duplicate tables")
+
+	require.Equal(t, 1, countTableHeaderLines(patched, "[features]"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "hooks"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "plugin_hooks"))
+	require.Contains(t, patched, "js_repl = true", "pre-existing root-level entries must be preserved")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {

@@ -2564,7 +2564,7 @@ def strip_root_dotted_key(text, key):
     return root + rest
 
 def table_body_bounds(text, table_header):
-    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?\n', text)
+    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
     if not m:
         return None
     start = m.end()
@@ -2572,24 +2572,19 @@ def table_body_bounds(text, table_header):
     end = start + m2.start() if m2 else len(text)
     return start, end
 
-def table_has_key(text, table_header, key):
+def ensure_table_entry(text, table_header, key, value):
     bounds = table_body_bounds(text, table_header)
     if bounds is None:
-        return False
-    body = text[bounds[0]:bounds[1]]
-    return re.search(r'(?m)^' + re.escape(key) + r'\s*=', body) is not None
-
-def ensure_table_entry(text, table_header, key, value):
-    if table_has_key(text, table_header, key):
-        return text
-    if table_body_bounds(text, table_header) is None:
         return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?\n', text)
-    idx = m.end()
-    return text[:idx] + key + ' = ' + value + '\n' + text[idx:]
+    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+        return text
+    prefix = text[:bounds[0]]
+    if not prefix.endswith('\n'):
+        prefix += '\n'
+    return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
 
 def has_table_header(text, header):
-    return re.search(r'(?m)^' + re.escape(header) + r'(?:\s*(?:#.*)?)?\s*$', text) is not None
+    return table_body_bounds(text, header) is not None
 
 `)
 
