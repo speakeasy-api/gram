@@ -316,22 +316,22 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 
 	projectID := authCtx.ProjectID.String()
 	source := strings.TrimSpace(payload.Source.Adapter)
-	eventType := strings.TrimSpace(payload.Event.Type)
+	hookEventName := telemetryHookEventName(payload)
 	sessionID := canonicalSessionID(payload)
 	toolName := canonicalTelemetryToolName(payload)
 	if toolName == "" {
-		toolName = eventType
+		toolName = hookEventName
 	}
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.HookEventKey:      eventType,
+		attr.HookEventKey:      hookEventName,
 		attr.HookSourceKey:     source,
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        canonicalTraceID(payload),
-		attr.LogBodyKey:        "Hook: " + eventType,
+		attr.LogBodyKey:        "Hook: " + hookEventName,
 	}
 	if sessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = sessionID
@@ -416,6 +416,63 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		UserInfo:   telemetry.UserInfoByID(authCtx.UserID),
 		Attributes: attrs,
 	})
+}
+
+// telemetryHookEventName resolves the value stored in the gram.hook.event
+// telemetry attribute. That attribute's vocabulary is the provider-style
+// HookEvent names: the per-platform ingest endpoints have always written them,
+// and the ClickHouse consumers (session summaries, tool-call success/failure
+// counts, the is_completed_tool_call predicate) match on them. Canonical
+// events are therefore translated back via the adapter's raw event name, with
+// a fixed canonical fallback for senders that omit one, so unified-ingest rows
+// keep counting without a ClickHouse migration.
+func telemetryHookEventName(payload *gen.IngestPayload) string {
+	// Skill activations are a Gram-specific classification layered onto an
+	// ordinary provider tool event; resolving via the raw name would erase it.
+	if strings.TrimSpace(payload.Event.Type) == "skill.activated" {
+		return "skill.activated"
+	}
+	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
+	if raw != "" {
+		var parse func(string) (HookEvent, bool)
+		switch strings.TrimSpace(payload.Source.Adapter) {
+		case "claude":
+			parse = parseClaudeHookEvent
+		case "cursor":
+			parse = parseCursorHookEvent
+		case "codex":
+			parse = parseCodexHookEvent
+		}
+		if parse != nil {
+			if event, ok := parse(raw); ok {
+				return string(event)
+			}
+		}
+	}
+	switch eventType := strings.TrimSpace(payload.Event.Type); eventType {
+	case "session.started":
+		return string(HookEventSessionStart)
+	case "session.ended":
+		return string(HookEventSessionEnd)
+	case "prompt.submitted":
+		return string(HookEventUserPromptSubmit)
+	case "tool.requested":
+		return string(HookEventPreToolUse)
+	case "tool.completed":
+		return string(HookEventPostToolUse)
+	case "tool.failed":
+		return string(HookEventPostToolUseFailure)
+	case "assistant.responded":
+		return string(HookEventAfterAgentResponse)
+	case "assistant.thought":
+		return string(HookEventAfterAgentThought)
+	case "notification.reported":
+		return string(HookEventNotification)
+	default:
+		// session.updated, usage.reported, skill.activated and any future
+		// canonical types have no provider-style equivalent; store them as-is.
+		return eventType
+	}
 }
 
 func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) error {

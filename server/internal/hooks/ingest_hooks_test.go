@@ -366,3 +366,40 @@ func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPay
 		},
 	}
 }
+
+// The gram.hook.event attribute vocabulary is the provider-style HookEvent
+// names — ClickHouse summary predicates match on PostToolUse and friends, so
+// canonical event types must translate back before they reach telemetry.
+func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
+	t.Parallel()
+
+	withRaw := func(adapter, eventType, raw string) *gen.IngestPayload {
+		payload := canonicalIngestPayload(adapter, eventType, "vocab-session")
+		payload.Source.RawEventName = &raw
+		return payload
+	}
+
+	// Known adapters resolve through their raw provider event name.
+	require.Equal(t, "PostToolUse", telemetryHookEventName(withRaw("claude", "tool.completed", "PostToolUse")))
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("claude", "tool.failed", "PostToolUseFailure")))
+	require.Equal(t, "AfterMCPExecution", telemetryHookEventName(withRaw("cursor", "tool.completed", "afterMCPExecution")))
+	require.Equal(t, "BeforeMCPExecution", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeMCPExecution")))
+	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("claude", "prompt.submitted", "UserPromptSubmit")))
+	require.Equal(t, "PermissionRequest", telemetryHookEventName(withRaw("codex", "tool.requested", "PermissionRequest")))
+
+	// Unrecognized raw names for known adapters fall back to the canonical map.
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
+
+	// Custom adapters have no raw vocabulary: canonical types map to their
+	// provider-style equivalents so summaries still count them.
+	require.Equal(t, "PostToolUse", telemetryHookEventName(canonicalIngestPayload("openclaw", "tool.completed", "vocab-session")))
+	require.Equal(t, "SessionStart", telemetryHookEventName(canonicalIngestPayload("openclaw", "session.started", "vocab-session")))
+	require.Equal(t, "AfterAgentThought", telemetryHookEventName(canonicalIngestPayload("openclaw", "assistant.thought", "vocab-session")))
+
+	// Canonical types without a provider-style equivalent pass through.
+	require.Equal(t, "usage.reported", telemetryHookEventName(canonicalIngestPayload("openclaw", "usage.reported", "vocab-session")))
+
+	// Skill activation is layered onto an ordinary tool event; the raw
+	// provider name must not erase it.
+	require.Equal(t, "skill.activated", telemetryHookEventName(withRaw("claude", "skill.activated", "PostToolUse")))
+}
