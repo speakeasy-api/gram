@@ -1018,7 +1018,6 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
-				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))

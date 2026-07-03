@@ -33,32 +33,6 @@ hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
-payload=$(cat)
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$script_dir/identity.sh" ]; then
-  . "$script_dir/identity.sh"
-fi
-. "$script_dir/http.sh"
-
-api_key="${GRAM_HOOKS_API_KEY:-}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
-
-# No env key: fall back to the credentials the browser login flow cached
-# (auth_preflight.sh / login.sh) so the inventory lands attributed. auth.sh
-# installs an EXIT trap when sourced; the trap set below deliberately
-# replaces it and covers the only resource created here (the curl config).
-if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
-  # shellcheck source=/dev/null
-  if . "$script_dir/auth.sh" 2>/dev/null && type gram_hooks_read_auth >/dev/null 2>&1; then
-    if gram_hooks_read_auth "$server_url" 2>/dev/null; then
-      api_key="$GRAM_HOOKS_CACHED_API_KEY"
-      [ -n "$project_slug" ] || project_slug="$GRAM_HOOKS_CACHED_PROJECT"
-    fi
-  fi
-fi
-
 auth_config=""
 auth_config_arg=()
 cleanup_auth_config() {
@@ -67,34 +41,30 @@ cleanup_auth_config() {
   fi
 }
 trap cleanup_auth_config EXIT
-if [ -n "$api_key" ] || [ -n "$project_slug" ]; then
+if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
   auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || {
     debug "mktemp failed for curl auth config; skipping inventory upload"
     exit 0
   }
   chmod 600 "$auth_config" || true
-  # curl config quoted strings treat backslash and double quote specially, and
-  # the config file is line-oriented; escape the metacharacters and strip CR/LF
-  # so a corrupted value cannot break out of the directive or inject additional
-  # config lines.
-  api_key="${api_key//\\/\\\\}"
-  api_key="${api_key//\"/\\\"}"
-  api_key="${api_key//$'\n'/}"
-  api_key="${api_key//$'\r'/}"
-  project_slug="${project_slug//\\/\\\\}"
-  project_slug="${project_slug//\"/\\\"}"
-  project_slug="${project_slug//$'\n'/}"
-  project_slug="${project_slug//$'\r'/}"
-  if [ -n "$api_key" ]; then
-    printf 'header = "Gram-Key: %s"\n' "$api_key" >>"$auth_config"
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
   fi
-  if [ -n "$project_slug" ]; then
-    printf 'header = "Gram-Project: %s"\n' "$project_slug" >>"$auth_config"
+  if [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
+    printf 'header = "Gram-Project: %s"\n' "$GRAM_HOOKS_PROJECT_SLUG" >>"$auth_config"
   fi
   auth_config_arg=(--config "$auth_config")
 else
-  debug "no cached or env hook credentials; sending inventory unauthenticated (server will fall back to OTEL session attribution)"
+  debug "no GRAM_HOOKS_API_KEY/GRAM_HOOKS_PROJECT_SLUG set; sending inventory unauthenticated (server will fall back to OTEL session attribution)"
 fi
+
+payload=$(cat)
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$script_dir/identity.sh" ]; then
+  . "$script_dir/identity.sh"
+fi
+. "$script_dir/http.sh"
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi

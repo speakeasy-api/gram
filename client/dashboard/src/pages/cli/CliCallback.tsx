@@ -5,10 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSessionData } from "@/contexts/Auth";
 
 interface CliCallbackProps {
-  keyScope?: "producer" | "hooks";
   localCallbackUrl: string;
-  projectSlug?: string | null;
-  organizationId?: string | null;
   /**
    * PKCE parameters. Their presence — a `codeChallenge` — is what selects the
    * PKCE one-time-code enrollment flow over the default producer-key flow. The
@@ -20,9 +17,9 @@ interface CliCallbackProps {
 }
 
 /**
- * CliCallback is an authentication handler for local clients such as the CLI
- * and coding-agent hooks. By default it generates an API key in the requested
- * scope and returns it to the localhost callback URL as query parameters.
+ * CliCallback is an authentication handler for the CLI. By default it generates
+ * a producer-scoped API key and transmits it to the client by appending it to
+ * the local callback URL as a query parameter.
  *
  * When the request supplies a PKCE `code_challenge`, it instead runs the PKCE
  * enrollment flow: it exchanges the challenge for a short-lived one-time code
@@ -31,14 +28,7 @@ interface CliCallbackProps {
  * flow is selected by the presence of PKCE parameters, not by client identity.
  */
 export default function CliCallback(props: CliCallbackProps): JSX.Element {
-  const {
-    keyScope = "producer",
-    localCallbackUrl,
-    projectSlug,
-    organizationId,
-    codeChallenge,
-    codeChallengeMethod,
-  } = props;
+  const { localCallbackUrl, codeChallenge, codeChallengeMethod } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey } = useCreateAPIKeyMutation();
@@ -71,21 +61,17 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
       return;
     }
 
-    // The requesting plugin was generated for a specific organization; a key
-    // minted in whichever org this browser session happens to have active
-    // would silently route that machine's telemetry and policy checks to the
-    // wrong org.
-    if (organizationId && session.activeOrganizationId !== organizationId) {
-      setError(errWrongOrganization);
-      return;
-    }
-
     hasCreatedKey.current = true;
 
-    const selectedProjectSlug = selectCallbackProjectSlug(
-      session.organization.projects,
-      projectSlug,
-    );
+    // Only get project from localStorage if it exists and is valid
+    let projectSlug: string | null = null;
+    const preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
+    if (
+      preferredProject &&
+      session.organization.projects.find((p) => p.slug === preferredProject)
+    ) {
+      projectSlug = preferredProject;
+    }
 
     if (isPkceFlow) {
       authorizePkceCode(
@@ -93,7 +79,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
         session.session,
         codeChallenge,
         codeChallengeMethod,
-        selectedProjectSlug,
+        projectSlug,
       )
         .then((code) => transmitCode(localCallbackUrl, code))
         .catch((err) => {
@@ -104,15 +90,9 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
       return;
     }
 
-    createScopedKey(createKey, session.session, keyScope)
+    createProducerKey(createKey, session.session)
       .then((key) =>
-        transmitKey(
-          localCallbackUrl,
-          key,
-          selectedProjectSlug,
-          session.user.email,
-          session.activeOrganizationId,
-        ),
+        transmitKey(localCallbackUrl, key, projectSlug, session.user.email),
       )
       .catch((err) => {
         setError(
@@ -122,11 +102,8 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
   }, [
     createKey,
     authorizeCode,
-    keyScope,
-    localCallbackUrl,
-    projectSlug,
-    organizationId,
     session,
+    localCallbackUrl,
     validCallback,
     isPkceFlow,
     codeChallenge,
@@ -169,16 +146,7 @@ function generateKeyName(): string {
   return `CLI Key (Generated) - ${timestamp}`.slice(0, maxLength);
 }
 
-function generateHooksKeyName(): string {
-  const timestamp = Date.now();
-  const maxLength = 40;
-
-  return `Hooks Key (Generated) - ${timestamp}`.slice(0, maxLength);
-}
-
 const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
-const errWrongOrganization =
-  "This connection link belongs to a different organization. Switch to that organization in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
 function isCallbackLocal(callbackUrl: string): boolean {
@@ -198,9 +166,7 @@ interface KeyRequestParams {
 }
 function keyRequest(params: KeyRequestParams) {
   const { scopes, sessionId } = params;
-  const name = scopes.includes("hooks")
-    ? generateHooksKeyName()
-    : generateKeyName();
+  const name = generateKeyName();
 
   return {
     createKeyForm: { name, scopes },
@@ -208,12 +174,11 @@ function keyRequest(params: KeyRequestParams) {
   };
 }
 
-async function createScopedKey(
+async function createProducerKey(
   createKey: ReturnType<typeof useCreateAPIKeyMutation>["mutateAsync"],
   sessionId: string,
-  keyScope: "producer" | "hooks",
 ): Promise<string> {
-  const scopes = [keyScope];
+  const scopes = ["producer"];
   const result = await createKey({
     request: keyRequest({ sessionId, scopes }),
   });
@@ -222,33 +187,11 @@ async function createScopedKey(
   return result.key;
 }
 
-function selectCallbackProjectSlug(
-  projects: { slug: string }[],
-  requestedProjectSlug: string | null | undefined,
-): string | null {
-  if (
-    requestedProjectSlug &&
-    projects.find((p) => p.slug === requestedProjectSlug)
-  ) {
-    return requestedProjectSlug;
-  }
-
-  const preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
-  if (preferredProject && projects.find((p) => p.slug === preferredProject)) {
-    return preferredProject;
-  }
-
-  // No validated selection: omit the project rather than guess one. Hook
-  // plugins fall back to their generated project slug on an empty callback.
-  return null;
-}
-
 async function transmitKey(
   callbackUrl: string,
   apiKey: string,
   projectSlug: string | null,
   userEmail: string,
-  organizationId?: string | null,
 ): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
@@ -257,11 +200,6 @@ async function transmitKey(
   }
   if (userEmail) {
     url.searchParams.set("email", userEmail);
-  }
-  // The receiving client binds its credential cache to this org so a cache
-  // minted here is never reused by a plugin generated for a different org.
-  if (organizationId) {
-    url.searchParams.set("organization_id", organizationId);
   }
 
   window.location.replace(url.toString());
