@@ -831,6 +831,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" {
+				s.recordWarnChallenge(ctx, ev.Event, scanResult, ev.ToolName)
+				return constructAskResponse(payload.HookEventName, emphasizeWarn(renderWarnBody(scanResult))), nil
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// Surface the block reason on the trace summary so the dashboard

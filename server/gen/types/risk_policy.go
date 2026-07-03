@@ -49,7 +49,8 @@ type RiskPolicy struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled bool
-	// Policy action: flag (log only) or block (deny in real-time).
+	// Policy action: flag (log only), warn (challenge: warn the user and require
+	// acknowledgement to proceed), or block (deny in real-time).
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string

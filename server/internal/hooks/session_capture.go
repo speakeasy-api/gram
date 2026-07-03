@@ -146,6 +146,25 @@ func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult 
 	return result
 }
 
+// constructAskResponse defers the decision to the user via Claude Code's native
+// confirmation prompt (PreToolUse `hookSpecificOutput.permissionDecision: "ask"`),
+// which renders as an inline [y/n] and blocks the tool call until the user
+// answers — no out-of-band acknowledgement needed. Only PreToolUse supports
+// "ask"; any other event falls back to a plain block (fail-safe).
+func constructAskResponse(hookEventName, reason string) *gen.ClaudeHookResult {
+	if hookEventName != "PreToolUse" {
+		return constructBlockResponse(hookEventName, reason)
+	}
+	result := makeHookResult(hookEventName)
+	ask := "ask"
+	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+		output.PermissionDecision = &ask
+		output.PermissionDecisionReason = &reason
+	}
+	result.SystemMessage = &reason
+	return result
+}
+
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
 // When a blocking risk policy matches, it returns 200 with a top-level
 // `decision: "block"` + `reason`, the shape Claude Code documents for
@@ -161,6 +180,13 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	}
 	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			// Warn (challenge) defers to the tool call: Claude Code can only show
+			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
+			// Never hard-block a warn here — let the prompt through so the
+			// follow-on tool call carrying the match gets challenged instead.
+			if scanResult.Action == "warn" {
+				return makeHookResult(ev.RawEventType), nil
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message

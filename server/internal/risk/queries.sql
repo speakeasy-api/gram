@@ -223,6 +223,113 @@ SET target_label = EXCLUDED.target_label
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: UpsertRiskPolicyChallenge :one
+-- Records (or refreshes) a warn/challenge for a (user, policy, tool). Never
+-- stores the raw matched value. A live acknowledgement is preserved so a
+-- re-scan does not wipe a still-valid ack before the agent retries.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , status
+  , policy_name
+  , entity
+  , rule_id
+  , challenged_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , 'challenged'
+  , sqlc.narg(policy_name)::text
+  , sqlc.narg(entity)::text
+  , sqlc.narg(rule_id)::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.status
+      ELSE 'challenged'
+    END
+  , policy_name = EXCLUDED.policy_name
+  , entity = EXCLUDED.entity
+  , rule_id = EXCLUDED.rule_id
+  , challenged_at = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.challenged_at
+      ELSE clock_timestamp()
+    END
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: MarkRiskPolicyChallengeAcknowledged :one
+-- Self-service redeem: mark the challenge acknowledged with a remember-until
+-- expiry. Upserts so a redeem that beats the async challenge insert still works.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , status
+  , policy_name
+  , challenged_at
+  , acknowledged_at
+  , expires_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , 'acknowledged'
+  , sqlc.narg(policy_name)::text
+  , clock_timestamp()
+  , clock_timestamp()
+  , @expires_at
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetActiveRiskPolicyAck :one
+-- Hook-time gate: is there a live acknowledgement for this (user, policy, tool)?
+-- The agent retries with NO token, so this table lookup — not the cache token —
+-- is what allows the retry through.
+SELECT *
+FROM risk_policy_challenges
+WHERE project_id = @project_id
+  AND user_id = @user_id
+  AND risk_policy_id = @risk_policy_id
+  AND tool_name IS NOT DISTINCT FROM sqlc.narg(tool_name)::text
+  AND status = 'acknowledged'
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE;
+
 -- name: ListRiskPolicyBypassRequests :many
 SELECT *
 FROM risk_policy_bypass_requests
@@ -913,11 +1020,13 @@ ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
+-- Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
+-- allowed after acknowledgement). flag is non-enforcing and excluded.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action = 'block'
+  AND action IN ('block', 'warn')
   AND deleted IS FALSE;
 
 -- name: GetProjectFlagGroups :one

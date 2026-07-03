@@ -18,6 +18,7 @@ const (
 	ActionRiskPolicyBypassRequestCreate  Action = "risk_policy:bypass_request_create"
 	ActionRiskPolicyBypassRequestDeny    Action = "risk_policy:bypass_request_deny"
 	ActionRiskPolicyBypassRequestRevoke  Action = "risk_policy:bypass_request_revoke"
+	ActionRiskPolicyChallengeAcknowledge Action = "risk_policy:challenge_acknowledge"
 	ActionRiskPolicyCreate               Action = "risk_policy:create"
 	ActionRiskPolicyUpdate               Action = "risk_policy:update"
 	ActionRiskPolicyDelete               Action = "risk_policy:delete"

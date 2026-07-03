@@ -102,6 +102,19 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
 			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+				if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+					break
+				}
+				// Unacknowledged warn → warning + ack link (challenge, not a
+				// durable block page). No ack link buildable → fall through to block.
+				if scanResult.Action == "warn" {
+					if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+						blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						userReason = warnReason
+						blockPolicyID = scanResult.PolicyID
+						break
+					}
+				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 				isToolCallBlock = true

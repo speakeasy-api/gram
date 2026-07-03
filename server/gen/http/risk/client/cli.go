@@ -219,8 +219,8 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 			}
 		}
 		if body.Action != nil {
-			if !(*body.Action == "flag" || *body.Action == "block") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+			if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
 			}
 		}
 		if body.AudienceType != nil {
@@ -1017,6 +1017,31 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 	}
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildAcknowledgeRiskPolicyChallengePayload builds the payload for the risk
+// acknowledgeRiskPolicyChallenge endpoint from CLI flags.
+func BuildAcknowledgeRiskPolicyChallengePayload(riskAcknowledgeRiskPolicyChallengeBody string, riskAcknowledgeRiskPolicyChallengeSessionToken string) (*risk.AcknowledgeRiskPolicyChallengePayload, error) {
+	var err error
+	var body AcknowledgeRiskPolicyChallengeRequestBody
+	{
+		err = json.Unmarshal([]byte(riskAcknowledgeRiskPolicyChallengeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ack_token\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if riskAcknowledgeRiskPolicyChallengeSessionToken != "" {
+			sessionToken = &riskAcknowledgeRiskPolicyChallengeSessionToken
+		}
+	}
+	v := &risk.AcknowledgeRiskPolicyChallengePayload{
+		AckToken: body.AckToken,
 	}
 	v.SessionToken = sessionToken
 

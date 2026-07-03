@@ -47,6 +47,15 @@ type RiskScanner interface {
 	// decide whether to inject the x-gram-toolset-id constant into tool
 	// schemas.
 	HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) (bool, error)
+	// HasAcknowledgedChallenge reports whether a live acknowledgement exists for
+	// a warn (challenge) policy match by this (user, policy, tool). The hooks
+	// layer calls this before denying a warn match: true means the user already
+	// acknowledged and the retried call should be allowed. Fail-closed.
+	HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName string) bool
+	// RecordPolicyChallenge upserts the challenged-state row for a warn match so
+	// the challenge is auditable and linkable. Log-safe: never receives the raw
+	// matched value. Best-effort.
+	RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID string)
 }
 
 // ShadowMCPPolicy is the minimal policy view the hooks layer needs to render
@@ -59,20 +68,31 @@ type ShadowMCPPolicy struct {
 	UserMessage *string // nil/empty means "render the default message"
 }
 
-// ScanResult describes a match from a blocking risk policy.
+// ScanResult describes a match from an enforcing risk policy (block or warn).
 //
-// We deliberately do not include the raw matched substring (the secret/PII
-// itself) so that ScanResult is safe to log, store, or serialize. Block
-// messages render PolicyName + Description, never the matched value.
+// The base fields are safe to log, store, or serialize; block messages render
+// PolicyName + Description, never the matched value.
+//
+// MatchedValue and Entity are the EXCEPTION: MatchedValue is the raw matched
+// substring (the secret/PII itself) and MUST NOT be logged, persisted to
+// ClickHouse traces, written to tool_call_blocks.reason, or included in audit
+// snapshots. They exist solely so the `warn` (challenge) path can render the
+// ephemeral, user-facing warning ("... %{match} identified as %{entity} ...").
+// MatchedValue is empty for judge-based matches (prompt-based policies) that
+// have no literal substring.
 type ScanResult struct {
-	Action      string // "block"
+	Action      string // "flag" | "block" | "warn"
 	PolicyID    string
 	PolicyName  string
 	Source      string
 	MessageType message.Type
 	RuleID      string
 	Description string
-	UserMessage *string // optional override for the rendered block message
+	UserMessage *string // optional override for the rendered block/warn message
+
+	// Sensitive — see the type doc. Only for the ephemeral warn render.
+	MatchedValue string
+	Entity       string
 }
 
 type scannerMetrics struct {
@@ -450,14 +470,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings := filter(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:      policy.Action,
-					PolicyID:    policy.ID.String(),
-					PolicyName:  policy.Name,
-					Source:      ra.SourceGitleaks,
-					MessageType: messageType,
-					RuleID:      findings[0].RuleID,
-					Description: findings[0].Description,
-					UserMessage: conv.FromPGText[string](policy.UserMessage),
+					Action:       policy.Action,
+					PolicyID:     policy.ID.String(),
+					PolicyName:   policy.Name,
+					Source:       ra.SourceGitleaks,
+					MessageType:  messageType,
+					RuleID:       findings[0].RuleID,
+					Description:  findings[0].Description,
+					UserMessage:  conv.FromPGText[string](policy.UserMessage),
+					MatchedValue: findings[0].Match,
+					Entity:       findings[0].RuleID,
 				}, nil
 			}
 		case ra.SourcePresidio:
@@ -479,14 +501,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
-						Action:      policy.Action,
-						PolicyID:    policy.ID.String(),
-						PolicyName:  policy.Name,
-						Source:      ra.SourcePresidio,
-						MessageType: messageType,
-						RuleID:      f.RuleID,
-						Description: f.Description,
-						UserMessage: conv.FromPGText[string](policy.UserMessage),
+						Action:       policy.Action,
+						PolicyID:     policy.ID.String(),
+						PolicyName:   policy.Name,
+						Source:       ra.SourcePresidio,
+						MessageType:  messageType,
+						RuleID:       f.RuleID,
+						Description:  f.Description,
+						UserMessage:  conv.FromPGText[string](policy.UserMessage),
+						MatchedValue: f.Match,
+						Entity:       f.RuleID,
 					}, nil
 				}
 			}
@@ -498,28 +522,32 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings = filter(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:      policy.Action,
-					PolicyID:    policy.ID.String(),
-					PolicyName:  policy.Name,
-					Source:      ra.SourcePromptInjection,
-					MessageType: messageType,
-					RuleID:      findings[0].RuleID,
-					Description: findings[0].Description,
-					UserMessage: conv.FromPGText[string](policy.UserMessage),
+					Action:       policy.Action,
+					PolicyID:     policy.ID.String(),
+					PolicyName:   policy.Name,
+					Source:       ra.SourcePromptInjection,
+					MessageType:  messageType,
+					RuleID:       findings[0].RuleID,
+					Description:  findings[0].Description,
+					UserMessage:  conv.FromPGText[string](policy.UserMessage),
+					MatchedValue: findings[0].Match,
+					Entity:       findings[0].RuleID,
 				}, nil
 			}
 		}
 	}
 	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
 		return &ScanResult{
-			Action:      policy.Action,
-			PolicyID:    policy.ID.String(),
-			PolicyName:  policy.Name,
-			Source:      ra.SourceCustom,
-			MessageType: messageType,
-			RuleID:      denyFindings[0].RuleID,
-			Description: denyFindings[0].Description,
-			UserMessage: conv.FromPGText[string](policy.UserMessage),
+			Action:       policy.Action,
+			PolicyID:     policy.ID.String(),
+			PolicyName:   policy.Name,
+			Source:       ra.SourceCustom,
+			MessageType:  messageType,
+			RuleID:       denyFindings[0].RuleID,
+			Description:  denyFindings[0].Description,
+			UserMessage:  conv.FromPGText[string](policy.UserMessage),
+			MatchedValue: denyFindings[0].Match,
+			Entity:       denyFindings[0].RuleID,
 		}, nil
 	}
 	return nil, nil
@@ -563,6 +591,9 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		RuleID:      finding.RuleID,
 		Description: finding.Description,
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
+		// Judge findings have no literal matched substring; Entity mirrors RuleID.
+		MatchedValue: finding.Match,
+		Entity:       finding.RuleID,
 	}
 }
 
@@ -583,6 +614,9 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 		RuleID:      ra.RuleLLMJudge,
 		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
+		// No literal match for a fail-closed judge result.
+		MatchedValue: "",
+		Entity:       ra.RuleLLMJudge,
 	}
 }
 

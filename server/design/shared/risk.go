@@ -12,6 +12,13 @@ import (
 // semantics; on update payloads (where the field is optional) they leave the
 // default off so the generated Go type stays *string.
 //
+// "warn" (a.k.a. "challenge") is the middle ground between flag and block: on
+// match, enforcement denies the current call and returns a warning plus a
+// short-lived out-of-band acknowledgement link. The user opens it, the ack is
+// recorded (per org+project+user+policy, TTL), and the agent retries the same
+// call — which now passes. Transports that cannot complete that round-trip fall
+// back to block (fail-safe).
+//
 // "redact" is intentionally absent. Genuine in-transit redaction would need
 // to rewrite both user prompts and tool inputs before they reach the model.
 // Tool-input rewriting is supported by every coding-agent hook protocol we
@@ -25,7 +32,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "block")
+	Enum("flag", "block", "warn")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -83,7 +90,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
 	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})

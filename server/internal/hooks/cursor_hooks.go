@@ -126,6 +126,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
 		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+				result.Permission = new("allow")
+				break
+			}
+			if scanResult.Action == "warn" {
+				if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					result.Permission = new("deny")
+					result.UserMessage = &warnReason
+					result.AgentMessage = &warnReason
+					break
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -211,6 +224,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			break
 		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+				result.Permission = new("allow")
+				break
+			}
+			if scanResult.Action == "warn" {
+				if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					result.Permission = new("deny")
+					result.UserMessage = &warnReason
+					result.AgentMessage = &warnReason
+					break
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason

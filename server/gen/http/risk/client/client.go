@@ -81,6 +81,10 @@ type Client struct {
 	// to the createRiskPolicyBypassRequest endpoint.
 	CreateRiskPolicyBypassRequestDoer goahttp.Doer
 
+	// AcknowledgeRiskPolicyChallenge Doer is the HTTP client used to make requests
+	// to the acknowledgeRiskPolicyChallenge endpoint.
+	AcknowledgeRiskPolicyChallengeDoer goahttp.Doer
+
 	// GetRiskBlock Doer is the HTTP client used to make requests to the
 	// getRiskBlock endpoint.
 	GetRiskBlockDoer goahttp.Doer
@@ -189,6 +193,7 @@ func NewClient(
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
+		AcknowledgeRiskPolicyChallengeDoer: doer,
 		GetRiskBlockDoer:                   doer,
 		SubmitRiskBlockFeedbackDoer:        doer,
 		ListRiskPolicyBypassRequestsDoer:   doer,
@@ -594,6 +599,30 @@ func (c *Client) CreateRiskPolicyBypassRequest() goa.Endpoint {
 		resp, err := c.CreateRiskPolicyBypassRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "createRiskPolicyBypassRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AcknowledgeRiskPolicyChallenge returns an endpoint that makes HTTP requests
+// to the risk service acknowledgeRiskPolicyChallenge server.
+func (c *Client) AcknowledgeRiskPolicyChallenge() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAcknowledgeRiskPolicyChallengeRequest(c.encoder)
+		decodeResponse = DecodeAcknowledgeRiskPolicyChallengeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAcknowledgeRiskPolicyChallengeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AcknowledgeRiskPolicyChallengeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "acknowledgeRiskPolicyChallenge", err)
 		}
 		return decodeResponse(resp)
 	}

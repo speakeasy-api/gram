@@ -3938,6 +3938,241 @@ func DecodeCreateRiskPolicyBypassRequestResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildAcknowledgeRiskPolicyChallengeRequest instantiates a HTTP request
+// object with method and path set to call the "risk" service
+// "acknowledgeRiskPolicyChallenge" endpoint
+func (c *Client) BuildAcknowledgeRiskPolicyChallengeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AcknowledgeRiskPolicyChallengeRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "acknowledgeRiskPolicyChallenge", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAcknowledgeRiskPolicyChallengeRequest returns an encoder for requests
+// sent to the risk acknowledgeRiskPolicyChallenge server.
+func EncodeAcknowledgeRiskPolicyChallengeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.AcknowledgeRiskPolicyChallengePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "acknowledgeRiskPolicyChallenge", "*risk.AcknowledgeRiskPolicyChallengePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewAcknowledgeRiskPolicyChallengeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAcknowledgeRiskPolicyChallengeResponse returns a decoder for responses
+// returned by the risk acknowledgeRiskPolicyChallenge endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeAcknowledgeRiskPolicyChallengeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAcknowledgeRiskPolicyChallengeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AcknowledgeRiskPolicyChallengeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			res := NewAcknowledgeRiskPolicyChallengeResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AcknowledgeRiskPolicyChallengeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AcknowledgeRiskPolicyChallengeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AcknowledgeRiskPolicyChallengeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AcknowledgeRiskPolicyChallengeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AcknowledgeRiskPolicyChallengeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AcknowledgeRiskPolicyChallengeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AcknowledgeRiskPolicyChallengeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AcknowledgeRiskPolicyChallengeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+				}
+				err = ValidateAcknowledgeRiskPolicyChallengeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+				}
+				return nil, NewAcknowledgeRiskPolicyChallengeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AcknowledgeRiskPolicyChallengeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+				}
+				err = ValidateAcknowledgeRiskPolicyChallengeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+				}
+				return nil, NewAcknowledgeRiskPolicyChallengeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "acknowledgeRiskPolicyChallenge", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AcknowledgeRiskPolicyChallengeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			err = ValidateAcknowledgeRiskPolicyChallengeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "acknowledgeRiskPolicyChallenge", err)
+			}
+			return nil, NewAcknowledgeRiskPolicyChallengeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "acknowledgeRiskPolicyChallenge", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskBlockRequest instantiates a HTTP request object with method and
 // path set to call the "risk" service "getRiskBlock" endpoint
 func (c *Client) BuildGetRiskBlockRequest(ctx context.Context, v any) (*http.Request, error) {

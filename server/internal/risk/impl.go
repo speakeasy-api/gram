@@ -2760,10 +2760,10 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 
 func validateAction(action string) error {
 	switch action {
-	case "flag", "block":
+	case "flag", "block", "warn":
 		return nil
 	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block")
 	}
 }
 
@@ -2779,7 +2779,9 @@ func validateSources(sources []string) error {
 }
 
 func validateSourceAction(sources []string, action string) error {
-	if action != "block" {
+	// warn (challenge) can end in a block, so it is subject to the same
+	// flag-only-source constraint as block: only "flag" is unconstrained.
+	if action == "flag" {
 		return nil
 	}
 	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive} {
