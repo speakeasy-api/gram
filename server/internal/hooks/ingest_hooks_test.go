@@ -352,6 +352,45 @@ func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	require.Equal(t, "custom-adapter", toolResult.Source.String)
 }
 
+// Codex PermissionRequest normalizes to tool.requested but is only a
+// pre-approval preview — it may be denied or followed by the real request,
+// so it must not create tool_calls rows in the captured transcript.
+func TestIngest_PermissionRequestsNotPersistedAsToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-perms-" + uuid.NewString()
+	toolName := "shell"
+	permissionType := "exec"
+	rawEvent := "PermissionRequest"
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	payload.Source.RawEventName = &rawEvent
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			Name:           &toolName,
+			Input:          map[string]any{"command": "ls"},
+			PermissionType: &permissionType,
+		},
+	}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, msgs, "permission prompts must not persist chat rows")
+}
+
 func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPayload {
 	return &gen.IngestPayload{
 		SchemaVersion: hookIngestSchemaV1,

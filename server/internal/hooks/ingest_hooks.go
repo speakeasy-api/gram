@@ -547,6 +547,14 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("assistant", content)
 		titleContent = content
 	case "tool.requested":
+		// Permission prompts (codex PermissionRequest) also normalize to
+		// tool.requested but are only pre-approval previews: they may be
+		// denied or followed by the real request, so persisting them would
+		// put phantom or duplicate tool_calls rows in the transcript.
+		if canonicalPermissionType(payload) != "" ||
+			strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, "")), "PermissionRequest") {
+			return nil
+		}
 		toolName := canonicalToolName(payload)
 		if strings.TrimSpace(toolName) == "" {
 			return nil
