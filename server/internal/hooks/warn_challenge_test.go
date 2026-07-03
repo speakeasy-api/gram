@@ -13,9 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
-//go:fix inline
-func warnPtr(s string) *string { return new(s) }
-
 // stubResultScanner is a RiskScanner that returns a fixed ScanForEnforcement
 // result, letting the warn (challenge) branches be exercised deterministically.
 type stubResultScanner struct {
@@ -107,7 +104,7 @@ func TestTruncateForWarn(t *testing.T) {
 	long := strings.Repeat("b", warnMatchMaxLen+50)
 	got := truncateForWarn(long)
 	assert.True(t, strings.HasSuffix(got, "…"))
-	assert.Equal(t, warnMatchMaxLen, len([]rune(strings.TrimSuffix(got, "…"))))
+	assert.Len(t, []rune(strings.TrimSuffix(got, "…")), warnMatchMaxLen)
 }
 
 func TestEmphasizeWarn_WrapsWithMarkerAndAmber(t *testing.T) {

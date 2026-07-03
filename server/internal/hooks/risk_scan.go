@@ -124,6 +124,8 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		RiskPolicyID:   scanResult.PolicyID,
 		PolicyName:     scanResult.PolicyName,
 		ToolName:       toolPtr,
+		// Zero: use the ack-window default (defaultAckGrace) so the retry passes.
+		RememberFor: 0,
 	}, 0)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",

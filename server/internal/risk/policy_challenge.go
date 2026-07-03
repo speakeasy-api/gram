@@ -157,7 +157,7 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 		UserID:         record.UserID,
 		ToolName:       toChallengeToolName(ptrValOr(record.ToolName)),
 		PolicyName:     toChallengeText(record.PolicyName),
-		ExpiresAt:      pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "acknowledge risk policy challenge").LogError(ctx, s.logger)
