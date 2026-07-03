@@ -273,10 +273,10 @@ type BillingMetadatum struct {
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
-	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
-	TunnelledMcpServerLimit pgtype.Int4
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
+	TunneledMcpServerLimit pgtype.Int4
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 type Chat struct {
@@ -878,8 +878,8 @@ type McpServer struct {
 	EnvironmentID       uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
-	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
-	TunnelledMcpServerID  uuid.NullUUID
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be set.
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -1723,12 +1723,12 @@ type TriggerInstance struct {
 }
 
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
-type TunnelledMcpServer struct {
-	// Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+type TunneledMcpServer struct {
+	// Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
 	ID uuid.UUID
-	// Project that owns this tunnelled MCP source. All management queries are scoped by project_id.
+	// Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 	ProjectID uuid.UUID
-	// User-facing display name for the tunnelled MCP source.
+	// User-facing display name for the tunneled MCP source.
 	Name string
 	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 	KeyHash string
@@ -1740,11 +1740,11 @@ type TunnelledMcpServer struct {
 	AgentVersion pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
 	LastSeenAt pgtype.Timestamptz
-	// Time when the tunnelled MCP source was created.
+	// Time when the tunneled MCP source was created.
 	CreatedAt pgtype.Timestamptz
-	// Time when the durable tunnelled MCP source record was last updated.
+	// Time when the durable tunneled MCP source record was last updated.
 	UpdatedAt pgtype.Timestamptz
-	// Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.
+	// Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.
 	DeletedAt pgtype.Timestamptz
 	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
 	Deleted bool
