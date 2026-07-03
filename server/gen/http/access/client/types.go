@@ -16116,9 +16116,19 @@ func ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body *ShadowMCPInvent
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"project"}))
+		}
+	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url"}))
 		}
 	}
 	return
