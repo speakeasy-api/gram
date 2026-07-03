@@ -14581,8 +14581,8 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -14616,8 +14616,8 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {

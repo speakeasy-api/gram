@@ -142,7 +142,7 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 // errPolicyAckStoreUnavailable so callers can return a server error.
 func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString string) (*policyAckRecord, error) {
 	if c == nil {
-		return nil, fmt.Errorf("risk policy ack cache is not configured")
+		return nil, fmt.Errorf("%w: cache is not configured", errPolicyAckStoreUnavailable)
 	}
 	if !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
 		return nil, fmt.Errorf("invalid risk policy ack token format")

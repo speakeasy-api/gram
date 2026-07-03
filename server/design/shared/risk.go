@@ -32,7 +32,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "block", "warn")
+	Enum("flag", "warn", "block")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type

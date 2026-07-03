@@ -608,7 +608,9 @@ var _ = Service("risk", func() {
 		Result(func() {
 			Attribute("acknowledged", Boolean, "Whether the challenge is now acknowledged.")
 			Attribute("policy_name", String, "The policy that issued the warning.")
-			Attribute("expires_at", String, "RFC3339 time until which the acknowledgement suppresses re-challenge.")
+			Attribute("expires_at", String, "RFC3339 time until which the acknowledgement suppresses re-challenge.", func() {
+				Format(FormatDateTime)
+			})
 			Required("acknowledged")
 		})
 

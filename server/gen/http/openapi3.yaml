@@ -35378,6 +35378,7 @@ components:
                 expires_at:
                     type: string
                     description: RFC3339 time until which the acknowledgement suppresses re-challenge.
+                    format: date-time
                 policy_name:
                     type: string
                     description: The policy that issued the warning.
@@ -38118,8 +38119,8 @@ components:
                     default: flag
                     enum:
                         - flag
-                        - block
                         - warn
+                        - block
                 audience_principal_urns:
                     type: array
                     items:
@@ -45684,8 +45685,8 @@ components:
                     default: flag
                     enum:
                         - flag
-                        - block
                         - warn
+                        - block
                 audience_principal_urns:
                     type: array
                     items:
@@ -50079,8 +50080,8 @@ components:
                     description: 'Policy action: flag, warn (challenge), or block.'
                     enum:
                         - flag
-                        - block
                         - warn
+                        - block
                 audience_principal_urns:
                     type: array
                     items:

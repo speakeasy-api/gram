@@ -2693,8 +2693,11 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	}
 
 	actionLabel := "Scanner"
-	if action == "block" {
+	switch action {
+	case "block":
 		actionLabel = "Blocker"
+	case "warn":
+		actionLabel = "Warner"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel

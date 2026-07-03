@@ -269,8 +269,9 @@ func (s *Scanner) ScanForEnforcement(
 	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
 	var (
-		winner   atomic.Pointer[ScanResult]
-		matchErr = errors.New("risk policy match")
+		blockWinner atomic.Pointer[ScanResult] // hard deny; short-circuits the fan-out
+		warnWinner  atomic.Pointer[ScanResult] // challenge; kept only if no block matches
+		matchErr    = errors.New("risk policy block")
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
@@ -298,9 +299,21 @@ func (s *Scanner) ScanForEnforcement(
 				)
 				return nil
 			}
-			if result != nil && winner.CompareAndSwap(nil, result) {
-				return matchErr
+			if result == nil {
+				return nil
 			}
+			// Enforce block > warn precedence. A block match short-circuits the
+			// fan-out (cancels siblings) and always wins; a warn match is recorded
+			// but must NOT cancel siblings, so a still-running block policy can
+			// override it. Without this the first goroutine to finish wins, and a
+			// matching block could be silently downgraded to a challenge.
+			if result.Action == "block" {
+				if blockWinner.CompareAndSwap(nil, result) {
+					return matchErr
+				}
+				return nil
+			}
+			warnWinner.CompareAndSwap(nil, result)
 			return nil
 		})
 	}
@@ -308,7 +321,11 @@ func (s *Scanner) ScanForEnforcement(
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("risk policy fan-out: %w", err)
 	}
-	if hit := winner.Load(); hit != nil {
+	if hit := blockWinner.Load(); hit != nil {
+		s.recordScan(ctx, projectID.String(), "blocked", time.Since(start))
+		return hit, nil
+	}
+	if hit := warnWinner.Load(); hit != nil {
 		s.recordScan(ctx, projectID.String(), "blocked", time.Since(start))
 		return hit, nil
 	}

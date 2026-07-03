@@ -14438,8 +14438,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -14542,8 +14542,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -14630,8 +14630,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -14983,6 +14983,9 @@ func ValidateCreateRiskPolicyBypassRequestResponseBody(body *CreateRiskPolicyByp
 func ValidateAcknowledgeRiskPolicyChallengeResponseBody(body *AcknowledgeRiskPolicyChallengeResponseBody) (err error) {
 	if body.Acknowledged == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("acknowledged", "body"))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -24053,8 +24056,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "warn") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "warn"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
 		}
 	}
 	if body.AudienceType != nil {
