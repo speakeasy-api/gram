@@ -14,14 +14,16 @@ const (
 )
 
 type attributeDimension struct {
-	column string
-	kind   attributeDimensionKind
+	column                 string
+	kind                   attributeDimensionKind
+	coLocateSessionFilters bool
 }
 
 type telemetryDimension struct {
-	aggregateColumn string
-	rawExpr         string
-	kind            attributeDimensionKind
+	aggregateColumn        string
+	rawExpr                string
+	kind                   attributeDimensionKind
+	coLocateSessionFilters bool
 }
 
 // telemetryDimensionRegistry is the single allowlist for public telemetry
@@ -100,29 +102,34 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		kind:            attributeDimScalar,
 	},
 	"query_source": {
-		aggregateColumn: "query_source",
-		rawExpr:         "toString(attributes.query_source)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "query_source",
+		rawExpr:                "toString(attributes.query_source)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: true,
 	},
 	"skill_name": {
-		aggregateColumn: "skill_name",
-		rawExpr:         "toString(attributes.skill.name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "skill_name",
+		rawExpr:                "toString(attributes.skill.name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: true,
 	},
 	"agent_name": {
-		aggregateColumn: "agent_name",
-		rawExpr:         "toString(attributes.agent.name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "agent_name",
+		rawExpr:                "toString(attributes.agent.name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: true,
 	},
 	"mcp_server_name": {
-		aggregateColumn: "mcp_server_name",
-		rawExpr:         "toString(attributes.mcp_server.name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "mcp_server_name",
+		rawExpr:                "toString(attributes.mcp_server.name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: true,
 	},
 	"mcp_tool_name": {
-		aggregateColumn: "mcp_tool_name",
-		rawExpr:         "toString(attributes.mcp_tool.name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "mcp_tool_name",
+		rawExpr:                "toString(attributes.mcp_tool.name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: true,
 	},
 	"role": {
 		aggregateColumn: "roles",
@@ -144,7 +151,11 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 func buildDimensionRegistry(columnFor func(telemetryDimension) string) map[string]attributeDimension {
 	out := make(map[string]attributeDimension, len(telemetryDimensionRegistry))
 	for key, dim := range telemetryDimensionRegistry {
-		out[key] = attributeDimension{column: columnFor(dim), kind: dim.kind}
+		out[key] = attributeDimension{
+			column:                 columnFor(dim),
+			kind:                   dim.kind,
+			coLocateSessionFilters: dim.coLocateSessionFilters,
+		}
 	}
 	return out
 }
