@@ -1,0 +1,21 @@
+server/internal/plugins/generate.go
+  s_328fa4953f14a5::t_8e315c7dddcdd7 125
+.github/workflows/plugin-generate-check.yml
+  s_328fa4953f14a5::t_8e315c7dddcdd7 25,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "39242847b262a41bf7aec3a3139b6009977bf313",
+  "prompts": {},
+  "sessions": {
+    "s_328fa4953f14a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2962-a155-77c3-a896-f68f4c6836c9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
