@@ -1,0 +1,28 @@
+.changeset/eval-session-search-ux.md
+  s_cf8bb6f8d7262a::t_a67033b2b925b6 5-6
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_cf8bb6f8d7262a::t_997a4bda528bfb 1683-1687,1718-1725,1730-1743,1745-1747
+  s_cf8bb6f8d7262a::t_ef61ae449a0ce5 1494,1513-1520,1541,1543,1548-1549,1573,1580,1744
+  s_cf8bb6f8d7262a::t_89bbfa64d584a5 1542,1545-1547
+  s_cf8bb6f8d7262a::t_e6908330f3917c 1750
+  s_cf8bb6f8d7262a::t_fb9ea10269f8ca 1496-1510
+  s_cf8bb6f8d7262a::t_4eb16a4108381c 1495,1511-1512,1748-1749
+  s_cf8bb6f8d7262a::t_88a6e291b6c6d4 1544
+  s_cf8bb6f8d7262a::t_162fee782dc294 1486
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9e94d2c772f1d81dc08801381ef8f0bae3d68de6",
+  "prompts": {},
+  "sessions": {
+    "s_cf8bb6f8d7262a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2996-9eca-72c0-8555-954b489695bf",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
