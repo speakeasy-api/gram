@@ -19,7 +19,7 @@ import {
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -67,7 +67,6 @@ export const MCPPage = (): JSX.Element => {
 function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
-  const navigate = useNavigate();
   const client = useSdkClient();
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
@@ -187,7 +186,7 @@ function MCPOverview() {
 
     toast.success(`MCP server "${result.name}" created`);
 
-    void navigate(routes.mcp.details.href(result.slug) + "#tools");
+    routes.mcp.details.tools.goTo(result.slug);
   };
 
   const newMcpServerButton = (

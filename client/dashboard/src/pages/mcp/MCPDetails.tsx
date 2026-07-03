@@ -1,9 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
-import { DetailHero } from "@/components/detail-hero";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
   useMcpMetadataMetadataForm,
   type UseMcpMetadataMetadataFormResult,
@@ -16,19 +14,12 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -42,7 +33,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_MODEL } from "@/lib/models";
@@ -85,19 +75,16 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  CheckCircleIcon,
+  Check,
   ChevronDown,
   Download,
   Globe,
-  LockIcon,
   Pencil,
-  Play,
   Trash2,
-  XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Outlet, useParams } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
@@ -106,13 +93,17 @@ import { useToolsets } from "../toolsets/useToolsets";
 import { getSystemProvidedVariables } from "./environmentVariableUtils";
 import { useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
+import {
+  activeTabFromPath,
+  initialTabFromHash,
+  mcpDetailTabHref,
+  MCP_DETAIL_TAB_URLS,
+  type TabValue,
+} from "./MCPDetailsRouting";
+import { MCPOverviewTab } from "./overview/MCPOverviewTab";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
-
-export function MCPDetailsRoot(): React.JSX.Element {
-  return <Outlet />;
-}
 
 function MCPLoading() {
   return (
@@ -220,6 +211,46 @@ function MCPRouteNotFound() {
 
 type LoadedMcpToolset = NonNullable<ReturnType<typeof useToolset>["data"]>;
 
+function renderMcpDetailTabContent(
+  tab: TabValue,
+  toolset: LoadedMcpToolset,
+): React.ReactNode {
+  switch (tab) {
+    case "overview":
+      return <MCPOverviewTab toolset={toolset} />;
+    case "tools":
+      return <MCPToolsTab toolset={toolset} />;
+    case "resources":
+      return <MCPResourcesTab toolset={toolset} />;
+    case "prompts":
+      return <MCPPromptsTab toolset={toolset} />;
+    case "authentication":
+      return (
+        <RequireScope scope="mcp:write" level="page">
+          <MCPAuthenticationTab toolset={toolset} />
+        </RequireScope>
+      );
+    case "performance":
+      return (
+        <RequireScope scope="mcp:write" level="page">
+          <MCPPerformanceTab toolset={toolset} />
+        </RequireScope>
+      );
+    case "team-access":
+      return (
+        <RequireScope scope="mcp:read" level="page">
+          <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+        </RequireScope>
+      );
+    case "settings":
+      return (
+        <RequireScope scope="mcp:write" level="page">
+          <MCPSettingsTab toolset={toolset} />
+        </RequireScope>
+      );
+  }
+}
+
 function MCPDetailPageContent({
   toolset,
   toolsetSlug,
@@ -229,254 +260,42 @@ function MCPDetailPageContent({
 }) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const location = useLocation();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
-  // Call hooks before any conditional returns
-  const { url: mcpUrl } = useMcpUrl(toolset);
-  const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
+  const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
 
-  // Fetch MCP metadata early to use in useMissingRequiredEnvVars
-  const { data: mcpMetadataData } = useGetMcpMetadata(
-    { toolsetSlug: toolset?.slug || "" },
-    undefined,
-    { enabled: !!toolset?.slug, throwOnError: false },
-  );
-  const mcpMetadataForBadge = mcpMetadataData?.metadata;
-
-  // Tab state controlled by URL hash - initialize directly from hash
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    const hash = window.location.hash.slice(1); // Remove the '#'
-    const validTabs = [
-      "overview",
-      "tools",
-      "resources",
-      "prompts",
-      "authentication",
-      "performance",
-      ...(isRbacEnabled ? ["team-access"] : []),
-      "settings",
-    ];
-    return hash && validTabs.includes(hash) ? hash : "overview";
-  });
-
-  // Re-validate activeTab when feature flag loads asynchronously
-  useEffect(() => {
-    if (!isRbacEnabled) return;
-    const hash = window.location.hash.slice(1);
-    if (hash === "team-access") {
-      setActiveTab("team-access");
-    }
-  }, [isRbacEnabled]);
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    const url = new URL(window.location.href);
-    url.hash = value;
-    window.history.replaceState(null, "", url.toString());
-  };
-
-  // Calculate if there are missing required env vars for the tab indicator
-  // Must be before early return to avoid hooks order issues
-  const missingRequiredEnvVars = useMissingRequiredEnvVars(
-    toolset,
-    environments,
-    toolset?.defaultEnvironmentSlug || "default",
-    mcpMetadataForBadge,
-  );
-
-  const externalMcpOAuthConfigStatus =
-    useExternalMcpOAuthConfigStatus(toolsetSlug);
-  const oauthRequiredUnconfigured =
-    externalMcpOAuthConfigStatus === "required-unconfigured";
-
-  let statusBadge = null;
-  if (!toolset.mcpEnabled) {
-    statusBadge = (
-      <Badge variant="warning">
-        <Badge.LeftIcon>
-          <XCircleIcon />
-        </Badge.LeftIcon>
-        <Badge.Text>Disabled</Badge.Text>
-      </Badge>
+  if (!activeTab) {
+    const initialTab = initialTabFromHash(window.location.hash, isRbacEnabled);
+    return (
+      <Navigate
+        to={mcpDetailTabHref(routes, toolsetSlug, initialTab)}
+        replace
+      />
     );
-  } else if (toolset.mcpIsPublic) {
-    statusBadge = (
-      <Badge variant="success">
-        <Badge.LeftIcon>
-          <CheckCircleIcon />
-        </Badge.LeftIcon>
-        <Badge.Text>Public</Badge.Text>
-      </Badge>
-    );
-  } else {
-    statusBadge = (
-      <Badge variant="information">
-        <Badge.LeftIcon>
-          <LockIcon />
-        </Badge.LeftIcon>
-        <Badge.Text>Private</Badge.Text>
-      </Badge>
+  }
+  if (activeTab === "team-access" && !isRbacEnabled) {
+    return (
+      <Navigate
+        to={mcpDetailTabHref(routes, toolsetSlug, "overview")}
+        replace
+      />
     );
   }
 
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ [toolsetSlug]: toolset.name }}
+          skipSegments={MCP_DETAIL_TAB_URLS}
+        />
       </Page.Header>
-      <Page.Body fullWidth noPadding className="gap-0">
-        <DetailHero
-          actions={
-            <>
-              <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  className="bg-background hover:bg-accent border-border"
-                >
-                  <Button.LeftIcon>
-                    <Play className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Playground</Button.Text>
-                </Button>
-              </routes.playground.Link>
-              <MCPStatusDropdown toolset={toolset} />
-            </>
-          }
-        >
-          <div className="flex items-end justify-between">
-            <Stack gap={2}>
-              <div className="ml-1 flex items-end gap-1">
-                <div className="flex items-baseline">
-                  <Heading variant="h1">{toolset.name}</Heading>
-                  <RenameMCPServerButton toolset={toolset} />
-                </div>
-                <div className="mb-1 flex items-center gap-2">
-                  {statusBadge}
-                </div>
-              </div>
-              <div className="ml-1 flex items-center gap-2">
-                <Type className="text-muted-foreground max-w-2xl truncate">
-                  {mcpUrl}
-                </Type>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => {
-                    if (mcpUrl) {
-                      void navigator.clipboard.writeText(mcpUrl);
-                      toast.success("URL copied to clipboard");
-                    }
-                  }}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <Button.LeftIcon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                    </svg>
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Copy URL</Button.Text>
-                </Button>
-              </div>
-            </Stack>
-          </div>
-        </DetailHero>
-
-        {/* Sub-navigation tabs */}
-        <Tabs
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="flex w-full flex-1 flex-col"
-        >
-          <div className="border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
-                <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
-                <PageTabsTrigger value="resources">Resources</PageTabsTrigger>
-                <PageTabsTrigger value="prompts">Prompts</PageTabsTrigger>
-                <PageTabsTrigger value="authentication">
-                  <span className="flex items-center gap-1.5">
-                    Authentication
-                    {(missingRequiredEnvVars > 0 ||
-                      oauthRequiredUnconfigured) && (
-                      <AlertTriangle className="text-warning h-3.5 w-3.5" />
-                    )}
-                  </span>
-                </PageTabsTrigger>
-                <PageTabsTrigger value="performance">
-                  Performance
-                </PageTabsTrigger>
-                {isRbacEnabled && (
-                  <PageTabsTrigger value="team-access">
-                    Team Access
-                  </PageTabsTrigger>
-                )}
-                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
-              </TabsList>
-            </div>
-          </div>
-
-          {/* Tab Content */}
-          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-            <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} />
-            </TabsContent>
-
-            <TabsContent value="tools" className="mt-0 w-full">
-              <MCPToolsTab toolset={toolset} />
-            </TabsContent>
-
-            <TabsContent value="resources" className="mt-0 w-full">
-              <MCPResourcesTab toolset={toolset} />
-            </TabsContent>
-
-            <TabsContent value="prompts" className="mt-0 w-full">
-              <MCPPromptsTab toolset={toolset} />
-            </TabsContent>
-
-            <TabsContent value="authentication" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPAuthenticationTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
-
-            <TabsContent value="performance" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPPerformanceTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
-
-            {isRbacEnabled && (
-              <TabsContent value="team-access" className="mt-0 w-full">
-                <RequireScope scope="mcp:read" level="page">
-                  <MCPTeamAccessTab
-                    resourceId={toolset.id}
-                    tools={toolset.tools}
-                  />
-                </RequireScope>
-              </TabsContent>
-            )}
-
-            <TabsContent value="settings" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPSettingsTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
-          </div>
-        </Tabs>
+      <Page.Body fullWidth className="gap-0">
+        {/* Name, status, URL, and Playground live in the sidebar header now */}
+        <div className="mx-auto w-full max-w-[1270px] flex-1">
+          {renderMcpDetailTabContent(activeTab, toolset)}
+        </div>
       </Page.Body>
     </Page>
   );
@@ -484,7 +303,11 @@ function MCPDetailPageContent({
 
 const MCP_SERVER_NAME_MAX_LENGTH = 40;
 
-function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
+export function RenameMCPServerButton({
+  toolset,
+}: {
+  toolset: Toolset;
+}): React.JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const updateToolsetMutation = useUpdateToolsetMutation();
@@ -632,7 +455,7 @@ const STATUS_OPTIONS: {
   {
     value: "disabled",
     label: "Disabled",
-    description: "The server is offline.",
+    description: "This server is not offline. No users can connect to it",
     dotClass: "bg-amber-400",
     hoverDotClass: "group-hover:bg-amber-400",
   },
@@ -654,7 +477,11 @@ const STATUS_OPTIONS: {
   },
 ];
 
-function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+export function MCPStatusDropdown({
+  toolset,
+}: {
+  toolset: Toolset;
+}): React.JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -808,32 +635,46 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     <>
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger asChild disabled={!canWrite}>
-          <Button variant="primary" disabled={!canWrite}>
-            <Button.Text>{currentLabel}</Button.Text>
-            <Button.RightIcon>
-              <ChevronDown className="h-4 w-4" />
-            </Button.RightIcon>
-          </Button>
+          <button
+            type="button"
+            disabled={!canWrite}
+            className="text-foreground hover:bg-muted trans border-border -my-0.5 flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
+                STATUS_OPTIONS.find((option) => option.value === currentStatus)
+                  ?.dotClass,
+              )}
+            />
+            {currentLabel}
+            <ChevronDown className="text-muted-foreground h-3 w-3" />
+          </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[320px] p-1">
+        <DropdownMenuContent align="start" className="w-[320px] p-1">
           {STATUS_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.value}
               onSelect={() => handleSelect(option.value)}
-              disabled={
-                option.value === currentStatus ||
-                (option.value === "public" && publicOptionUnavailable)
-              }
+              disabled={option.value === "public" && publicOptionUnavailable}
               className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
-              <span
-                className={cn(
-                  "mt-1 h-2 w-2 shrink-0 rounded-full transition-colors",
-                  option.value === currentStatus
-                    ? option.dotClass
-                    : cn("bg-muted", option.hoverDotClass),
-                )}
-              />
+              {option.value === currentStatus ? (
+                <span className="bg-muted mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full">
+                  <Check
+                    className="text-foreground h-2.5 w-2.5"
+                    strokeWidth={4}
+                  />
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                    "bg-muted",
+                    option.hoverDotClass,
+                  )}
+                />
+              )}
               <div className="flex-1">
                 <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
                   {option.label}
@@ -867,70 +708,6 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         targetIsPublic={pendingStatus === "public"}
       />
     </>
-  );
-}
-
-/**
- * Overview Tab - Hosted URL and Installation instructions
- */
-function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
-  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
-
-  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-    retry: (_, err) => {
-      if (err instanceof GramError && err.statusCode === 404) {
-        return false;
-      }
-      return true;
-    },
-    throwOnError: false,
-  });
-
-  const form = useMcpMetadataMetadataForm(
-    { kind: "toolset", toolsetSlug: toolset.slug },
-    result.data?.metadata,
-  );
-  const isLoading = result.isLoading || form.isLoading;
-
-  return (
-    <Stack className="mb-4">
-      <PageSection
-        heading="Hosted URL"
-        description="The URL you or your users will use to access this MCP server."
-      >
-        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-      </PageSection>
-
-      <PageSection
-        heading="Install Page"
-        description="Share this page with your users to give simple instructions for getting started with your MCP in their client like Cursor or Claude Desktop."
-      >
-        {!toolset.mcpIsPublic && (
-          <Type small italic destructive>
-            Your server is private. To share with external users, use the status
-            dropdown in the header to set it to Public.
-          </Type>
-        )}
-        <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm
-            installPageUrl={installPageUrl}
-            form={form}
-            isLoading={isLoading}
-          />
-        </Stack>
-      </PageSection>
-
-      <PageSection
-        heading="Server Instructions"
-        description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
-      >
-        <ServerInstructionsSection
-          toolset={toolset}
-          form={form}
-          isLoading={isLoading}
-        />
-      </PageSection>
-    </Stack>
   );
 }
 
@@ -1412,6 +1189,26 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
 
+  const metadataResult = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
+  const instructionsForm = useMcpMetadataMetadataForm(
+    { kind: "toolset", toolsetSlug: toolset.slug },
+    metadataResult.data?.metadata,
+  );
+  const instructionsLoading =
+    metadataResult.isLoading || instructionsForm.isLoading;
+
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
@@ -1638,7 +1435,18 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   );
 
   return (
-    <Stack className="mb-4">
+    <Stack gap={0} className="mb-4">
+      <PageSection
+        heading="Server Instructions"
+        description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+      >
+        <ServerInstructionsSection
+          toolset={toolset}
+          form={instructionsForm}
+          isLoading={instructionsLoading}
+        />
+      </PageSection>
+
       <PageSection
         heading="Custom Slug"
         description="Customize the URL path for your MCP server."

@@ -3,11 +3,15 @@ import type { useRoutes } from "@/routes";
 const VALID_TABS = [
   "overview",
   "tools",
-  "analytics",
+  "resources",
+  "prompts",
+  "authentication",
+  "performance",
   "team-access",
   "settings",
 ] as const;
-const LEGACY_AUTHENTICATION_TAB = "authentication";
+
+export const MCP_DETAIL_TAB_URLS: string[] = [...VALID_TABS];
 
 export type TabValue = (typeof VALID_TABS)[number];
 
@@ -25,42 +29,31 @@ function decodePathSegment(segment: string): string {
 
 function tabSegmentFromPath(
   pathname: string,
-  mcpServerSlug: string,
+  toolsetSlug: string,
 ): string | undefined {
-  if (!mcpServerSlug) {
+  if (!toolsetSlug) {
     return undefined;
   }
 
   const segments = pathname.split("/").filter(Boolean).map(decodePathSegment);
-  const serverSlugIndex = segments.findIndex(
+  const slugIndex = segments.findIndex(
     (segment, index) =>
-      segment === mcpServerSlug &&
-      segments[index - 1] === "x" &&
-      segments[index - 2] === "mcp",
+      segment === toolsetSlug && segments[index - 1] === "mcp",
   );
 
-  if (serverSlugIndex === -1) {
+  if (slugIndex === -1) {
     return undefined;
   }
 
-  return segments[serverSlugIndex + 1];
+  return segments[slugIndex + 1];
 }
 
 export function activeTabFromPath(
   pathname: string,
-  mcpServerSlug: string,
+  toolsetSlug: string,
 ): TabValue | undefined {
-  const tabSegment = tabSegmentFromPath(pathname, mcpServerSlug);
+  const tabSegment = tabSegmentFromPath(pathname, toolsetSlug);
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
-}
-
-export function isLegacyAuthenticationTabPath(
-  pathname: string,
-  mcpServerSlug: string,
-): boolean {
-  return (
-    tabSegmentFromPath(pathname, mcpServerSlug) === LEGACY_AUTHENTICATION_TAB
-  );
 }
 
 export function initialTabFromHash(
@@ -68,27 +61,32 @@ export function initialTabFromHash(
   isRbacEnabled: boolean,
 ): TabValue {
   const hashValue = hash.replace("#", "");
-  if (hashValue === LEGACY_AUTHENTICATION_TAB) return "settings";
   if (!isValidTab(hashValue)) return "overview";
   if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
 }
 
-export function mcpServerTabHref(
+export function mcpDetailTabHref(
   routes: ReturnType<typeof useRoutes>,
-  mcpServerSlug: string,
+  toolsetSlug: string,
   tab: TabValue,
 ): string {
   switch (tab) {
     case "overview":
-      return routes.mcp.x.overview.href(mcpServerSlug);
+      return routes.mcp.details.overview.href(toolsetSlug);
     case "tools":
-      return routes.mcp.x.tools.href(mcpServerSlug);
-    case "analytics":
-      return routes.mcp.x.analytics.href(mcpServerSlug);
+      return routes.mcp.details.tools.href(toolsetSlug);
+    case "resources":
+      return routes.mcp.details.resources.href(toolsetSlug);
+    case "prompts":
+      return routes.mcp.details.prompts.href(toolsetSlug);
+    case "authentication":
+      return routes.mcp.details.authentication.href(toolsetSlug);
+    case "performance":
+      return routes.mcp.details.performance.href(toolsetSlug);
     case "team-access":
-      return routes.mcp.x.teamAccess.href(mcpServerSlug);
+      return routes.mcp.details.teamAccess.href(toolsetSlug);
     case "settings":
-      return routes.mcp.x.settings.href(mcpServerSlug);
+      return routes.mcp.details.settings.href(toolsetSlug);
   }
 }

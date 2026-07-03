@@ -226,6 +226,16 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 
 	plugins := make([]*gen.Plugin, 0, len(rows))
 	for _, r := range rows {
+		servers, err := s.repo.ListPluginServers(ctx, r.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+		}
+
+		genServers := make([]*gen.PluginServer, 0, len(servers))
+		for _, srv := range servers {
+			genServers = append(genServers, pluginServerToGen(srv))
+		}
+
 		plugins = append(plugins, &gen.Plugin{
 			ID:              r.ID.String(),
 			Name:            r.Name,
@@ -233,7 +243,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Description:     conv.FromPGText[string](r.Description),
 			ServerCount:     &r.ServerCount,
 			AssignmentCount: &r.AssignmentCount,
-			Servers:         nil,
+			Servers:         genServers,
 			Assignments:     nil,
 			CreatedAt:       formatTime(r.CreatedAt),
 			UpdatedAt:       formatTime(r.UpdatedAt),

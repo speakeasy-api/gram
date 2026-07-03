@@ -6,14 +6,15 @@ import {
   useOnboardingCta,
 } from "@/hooks/useOnboardingCta";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { ArrowRight, Wrench } from "lucide-react";
 
 export function OnboardingBanner(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { eligible, dismissed, dismiss } = useOnboardingCta();
 
-  if (!eligible || dismissed) return null;
+  if (!eligible || dismissed || routes.mcp.details.active) return null;
 
   return (
     <div

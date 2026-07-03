@@ -14,11 +14,9 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useMemo, useState, ReactElement } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
 
 function getInitials(name: string) {
   return name
@@ -192,17 +190,25 @@ function AccessBadge({
 }) {
   switch (level) {
     case "full":
-      return <Badge variant="default">All servers</Badge>;
+      return (
+        <Badge variant="neutral">
+          <Badge.Text>All servers</Badge.Text>
+        </Badge>
+      );
     case "server":
-      return <Badge variant="secondary">This server</Badge>;
+      return (
+        <Badge variant="neutral">
+          <Badge.Text>This server</Badge.Text>
+        </Badge>
+      );
     case "tools":
       return (
         <button type="button" onClick={onClick} className="cursor-pointer">
           <Badge
-            variant="outline"
+            variant="neutral"
             className="hover:bg-accent transition-colors"
           >
-            Specific tools &ensp;&rsaquo;
+            <Badge.Text>Specific tools &ensp;&rsaquo;</Badge.Text>
           </Badge>
         </button>
       );

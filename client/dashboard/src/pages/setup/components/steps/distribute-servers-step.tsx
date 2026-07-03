@@ -79,6 +79,11 @@ export function DistributeServersStep({
   const [drawerError, setDrawerError] = useState<string | null>(null);
   // Servers handed to the release workflow once the user hits Distribute.
   const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
+  // Slug of the Default plugin found/created during this run — captured so
+  // the install-instructions step below can address it precisely.
+  const [distributedPluginSlug, setDistributedPluginSlug] = useState<
+    string | null
+  >(null);
 
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
@@ -214,6 +219,8 @@ export function DistributeServersStep({
         (await client.plugins.createPlugin({
           createPluginForm: { name: DEFAULT_PLUGIN_NAME },
         }));
+
+      setDistributedPluginSlug(plugin.slug);
 
       const full = await client.plugins.getPlugin({ id: plugin.id });
       const alreadyBundled = new Set(
@@ -611,6 +618,8 @@ export function DistributeServersStep({
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
+                      pluginName={DEFAULT_PLUGIN_NAME}
+                      pluginSlug={distributedPluginSlug ?? undefined}
                     />
                   </div>
                 )}
