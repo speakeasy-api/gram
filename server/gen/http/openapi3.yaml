@@ -50599,6 +50599,8 @@ components:
             properties:
                 access_scope:
                     type: string
+                    enum:
+                        - project
                 display_name:
                     type: string
                 disposition:
@@ -50611,6 +50613,8 @@ components:
                     format: uuid
                 match_breadth:
                     type: string
+                    enum:
+                        - full_url
                 match_value:
                     type: string
                 project_id:

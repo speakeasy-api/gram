@@ -589,7 +589,9 @@ trackedFiles:
   docs/models/components/shadowmcpapprovaldecisionresult.md: {}
   docs/models/components/shadowmcpapprovalrequest.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematch.md: {}
+  docs/models/components/shadowmcpinventoryaccessrulematchaccessscope.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematchdisposition.md: {}
+  docs/models/components/shadowmcpinventoryaccessrulematchmatchbreadth.md: {}
   docs/models/components/shadowmcpinventoryserver.md: {}
   docs/models/components/skillbreakdownrow.md: {}
   docs/models/components/skillsummary.md: {}

@@ -9,6 +9,13 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export const ShadowMCPInventoryAccessRuleMatchAccessScope = {
+  Project: "project",
+} as const;
+export type ShadowMCPInventoryAccessRuleMatchAccessScope = ClosedEnum<
+  typeof ShadowMCPInventoryAccessRuleMatchAccessScope
+>;
+
 export const ShadowMCPInventoryAccessRuleMatchDisposition = {
   Allowed: "allowed",
   Denied: "denied",
@@ -17,15 +24,28 @@ export type ShadowMCPInventoryAccessRuleMatchDisposition = ClosedEnum<
   typeof ShadowMCPInventoryAccessRuleMatchDisposition
 >;
 
+export const ShadowMCPInventoryAccessRuleMatchMatchBreadth = {
+  FullUrl: "full_url",
+} as const;
+export type ShadowMCPInventoryAccessRuleMatchMatchBreadth = ClosedEnum<
+  typeof ShadowMCPInventoryAccessRuleMatchMatchBreadth
+>;
+
 export type ShadowMCPInventoryAccessRuleMatch = {
-  accessScope: string;
+  accessScope: ShadowMCPInventoryAccessRuleMatchAccessScope;
   displayName: string;
   disposition: ShadowMCPInventoryAccessRuleMatchDisposition;
   id: string;
-  matchBreadth: string;
+  matchBreadth: ShadowMCPInventoryAccessRuleMatchMatchBreadth;
   matchValue: string;
   projectId?: string | undefined;
 };
+
+/** @internal */
+export const ShadowMCPInventoryAccessRuleMatchAccessScope$inboundSchema:
+  z.ZodMiniEnum<typeof ShadowMCPInventoryAccessRuleMatchAccessScope> = z.enum(
+    ShadowMCPInventoryAccessRuleMatchAccessScope,
+  );
 
 /** @internal */
 export const ShadowMCPInventoryAccessRuleMatchDisposition$inboundSchema:
@@ -34,16 +54,22 @@ export const ShadowMCPInventoryAccessRuleMatchDisposition$inboundSchema:
   );
 
 /** @internal */
+export const ShadowMCPInventoryAccessRuleMatchMatchBreadth$inboundSchema:
+  z.ZodMiniEnum<typeof ShadowMCPInventoryAccessRuleMatchMatchBreadth> = z.enum(
+    ShadowMCPInventoryAccessRuleMatchMatchBreadth,
+  );
+
+/** @internal */
 export const ShadowMCPInventoryAccessRuleMatch$inboundSchema: z.ZodMiniType<
   ShadowMCPInventoryAccessRuleMatch,
   unknown
 > = z.pipe(
   z.object({
-    access_scope: z.string(),
+    access_scope: ShadowMCPInventoryAccessRuleMatchAccessScope$inboundSchema,
     display_name: z.string(),
     disposition: ShadowMCPInventoryAccessRuleMatchDisposition$inboundSchema,
     id: z.string(),
-    match_breadth: z.string(),
+    match_breadth: ShadowMCPInventoryAccessRuleMatchMatchBreadth$inboundSchema,
     match_value: z.string(),
     project_id: z.optional(z.string()),
   }),

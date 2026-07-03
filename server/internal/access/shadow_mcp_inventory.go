@@ -61,15 +61,18 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		inventoryRows = inventoryRows[:limit]
 	}
 
-	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		GramProjectID:       projectID.String(),
-		CanonicalServerURLs: shadowMCPInventoryCanonicalURLs(inventoryRows),
-		Limit:               shadowMCPInventoryUsageTraceLimit,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
+	usageByURL := map[string]telemetryrepo.ShadowMCPInventoryUsageRow{}
+	if len(inventoryRows) > 0 {
+		usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
+			GramProjectID:       projectID.String(),
+			CanonicalServerURLs: shadowMCPInventoryCanonicalURLs(inventoryRows),
+			Limit:               shadowMCPInventoryUsageTraceLimit,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
+		}
+		usageByURL = shadowMCPInventoryUsageByURL(usageRows)
 	}
-	usageByURL := shadowMCPInventoryUsageByURL(usageRows)
 
 	servers := make([]*gen.ShadowMCPInventoryServer, 0, len(inventoryRows))
 	for _, row := range inventoryRows {

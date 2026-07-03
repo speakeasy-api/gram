@@ -970,11 +970,15 @@ var ShadowMCPInventoryAccessRuleMatchModel = Type("ShadowMCPInventoryAccessRuleM
 	Attribute("project_id", String, func() {
 		Format(FormatUUID)
 	})
-	Attribute("access_scope", String)
+	Attribute("access_scope", String, func() {
+		Enum("project")
+	})
 	Attribute("disposition", String, func() {
 		Enum("allowed", "denied")
 	})
-	Attribute("match_breadth", String)
+	Attribute("match_breadth", String, func() {
+		Enum("full_url")
+	})
 	Attribute("match_value", String)
 	Attribute("display_name", String)
 })
