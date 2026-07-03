@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -26,7 +26,7 @@ Content to display - string or object (will be JSON stringified)
 
 ### defaultExpanded?
 
-> `optional` **defaultExpanded**: `boolean`
+> `optional` **defaultExpanded?**: `boolean`
 
 Whether section starts expanded
 
@@ -34,7 +34,7 @@ Whether section starts expanded
 
 ### highlightSyntax?
 
-> `optional` **highlightSyntax**: `boolean`
+> `optional` **highlightSyntax?**: `boolean`
 
 Enable syntax highlighting
 
@@ -42,7 +42,7 @@ Enable syntax highlighting
 
 ### language?
 
-> `optional` **language**: `BundledLanguage`
+> `optional` **language?**: `BundledLanguage`
 
 Language hint for syntax highlighting
 
@@ -50,6 +50,6 @@ Language hint for syntax highlighting
 
 ### highlight?
 
-> `optional` **highlight**: [`SectionHighlight`](SectionHighlight.md)
+> `optional` **highlight?**: [`SectionHighlight`](SectionHighlight.md)
 
 Flagged substrings — renders a navigable highlighted view + header icon.

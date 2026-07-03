@@ -137,20 +137,21 @@ func audienceAttribute() {
 
 // CreateOrganizationRemoteSessionClientForm registers a standalone
 // remote_session_client under an existing remote_session_issuer in the caller's
-// organization, with no user_session_issuer attachments. The client is always
-// project-scoped: it inherits the issuer's project for a project-specific
-// issuer, or the caller names a project when the issuer is organization-level
-// (there is no organization-level client). The caller supplies client_id (and
-// optional client_secret) obtained out-of-band, typically via Dynamic Client
-// Registration performed client-side. A supplied secret is encrypted before
-// persisting; the plaintext is never returned.
+// organization, with no user_session_issuer attachments. Scope mirrors
+// createIssuer's project_id: a supplied project_id scopes the client to that
+// project; an omitted project_id inherits a project-specific issuer's project,
+// or, under an organization-level issuer, creates an organization-level client
+// (no project) that every project in the organization can attach. The caller
+// supplies client_id (and optional client_secret) obtained out-of-band,
+// typically via Dynamic Client Registration performed client-side. A supplied
+// secret is encrypted before persisting; the plaintext is never returned.
 var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSessionClientForm", func() {
 	Description("Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id; must belong to the caller's organization.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, "Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.", func() {
+	Attribute("project_id", String, "Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("client_id", String, "client_id supplied by the caller, e.g. from Dynamic Client Registration.")
@@ -164,6 +165,26 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
+})
+
+// CreateCimdOrganizationRemoteSessionClientForm registers a standalone client
+// in Client ID Metadata Document (CIMD) mode. The caller supplies no
+// credentials: Gram generates the client_id and hosts the metadata document.
+var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganizationRemoteSessionClientForm", func() {
+	Description("Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.")
+
+	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+
+	Required("remote_session_issuer_id")
 })
 
 // UpdateOrganizationRemoteSessionClientForm patches the fields of a

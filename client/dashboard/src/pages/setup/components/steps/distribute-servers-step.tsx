@@ -11,10 +11,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
-import {
-  type PulseMCPServer,
-  useInfiniteListMCPCatalog,
-} from "@/pages/catalog/hooks";
+import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useExternalMcpReleaseWorkflow } from "@/pages/catalog/useExternalMcpReleaseWorkflow";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -83,8 +80,9 @@ export function DistributeServersStep({
   // Servers handed to the release workflow once the user hits Distribute.
   const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteListMCPCatalog(query || undefined);
+  // The catalog is small and returned in a single response, so we fetch the
+  // whole list once and search/filter it client-side (no cursor pagination).
+  const { data, isLoading } = useListMCPCatalog();
   const { data: toolsetsData, refetch: refetchToolsets } = useListToolsets();
   const { data: publishStatus } = usePublishStatus();
 
@@ -114,7 +112,7 @@ export function DistributeServersStep({
   }, [defaultPluginFull?.servers, toolsetsData?.toolsets]);
 
   const servers = useMemo(
-    () => data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
   );
   // Onboarding only surfaces servers Gram can fully auto-configure: those whose
@@ -127,9 +125,24 @@ export function DistributeServersStep({
     () => servers.filter((s) => s.supportsDcr),
     [servers],
   );
+
+  // Search runs client-side over the full auto-configurable list. It only
+  // narrows what's shown — selection (selectedServerObjects) still reads the
+  // unfiltered autoConfigurableServers so a selected server survives a search
+  // that no longer matches it.
+  const matchedServers = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return autoConfigurableServers;
+    return autoConfigurableServers.filter((s) =>
+      [s.registrySpecifier, s.title ?? "", s.description ?? ""].some((field) =>
+        field.toLowerCase().includes(needle),
+      ),
+    );
+  }, [autoConfigurableServers, query]);
+
   const visibleServers = showAll
-    ? autoConfigurableServers
-    : autoConfigurableServers.slice(0, INITIAL_VISIBLE);
+    ? matchedServers
+    : matchedServers.slice(0, INITIAL_VISIBLE);
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -382,7 +395,7 @@ export function DistributeServersStep({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
-          ) : autoConfigurableServers.length === 0 ? (
+          ) : matchedServers.length === 0 ? (
             <p className="text-muted-foreground mt-3 text-sm">
               {query
                 ? `No auto-configurable servers match "${query}".`
@@ -451,27 +464,13 @@ export function DistributeServersStep({
             </div>
           )}
 
-          {!showAll && autoConfigurableServers.length > INITIAL_VISIBLE && (
+          {!showAll && matchedServers.length > INITIAL_VISIBLE && (
             <button
               type="button"
               onClick={() => setShowAll(true)}
               className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
             >
               Show more servers
-            </button>
-          )}
-          {showAll && hasNextPage && !query && (
-            <button
-              type="button"
-              onClick={() => void fetchNextPage()}
-              disabled={isFetchingNextPage}
-              className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors disabled:opacity-50"
-            >
-              {isFetchingNextPage ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Load more servers"
-              )}
             </button>
           )}
 

@@ -121,6 +121,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
 		ClientID:                externalCID,
 		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
@@ -173,7 +174,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretPost(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, clientSecret, externalCID := setupRefreshFixture(t, "client_secret_post", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject)
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -189,7 +190,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, _, _ := setupRefreshFixture(t, "client_secret_basic", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject)
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

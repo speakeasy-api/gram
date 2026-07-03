@@ -69,6 +69,52 @@ func TestMatchCachedMCPEntry(t *testing.T) {
 	}
 }
 
+func TestMatchCachedMCPEntry_AmbiguousPrefix(t *testing.T) {
+	t.Parallel()
+	entries := []MCPServerEntry{
+		{Source: "local", Name: "datadog", URL: "https://app.getgram.ai/mcp/datadog", ToolPrefix: "datadog"},
+		{Source: "local", Name: "datadog", URL: "https://third-party.example.com/mcp/datadog", ToolPrefix: "datadog"},
+	}
+
+	assert.Nil(t, matchCachedMCPEntry(entries, "datadog"))
+}
+
+func TestMatchCodexCachedMCPServerEntry(t *testing.T) {
+	t.Parallel()
+	entries := []MCPServerEntry{
+		{Source: "local", Name: "platform-logs", URL: "https://chat.example.com/mcp/platform-logs", ToolPrefix: "platform_logs"},
+		{Source: "local", Name: "Slack (Remote)", URL: "https://app.getgram.ai/mcp/slack", ToolPrefix: "Slack__Remote_"},
+	}
+
+	got := matchCodexCachedMCPServerEntry(entries, "platform-logs")
+	if assert.NotNil(t, got) {
+		assert.Equal(t, "https://chat.example.com/mcp/platform-logs", got.URL)
+	}
+
+	got = matchCodexCachedMCPServerEntry(entries, "Slack (Remote)")
+	if assert.NotNil(t, got) {
+		assert.Equal(t, "https://app.getgram.ai/mcp/slack", got.URL)
+	}
+
+	got = matchCodexCachedMCPServerEntry(entries, "platform_logs")
+	if assert.NotNil(t, got) {
+		assert.Equal(t, "platform-logs", got.Name)
+	}
+
+	assert.Nil(t, matchCodexCachedMCPServerEntry(entries, ""))
+	assert.Nil(t, matchCodexCachedMCPServerEntry(entries, "missing"))
+}
+
+func TestMatchCodexCachedMCPServerEntry_AmbiguousName(t *testing.T) {
+	t.Parallel()
+	entries := []MCPServerEntry{
+		{Source: "local", Name: "Datadog", URL: "https://app.getgram.ai/mcp/datadog", ToolPrefix: "Datadog"},
+		{Source: "local", Name: "Datadog", URL: "https://third-party.example.com/mcp/datadog", ToolPrefix: "Datadog"},
+	}
+
+	assert.Nil(t, matchCodexCachedMCPServerEntry(entries, "Datadog"))
+}
+
 func TestApplyMCPInventoryAttrs(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +199,7 @@ func TestIsGramHostedMCPURL(t *testing.T) {
 		}{
 			{"https://chat.speakeasy.com/mcp/linear", []string{"chat.speakeasy.com"}, true, "custom domain matches"},
 			{"https://CHAT.SPEAKEASY.COM/mcp/linear", []string{"chat.speakeasy.com"}, true, "custom domain case-insensitive"},
+			{"https://localhost:8080/mcp/local-org", []string{"localhost"}, true, "configured local Gram server host matches"},
 			{"https://app.getgram.ai/mcp/x", []string{"chat.speakeasy.com"}, true, "canonical still works with extra hosts"},
 			{"https://other.example.com/mcp/x", []string{"chat.speakeasy.com"}, false, "unknown host rejected"},
 			{"https://mcp.slack.com/mcp", []string{"chat.speakeasy.com"}, false, "third party rejected"},

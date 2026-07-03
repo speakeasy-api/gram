@@ -19,6 +19,7 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
 }

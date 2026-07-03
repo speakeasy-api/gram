@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@
 
 ### logo?
 
-> `optional` **logo**: `string`
+> `optional` **logo?**: `string`
 
 Optional logo image URL shown above the title on the empty-thread welcome
 screen.
@@ -19,7 +19,7 @@ screen.
 
 ### title?
 
-> `optional` **title**: `string`
+> `optional` **title?**: `string`
 
 The welcome message to display when the thread is empty.
 
@@ -27,7 +27,7 @@ The welcome message to display when the thread is empty.
 
 ### subtitle?
 
-> `optional` **subtitle**: `string`
+> `optional` **subtitle?**: `string`
 
 The subtitle to display when the thread is empty.
 
@@ -35,6 +35,6 @@ The subtitle to display when the thread is empty.
 
 ### suggestions?
 
-> `optional` **suggestions**: [`Suggestion`](Suggestion.md)[]
+> `optional` **suggestions?**: [`Suggestion`](Suggestion.md)[]
 
 The suggestions to display when the thread is empty.

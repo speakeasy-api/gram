@@ -1,5 +1,77 @@
 # dashboard
 
+## 0.82.0
+
+### Minor Changes
+
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- ab1450f: Break down and filter AI usage by account type — Team (enterprise) vs Personal (individual, e.g. Claude Max) — and by provider (Claude, Codex, Cursor) across Costs, Insights, Agent Sessions, Tool Logs, and Employees. Personal usage is flagged at a glance on sessions and logs, and each employee's linked AI accounts are listed with the option to scope their metrics to a single account.
+- ab1450f: Cost is now shown as an estimate ("Est. cost", with an explanation on hover) wherever it appears in Costs and insights, because the figure is derived from token usage at standard API rates — which only reflects real spend on metered (pay-per-token) accounts, not flat-fee subscription plans like Claude Max/Pro/Team/Enterprise. Admins can declare a provider integration's billing mode (Metered / Flat rate / Unknown) under Settings → Logging & Telemetry; once an account is declared metered, its cost reads as a confident "Cost".
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- Updated dependencies [7ce4d76]
+  - @gram-ai/elements@1.40.1
+
+## 0.81.0
+
+### Minor Changes
+
+- 2186673: Support organization-level remote session clients. A `remote_session_client` can now be created with no project (organization-level) so every project in the organization can attach and use it, mirroring organization-level remote session issuers. On `organizationRemoteSessionIssuers.createClient` and `createCimdClient` an omitted `project_id` under an organization-level issuer creates an organization-level client (the same `project_id`-omission convention `createIssuer` already uses), while a supplied `project_id` scopes the client to that project. The consent/token runtime resolver, the project-scoped client reads, and the attach-time single-client invariant now resolve both a project's own clients and organization-level clients in its organization, so a project admin can attach, detach, and use an organization-level client from their own user session issuer but cannot edit or delete it (those stay on the org-admin surface). The `RemoteSessionClient` API shape adds `organization_id` and allows an empty `project_id` for organization-level clients, mirroring the issuer change.
+
+### Patch Changes
+
+- d7b8ec9: Gate the "click to reveal" secret action in Risk Events behind the `chat:read` scope. Users without `chat:read` now see flagged secret values as a non-interactive "Hidden" placeholder (with an explanatory tooltip) instead of a reveal control, and the page-level "Reveal all" toggle is hidden for them. The `chat:read` scope description in the role editor is updated to note that the grant also controls unmasking flagged secrets in Risk Events.
+- fcfd78e: Add server-side controls for unmasking redacted secrets
+- c8597b1: Add the unified `/rpc/hooks.ingest` endpoint for third-party hook ingestion while preserving existing provider-specific hook endpoints. Hook plugins now authenticate each developer locally through the browser callback flow and store a hooks-scoped key on the device.
+- c9da9e5: Add callback URL to the Remote Session Client form
+- Updated dependencies [5c825a9]
+  - @gram-ai/elements@1.40.0
+
+## 0.80.0
+
+### Minor Changes
+
+- fc47698: Allow editing the permissions of system roles (`admin`/`member`) per organization, while keeping their name and description platform-managed. The Admin role is guarded against losing the `org:admin` permission to prevent org lockout. The roles tab is reworked: the whole role row opens the edit sheet (gated on `org:admin`), scope groups no longer auto-expand and show a description when collapsed, and the members column uses a new interactive member facepile (hover focus, click to view all members) that also replaces the facepile on the org home projects list. Adds Directory Sync (SCIM) info alerts on the team, roles, and identity pages explaining that members and roles are managed by the identity provider while SCIM is enabled.
+- c637f6b: Risk policies: configurable detection sensitivity. Adds a per-policy minimum
+  match-confidence threshold with a "Sensitivity" slider in the policy wizard, and
+  lowers the default to 0.5.
+
+### Patch Changes
+
+- c6ddf0e: Fixed the MCP catalog listing duplicate servers (count doubling) when loading more
+
+## 0.79.0
+
+### Minor Changes
+
+- f193c77: Project Assistant: fold the app-injected `<…context>` block in a user turn into a collapsed "Additional context" disclosure (chevron, expand to inspect) instead of rendering the raw tags. The expanded block wraps to the message-bubble width, so opening it no longer widens the bubble.
+- f04e8b0: Add a `chat:read` RBAC scope that gates access to other members' agent session transcripts. The `chat.load` endpoint and the dashboard agent-sessions list are scoped by `chat:read`: anyone can always read sessions they own (the handler grants owner access directly — no `chat:read` grant needed), while reading every member's session requires an unrestricted `chat:read`. The scope is not a default of any system role — not even `admin` — so it must be granted explicitly via a custom role. On the agent-sessions page, callers without `chat:read` see a banner noting they only see their own sessions (with a link to the roles page for org admins). Each dashboard session open is recorded in the audit log as a `chat_session:access` event. The scope is selectable in the role editor (Agent Sessions group) and the dev RBAC override toolbar.
+
+### Patch Changes
+
+- Updated dependencies [f193c77]
+  - @gram-ai/elements@1.39.0
+
+## 0.78.0
+
+### Minor Changes
+
+- 0cd8e96: Add an agent type filter to the Agent Sessions page, populated from the agent sources actually present in each project's chats via a new `chat.listSources` endpoint.
+- 7763a1b: Tool-call blocks are now durable, first-class entities with a stable `/blocks/<id>` URL and 👍/👎 feedback. When the risk engine blocks a tool call, the block is persisted and its reason is injected into the agent-facing response (Claude `PermissionDecisionReason`, Cursor `AgentMessage`, Codex `reason`) along with a link to the block page, so the agent can reason about the denial instead of hallucinating one. New session-scoped, org-admin-gated `getRiskBlock` and `submitRiskBlockFeedback` endpoints back an in-app `BlockDetailPage` (under `AppLayout`) and a slug-free redirect resolver for the agent's external link, with a "More Info" link from the Risk Events modal.
+
+### Patch Changes
+
+- 0405ac9: Distribute → MCP → Tools now shows the same text permission labels (Read-only, Destructive, Idempotent) as Connect → Catalog → MCP, instead of icon-only badges, for quicker at-a-glance access to a tool's behavior hints.
+- 3464cb8: Show the assistant's creator as its owner. Assistants already recorded who created them; that attribution is now surfaced as a profile avatar (reusing the org-home member avatar treatment) on both the assistant card and the assistant setup page's overview panel. The owner resolves to one of three states: the creating member (avatar + name, full name on hover), "No owner" when the assistant was never attributed, or "Orphaned, no owner" when the creator is no longer a member of the organization. Backed by a new optional `created_by_user_id` field on the `Assistant` API type.
+- dd03a11: Plugin detail now shows an explicit "Up to date" badge and surfaces the last-published time even when there are unpublished changes, rounding out the publish-freshness affordance.
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+- b6a94ad: Fix the risk policy creation Detect step so the Continue button enables when only category-level detectors (Prompt Injection, Shadow MCP, Destructive Tools, Destructive CLI Commands) are selected. These categories have no individual sub-rules, so the previous `hasEnabledDetector` check treated them as empty and kept Continue/Save disabled.
+- Updated dependencies [a5d57cb]
+  - @gram-ai/elements@1.38.2
+
 ## 0.77.1
 
 ### Patch Changes

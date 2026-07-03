@@ -17,13 +17,11 @@ export type ShadowMCPAccessRuleAccessScope = ClosedEnum<
   typeof ShadowMCPAccessRuleAccessScope
 >;
 
-export const ShadowMCPAccessRuleDisposition = {
+export const Disposition = {
   Allowed: "allowed",
   Denied: "denied",
 } as const;
-export type ShadowMCPAccessRuleDisposition = ClosedEnum<
-  typeof ShadowMCPAccessRuleDisposition
->;
+export type Disposition = ClosedEnum<typeof Disposition>;
 
 export const ShadowMCPAccessRuleMatchBreadth = {
   FullUrl: "full_url",
@@ -38,7 +36,7 @@ export type ShadowMCPAccessRule = {
   createdAt: Date;
   createdBy?: string | undefined;
   displayName: string;
-  disposition: ShadowMCPAccessRuleDisposition;
+  disposition: Disposition;
   id: string;
   matchBreadth: ShadowMCPAccessRuleMatchBreadth;
   matchValue: string;
@@ -60,9 +58,8 @@ export const ShadowMCPAccessRuleAccessScope$inboundSchema: z.ZodMiniEnum<
 > = z.enum(ShadowMCPAccessRuleAccessScope);
 
 /** @internal */
-export const ShadowMCPAccessRuleDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof ShadowMCPAccessRuleDisposition
-> = z.enum(ShadowMCPAccessRuleDisposition);
+export const Disposition$inboundSchema: z.ZodMiniEnum<typeof Disposition> = z
+  .enum(Disposition);
 
 /** @internal */
 export const ShadowMCPAccessRuleMatchBreadth$inboundSchema: z.ZodMiniEnum<
@@ -82,7 +79,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
     ),
     created_by: z.optional(z.string()),
     display_name: z.string(),
-    disposition: ShadowMCPAccessRuleDisposition$inboundSchema,
+    disposition: Disposition$inboundSchema,
     id: z.string(),
     match_breadth: ShadowMCPAccessRuleMatchBreadth$inboundSchema,
     match_value: z.string(),

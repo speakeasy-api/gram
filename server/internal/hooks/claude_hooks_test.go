@@ -158,13 +158,13 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 
 	sessionID := uuid.NewString()
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   userEmail,
-		UserID:      "",
-		ClaudeOrgID: "claude_org",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     userEmail,
+		UserID:        "",
+		ExternalOrgID: "claude_org",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     uuid.NewString(),
 	}, 0))
 
 	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
@@ -755,13 +755,13 @@ func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "session_test", "")
 	require.True(t, ok)
 	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
-		SessionID:   "session_test",
-		ServiceName: "claude-code",
-		UserEmail:   "local-hook-testing@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude_org",
-		GramOrgID:   "org_from_cache",
-		ProjectID:   "project_from_cache",
+		SessionID:     "session_test",
+		ServiceName:   "claude-code",
+		UserEmail:     "local-hook-testing@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude_org",
+		GramOrgID:     "org_from_cache",
+		ProjectID:     "project_from_cache",
 	})
 
 	assert.Empty(t, metadata.UserID)
@@ -769,7 +769,7 @@ func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	assert.Equal(t, authCtx.ProjectID.String(), metadata.ProjectID)
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
-	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+	assert.Equal(t, "claude_org", metadata.ExternalOrgID)
 }
 
 func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
@@ -787,13 +787,13 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	cachedProjectID := uuid.NewString()
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   localFallbackEmail,
-		UserID:      "",
-		ClaudeOrgID: authCtx.ActiveOrganizationID,
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   cachedProjectID,
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     localFallbackEmail,
+		UserID:        "",
+		ExternalOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     cachedProjectID,
 	}, time.Hour))
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
@@ -888,13 +888,13 @@ func TestMergeClaudeAuthContextMetadata_DropsCachedUserID(t *testing.T) {
 	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "session_test", "")
 	require.True(t, ok)
 	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
-		SessionID:   "session_test",
-		ServiceName: "claude-code",
-		UserEmail:   "local-hook-testing@example.com",
-		UserID:      "user_from_cache",
-		ClaudeOrgID: "claude_org",
-		GramOrgID:   "org_from_cache",
-		ProjectID:   "project_from_cache",
+		SessionID:     "session_test",
+		ServiceName:   "claude-code",
+		UserEmail:     "local-hook-testing@example.com",
+		UserID:        "user_from_cache",
+		ExternalOrgID: "claude_org",
+		GramOrgID:     "org_from_cache",
+		ProjectID:     "project_from_cache",
 	})
 
 	assert.Empty(t, metadata.UserID)
@@ -902,7 +902,51 @@ func TestMergeClaudeAuthContextMetadata_DropsCachedUserID(t *testing.T) {
 	assert.Equal(t, authCtx.ProjectID.String(), metadata.ProjectID)
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
-	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+	assert.Equal(t, "claude_org", metadata.ExternalOrgID)
+}
+
+// TestMergeClaudeAuthContextMetadata_AdoptsBridgedOwnerForPersonalAccount covers
+// the personal-account branch: the session email does not resolve to an org
+// member, but the OTEL path already attributed the account to an employee via the
+// device bridge (cached AccountType=personal, UserID set). The merge must adopt
+// that bridged owner instead of dropping it, and carry the account identity
+// through hook re-hydration.
+func TestMergeClaudeAuthContextMetadata_AdoptsBridgedOwnerForPersonalAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// A gmail that resolves to no org member, so email resolution yields "".
+	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "personal_session", "someone@gmail.com")
+	require.True(t, ok)
+	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
+		SessionID:           "personal_session",
+		ServiceName:         "claude-code",
+		UserEmail:           "someone@gmail.com",
+		UserID:              "bridged-employee",
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "max-org",
+		ExternalAccountUUID: "acct-personal",
+		ExternalAccountID:   "user_personal",
+		DeviceID:            "device-1",
+		AccountType:         accountTypePersonal,
+		UserAccountID:       "user-account-id",
+		GramOrgID:           "org_from_cache",
+		ProjectID:           "project_from_cache",
+	})
+
+	// Email didn't resolve, but the cached personal-account owner is adopted.
+	assert.Equal(t, "bridged-employee", metadata.UserID)
+	assert.Equal(t, accountTypePersonal, metadata.AccountType)
+	// Account identity is carried through from the cached OTEL attribution.
+	assert.Equal(t, providerAnthropic, metadata.Provider)
+	assert.Equal(t, "max-org", metadata.ExternalOrgID)
+	assert.Equal(t, "acct-personal", metadata.ExternalAccountUUID)
+	assert.Equal(t, "device-1", metadata.DeviceID)
+	assert.Equal(t, "user-account-id", metadata.UserAccountID)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,
@@ -987,13 +1031,13 @@ func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testin
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_pretooluse_no_email"
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "claude_org",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     "",
+		UserID:        "",
+		ExternalOrgID: "claude_org",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}, 0))
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{

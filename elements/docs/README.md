@@ -1,4 +1,4 @@
-**@gram-ai/elements v1.38.1**
+**@gram-ai/elements v1.40.1**
 
 ***
 

@@ -28,6 +28,9 @@ type RemoteSessionIssuerDraft struct {
 	Oidc bool
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool
+	// Whether the issuer advertises support for a Client ID Metadata Document URL
+	// as client_id (OAuth CIMD draft), parsed from the discovery document.
+	ClientIDMetadataDocumentSupported bool
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string
 }

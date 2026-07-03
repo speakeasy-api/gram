@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,26 @@ func tokenBearingRecord() *gen.OTELLogRecord {
 			strAttr("user.email", "dev@example.com"),
 		},
 	}
+}
+
+// TestLogs_StampsProviderOnCodexUsage drives the codex usage path end-to-end
+// (Logs -> writeCodexUsageToClickHouse) and asserts the persisted usage row
+// carries provider=openai.
+func TestLogs_StampsProviderOnCodexUsage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	rec := tokenBearingRecord()
+	rec.ObservedTimeUnixNano = new(nanoString(now))
+
+	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, now, 1)
+	require.Contains(t, logs[0].Attributes, providerOpenAI)
 }
 
 func TestIsCodexLogsPayload(t *testing.T) {

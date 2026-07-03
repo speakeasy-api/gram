@@ -64,6 +64,33 @@ func TestSearchUsers_Empty(t *testing.T) {
 	require.Nil(t, result.NextCursor)
 }
 
+// TestSearchUsers_NilFilter guards against the nil pointer dereference that
+// occurred when a direct caller (e.g. a platform tool bypassing Goa transport
+// validation) invoked SearchUsers with a nil Filter. Both the employee and role
+// grouping paths must treat a nil filter as an empty filter (full time range).
+func TestSearchUsers_NilFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	for _, groupBy := range []string{"employee", "role"} {
+		t.Run(groupBy, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+				Filter:   nil,
+				UserType: "internal",
+				GroupBy:  groupBy,
+				Limit:    50,
+				Sort:     "desc",
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+		})
+	}
+}
+
 func TestSearchUsers_GroupByInternalUser(t *testing.T) {
 	t.Parallel()
 

@@ -29,6 +29,7 @@ type Endpoints struct {
 	ListClientMcpServers      goa.Endpoint
 	ListClientSessions        goa.Endpoint
 	CreateClient              goa.Endpoint
+	CreateCimdClient          goa.Endpoint
 	UpdateClient              goa.Endpoint
 	DeleteClient              goa.Endpoint
 	RemoveClientFromMcpServer goa.Endpoint
@@ -56,6 +57,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListClientMcpServers:      NewListClientMcpServersEndpoint(s, a.APIKeyAuth),
 		ListClientSessions:        NewListClientSessionsEndpoint(s, a.APIKeyAuth),
 		CreateClient:              NewCreateClientEndpoint(s, a.APIKeyAuth),
+		CreateCimdClient:          NewCreateCimdClientEndpoint(s, a.APIKeyAuth),
 		UpdateClient:              NewUpdateClientEndpoint(s, a.APIKeyAuth),
 		DeleteClient:              NewDeleteClientEndpoint(s, a.APIKeyAuth),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerEndpoint(s, a.APIKeyAuth),
@@ -81,6 +83,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListClientMcpServers = m(e.ListClientMcpServers)
 	e.ListClientSessions = m(e.ListClientSessions)
 	e.CreateClient = m(e.CreateClient)
+	e.CreateCimdClient = m(e.CreateCimdClient)
 	e.UpdateClient = m(e.UpdateClient)
 	e.DeleteClient = m(e.DeleteClient)
 	e.RemoveClientFromMcpServer = m(e.RemoveClientFromMcpServer)
@@ -543,6 +546,41 @@ func NewCreateClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.CreateClient(ctx, p)
+	}
+}
+
+// NewCreateCimdClientEndpoint returns an endpoint function that calls the
+// method "createCimdClient" of service "organizationRemoteSessionIssuers".
+func NewCreateCimdClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateCimdClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateCimdClient(ctx, p)
 	}
 }
 

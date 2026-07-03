@@ -29,6 +29,20 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("environment:write")).toBe("environment");
   });
 
+  it("returns 'risk_policy' for risk_policy scopes", () => {
+    expect(resourceKindForScope("risk_policy:evaluate")).toBe("risk_policy");
+    expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
+  });
+
+  // Regression: chat scopes must map to "chat" so a restricted chat:read grant
+  // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
+  // check. When this returned "*" the check selector ({resource_kind:"*"}) never
+  // matched the grant, so admins with chat:read still saw the "own sessions
+  // only" banner.
+  it("returns 'chat' for chat scopes", () => {
+    expect(resourceKindForScope("chat:read")).toBe("chat");
+  });
+
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");

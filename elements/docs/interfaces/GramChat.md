@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -54,4 +54,4 @@ Represents a chat from the Gram API.
 
 ### has\_more\_before?
 
-> `optional` **has\_more\_before**: `boolean`
+> `optional` **has\_more\_before?**: `boolean`

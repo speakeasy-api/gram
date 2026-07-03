@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -26,7 +26,7 @@ const config: ElementsConfig = {
 
 ### expandToolGroupsByDefault?
 
-> `optional` **expandToolGroupsByDefault**: `boolean`
+> `optional` **expandToolGroupsByDefault?**: `boolean`
 
 Whether individual tool calls within a group should be expanded by default.
 
@@ -40,7 +40,7 @@ false
 
 ### components?
 
-> `optional` **components**: `Record`\<`string`, `ToolCallMessagePartComponent` \| `undefined`\>
+> `optional` **components?**: `Record`\<`string`, `ToolCallMessagePartComponent` \| `undefined`\>
 
 `components` can be used to override the default components used by the
 Elements library for a given tool result.
@@ -63,7 +63,7 @@ const config: ElementsConfig = {
 
 ### frontendTools?
 
-> `optional` **frontendTools**: `FrontendTools`
+> `optional` **frontendTools?**: `FrontendTools`
 
 The frontend tools to use for the Elements library.
 
@@ -117,7 +117,7 @@ const config: ElementsConfig = {
 
 ### toolsRequiringApproval?
 
-> `optional` **toolsRequiringApproval**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
+> `optional` **toolsRequiringApproval?**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
 
 List of tool names that require confirmation from the end user before
 being executed. A function can also be provided to dynamically determine if a tool requires approval.
@@ -126,11 +126,15 @@ entire session via the UI.
 
 #### Examples
 
+**Using an array of tool names**
+
 ```ts
 tools: {
   toolsRequiringApproval: ['delete_file', 'send_email'],
 }
 ```
+
+**Using a function to dynamically determine if a tool requires approval**
 
 ```ts
 tools: {
@@ -144,7 +148,7 @@ tools: {
 
 ### toolsToInclude?
 
-> `optional` **toolsToInclude**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
+> `optional` **toolsToInclude?**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
 
 List of MCP tool names to expose to the chat.
 Only tool names listed here that match a tool in the MCP will be exposed to the chat.
@@ -160,7 +164,7 @@ tools: {
 
 ### maxOutputBytes?
 
-> `optional` **maxOutputBytes**: `number`
+> `optional` **maxOutputBytes?**: `number`
 
 Maximum UTF-8 byte size for any single tool call's result. Results larger
 than this are truncated with a head+tail preserving strategy and a notice

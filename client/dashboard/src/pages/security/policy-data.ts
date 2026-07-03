@@ -53,7 +53,7 @@ export const RULE_CATEGORY_META: Record<
   },
   government_ids: {
     label: "Government Identifiers",
-    description: "SSNs, passport numbers, driver's licenses, tax IDs",
+    description: "SSNs, passport numbers, national IDs, tax IDs",
     icon: "landmark",
   },
   healthcare: {

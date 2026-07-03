@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
@@ -22,13 +22,13 @@ jobs:
           git fetch origin "$BASE_REF"
           CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD)
 
-          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' || true)
+          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' | grep -v -E '^hooks/plugin-claude-test/' || true)
           GENERATE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^server/internal/plugins/generate\.go$' || true)
 
           if [ -n "$HOOKS_CHANGED" ] && [ -z "$GENERATE_CHANGED" ]; then
             echo "❌ Error: hooks/ was modified but server/internal/plugins/generate.go was not updated"
             echo ""
-            echo "Changed files under hooks/:"
+            echo "Changed production hook files:"
             echo "$HOOKS_CHANGED"
             echo ""
             echo "Please update server/internal/plugins/generate.go to reflect the hook changes."

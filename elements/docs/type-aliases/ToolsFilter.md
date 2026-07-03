@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -6,4 +6,4 @@
 
 # Type Alias: ToolsFilter
 
-> **ToolsFilter** = `string`[] \| (`{ toolName }`) => `boolean`
+> **ToolsFilter** = `string`[] \| ((`{ toolName }`) => `boolean`)

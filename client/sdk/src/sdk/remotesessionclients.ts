@@ -5,6 +5,7 @@
 import { remoteSessionClientsAttachUserSessionIssuer } from "../funcs/remoteSessionClientsAttachUserSessionIssuer.js";
 import { remoteSessionClientsCloneClientFromOAuthProxyProvider } from "../funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.js";
 import { remoteSessionClientsCreate } from "../funcs/remoteSessionClientsCreate.js";
+import { remoteSessionClientsCreateCimd } from "../funcs/remoteSessionClientsCreateCimd.js";
 import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.js";
 import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
@@ -67,6 +68,25 @@ export class RemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createCimd remoteSessionClients
+   *
+   * @remarks
+   * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+   */
+  async createCimd(
+    request: operations.CreateCimdRemoteSessionClientRequest,
+    security?: operations.CreateCimdRemoteSessionClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RemoteSessionClient> {
+    return unwrapAsync(remoteSessionClientsCreateCimd(
       this,
       request,
       security,

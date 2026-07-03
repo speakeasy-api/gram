@@ -28,6 +28,10 @@ export interface WindowedTranscript {
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
   isError: boolean;
+  /** True when the load failed specifically because the caller lacks
+   * chat:read for this chat, so callers can show a permission message
+   * instead of a generic error. */
+  isForbidden: boolean;
 }
 
 interface WindowState {
@@ -89,8 +93,15 @@ export function useWindowedTranscript(
     undefined,
     {
       enabled,
+      // Let 404s and 403s fall through to the panel's "Not found" /
+      // "Permission denied" UI instead of throwing to the nearest error
+      // boundary — both are anticipated outcomes of opening an arbitrary
+      // chat_id, not unexpected failures.
       throwOnError: (error) =>
-        !(error instanceof GramError && error.statusCode === 404),
+        !(
+          error instanceof GramError &&
+          (error.statusCode === 404 || error.statusCode === 403)
+        ),
     },
   );
 
@@ -210,6 +221,8 @@ export function useWindowedTranscript(
     gaps: state?.gaps ?? new Set(),
     hasMoreBefore: state?.hasMoreBefore ?? false,
     hasMoreAfter: state?.hasMoreAfter ?? false,
+    isForbidden:
+      base.error instanceof GramError && base.error.statusCode === 403,
     loadBefore,
     loadAfter,
     loadGap,

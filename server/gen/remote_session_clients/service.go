@@ -22,6 +22,12 @@ type Service interface {
 	// Register a remote_session_client by supplying a client_id and optional
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
+	// Register a remote_session_client in Client ID Metadata Document (CIMD) mode.
+	// Gram generates the client_id (the URL of a hosted client metadata document)
+	// and serves the document publicly; the client carries no secret and
+	// authenticates with token_endpoint_auth_method=none. The owning issuer must
+	// advertise client_id_metadata_document_supported.
+	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
 	// Platform-admin-only. Clone the client_id / client_secret from an existing
 	// oauth_proxy_provider into a new remote_session_client paired with the
 	// supplied issuers. The upstream secret stays server-side: it is read from the
@@ -68,7 +74,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createRemoteSessionClient", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [9]string{"createRemoteSessionClient", "createCimd", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachUserSessionIssuerPayload is the payload type of the
 // remoteSessionClients service attachUserSessionIssuer method.
@@ -104,6 +110,26 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange for the cloned client.
+	Audience *string
+}
+
+// CreateCimdPayload is the payload type of the remoteSessionClients service
+// createCimd method.
+type CreateCimdPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The owning remote_session_issuer id. Must advertise
+	// client_id_metadata_document_supported.
+	RemoteSessionIssuerID string
+	// The user_session_issuers to attach this client to via the join table. Omit
+	// or pass an empty array to create a standalone client with no attachments.
+	UserSessionIssuerIds []string
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
 	Audience *string
 }
 

@@ -42,7 +42,7 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"contact me at john.smith@globex.com",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -64,7 +64,7 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 		"My credit card is 4111111111111111",
 		"Card: 5500-0000-0000-0004",
 		"Bogus card 4111111111111112 not detected",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
@@ -79,7 +79,7 @@ func TestMockServer_DetectsPhoneNumber(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"call me at 425-882-8080 thanks",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Contains(t, ruleIDs(results[0]), "pii.phone_number")
@@ -91,7 +91,7 @@ func TestMockServer_DetectsPersonName(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My name is John Smith and I'm here",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Contains(t, ruleIDs(results[0]), "pii.person")
@@ -103,7 +103,7 @@ func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Version 1.234.567.890 was released",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -118,7 +118,7 @@ func TestMockServer_NoFalsePositiveOnUUID(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Transaction: 550e8400-e29b-41d4-a716-446655440000",
-	}, nil, nil)
+	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -136,7 +136,7 @@ func TestMockServer_EntityFilterRespected(t *testing.T) {
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"call 425-882-8080 or email alice@globex.com",
-	}, []string{"EMAIL_ADDRESS"}, nil)
+	}, []string{"EMAIL_ADDRESS"}, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -157,7 +157,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 		messages[i] = "message " + strconv.Itoa(i) + " contact " + emails[i] + " end"
 	}
 
-	results, err := client.AnalyzeBatch(t.Context(), messages, []string{"EMAIL_ADDRESS"}, nil)
+	results, err := client.AnalyzeBatch(t.Context(), messages, []string{"EMAIL_ADDRESS"}, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, n)
 
@@ -186,7 +186,7 @@ func TestMockServer_CustomDetectorOverride(t *testing.T) {
 		}}
 	})
 
-	results, err := client.AnalyzeBatch(t.Context(), []string{"anything"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"anything"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -203,7 +203,7 @@ func TestMockServer_AnalyzeRequestCount(t *testing.T) {
 		messages[i] = "msg " + strconv.Itoa(i)
 	}
 
-	_, err := client.AnalyzeBatch(t.Context(), messages, nil, nil)
+	_, err := client.AnalyzeBatch(t.Context(), messages, nil, 0, nil)
 	require.NoError(t, err)
 
 	// The Presidio client fans out one HTTP request per text — failures

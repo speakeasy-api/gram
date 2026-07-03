@@ -16,24 +16,25 @@ import {
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
 import {
   invalidateAllOrganizationRemoteSessionClients,
-  useCreateOrganizationRemoteSessionClientMutation,
   useListProjects,
 } from "@gram/client/react-query/index.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  ClientCredentialsFields,
+  ClientTypeFields,
   OverridesFields,
-  TokenEndpointAuthMethodField,
 } from "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
+  availableClientTypes,
+  type ClientType,
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
@@ -42,17 +43,6 @@ import {
 // Radix Select treats the empty string specially, so submission is gated until
 // the operator picks a real project (a client must be project-scoped).
 const UNSELECTED_PROJECT = "";
-
-// ClientType selects how the new client's credentials are obtained. It is a
-// UI-only choice (never sent to the backend, which just persists whatever
-// credentials result). Client ID Metadata Document (CIMD) support will add a
-// third type here, expanding the form further.
-type ClientType = "dcr" | "manual";
-
-const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
-  dcr: "Dynamic Client Registration (DCR)",
-  manual: "Manual",
-};
 
 // CreateRemoteSessionClientSheet registers a standalone remote_session_client
 // under the page's already-selected issuer via the org-admin createClient
@@ -75,6 +65,7 @@ export function CreateRemoteSessionClientSheet({
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const { fetch: authedFetch } = useFetcher();
+  const client = useSdkClient();
 
   // DCR is offered as a client type only when the issuer advertises a
   // registration_endpoint (RFC 7591); otherwise the operator pastes a client_id
@@ -82,13 +73,20 @@ export function CreateRemoteSessionClientSheet({
   const registrationEndpoint = issuer.registrationEndpoint?.trim() ?? "";
   const dcrAvailable = registrationEndpoint.length > 0;
 
-  // The selectable client types for this issuer. DCR appears only when the
-  // issuer supports it; Manual is always available. When only one type is
-  // available the selector is hidden (there is nothing to choose).
-  const availableClientTypes = useMemo<ClientType[]>(
-    () => (dcrAvailable ? ["dcr", "manual"] : ["manual"]),
-    [dcrAvailable],
+  // CIMD is offered only when the issuer advertises support for Client ID
+  // Metadata Documents (parsed during issuer discovery); the platform then
+  // hosts the document and uses its URL as the client_id, so no credentials are
+  // collected.
+  const cimdAvailable = issuer.clientIdMetadataDocumentSupported;
+
+  // The selectable client types for this issuer. DCR and CIMD appear only when
+  // the issuer supports them; Manual is always available. The first entry is
+  // the default (an automatic type when one is available).
+  const clientTypes = useMemo(
+    () => availableClientTypes({ dcrAvailable, cimdAvailable }),
+    [dcrAvailable, cimdAvailable],
   );
+  const defaultClientType = clientTypes[0] ?? "manual";
 
   // Organization-level issuers (no owning project) have no project to inherit,
   // so the operator must name one; project-specific issuers inherit silently.
@@ -101,10 +99,14 @@ export function CreateRemoteSessionClientSheet({
   );
   const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
 
-  const [projectId, setProjectId] = useState<string>(UNSELECTED_PROJECT);
-  const [clientType, setClientType] = useState<ClientType>(
-    dcrAvailable ? "dcr" : "manual",
+  // For an organization-level issuer the client is either created at the
+  // organization level (no project, attachable by every project) or downscoped
+  // to a single project. Defaults to organization-level, the issuer's own scope.
+  const [scope, setScope] = useState<"organization" | "project">(
+    "organization",
   );
+  const [projectId, setProjectId] = useState<string>(UNSELECTED_PROJECT);
+  const [clientType, setClientType] = useState<ClientType>(defaultClientType);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState<
@@ -113,23 +115,94 @@ export function CreateRemoteSessionClientSheet({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
-  // DCR may hand back a token_endpoint_auth_method the SDK enum doesn't model;
-  // we keep the client record without it but warn the operator after success.
-  const unsupportedDcrAuthMethod = useRef<string | null>(null);
-  // The proxy-register call is a pre-step the create mutation can't see; track
-  // its pending/error state separately and fold both into the submit surface.
-  const [registering, setRegistering] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
+  // One mutation drives all client types. Its mutationFn does whatever async
+  // work the chosen type needs — a DCR proxy registration pre-step, or a direct
+  // create — so isPending/error are a single source of truth (no separate
+  // registering flag or per-type mutation to combine). It returns the
+  // unsupported DCR auth method, if any, for the success toast.
+  const createMutation = useMutation({
+    mutationFn: async (): Promise<{
+      unsupportedDcrAuthMethod: string | null;
+    }> => {
+      const parsedScopes = parseScopes(scopeOverride);
+      const trimmedAudience = audienceOverride.trim();
+      // Project-specific issuers inherit their project (project_id omitted). For
+      // an org-level issuer, omitting project_id creates an organization-level
+      // client (no project); sending it downscopes to the chosen project.
+      const projectIdForOrg =
+        isOrganizational && scope === "project" ? projectId : undefined;
 
-  const createMutation = useCreateOrganizationRemoteSessionClientMutation({
-    onSuccess: async () => {
+      // CIMD: the platform generates the client_id and hosts the metadata
+      // document, so there are no credentials to collect.
+      if (clientType === "cimd") {
+        await client.organizationRemoteSessionIssuers.createCimdClient({
+          createCimdOrganizationRemoteSessionClientForm: {
+            remoteSessionIssuerId: issuer.id,
+            projectId: projectIdForOrg,
+            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+            audience: trimmedAudience || undefined,
+          },
+        });
+        return { unsupportedDcrAuthMethod: null };
+      }
+
+      // DCR proxies a registration to the upstream issuer for a fresh
+      // client_id / client_secret; Manual uses what the operator typed.
+      let credentials: {
+        clientId: string;
+        clientSecret?: string;
+        tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+      };
+      let unsupportedDcrAuthMethod: string | null = null;
+      if (clientType === "dcr") {
+        const registered = await proxyRegisterUpstreamClient(authedFetch, {
+          registrationEndpoint,
+          // RFC 7591 §2: scope is a space-separated string at registration time.
+          scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
+          tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+        });
+        const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
+          registered.tokenEndpointAuthMethod,
+        );
+        if (registered.tokenEndpointAuthMethod && !narrowedDcrMethod) {
+          unsupportedDcrAuthMethod = registered.tokenEndpointAuthMethod;
+        }
+        credentials = {
+          clientId: registered.clientId,
+          clientSecret: registered.clientSecret || undefined,
+          tokenEndpointAuthMethod:
+            narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
+        };
+      } else {
+        credentials = {
+          clientId: clientId.trim(),
+          clientSecret: clientSecret.trim() || undefined,
+          tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+        };
+      }
+
+      await client.organizationRemoteSessionIssuers.createClient({
+        createOrganizationRemoteSessionClientForm: {
+          remoteSessionIssuerId: issuer.id,
+          projectId: projectIdForOrg,
+          clientId: credentials.clientId,
+          clientSecret: credentials.clientSecret,
+          tokenEndpointAuthMethod: credentials.tokenEndpointAuthMethod,
+          scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+          audience: trimmedAudience || undefined,
+        },
+      });
+
+      return { unsupportedDcrAuthMethod };
+    },
+    onSuccess: async ({ unsupportedDcrAuthMethod }) => {
       await invalidateAllOrganizationRemoteSessionClients(queryClient, {
         refetchType: "all",
       });
       toast.success("Client created");
-      if (unsupportedDcrAuthMethod.current) {
+      if (unsupportedDcrAuthMethod) {
         toast.warning(
-          `The issuer registered the client with an unsupported token endpoint auth method (${unsupportedDcrAuthMethod.current}); it was not stored on the client.`,
+          `The issuer registered the client with an unsupported token endpoint auth method (${unsupportedDcrAuthMethod}); it was not stored on the client.`,
         );
       }
       onOpenChange(false);
@@ -141,158 +214,42 @@ export function CreateRemoteSessionClientSheet({
     },
   });
 
-  const submitting = registering || createMutation.isPending;
-  const mutationError = createMutation.error
+  const submitting = createMutation.isPending;
+  const submitError = createMutation.error
     ? createMutation.error instanceof Error && createMutation.error.message
       ? createMutation.error.message
       : "An unexpected error occurred. Please try again."
     : null;
-  const submitError = registerError ?? mutationError;
   const { reset: resetCreateMutation } = createMutation;
 
   // Reset transient state whenever the sheet is reopened so a prior draft never
   // leaks into a new creation.
   useEffect(() => {
     if (!open) return;
+    setScope("organization");
     setProjectId(UNSELECTED_PROJECT);
-    setClientType(dcrAvailable ? "dcr" : "manual");
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
     setScopeOverride("");
     setAudienceOverride("");
-    setRegisterError(null);
-    unsupportedDcrAuthMethod.current = null;
+    setClientType(defaultClientType);
     resetCreateMutation();
-  }, [open, dcrAvailable, resetCreateMutation]);
+  }, [open, defaultClientType, resetCreateMutation]);
 
-  const projectChosen = !isOrganizational || projectId !== UNSELECTED_PROJECT;
+  const projectChosen =
+    !isOrganizational ||
+    scope === "organization" ||
+    projectId !== UNSELECTED_PROJECT;
   // Manual requires a client_id; DCR mints one during proxy registration.
   const credentialsReady =
     clientType === "manual" ? clientId.trim().length > 0 : true;
   const submittable = projectChosen && credentialsReady;
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!submittable || submitting) return;
-
-    setRegisterError(null);
-    unsupportedDcrAuthMethod.current = null;
-    resetCreateMutation();
-
-    const parsedScopes = parseScopes(scopeOverride);
-    const trimmedAudience = audienceOverride.trim();
-
-    // Obtain client credentials. The DCR client type proxies a registration to
-    // the upstream issuer for a fresh client_id / client_secret; Manual uses
-    // what the operator typed.
-    let credentials: {
-      clientId: string;
-      clientSecret?: string;
-      tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-    };
-    if (clientType === "dcr") {
-      setRegistering(true);
-      try {
-        const registered = await proxyRegisterUpstreamClient(authedFetch, {
-          registrationEndpoint,
-          // RFC 7591 §2: scope is a space-separated string at registration time.
-          scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
-          tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-        });
-        const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
-          registered.tokenEndpointAuthMethod,
-        );
-        if (registered.tokenEndpointAuthMethod && !narrowedDcrMethod) {
-          unsupportedDcrAuthMethod.current = registered.tokenEndpointAuthMethod;
-        }
-        credentials = {
-          clientId: registered.clientId,
-          clientSecret: registered.clientSecret || undefined,
-          tokenEndpointAuthMethod:
-            narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
-        };
-      } catch (error) {
-        setRegisterError(
-          error instanceof Error && error.message
-            ? error.message
-            : "Dynamic Client Registration failed. Please try again.",
-        );
-        return;
-      } finally {
-        setRegistering(false);
-      }
-    } else {
-      credentials = {
-        clientId: clientId.trim(),
-        clientSecret: clientSecret.trim() || undefined,
-        tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-      };
-    }
-
-    createMutation.mutate({
-      request: {
-        createOrganizationRemoteSessionClientForm: {
-          remoteSessionIssuerId: issuer.id,
-          // Project-specific issuers inherit their project (omit); org-level
-          // issuers are downscoped to the chosen project.
-          projectId: isOrganizational ? projectId : undefined,
-          clientId: credentials.clientId,
-          clientSecret: credentials.clientSecret,
-          tokenEndpointAuthMethod: credentials.tokenEndpointAuthMethod,
-          scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-          audience: trimmedAudience || undefined,
-        },
-      },
-    });
+    createMutation.mutate();
   };
-
-  let credentialsSection: JSX.Element;
-  switch (clientType) {
-    case "dcr":
-      // DCR mints the client_id/client_secret at save time, so the only input
-      // is the token endpoint auth method forwarded to the registration call.
-      // The explanatory copy lives under the Client Type selector.
-      credentialsSection = (
-        <TokenEndpointAuthMethodField
-          value={tokenEndpointAuthMethod}
-          onChange={setTokenEndpointAuthMethod}
-        />
-      );
-      break;
-    // CIMD will add a "cimd" case here; the exhaustiveness check enforces it.
-    case "manual":
-      // The "OAuth Client Credentials" heading is moved under the Client Type
-      // selector (see clientTypeHelp), so the fields render without it.
-      credentialsSection = (
-        <ClientCredentialsFields
-          showHeading={false}
-          clientId={clientId}
-          clientSecret={clientSecret}
-          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-          onClientIdChange={setClientId}
-          onClientSecretChange={setClientSecret}
-          onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
-        />
-      );
-  }
-
-  // Help text shown under the Client Type selector. It explains the active
-  // type and, in Manual mode, points at DCR when the issuer supports it.
-  let clientTypeHelp: string;
-  switch (clientType) {
-    case "dcr":
-      clientTypeHelp =
-        "The issuer advertises a registration endpoint (RFC 7591), so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
-      break;
-    case "manual":
-      clientTypeHelp =
-        "The platform acts as an OAuth client against the upstream issuer. Register a client with the issuer out-of-band and paste the credentials here.";
-      if (dcrAvailable) {
-        clientTypeHelp +=
-          " You can also choose Dynamic Client Registration (DCR) to register a client automatically.";
-      }
-      break;
-  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -307,24 +264,54 @@ export function CreateRemoteSessionClientSheet({
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
           <Stack gap={4}>
             {isOrganizational ? (
-              <Stack gap={2}>
-                <Label className="text-muted-foreground text-xs">Project</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
+              <Stack gap={4}>
+                <Stack gap={2}>
+                  <Label className="text-muted-foreground text-xs">Scope</Label>
+                  <Select
+                    value={scope}
+                    onValueChange={(value) =>
+                      setScope(value as "organization" | "project")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="organization">
+                        All projects (organization-level)
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Type muted small>
-                  This provider is organizational, so the client must be scoped
-                  to a project in the organization.
-                </Type>
+                      <SelectItem value="project">Specific project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Type muted small>
+                    An organization-level client has no project and can be
+                    attached by every project in the organization.
+                  </Type>
+                </Stack>
+
+                {scope === "project" && (
+                  <Stack gap={2}>
+                    <Label className="text-muted-foreground text-xs">
+                      Project
+                    </Label>
+                    <Select value={projectId} onValueChange={setProjectId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Type muted small>
+                      The client will be scoped to this project in the
+                      organization.
+                    </Type>
+                  </Stack>
+                )}
               </Stack>
             ) : (
               <Type muted small>
@@ -332,37 +319,17 @@ export function CreateRemoteSessionClientSheet({
               </Type>
             )}
 
-            <Stack gap={2}>
-              {availableClientTypes.length > 1 && (
-                <>
-                  <Label className="text-muted-foreground text-xs">
-                    Client Type
-                  </Label>
-                  <Select
-                    value={clientType}
-                    onValueChange={(value) =>
-                      setClientType(value as ClientType)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableClientTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {CLIENT_TYPE_LABELS[type]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              )}
-              <Type muted small>
-                {clientTypeHelp}
-              </Type>
-            </Stack>
-
-            {credentialsSection}
+            <ClientTypeFields
+              availableTypes={clientTypes}
+              clientType={clientType}
+              onClientTypeChange={setClientType}
+              clientId={clientId}
+              clientSecret={clientSecret}
+              tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+              onClientIdChange={setClientId}
+              onClientSecretChange={setClientSecret}
+              onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
+            />
 
             <OverridesFields
               scopeOverride={scopeOverride}
@@ -390,7 +357,7 @@ export function CreateRemoteSessionClientSheet({
           <Button
             variant="primary"
             disabled={!submittable || submitting}
-            onClick={() => void handleSubmit()}
+            onClick={handleSubmit}
           >
             <Button.Text>{submitting ? "Creating…" : "Create"}</Button.Text>
           </Button>

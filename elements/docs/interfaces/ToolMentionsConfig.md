@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@
 
 ### enabled?
 
-> `optional` **enabled**: `boolean`
+> `optional` **enabled?**: `boolean`
 
 #### Default
 
@@ -22,7 +22,7 @@ true
 
 ### maxSuggestions?
 
-> `optional` **maxSuggestions**: `number`
+> `optional` **maxSuggestions?**: `number`
 
 #### Default
 
@@ -34,4 +34,4 @@ true
 
 ### placeholder?
 
-> `optional` **placeholder**: `string`
+> `optional` **placeholder?**: `string`

@@ -64,6 +64,31 @@ var _ = Service("remoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteSessionClient"}`)
 	})
 
+	Method("createCimd", func() {
+		Description("Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.")
+
+		Payload(func() {
+			Extend(CreateCimdForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessionClients.createCimd")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createCimdRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCimd")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateCimdRemoteSessionClient"}`)
+	})
+
 	Method("cloneClientFromOAuthProxyProvider", func() {
 		Description("Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.")
 
@@ -280,6 +305,25 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Required("remote_session_issuer_id", "client_id")
 })
 
+var CreateCimdForm = Type("CreateCimdForm", func() {
+	Description("Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.")
+
+	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_session_issuer_ids", ArrayOf(String), "The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+
+	Required("remote_session_issuer_id")
+})
+
 var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProviderForm", func() {
 	Description("Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider and the remote_session_issuer to register the new client with, plus zero or more user_session_issuers to attach it to.")
 
@@ -353,9 +397,10 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, "The owning project id.", func() {
-		Format(FormatUUID)
-	})
+	// No FormatUUID: organization-level clients have no project and serialize
+	// this as an empty string, which a UUID format check would reject.
+	Attribute("project_id", String, "The owning project id. Empty for organization-level clients.")
+	Attribute("organization_id", String, "The owning organization id. Empty for legacy rows not yet backfilled.")
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
@@ -365,6 +410,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		})
 	})
 	Attribute("client_id", String, "The client_id used to identify this client at the issuer's token and authorization endpoints.")
+	Attribute("client_id_metadata_uri", String, "When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.")
 	Attribute("client_id_issued_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -381,7 +427,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "client_id_issued_at", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "client_id_issued_at", "created_at", "updated_at")
 })
 
 var ListRemoteSessionClientsResult = Type("ListRemoteSessionClientsResult", func() {

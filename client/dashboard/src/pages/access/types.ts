@@ -1,11 +1,11 @@
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Selector,
-  Disposition,
+  SelectorDisposition,
 } from "@gram/client/models/components/selector.js";
 
 export { Scope };
-export type { Selector, Disposition };
+export type { Selector };
 
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
 export function toRoleSlug(name: string): string {
@@ -27,7 +27,8 @@ export type ResourceType =
   | "project"
   | "mcp"
   | "environment"
-  | "risk_policy";
+  | "risk_policy"
+  | "chat";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -76,7 +77,10 @@ export interface RoleGrant {
 
 /** Maps annotation hint keys to disposition values stored in selectors.
  * Must match the backend constants in authz/selector.go. */
-export const ANNOTATION_TO_DISPOSITION: Record<AnnotationHint, Disposition> = {
+export const ANNOTATION_TO_DISPOSITION: Record<
+  AnnotationHint,
+  SelectorDisposition
+> = {
   readOnlyHint: "read_only",
   destructiveHint: "destructive",
   idempotentHint: "idempotent",

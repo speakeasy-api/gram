@@ -6,6 +6,51 @@ WHERE t.chat_id = @chat_id
   AND t.deleted IS FALSE
 LIMIT 1;
 
+-- name: AssistantExistsInProject :one
+-- Reports whether an undeleted assistant with this id exists in the given
+-- project. Gates setup-thread linking so a client-supplied assistant id that
+-- belongs to another project can never create a cross-project
+-- assistant_threads row (the FK alone only proves the assistant exists
+-- *somewhere*, not that it belongs to the caller's project).
+SELECT EXISTS (
+  SELECT 1 FROM assistants
+  WHERE id = @assistant_id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+) AS assistant_exists;
+
+-- name: UpsertSetupAssistantThread :one
+-- Links a client-side setup/onboarding chat to its assistant so the chat is
+-- listable (chat.list?assistant_id=) and URL-addressable like runtime threads.
+-- Mirrors the runtime UpsertAssistantThread idempotency (ON CONFLICT on
+-- project_id/assistant_id/correlation_id). Fixed source_kind='setup' marks the
+-- row as a client-driven onboarding thread: it enqueues no runtime events, so
+-- the active-thread accounting excludes 'setup' and it never consumes
+-- max_concurrency or a warm-pool slot. Unlike the runtime upsert this does NOT
+-- refresh last_event_at on conflict, but that is NOT a second safety net: a
+-- setup row's last_event_at defaults to clock_timestamp() at insert, so it is
+-- recent and falls inside the warm window like any live thread. The
+-- source_kind <> 'setup' predicate in CountActiveAssistantThreads is therefore
+-- the SOLE guard keeping setup threads out of concurrency/warm accounting — if
+-- that filter regressed, setup threads would be counted.
+INSERT INTO assistant_threads (
+  assistant_id,
+  project_id,
+  correlation_id,
+  chat_id,
+  source_kind
+) VALUES (
+  @assistant_id,
+  @project_id,
+  @correlation_id,
+  @chat_id,
+  'setup'
+)
+ON CONFLICT (project_id, assistant_id, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+  updated_at = clock_timestamp()
+RETURNING id;
+
 -- name: UpsertChat :one
 INSERT INTO chats (
     id
@@ -237,6 +282,7 @@ candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -259,6 +305,13 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND (@source_kind::text = '' OR at.source_kind = @source_kind::text)
+          AND (@exclude_source_kind::text = '' OR at.source_kind <> @exclude_source_kind::text)
       )
     )
     AND (
@@ -267,8 +320,30 @@ candidate_chats AS (
       OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
+      @account_type::text = ''
+      OR ua.account_type = @account_type::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        @account_type::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
+    )
+    AND (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
+    )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
     )
 ),
 chat_activity AS (
@@ -311,9 +386,13 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
-    COALESCE(rc.cnt, 0) AS risk_findings_count
+    COALESCE(rc.cnt, 0) AS risk_findings_count,
+    COALESCE(ua.account_type, '')::text AS account_type
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
+  -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
+  -- matching chats.user_id) to expose its team/personal classification.
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -336,6 +415,13 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND (@source_kind::text = '' OR at.source_kind = @source_kind::text)
+          AND (@exclude_source_kind::text = '' OR at.source_kind <> @exclude_source_kind::text)
       )
     )
     AND (
@@ -344,8 +430,30 @@ candidate_chats AS (
       OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
+      @account_type::text = ''
+      OR ua.account_type = @account_type::text
+      -- Rows without a classified account type are treated as 'team' so the
+      -- team filter stays backwards-compatible with pre-classification chats.
+      OR (
+        @account_type::text = 'team'
+        AND (ua.account_type IS NULL OR ua.account_type = '')
+      )
+    )
+    AND (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
+    )
+    AND (
+      coalesce(cardinality(@sources::text[]), 0) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+          AND cmsrc.source <> ''
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) = ANY (@sources::text[])
     )
 ),
 chat_stats AS (
@@ -367,7 +475,8 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    cc.risk_findings_count
+    cc.risk_findings_count,
+    cc.account_type
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -382,9 +491,10 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
-    fc.risk_findings_count
+    fc.risk_findings_count,
+    fc.account_type
   FROM filtered_chats fc
   ORDER BY
     CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
@@ -406,11 +516,40 @@ SELECT
   lc.updated_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  lc.risk_findings_count
+  lc.risk_findings_count,
+  lc.account_type
 FROM limited_chats lc;
 
+-- name: ListChatSources :many
+-- Distinct inferred source (the latest non-null message source) across the
+-- project's chats, honoring the same visibility scoping as ListChats. Feeds the
+-- agent-type filter options on the Agent Sessions page so the list reflects the
+-- sources actually present in the data rather than a hardcoded catalog.
+WITH latest_sources AS (
+  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
+  FROM chats c
+  JOIN chat_messages cm ON cm.chat_id = c.id
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+    AND cm.source IS NOT NULL
+    AND cm.source <> ''
+  ORDER BY cm.chat_id, cm.created_at DESC
+)
+SELECT DISTINCT source
+FROM latest_sources
+WHERE source IS NOT NULL
+ORDER BY source;
+
 -- name: GetChat :one
-SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
+-- Loads a chat plus the team/personal classification of the AI account that
+-- produced it (chats.user_account_id has no FK), scoped by organization. Returns
+-- '' for account_type when the chat has no linked account or it is unclassified.
+SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+WHERE c.id = @id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
 SELECT id, title FROM chats
@@ -957,6 +1096,14 @@ RETURNING id;
 -- instead of relying on wall-clock gaps between inserts.
 INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageWithSource :one
+-- Test fixture: insert a chat message carrying a specific source. The per-chat
+-- inferred source (used by the agent-type filter and ListChatSources) is the
+-- latest non-null message source, so source-filter tests seed messages this way.
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedChatMessageContent :one

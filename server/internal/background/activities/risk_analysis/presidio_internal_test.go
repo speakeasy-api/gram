@@ -41,6 +41,44 @@ func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
+// TestConvertPresidioFindings_DropsUSDriverLicense is the regression test for
+// AIS-158: a policy that pins no Presidio entities makes Presidio scan its full
+// default set, which includes US_DRIVER_LICENSE. filterEntities cannot strip it
+// (there is no pinned list to trim), so the finding-level gate in
+// convertPresidioFindings must drop it. Other findings — including PERSON,
+// whose unpinned detection is intended — still flow through.
+func TestConvertPresidioFindings_DropsUSDriverLicense(t *testing.T) {
+	t.Parallel()
+
+	text := "D1234567 Jane Roe alice@globex.com"
+	results := []presidioResult{
+		{EntityType: "US_DRIVER_LICENSE", Start: 0, End: 8, Score: 0.9},
+		{EntityType: "PERSON", Start: 9, End: 17, Score: 0.85},
+		{EntityType: "EMAIL_ADDRESS", Start: 18, End: 34, Score: 1},
+	}
+
+	findings := convertPresidioFindings(text, results)
+	ruleIDs := make([]string, len(findings))
+	for i, f := range findings {
+		ruleIDs[i] = f.RuleID
+	}
+	assert.NotContains(t, ruleIDs, guard(prefixPII+"us_driver_license"), "US_DRIVER_LICENSE must be dropped")
+	assert.Contains(t, ruleIDs, guard(prefixPII+"person"), "PERSON detection is intended and must survive")
+	assert.Contains(t, ruleIDs, guard(prefixPII+"email_address"))
+}
+
+// TestIsFindingLevelDropped locks the finding-level gate to US_DRIVER_LICENSE
+// only. PERSON is blocklisted from pinned request lists (filterEntities) but is
+// deliberately not dropped here, so unpinned scans still surface it.
+func TestIsFindingLevelDropped(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isFindingLevelDropped("US_DRIVER_LICENSE"))
+	assert.False(t, isFindingLevelDropped("PERSON"))
+	assert.False(t, isFindingLevelDropped("EMAIL_ADDRESS"))
+	assert.False(t, isFindingLevelDropped(""))
+}
+
 // TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
 // positive-coverage gate: every IP in testdata/fp-ip.txt is an address
 // the catalog must drop. Each line is run through
@@ -253,7 +291,7 @@ func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	t.Parallel()
 
-	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, nil)
+	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	for _, findings := range results {
@@ -276,7 +314,7 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 
 	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
 
-	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 	for _, r := range results {
@@ -300,7 +338,7 @@ func TestAnalyzeOnceSingleAttemptNoRetry(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	_, err := client.analyzeOnce(t.Context(), "one", nil, nil)
+	_, err := client.analyzeOnce(t.Context(), "one", nil, 0, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "presidio returned status 503")
 	assert.Equal(t, int64(1), calls.Load(), "analyzeOnce must not retry internally")
@@ -321,7 +359,7 @@ func TestAnalyzeOnceRequestPayload(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	_, err := client.analyzeOnce(t.Context(), "alpha", []string{"EMAIL_ADDRESS"}, nil)
+	_, err := client.analyzeOnce(t.Context(), "alpha", []string{"EMAIL_ADDRESS"}, 0, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"alpha"}, got.Text)
 	assert.Equal(t, []string{"EMAIL_ADDRESS"}, got.Entities)
@@ -356,7 +394,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 	callResult := make(chan callOutcome, 1)
 
 	go func() {
-		results, err := client.AnalyzeBatch(t.Context(), []string{"hello"}, nil, func() {
+		results, err := client.AnalyzeBatch(t.Context(), []string{"hello"}, nil, 0, func() {
 			progress.Add(1)
 		})
 		callResult <- callOutcome{results: results, err: err}
@@ -408,7 +446,7 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -432,7 +470,7 @@ func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, 0, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -467,7 +505,7 @@ func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
@@ -502,7 +540,7 @@ func TestPresidioClientSurfacesOuterContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel before the call so the first ctx.Err() check trips
 
-	_, err := client.AnalyzeBatch(ctx, []string{"hang"}, nil, nil)
+	_, err := client.AnalyzeBatch(ctx, []string{"hang"}, nil, 0, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -529,7 +567,7 @@ func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	// without waiting out the 30s production default.
 	client.requestTimeout = 30 * time.Millisecond
 
-	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, 0, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -589,7 +627,7 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	// Build an input that is double the limit and contains a multibyte rune
 	// straddling the truncation point so we exercise the UTF-8 walk-back.
 	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
-	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, nil)
+	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
 	require.NoError(t, err)
 
 	// Truncation walks back to a rune start, so we land strictly inside the
@@ -611,22 +649,22 @@ func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
 	assert.Empty(t, truncateAtRuneBoundary(in, 0))
 }
 
-// TestFilterEntitiesDropsBlacklistedTypes asserts that PERSON and
+// TestFilterEntitiesDropsBlocklistedTypes asserts that PERSON and
 // US_DRIVER_LICENSE are stripped from any caller-supplied entity list
 // before reaching Presidio. PERSON is dropped because NER trips on
 // capitalized words inside tool calls; US_DRIVER_LICENSE because the
 // upstream regex is unusably broad (microsoft/presidio#1063).
-func TestFilterEntitiesDropsBlacklistedTypes(t *testing.T) {
+func TestFilterEntitiesDropsBlocklistedTypes(t *testing.T) {
 	t.Parallel()
 
 	// nil passes through untouched so Presidio's default entity set still applies.
 	assert.Nil(t, filterEntities(nil))
 
-	// Blacklisted entries are removed; the rest survive in order.
+	// Blocklisted entries are removed; the rest survive in order.
 	got := filterEntities([]string{"EMAIL_ADDRESS", "PERSON", "US_DRIVER_LICENSE", "CREDIT_CARD"})
 	assert.Equal(t, []string{"EMAIL_ADDRESS", "CREDIT_CARD"}, got)
 
-	// All-blacklisted input returns an empty (non-nil) slice so AnalyzeBatch
+	// All-blocklisted input returns an empty (non-nil) slice so AnalyzeBatch
 	// can short-circuit instead of falling back to the unbounded default scan.
 	got = filterEntities([]string{"PERSON", "US_DRIVER_LICENSE"})
 	assert.NotNil(t, got)
@@ -750,7 +788,7 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 
 	client := newTestPresidioClient(t, srv.URL)
 	in := `{"body":"line one\nline two"}`
-	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, nil)
+	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Text, 1)
@@ -759,6 +797,49 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
 	assert.Contains(t, wire, "line one")
 	assert.Contains(t, wire, "line two")
+}
+
+func TestResolvePresidioScoreThreshold(t *testing.T) {
+	t.Parallel()
+
+	// Unset (zero) and out-of-range values fall back to the default floor.
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(0), 1e-9)
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(-0.1), 1e-9)
+	assert.InDelta(t, DefaultPresidioScoreThreshold, resolvePresidioScoreThreshold(1.5), 1e-9)
+	// In-range values pass through verbatim, including the boundary 1.0.
+	assert.InDelta(t, 0.6, resolvePresidioScoreThreshold(0.6), 1e-9)
+	assert.InDelta(t, 1.0, resolvePresidioScoreThreshold(1.0), 1e-9)
+}
+
+// TestPresidioClientForwardsScoreThreshold verifies the per-call threshold is
+// sent on the /analyze request as score_threshold and that an unset (0) value
+// resolves to DefaultPresidioScoreThreshold before the request leaves.
+func TestPresidioClientForwardsScoreThreshold(t *testing.T) {
+	t.Parallel()
+
+	var got atomic.Value // holds float64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req presidioRequest
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		got.Store(req.ScoreMin)
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+
+	_, err := client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0.9, nil)
+	require.NoError(t, err)
+	gotCustom, ok := got.Load().(float64)
+	require.True(t, ok)
+	require.InDelta(t, 0.9, gotCustom, 1e-9)
+
+	_, err = client.AnalyzeBatch(t.Context(), []string{"x"}, nil, 0, nil)
+	require.NoError(t, err)
+	gotDefault, ok := got.Load().(float64)
+	require.True(t, ok)
+	require.InDelta(t, DefaultPresidioScoreThreshold, gotDefault, 1e-9)
 }
 
 // --- helpers ---

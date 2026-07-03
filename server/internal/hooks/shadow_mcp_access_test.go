@@ -66,7 +66,6 @@ func TestEnforceShadowMCPToolAccess_BypassGrantAllowsBlockedCall(t *testing.T) {
 		authCtx.ProjectID.String(),
 		authCtx.UserID,
 		policyID,
-		map[string]any{},
 		"do_thing",
 		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "blocked-server"},
 	)
@@ -102,13 +101,12 @@ func TestEnforceShadowMCPToolAccess_URLScopedBypassGrantDoesNotAllowIdentityOnly
 		authCtx.ProjectID.String(),
 		authCtx.UserID,
 		policyID,
-		map[string]any{},
 		"do_thing",
 		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: "local-server"},
 	)
 
 	require.True(t, denied)
-	require.Contains(t, detail, "missing required")
+	require.Contains(t, detail, "not Gram-hosted")
 }
 
 func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyTarget(t *testing.T) {
@@ -139,7 +137,6 @@ func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyT
 		authCtx.ProjectID.String(),
 		authCtx.UserID,
 		policyID,
-		map[string]any{},
 		"do_thing",
 		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: serverIdentity},
 	)
@@ -174,7 +171,6 @@ func TestEnforceShadowMCPToolAccess_WholePolicyBypassGrantAllowsIdentityOnlyTarg
 		authCtx.ProjectID.String(),
 		authCtx.UserID,
 		policyID,
-		map[string]any{},
 		"do_thing",
 		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: "local-server"},
 	)
@@ -213,4 +209,70 @@ func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
 
 	require.False(t, allowed)
 	require.Nil(t, target)
+}
+
+func TestEnforceShadowMCPToolAccess_GramHostedURLAllowed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		uuid.NewString(),
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "https://app.getgram.ai/mcp/example", URLHost: "", ServerIdentity: "example"},
+	)
+
+	require.False(t, denied)
+	require.Empty(t, detail)
+}
+
+func TestEnforceShadowMCPToolAccess_NonGramURLBlocked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		uuid.NewString(),
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "https://mcp.shadow.example/mcp", URLHost: "", ServerIdentity: "mcp.shadow.example"},
+	)
+
+	require.True(t, denied)
+	require.Contains(t, detail, "not Gram-hosted")
+}
+
+func TestEnforceShadowMCPToolAccess_NoURLServerBlocked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		uuid.NewString(),
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: "local-stdio"},
+	)
+
+	require.True(t, denied)
+	require.Contains(t, detail, "not Gram-hosted")
 }

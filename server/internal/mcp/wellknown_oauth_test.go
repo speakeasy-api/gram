@@ -34,10 +34,12 @@ func Test_writeOAuthServerMetadataResponse_Static(t *testing.T) {
 		ProxyURL: "",
 	}
 
-	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, result)
+	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.Equal(t, "public, max-age=60", w.Header().Get("Cache-Control"))
+	require.NotEmpty(t, w.Header().Get("ETag"))
 
 	var got wellknown.OAuthServerMetadata
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
@@ -58,10 +60,12 @@ func Test_writeOAuthServerMetadataResponse_Raw(t *testing.T) {
 		ProxyURL: "",
 	}
 
-	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, result)
+	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.Equal(t, "public, max-age=60", w.Header().Get("Cache-Control"))
+	require.NotEmpty(t, w.Header().Get("ETag"))
 	require.JSONEq(t, string(raw), w.Body.String())
 }
 
@@ -84,7 +88,7 @@ func Test_writeOAuthServerMetadataResponse_UnknownKind_DoesNotWriteResponse(t *t
 		ProxyURL: "",
 	}
 
-	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, result)
+	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)
 	require.Error(t, err)
 	require.Empty(t, w.Header().Get("Content-Type"))
 	require.Empty(t, w.Body.Bytes())
@@ -104,10 +108,12 @@ func Test_writeOAuthProtectedResourceMetadataResponse_Success(t *testing.T) {
 		ResourceDocumentation:  "",
 	}
 
-	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
+	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.Equal(t, "public, max-age=60", w.Header().Get("Cache-Control"))
+	require.NotEmpty(t, w.Header().Get("ETag"))
 
 	var got wellknown.OAuthProtectedResourceMetadata
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
@@ -134,7 +140,7 @@ func Test_writeOAuthProtectedResourceMetadataResponse_OmitsOptionalFields(t *tes
 		ResourceDocumentation:  "",
 	}
 
-	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
+	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
 	require.NoError(t, err)
 
 	const expected = `{
@@ -165,7 +171,7 @@ func Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields(t *testing.
 		ResourceDocumentation:  "https://docs.example.test",
 	}
 
-	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
+	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
 	require.NoError(t, err)
 
 	const expected = `{

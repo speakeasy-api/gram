@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/cliauth"
 	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -296,24 +297,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "posthog-endpoint",
-			Usage:    "The endpoint to proxy product metrics too",
-			EnvVars:  []string{"POSTHOG_ENDPOINT"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-api-key",
-			Usage:    "The posthog public API key",
-			EnvVars:  []string{"POSTHOG_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-personal-api-key",
-			Usage:    "The posthog personal API key for local feature flag evaluation",
-			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -380,12 +363,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the server working directory.",
-			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
@@ -439,6 +416,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, posthogFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, gcpFlags...)
 
@@ -490,11 +468,6 @@ func newStartCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
-			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
 
@@ -561,6 +534,8 @@ func newStartCommand() *cli.Command {
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -573,6 +548,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -620,7 +596,6 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
 
@@ -858,7 +833,7 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -1006,7 +981,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1043,6 +1018,7 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
+				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))
@@ -1066,6 +1042,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
@@ -1096,6 +1073,7 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
+			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

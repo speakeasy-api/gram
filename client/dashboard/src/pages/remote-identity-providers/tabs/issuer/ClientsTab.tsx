@@ -18,6 +18,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
 
@@ -67,7 +68,7 @@ export function ClientsTab({
               issuer.id,
               item.client.id,
             )}
-            ariaLabel={`View client ${item.client.clientId}`}
+            ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
           >
             <td className="px-3 py-3">
               <Type
@@ -75,7 +76,7 @@ export function ClientsTab({
                 as="div"
                 className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
               >
-                {item.client.clientId}
+                {remoteSessionClientDisplayName(item.client)}
               </Type>
             </td>
             <td className="px-3 py-3">
@@ -137,7 +138,7 @@ export function ClientsTab({
       {deleteTarget && (
         <DeleteClientDialog
           clientId={deleteTarget.client.id}
-          clientLabel={deleteTarget.client.clientId}
+          clientLabel={remoteSessionClientDisplayName(deleteTarget.client)}
           onClose={() => setDeleteTarget(null)}
         />
       )}

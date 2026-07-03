@@ -16,7 +16,7 @@ from gram_infra.pubsub import (
 )
 
 from pystreams import attr
-from pystreams.deps import logging
+from pystreams.deps import logging, otel
 from pystreams.deps.blocking import activate_blocking_detection
 from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.deps.scanner import build_presidio_scanner
@@ -46,8 +46,11 @@ async def multi(
     # Service options
     service_version: str | None,
     environment: str | None,
+    git_sha: str | None,
     log_level: str,
     pretty_log: bool,
+    enable_tracing: bool,
+    enable_metrics: bool,
     # GCP options
     gcp_project_id: str | None,
     pubsub_emulator_host: str | None,
@@ -71,6 +74,15 @@ async def multi(
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+    otel_options = otel.OTelOptions(
+        service_name="gram-pystreams",
+        service_version=service_version,
+        git_sha=git_sha,
+        environment=environment,
+        enable_tracing=enable_tracing,
+        enable_metrics=enable_metrics,
+    )
+
     # Opt-in (defaulted on for local dev via mise.toml): actively watch the loop
     # for blocking calls and raise on a high-severity violation. The production
     # container leaves the env var unset, so this is a no-op there.
@@ -93,62 +105,71 @@ async def multi(
 
     ping_log_level = stdlogging.DEBUG if environment != "local" else stdlogging.INFO
 
-    # The broker owns the publisher/subscriber clients: entering it flushes and
-    # closes them on exit (including a clean teardown on Ctrl-C).
-    with broker:
-        health_state = HealthState()
-        findings_publisher = await pubsub_publisher_for_message_async(
-            broker, finding_pb2.Finding
-        )
+    # Install the OTel SDK outermost so its providers flush on exit only after
+    # the receivers have drained — the per-message spans and loop-lag/blocking
+    # metrics, dormant proxies until now, start exporting here.
+    async with otel.otel_sdk(otel_options, logger=logger):
+        # The broker owns the publisher/subscriber clients: entering it flushes
+        # and closes them on exit (including a clean teardown on Ctrl-C).
+        with broker:
+            health_state = HealthState()
+            findings_publisher = await pubsub_publisher_for_message_async(
+                broker, finding_pb2.Finding
+            )
 
-        # Build the scan strategy: a pool of worker processes (the default, with
-        # --scan-workers > 0) or the in-process thread scanner. The selection and
-        # its analyzer/concurrency wiring live in build_presidio_scanner.
-        presidio_scanner = await build_presidio_scanner(
-            scan_workers=scan_workers,
-            scan_max_tasks_per_child=scan_max_tasks_per_child,
-            scan_timeout=scan_timeout,
-            max_scan_concurrency=max_scan_concurrency,
-            logger=logger,
-        )
+            # Build the scan strategy: a pool of worker processes (the default,
+            # with --scan-workers > 0) or the in-process thread scanner. The
+            # selection and its analyzer/concurrency wiring live in
+            # build_presidio_scanner.
+            presidio_scanner = await build_presidio_scanner(
+                scan_workers=scan_workers,
+                scan_max_tasks_per_child=scan_max_tasks_per_child,
+                scan_timeout=scan_timeout,
+                max_scan_concurrency=max_scan_concurrency,
+                logger=logger,
+            )
 
-        presidio_handler = PresidioHandler(logger, findings_publisher, presidio_scanner)
+            presidio_handler = PresidioHandler(
+                logger, findings_publisher, presidio_scanner
+            )
 
-        # The scanner is an async context manager: leaving the block releases it,
-        # draining in-flight scans and reaping the worker processes for the pool
-        # scanner (a no-op for the in-process one).
-        async with presidio_scanner, anyio.create_task_group() as tg:
-            tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
-            tg.start_soon(monitor_event_loop_lag)
-            # Start the health server first (and wait until it is bound) so the
-            # liveness probe answers as early as possible, then begin consuming
-            # and only then report ready.
-            await tg.start(
-                partial(
-                    serve_control,
-                    health_state,
-                    host=control_host,
-                    port=control_port,
-                    logger=logger,
+            # The scanner is an async context manager: leaving the block releases
+            # it, draining in-flight scans and reaping the worker processes for
+            # the pool scanner (a no-op for the in-process one).
+            async with presidio_scanner, anyio.create_task_group() as tg:
+                tg.start_soon(
+                    _shutdown_on_signal, tg.cancel_scope, health_state, logger
                 )
-            )
+                tg.start_soon(monitor_event_loop_lag)
+                # Start the health server first (and wait until it is bound) so
+                # the liveness probe answers as early as possible, then begin
+                # consuming and only then report ready.
+                await tg.start(
+                    partial(
+                        serve_control,
+                        health_state,
+                        host=control_host,
+                        port=control_port,
+                        logger=logger,
+                    )
+                )
 
-            receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
+                receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
 
-            # Register subscription receivers here. Each call resolves a
-            # subscriber and starts consuming with per-message tracing.
-            await receivers.receive(
-                ping_pb2.Message,
-                processor_pb2.PyProcessor,
-                PingHandler(logger, ping_log_level).handle,
-            )
-            await receivers.receive(
-                presidio_analysis_pb2.PresidioAnalysis,
-                presidio_analyzer_pb2.PresidioAnalyzer,
-                presidio_handler.handle,
-            )
+                # Register subscription receivers here. Each call resolves a
+                # subscriber and starts consuming with per-message tracing.
+                await receivers.receive(
+                    ping_pb2.Message,
+                    processor_pb2.PyProcessor,
+                    PingHandler(logger, ping_log_level).handle,
+                )
+                await receivers.receive(
+                    presidio_analysis_pb2.PresidioAnalysis,
+                    presidio_analyzer_pb2.PresidioAnalyzer,
+                    presidio_handler.handle,
+                )
 
-            health_state.set_ready()
+                health_state.set_ready()
 
 
 def _build_broker(

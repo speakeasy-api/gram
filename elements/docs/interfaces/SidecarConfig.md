@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -14,7 +14,7 @@
 
 ### expandable?
 
-> `optional` **expandable**: `boolean`
+> `optional` **expandable?**: `boolean`
 
 Whether the modal or sidecar can be expanded
 
@@ -26,7 +26,7 @@ Whether the modal or sidecar can be expanded
 
 ### defaultExpanded?
 
-> `optional` **defaultExpanded**: `boolean`
+> `optional` **defaultExpanded?**: `boolean`
 
 Whether the modal or sidecar should be expanded by default.
 
@@ -44,7 +44,7 @@ false
 
 ### dimensions?
 
-> `optional` **dimensions**: [`Dimensions`](Dimensions.md)
+> `optional` **dimensions?**: [`Dimensions`](Dimensions.md)
 
 The dimensions for the modal or sidecar window.
 
@@ -56,7 +56,7 @@ The dimensions for the modal or sidecar window.
 
 ### title?
 
-> `optional` **title**: `string`
+> `optional` **title?**: `string`
 
 The title displayed in the sidecar header.
 

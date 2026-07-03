@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -18,7 +18,7 @@ Display name of the tool
 
 ### icon?
 
-> `optional` **icon**: `ReactNode`
+> `optional` **icon?**: `ReactNode`
 
 Optional icon to display (defaults to first letter of name)
 
@@ -26,7 +26,7 @@ Optional icon to display (defaults to first letter of name)
 
 ### provider?
 
-> `optional` **provider**: `string`
+> `optional` **provider?**: `string`
 
 Provider/source name (e.g., "Notion", "GitHub")
 
@@ -34,7 +34,7 @@ Provider/source name (e.g., "Notion", "GitHub")
 
 ### status?
 
-> `optional` **status**: [`ToolStatus`](../type-aliases/ToolStatus.md)
+> `optional` **status?**: [`ToolStatus`](../type-aliases/ToolStatus.md)
 
 Current status of the tool execution
 
@@ -42,7 +42,7 @@ Current status of the tool execution
 
 ### request?
 
-> `optional` **request**: `string` \| `Record`\<`string`, `unknown`\>
+> `optional` **request?**: `string` \| `Record`\<`string`, `unknown`\>
 
 Request/input data - can be string or object
 
@@ -50,7 +50,7 @@ Request/input data - can be string or object
 
 ### result?
 
-> `optional` **result**: `string` \| `Record`\<`string`, `unknown`\> \| \{ `content`: [`ContentItem`](../type-aliases/ContentItem.md)[]; \}
+> `optional` **result?**: `string` \| `Record`\<`string`, `unknown`\> \| \{ `content`: [`ContentItem`](../type-aliases/ContentItem.md)[]; \}
 
 Result/output data - can be string, object, or structured content array
 
@@ -58,7 +58,7 @@ Result/output data - can be string, object, or structured content array
 
 ### defaultExpanded?
 
-> `optional` **defaultExpanded**: `boolean`
+> `optional` **defaultExpanded?**: `boolean`
 
 Whether the tool card starts expanded
 
@@ -66,7 +66,7 @@ Whether the tool card starts expanded
 
 ### requestHighlight?
 
-> `optional` **requestHighlight**: [`SectionHighlight`](SectionHighlight.md)
+> `optional` **requestHighlight?**: [`SectionHighlight`](SectionHighlight.md)
 
 Flag matches inside the arguments (risk review).
 
@@ -74,7 +74,7 @@ Flag matches inside the arguments (risk review).
 
 ### resultHighlight?
 
-> `optional` **resultHighlight**: [`SectionHighlight`](SectionHighlight.md)
+> `optional` **resultHighlight?**: [`SectionHighlight`](SectionHighlight.md)
 
 Flag matches inside the output (risk review).
 
@@ -82,7 +82,7 @@ Flag matches inside the output (risk review).
 
 ### nameQuery?
 
-> `optional` **nameQuery**: `string`
+> `optional` **nameQuery?**: `string`
 
 When set, highlight occurrences of this query (case-insensitive) in the
 tool name — e.g. a thread search for "customer" lights up `get_customer`.
@@ -91,7 +91,7 @@ tool name — e.g. a thread search for "customer" lights up `get_customer`.
 
 ### nameActiveOccurrence?
 
-> `optional` **nameActiveOccurrence**: `number` \| `null`
+> `optional` **nameActiveOccurrence?**: `number` \| `null`
 
 Index of the active query occurrence within the tool name (the unified
 navigator's current target), or null when the active occurrence isn't in the
@@ -101,7 +101,7 @@ name. Per-section args/output active occurrences ride their `*Highlight`.
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Additional class names
 
@@ -109,15 +109,15 @@ Additional class names
 
 ### annotations?
 
-> `optional` **annotations**: `ToolAnnotations`
+> `optional` **annotations?**: `ToolAnnotations`
 
 MCP tool annotations
 
 ***
 
-### onApproveOnce()?
+### onApproveOnce?
 
-> `optional` **onApproveOnce**: () => `void`
+> `optional` **onApproveOnce?**: () => `void`
 
 Approval callbacks
 
@@ -127,9 +127,9 @@ Approval callbacks
 
 ***
 
-### onApproveForSession()?
+### onApproveForSession?
 
-> `optional` **onApproveForSession**: () => `void`
+> `optional` **onApproveForSession?**: () => `void`
 
 #### Returns
 
@@ -137,9 +137,9 @@ Approval callbacks
 
 ***
 
-### onDeny()?
+### onDeny?
 
-> `optional` **onDeny**: () => `void`
+> `optional` **onDeny?**: () => `void`
 
 #### Returns
 

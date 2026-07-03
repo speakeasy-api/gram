@@ -21,6 +21,10 @@ export interface ChatTranscript {
   messages: ChatMessage[];
   isLoading: boolean;
   isError: boolean;
+  /** True when the load failed specifically because the caller lacks
+   * chat:read for this chat, so callers can show a permission message
+   * instead of a generic error. */
+  isForbidden: boolean;
   /** Older messages exist above the first loaded message. */
   hasMoreBefore: boolean;
   /** Newer messages exist below the last loaded message. */
@@ -71,9 +75,15 @@ export function useChatTranscript(
       if (!lastPage.hasMoreAfter || !newest) return undefined;
       return { dir: "after", seq: newest.seq };
     },
-    // Let 404s fall through to the panel's "Not found" UI.
+    // Let 404s and 403s fall through to the panel's "Not found" / "Permission
+    // denied" UI instead of throwing to the nearest error boundary — both are
+    // anticipated outcomes of opening an arbitrary chat_id, not unexpected
+    // failures.
     throwOnError: (error) =>
-      !(error instanceof GramError && error.statusCode === 404),
+      !(
+        error instanceof GramError &&
+        (error.statusCode === 404 || error.statusCode === 403)
+      ),
   });
 
   const messages = useMemo(
@@ -97,6 +107,8 @@ export function useChatTranscript(
     messages,
     isLoading: query.isLoading,
     isError: query.isError,
+    isForbidden:
+      query.error instanceof GramError && query.error.statusCode === 403,
     hasMoreBefore: query.hasPreviousPage,
     hasMoreAfter: query.hasNextPage,
     fetchOlder: () => {

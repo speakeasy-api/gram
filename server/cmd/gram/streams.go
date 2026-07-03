@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -23,14 +24,19 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/streams"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 func newStreamsCommand() *cli.Command {
@@ -50,9 +56,9 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:     "database-url",
-			Usage:    "Database URL",
-			EnvVars:  []string{"GRAM_DATABASE_URL"},
+			Name:     "database-read-replica-url",
+			Usage:    "Database read replica URL",
+			EnvVars:  []string{"GRAM_DATABASE_READ_REPLICA_URL"},
 			Required: true,
 		},
 		&cli.BoolFlag{
@@ -96,6 +102,8 @@ func newStreamsCommand() *cli.Command {
 	}
 
 	flags = append(flags, gcpFlags...)
+	flags = append(flags, posthogFlags...)
+	flags = append(flags, riskFlags...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -142,18 +150,13 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = guardianPolicy
 
-			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
+			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
-			defer db.Close()
+			defer replicaDB.Close()
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -165,10 +168,32 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = redisClient
 
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+			var featureFlags feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
 			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			bqClient, shutdown, err := newBigQueryClient(ctx, c, logger)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			if err != nil {
+				return fmt.Errorf("failed to create bigquery client: %w", err)
+			}
+
+			riskFindingsTable, err := bqTableFromSpec(bqClient, c.String("bq-risk-findings"))
+			if err != nil {
+				return fmt.Errorf("failed to parse BigQuery table spec: %w", err)
+			}
+
+			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
+			if err != nil {
+				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
@@ -185,6 +210,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create gitleaks handler: %w", err)
 			}
 
+			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
+			// detection rules from the read replica (caching their compilation) and
+			// publishes any matches into the shared Finding topic.
+			customRulesHandler, err := customruleanalyzer.NewHandler(logger, replicaDB, findingsPub)
+			if err != nil {
+				return fmt.Errorf("failed to create custom rules handler: %w", err)
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -194,7 +227,7 @@ func newStreamsCommand() *cli.Command {
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					[]*o11y.NamedResource[client.Client]{},
 				))
@@ -230,6 +263,13 @@ func newStreamsCommand() *cli.Command {
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+
+				mustReceiveBatch(
+					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},
+					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+					risk.NewFindingBQWriter(logger, meterProvider, riskFindingsTable, featureFlags, riskFingerprinter),
+				)
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-
@@ -387,8 +427,6 @@ func mustReceive[M proto.Message](
 // streams runner surface so consumers can opt into batch processing; register
 // one with mustReceiveBatch in the receivers block alongside the single-message
 // handlers.
-//
-//nolint:unused // wiring kept available for batch consumers registered later
 func receiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
@@ -456,7 +494,6 @@ func receiveBatch[M proto.Message](
 	return nil
 }
 
-//nolint:unused // registration helper for batch consumers added later
 func mustReceiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,

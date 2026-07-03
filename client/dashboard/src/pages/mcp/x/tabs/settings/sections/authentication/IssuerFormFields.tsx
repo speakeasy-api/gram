@@ -1,3 +1,4 @@
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -8,8 +9,51 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import {
+  CLIENT_TYPE_LABELS,
+  clientTypeHelp,
+  type ClientType,
+} from "./issuerFormUtils";
+
+// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
+// every upstream OAuth provider, regardless of MCP server or slug (see
+// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
+// Manual clients need it registered on the upstream's app out-of-band; DCR
+// and CIMD clients send/publish it automatically, so this only surfaces
+// where the operator has to do that registration by hand.
+function remoteLoginCallbackURL(): string {
+  return `${getServerURL()}/mcp/remote_login_callback`;
+}
+
+// RedirectURICallout shows the redirect_uri operators must register on the
+// upstream provider's OAuth app before typed-in client credentials will
+// work. Rendered inside ClientCredentialsFields so both the Attach sheet's
+// Manual add path and the Modify sheet's existing-client edit path show it.
+function RedirectURICallout(): JSX.Element {
+  const redirectURI = remoteLoginCallbackURL();
+  return (
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">Redirect URI</Label>
+      <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <code className="break-all">{redirectURI}</code>
+          <CopyButton
+            size="inline"
+            text={redirectURI}
+            tooltip="Copy redirect URI"
+          />
+        </div>
+      </div>
+      <Type muted small>
+        Register this as the callback / redirect URI on the upstream provider's
+        OAuth app before pasting credentials below.
+      </Type>
+    </Stack>
+  );
+}
 
 // Shared form-field components used by both AttachRemoteIdentityProviderSheet
 // and ModifyRemoteIdentityProviderSheet. The state lives in the parent sheet;
@@ -179,32 +223,11 @@ export function EndpointsFields({
   );
 }
 
-// DcrNotice replaces the OAuth Client Credentials form when the issuer
-// advertises a registration_endpoint. In Add we still call proxy-register to
-// obtain credentials; in Modify the existing client_id is kept and only
-// scope/audience can drift. The token_endpoint_auth_method field stays
-// editable in both DCR and manual modes — see TokenEndpointAuthMethodField.
-export function DcrNotice({
-  description,
-}: {
-  description?: string;
-}): JSX.Element {
-  return (
-    <Stack gap={2} className="border-t pt-6">
-      <Label className="text-sm font-medium">OAuth Client Credentials</Label>
-      <Type muted small>
-        {description ??
-          "The issuer advertises a registration endpoint (RFC 7591), so the platform will automatically register a client on save."}
-      </Type>
-    </Stack>
-  );
-}
-
 // TokenEndpointAuthMethodField is the standalone Select for the upstream
-// token endpoint auth method. It renders in both DCR mode (alongside
-// DcrNotice so operators can override the upstream-assigned default) and in
-// the manual ClientCredentialsFields. Extracted so the two paths stay in
-// lockstep on the enum values and placeholder copy.
+// token endpoint auth method. It renders for the DCR client type (so operators
+// can override the upstream-assigned default) and inside the manual
+// ClientCredentialsFields. Extracted so the two paths stay in lockstep on the
+// enum values and placeholder copy.
 export function TokenEndpointAuthMethodField({
   value,
   onChange,
@@ -302,6 +325,8 @@ export function ClientCredentialsFields({
         </Stack>
       )}
 
+      <RedirectURICallout />
+
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>
         {clientIdEditable ? (
@@ -385,6 +410,100 @@ export function OverridesFields({
           return JWT access tokens.
         </Type>
       </Stack>
+    </Stack>
+  );
+}
+
+// ClientTypeFields renders the Client Type selector (DCR / CIMD / Manual) and
+// the credentials inputs the chosen type needs. Used by both the org-admin
+// CreateRemoteSessionClientSheet and the Attach sheet so the two stay in
+// lockstep on the available-types logic and per-type copy. The selector hides
+// when only one type is available (nothing to choose). The owning sheet holds
+// `clientType` so its submit handler can branch on it.
+export function ClientTypeFields({
+  availableTypes,
+  clientType,
+  onClientTypeChange,
+  clientId,
+  clientSecret,
+  tokenEndpointAuthMethod,
+  onClientIdChange,
+  onClientSecretChange,
+  onTokenEndpointAuthMethodChange,
+}: {
+  availableTypes: ClientType[];
+  clientType: ClientType;
+  onClientTypeChange: (value: ClientType) => void;
+  clientId: string;
+  clientSecret: string;
+  tokenEndpointAuthMethod:
+    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
+    | "";
+  onClientIdChange: (value: string) => void;
+  onClientSecretChange: (value: string) => void;
+  onTokenEndpointAuthMethodChange: (
+    value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  ) => void;
+}): JSX.Element {
+  let credentials: JSX.Element | null;
+  switch (clientType) {
+    case "dcr":
+      // DCR mints the client_id/client_secret at save time, so the only input
+      // is the token endpoint auth method forwarded to the registration call.
+      credentials = (
+        <TokenEndpointAuthMethodField
+          value={tokenEndpointAuthMethod}
+          onChange={onTokenEndpointAuthMethodChange}
+        />
+      );
+      break;
+    case "cimd":
+      // CIMD has no credentials to collect, and the selector help text above
+      // already explains the hosted-document flow, so render nothing here.
+      credentials = null;
+      break;
+    case "manual":
+      credentials = (
+        <ClientCredentialsFields
+          showHeading={false}
+          clientId={clientId}
+          clientSecret={clientSecret}
+          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+          onClientIdChange={onClientIdChange}
+          onClientSecretChange={onClientSecretChange}
+          onTokenEndpointAuthMethodChange={onTokenEndpointAuthMethodChange}
+        />
+      );
+  }
+
+  return (
+    <Stack gap={4}>
+      <Stack gap={2}>
+        {availableTypes.length > 1 && (
+          <>
+            <Label className="text-muted-foreground text-xs">Client Type</Label>
+            <Select
+              value={clientType}
+              onValueChange={(value) => onClientTypeChange(value as ClientType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {CLIENT_TYPE_LABELS[type]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <Type muted small>
+          {clientTypeHelp(clientType, availableTypes)}
+        </Type>
+      </Stack>
+      {credentials}
     </Stack>
   );
 }

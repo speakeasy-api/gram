@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -338,6 +339,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
+	// (not slug-scoped): clients are addressed by their globally unique id.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -371,6 +375,14 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
+// HandleClientMetadataDocument is the public outbound-CIMD document endpoint at
+// `GET /.well-known/oauth-client/{id}`. Thin passthrough to
+// remotesessions.ChallengeManager so the route mounts alongside the other
+// remote-session handlers without reaching into the unexported manager field.
+func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
 // and delegating to metadata service, or returning method not allowed for others.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
@@ -397,7 +409,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 // if marshaling fails or the result kind is unrecognized, the caller's error
 // handler middleware needs an unwritten ResponseWriter so it can emit the real
 // error status — Go's net/http silently drops a second WriteHeader call.
-func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -412,32 +424,20 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
 // resource metadata body and only commits the 200 OK status once the body is
 // ready. See writeOAuthServerMetadataResponse for the rationale behind the
 // ordering.
-func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints

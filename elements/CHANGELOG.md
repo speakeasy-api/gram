@@ -1,5 +1,29 @@
 # @gram-ai/elements
 
+## 1.40.1
+
+### Patch Changes
+
+- 7ce4d76: Hide the assistant message copy button on tool-only turns. A message made up solely of tool calls (and/or reasoning) has no copyable text, so the lone Copy button no longer hangs beneath it.
+
+## 1.40.0
+
+### Minor Changes
+
+- 5c825a9: Default to Claude Sonnet 5 (`anthropic/claude-sonnet-5`) for in-app model usage and newly created assistants. The model is added to the allowlist and all model pickers (playground, elements, onboarding). The backend `DefaultChatModel`, the platform-managed assistant, the onboarding assistant default, and the playground/MCP chat surfaces now select Sonnet 5. Specialized models (risk/PromptIntel judges, chat segmentation, embeddings, follow-on suggestions) are unchanged.
+
+## 1.39.0
+
+### Minor Changes
+
+- f193c77: Project Assistant: fold the app-injected `<…context>` block in a user turn into a collapsed "Additional context" disclosure (chevron, expand to inspect) instead of rendering the raw tags. The expanded block wraps to the message-bubble width, so opening it no longer widens the bubble.
+
+## 1.38.2
+
+### Patch Changes
+
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+
 ## 1.38.1
 
 ### Patch Changes

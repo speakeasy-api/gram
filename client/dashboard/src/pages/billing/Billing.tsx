@@ -6,7 +6,7 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
@@ -45,7 +45,7 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
 
   // Enterprise contracts bill on tokens under management, so enterprise orgs
   // see the TUM view instead of the self-serve usage meters.
@@ -72,7 +72,7 @@ function BillingInner() {
 const UsageSection = () => {
   const productTier = useProductTier();
 
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {

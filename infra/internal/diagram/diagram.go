@@ -60,6 +60,7 @@ type scan struct {
 	msgVar     string          // single metavariable holding the topic message type expression
 	subVar     string          // single metavariable holding the subscription marker expression ("" for publishers)
 	hdlrVar    string          // multi metavariable whose first element is the handler ("" if none)
+	batch      bool            // true when the site consumes via ReceiveBatch (batch handler)
 }
 
 // scanConstraint restricts a captured metavariable to an anchored regex, so the
@@ -99,6 +100,21 @@ var subscribeScans = []scan{
 		msgVar:  "MSG",
 		subVar:  "SUB",
 		hdlrVar: "HANDLER",
+	},
+	// Go: batch subscription registered in the streams runner. mustReceiveBatch
+	// carries an extra BatchReceiveSettings argument ($S) between the subscription
+	// marker and the handler, and binds a streams.BatchHandler. A distinct
+	// identifier from mustReceive, so the single-message scan never matches it.
+	{
+		id:      "subscribe-batch-go",
+		role:    "subscribe",
+		lang:    "go",
+		pattern: "mustReceiveBatch($G, $MSG, $SUB, $S, $$$HANDLER)",
+		dirs:    []string{"server"},
+		msgVar:  "MSG",
+		subVar:  "SUB",
+		hdlrVar: "HANDLER",
+		batch:   true,
 	},
 	// Python: subscription registered with the receiver group.
 	{
@@ -180,6 +196,7 @@ type callSite struct {
 	msgFull string // resolved proto full name of the topic message
 	subFull string // resolved proto full name of the subscription marker (subscribe only)
 	handler string // short handler label (subscribe only)
+	batch   bool   // true when consumed via ReceiveBatch (subscribe only)
 }
 
 // Generate runs the scans, joins them with the topology discovered from the
@@ -280,6 +297,7 @@ func collectCallSites(ctx context.Context, repoRoot string, scans []scan) (sites
 				file:    m.File,
 				line:    m.line(),
 				msgFull: msgFull,
+				batch:   s.batch,
 			}
 
 			if s.subVar != "" {
@@ -749,6 +767,9 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 			label := fmt.Sprintf("📥<br/>%s", site.file)
 			if site.handler != "" {
 				label += "<br/>" + site.handler
+			}
+			if site.batch {
+				label += "<br/>(batch)"
 			}
 			fmt.Fprintf(b, "  %s[\\\"%s\"\\]:::%s\n", cid, label, site.lang)
 			fmt.Fprintf(b, "  %s --> %s\n", nodeID("s_", s.Name), cid)

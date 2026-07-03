@@ -49,7 +49,7 @@ func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrati
 	{
 		err = json.Unmarshal([]byte(aiIntegrationsUpsertConfigBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key\": \"abc123\",\n      \"billing_mode\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -68,6 +68,7 @@ func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrati
 		Provider:               body.Provider,
 		APIKey:                 body.APIKey,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		BillingMode:            body.BillingMode,
 		Enabled:                body.Enabled,
 	}
 	v.ApikeyToken = apikeyToken

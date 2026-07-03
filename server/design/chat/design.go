@@ -23,11 +23,17 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
 			})
+			Attribute("source_kind", String, "When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.")
+			Attribute("exclude_source_kind", String, "When set with assistant_id, exclude that assistant's threads whose source_kind matches this value (e.g. 'setup' to hide onboarding threads from runtime views). Empty for no filter.")
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
+			})
+			Attribute("account_type", String, "Filter by AI account type: 'team', 'personal', or empty for no filter.", func() {
+				Enum("", "team", "personal")
 			})
 			Attribute("pinned", String, "Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.", func() {
 				Enum("", "true", "false")
@@ -66,8 +72,12 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("source")
 			Param("assistant_id")
+			Param("source_kind")
+			Param("exclude_source_kind")
 			Param("has_risk")
+			Param("account_type")
 			Param("pinned")
 			Param("min_risk_score")
 			Param("from")
@@ -280,6 +290,35 @@ var _ = Service("chat", func() {
 		Meta("openapi:operationId", "submitFeedback")
 		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
 	})
+
+	Method("listSources", func() {
+		Description("List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+		})
+
+		Result(ListSourcesResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.listSources")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChatSources")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSources")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
+	})
+})
+
+var ListSourcesResult = Type("ListSourcesResult", func() {
+	Attribute("sources", ArrayOf(String), "The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').")
+	Required("sources")
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {
@@ -312,6 +351,7 @@ var ChatOverview = Type("ChatOverview", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
+	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })

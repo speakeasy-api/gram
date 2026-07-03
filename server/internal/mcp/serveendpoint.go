@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -284,10 +285,40 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID)
 	resolved.RouteBase = mcpRouteBase
+	upstreamResource, err := s.resolveUpstreamResource(ctx, logger, mcpEndpoint.ProjectID, mcpServer)
+	if err != nil {
+		return nil, err
+	}
+	resolved.UpstreamResource = upstreamResource
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
 		return nil, fmt.Errorf("require user session issuer: %w", err)
 	}
 	return resolved, nil
+}
+
+// resolveUpstreamResource derives the RFC 8707 resource indicator for an
+// mcp_server's upstream: the remote backend URL (sans trailing slash) for
+// remote-backed servers, empty otherwise.
+func (s *Service) resolveUpstreamResource(
+	ctx context.Context,
+	logger *slog.Logger,
+	projectID uuid.UUID,
+	mcpServer *mcpserversrepo.McpServer,
+) (string, error) {
+	if !mcpServer.RemoteMcpServerID.Valid {
+		return "", nil
+	}
+	remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+		ID:        mcpServer.RemoteMcpServerID.UUID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", oops.E(oops.CodeNotFound, err, "remote mcp server not found")
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
+	}
+	return strings.TrimRight(remote.Url, "/"), nil
 }
 
 // serveRemoteBackend handles an mcp_server backed by a remote_mcp_server.

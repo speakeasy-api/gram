@@ -6,6 +6,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension, type QueryRow } from "@gram/client/models/components";
@@ -20,14 +25,24 @@ import {
   Cpu,
   Download,
   Home,
+  Info,
   type LucideIcon,
   Network,
+  Server,
   Shield,
+  Sparkles,
   UserRound,
   Wallet,
+  Wrench,
 } from "lucide-react";
+import { CostMeasureLabel } from "@/components/estimated-cost";
 import { CostTable } from "./CostTable";
-import { type Crumb, LABELS, type Measures } from "./taxonomy";
+import {
+  type Crumb,
+  isAttributionDim,
+  LABELS,
+  type Measures,
+} from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -59,15 +74,21 @@ function csvField(value: string | number): string {
 
 // Serialize the current table rows to CSV — same columns the table shows
 // (minus the Trend sparkline), with raw numbers so the file is spreadsheet-ready.
-function buildCostCsv(rows: QueryRow[], groupLabel: string): string {
+// Attribution breakdowns swap "Tool Calls" for "Tokens Added" to mirror the table.
+function buildCostCsv(
+  rows: QueryRow[],
+  groupLabel: string,
+  groupBy: Dimension,
+): string {
   const total = rows.reduce((sum, r) => sum + (r.measures.totalCost ?? 0), 0);
+  const cacheMetric = isAttributionDim(groupBy);
   const header = [
     groupLabel,
     "Total Cost",
     "% Share",
     "Cost / Session",
     "Sessions",
-    "Tool Calls",
+    cacheMetric ? "Tokens Added" : "Tool Calls",
     "Tokens",
   ];
   const body = rows.map((r) => {
@@ -79,7 +100,9 @@ function buildCostCsv(rows: QueryRow[], groupLabel: string): string {
       total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
       chats > 0 ? (cost / chats).toFixed(2) : "0.00",
       chats,
-      r.measures.totalToolCalls ?? 0,
+      cacheMetric
+        ? (r.measures.cacheCreationInputTokens ?? 0)
+        : (r.measures.totalToolCalls ?? 0),
       r.measures.totalTokens ?? 0,
     ];
   });
@@ -164,6 +187,11 @@ const ENTITY_ICONS: Partial<Record<Dimension, LucideIcon>> = {
   [Dimension.CostCenterName]: Wallet,
   [Dimension.Model]: Cpu,
   [Dimension.Role]: Shield,
+  // Claude attribution cuts (also used for the root "collection" hero).
+  [Dimension.McpServerName]: Server,
+  [Dimension.McpToolName]: Wrench,
+  [Dimension.SkillName]: Sparkles,
+  [Dimension.AgentName]: Bot,
 };
 
 function entityIcon(entity: Crumb | null): LucideIcon {
@@ -180,7 +208,7 @@ function HeaderStat({
   value,
   onClick,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   // When set, the stat becomes a button — used to turn "Agent sessions" into the
   // header entry point for the per-session list.
@@ -211,6 +239,13 @@ function HeaderStat({
 export type EntityProfileProps = {
   // The entity this profile represents; null = the org root (bird's-eye).
   entity: Crumb | null;
+  // At the root, an attribution breakdown presents as a collection (e.g. "MCP
+  // Servers") instead of the project — supplies the hero title + icon. Null
+  // otherwise (project root or a drilled entity).
+  collection: { dim: Dimension; label: string } | null;
+  // Whether this is an attribution lens: swaps the "Tool calls" hero stat for
+  // "Tokens added" (cache-creation tokens), the meaningful measure for these cuts.
+  cacheMetric: boolean;
   // Navigate up one ancestor. No-op at the root.
   onBack: () => void;
   // Jump straight back to the org root.
@@ -233,9 +268,15 @@ export type EntityProfileProps = {
   // its selectable options, plus the change handler.
   axisValue: string;
   axisOptions: { value: string; label: string }[];
+  // Optional caveat for the current breakdown axis, shown as an info tooltip
+  // beside the select (e.g. the root Skill cut excludes subagent-run skills).
+  axisHint?: string;
   onAxisChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
+  // The view's resolved billing mode; "metered" shows real cost instead of the
+  // API-rate estimate on the cost columns.
+  billingMode?: string;
   onDrill: (row: QueryRow) => void;
   // When set, replaces the dimension CostTable (the per-session list in sessions
   // mode). The override owns its own loading/empty/error states.
@@ -263,6 +304,8 @@ export type EntityProfileProps = {
  */
 export function EntityProfile({
   entity,
+  collection,
+  cacheMetric,
   onBack,
   onHome,
   projectName,
@@ -273,8 +316,10 @@ export function EntityProfile({
   canDrill,
   axisValue,
   axisOptions,
+  axisHint,
   onAxisChange,
   rows,
+  billingMode,
   onDrill,
   tableOverride,
   onViewSessions,
@@ -289,20 +334,27 @@ export function EntityProfile({
 
   const title = entity
     ? prettyName(entity.value, entity.dim)
-    : projectName || "All costs";
-  const typeLabel = entity ? (LABELS[entity.dim] ?? "Group") : "Project";
+    : (collection?.label ?? projectName ?? "All costs");
+  const typeLabel = entity
+    ? (LABELS[entity.dim] ?? "Group")
+    : collection
+      ? "Breakdown"
+      : "Project";
   // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
   // Values stay raw — the title already shows the entity's pretty name.
   const ancestryTrail = ancestors
     .map((c) => displayValue(c.value))
     .join("  ›  ");
   const palette = entityPalette(title);
-  const Icon = entityIcon(entity);
+  const Icon =
+    !entity && collection
+      ? (ENTITY_ICONS[collection.dim] ?? Building2)
+      : entityIcon(entity);
 
   const handleExportCsv = () =>
     downloadCsv(
       `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
-      buildCostCsv(rows, groupLabel),
+      buildCostCsv(rows, groupLabel, groupBy),
     );
 
   // The default dimension table; replaced by `tableOverride` (the session list)
@@ -318,6 +370,7 @@ export function EntityProfile({
       onDrill={onDrill}
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
+      billingMode={billingMode}
     />
   );
 
@@ -404,16 +457,26 @@ export function EntityProfile({
               </div>
             </div>
             <div className="flex shrink-0 gap-8">
-              <HeaderStat label="Cost" value={formatCost(stats.cost)} />
+              <HeaderStat
+                label={<CostMeasureLabel billingMode={billingMode} />}
+                value={formatCost(stats.cost)}
+              />
               <HeaderStat
                 label="Agent sessions"
                 value={stats.sessions.toLocaleString()}
                 onClick={onViewSessions}
               />
-              <HeaderStat
-                label="Tool calls"
-                value={stats.tools.toLocaleString()}
-              />
+              {cacheMetric ? (
+                <HeaderStat
+                  label="Tokens added"
+                  value={stats.cacheCreation.toLocaleString()}
+                />
+              ) : (
+                <HeaderStat
+                  label="Tool calls"
+                  value={stats.tools.toLocaleString()}
+                />
+              )}
               <HeaderStat
                 label="Tokens"
                 value={stats.tokens.toLocaleString()}
@@ -441,6 +504,19 @@ export function EntityProfile({
                   ))}
                 </SelectContent>
               </Select>
+              {axisHint && (
+                <Tooltip>
+                  <TooltipTrigger
+                    aria-label={axisHint}
+                    className="text-muted-foreground inline-flex cursor-help"
+                  >
+                    <Info className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-64">
+                    {axisHint}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </h2>
             {/* CSV export covers the dimension table only; the session list owns
                 its own affordances. */}

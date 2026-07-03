@@ -88,7 +88,6 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
 
 /** Whether the form fields are valid enough to submit */
 function isFormValid(input: SaveButtonInput): boolean {
-  if (input.isSystemRole) return true; // system roles only change members
   return (
     input.name.trim().length > 0 &&
     input.description.trim().length > 0 &&

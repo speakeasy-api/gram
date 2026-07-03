@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -24,7 +24,7 @@ carries when `role === "tool"`.
 
 ### seq?
 
-> `optional` **seq**: `number`
+> `optional` **seq?**: `number`
 
 ***
 
@@ -48,28 +48,28 @@ carries when `role === "tool"`.
 
 ### content?
 
-> `optional` **content**: `GramChatContent` \| `null`
+> `optional` **content?**: `GramChatContent` \| `null`
 
 ***
 
 ### name?
 
-> `optional` **name**: `string`
+> `optional` **name?**: `string`
 
 ***
 
 ### tool\_calls?
 
-> `optional` **tool\_calls**: `string`
+> `optional` **tool\_calls?**: `string`
 
 ***
 
 ### tool\_call\_id?
 
-> `optional` **tool\_call\_id**: `string`
+> `optional` **tool\_call\_id?**: `string`
 
 ***
 
 ### reasoning?
 
-> `optional` **reasoning**: `string` \| `null`
+> `optional` **reasoning?**: `string` \| `null`

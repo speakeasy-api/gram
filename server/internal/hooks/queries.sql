@@ -22,6 +22,7 @@ INSERT INTO chats (
   , organization_id
   , user_id
   , external_user_id
+  , user_account_id
   , title
   , created_at
   , updated_at
@@ -32,15 +33,170 @@ VALUES (
     @organization_id,
     @user_id,
     @external_user_id,
+    sqlc.narg(user_account_id),
     @title,
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET
+    updated_at = NOW()
+  , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = @id AND project_id = @project_id;
+
+-- name: UpsertUserAccount :one
+-- Records the external AI provider account observed for a session, keyed by the
+-- provider's stable per-account id. COALESCE on conflict keeps a previously
+-- learned owner/email/account_id rather than clobbering it with a null from a
+-- later session that lacked that field. The conflict target carries the partial
+-- index predicate so it matches user_accounts_org_provider_external_account_uuid_key.
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , external_org_id
+  , external_account_id
+  , email
+  , account_type
+) VALUES (
+    @organization_id
+  , @provider
+  , @external_account_uuid
+  , sqlc.narg(user_id)
+  , sqlc.narg(external_org_id)
+  , sqlc.narg(external_account_id)
+  , sqlc.narg(email)
+  , sqlc.narg(account_type)
+)
+ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+DO UPDATE SET
+    user_id             = COALESCE(EXCLUDED.user_id, user_accounts.user_id)
+  , external_org_id     = COALESCE(EXCLUDED.external_org_id, user_accounts.external_org_id)
+  , external_account_id = COALESCE(EXCLUDED.external_account_id, user_accounts.external_account_id)
+  , email               = COALESCE(EXCLUDED.email, user_accounts.email)
+  , account_type        = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
+  , last_seen_at        = clock_timestamp()
+  , updated_at          = clock_timestamp()
+-- billing_mode is intentionally not written here: it is an admin/out-of-band
+-- override, never set by ingest. Returning it lets attribution resolve the
+-- account-level tier of the billing-mode cascade without a second round trip.
+RETURNING id, billing_mode;
+
+-- name: CountEmployeesForExternalOrg :one
+-- Distinct employees (resolved Gram users) ever seen under a provider org. An
+-- enterprise org is shared by many employees; a personal org maps to exactly one.
+-- A count >= 2 marks the org as the company's enterprise org: accounts under it
+-- classify team even when their own email has not resolved, and a resolved work
+-- email under a solo org is checked against the work-email guard instead.
+SELECT COUNT(DISTINCT user_id)::bigint
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND external_org_id = @external_org_id
+  AND user_id IS NOT NULL
+  AND deleted_at IS NULL;
+
+-- name: EmployeeHasSharedExternalOrg :one
+-- Whether this employee also appears under a DIFFERENT provider org that is
+-- shared by >= 2 employees (i.e. the company's real enterprise org). If so, a
+-- solo provider org for the same employee is almost certainly a personal account
+-- signed in with their work email, and should not be classified team.
+SELECT EXISTS (
+  SELECT 1
+  FROM user_accounts mine
+  WHERE mine.organization_id = @organization_id
+    AND mine.provider = @provider
+    AND mine.user_id = @user_id
+    AND mine.deleted_at IS NULL
+    AND mine.external_org_id IS NOT NULL
+    AND mine.external_org_id <> @external_org_id
+    AND (
+      SELECT COUNT(DISTINCT peers.user_id)
+      FROM user_accounts peers
+      WHERE peers.organization_id = mine.organization_id
+        AND peers.provider = mine.provider
+        AND peers.external_org_id = mine.external_org_id
+        AND peers.user_id IS NOT NULL
+        AND peers.deleted_at IS NULL
+    ) >= 2
+)::boolean;
+
+-- name: GetUserAccount :one
+SELECT * FROM user_accounts
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND external_account_uuid = @external_account_uuid
+  AND deleted_at IS NULL;
+
+-- name: ListUserAccountsByUsers :many
+-- Returns the linked AI accounts for a set of users within an org. Each
+-- (provider, email) row is a distinct account, so a user may have several across
+-- providers. Used to attach a per-user accounts breakdown to usage summaries on
+-- the employees list. Ordered team-first, then by provider for stable display.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
+-- name: GetProviderOrgBillingMode :one
+-- Resolves the org-level admin-declared billing mode for a provider org from the
+-- org's AI integration config (the org-level tier of the billing-mode cascade).
+-- A config scoped to a specific external_organization_id must match the session's
+-- provider org; a config with none applies provider-wide. Exact-org matches are
+-- preferred over provider-wide (NULLS LAST because the comparison is NULL for a
+-- NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
+-- Only one live config per (org, provider) can exist today, so the ordering is
+-- defensive. Only configs with a non-null billing_mode are considered, so an
+-- undeclared org returns no rows (treated as unknown upstream).
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+  AND (
+    external_organization_id IS NULL
+    OR external_organization_id = ''
+    OR external_organization_id = @external_org_id
+  )
+ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
+LIMIT 1;
+
+-- name: GetDeviceOwner :one
+SELECT * FROM device_owners
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND device_id = @device_id
+  AND deleted_at IS NULL;
+
+-- name: UpsertDeviceOwner :one
+-- Records (and over time, links to an employee) a per-device anonymous id so a
+-- personal account seen on the same device can be attributed to the employee
+-- learned from a team session. COALESCE keeps a known owner if a later session
+-- arrives without one. Returns the linked employee (NULL until one is learned).
+INSERT INTO device_owners (
+    organization_id
+  , provider
+  , device_id
+  , linked_user_id
+) VALUES (
+    @organization_id
+  , @provider
+  , @device_id
+  , sqlc.narg(linked_user_id)
+)
+ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
+DO UPDATE SET
+    linked_user_id = COALESCE(EXCLUDED.linked_user_id, device_owners.linked_user_id)
+  , last_seen_at   = clock_timestamp()
+  , updated_at     = clock_timestamp()
+RETURNING linked_user_id;
 
 -- name: FindAssistantToolCallMessageID :one
 SELECT id

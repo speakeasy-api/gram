@@ -158,7 +158,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		}
 		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, ev.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -274,13 +274,20 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
 
 	metadata := &SessionMetadata{
-		SessionID:   *payload.ConversationID,
-		ServiceName: "Cursor",
-		UserEmail:   userEmail,
-		UserID:      userID,
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+		SessionID:           *payload.ConversationID,
+		ServiceName:         "Cursor",
+		UserEmail:           userEmail,
+		UserID:              userID,
+		Provider:            providerCursor,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
 
 	// Persistence does DB + ClickHouse writes that can take longer than the
@@ -419,6 +426,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		attr.OrganizationIDKey: orgID,
 		attr.ResourceURNKey:    urn,
 		attr.HookSourceKey:     "cursor",
+		attr.ProviderKey:       providerCursor,
 		attr.HookEventKey:      "AfterAgentResponse",
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
@@ -491,6 +499,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: orgID,
 		attr.HookSourceKey:     "cursor",
+		attr.ProviderKey:       providerCursor,
 	}
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 

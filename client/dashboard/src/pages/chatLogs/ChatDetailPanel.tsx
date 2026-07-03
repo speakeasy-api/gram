@@ -33,7 +33,8 @@ import {
 import type { ChatOverview, RiskResult } from "@gram/client/models/components";
 import { useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import {
   Sheet,
   SheetContent,
@@ -50,7 +51,8 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -143,6 +145,36 @@ function totalTokensFor(chat: {
   return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
+// ChatDetailErrorFallback is the defensive backstop for unexpected
+// render-time throws inside the sheet (anything beyond the anticipated
+// not-found/forbidden states the panel already handles inline) — it keeps a
+// crash scoped to the sheet's content instead of tripping the page-wide
+// ContentErrorBoundary and wiping the rest of Risk Events / Chat Logs behind
+// it. Retry resets the boundary and any errored queries in place.
+function ChatDetailErrorFallback({
+  error: rawError,
+  resetErrorBoundary,
+}: FallbackProps): JSX.Element {
+  const error = toError(rawError);
+  handleError(error, { silent: true });
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <Icon name="circle-alert" className="text-destructive h-6 w-6" />
+      <div>
+        <p className="font-medium">Something went wrong loading this chat.</p>
+        <p className="text-muted-foreground mt-1 text-sm">{error.message}</p>
+      </div>
+      <Button variant="secondary" size="sm" onClick={resetErrorBoundary}>
+        <Button.LeftIcon>
+          <Icon name="rotate-ccw" className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Retry</Button.Text>
+      </Button>
+    </div>
+  );
+}
+
 export function ChatDetailSheet({
   chatId,
   onClose,
@@ -162,13 +194,22 @@ export function ChatDetailSheet({
         showCloseButton={false}
       >
         {chatId && (
-          <ChatDetailPanel
-            chatId={chatId}
-            onClose={onClose}
-            onDelete={onDelete}
-            riskFocus={riskFocus}
-            dimNonRisk={dimNonRisk}
-          />
+          <QueryErrorResetBoundary>
+            {({ reset }) => (
+              <ErrorBoundary
+                onReset={reset}
+                FallbackComponent={ChatDetailErrorFallback}
+              >
+                <ChatDetailPanel
+                  chatId={chatId}
+                  onClose={onClose}
+                  onDelete={onDelete}
+                  riskFocus={riskFocus}
+                  dimNonRisk={dimNonRisk}
+                />
+              </ErrorBoundary>
+            )}
+          </QueryErrorResetBoundary>
         )}
       </SheetContent>
     </Sheet>
@@ -635,12 +676,12 @@ function ChatDetailPanel({
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
-  const isSuperAdmin = useIsAdmin();
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
-  const canManageChat = isSuperAdmin || hasScope("org:admin");
+  const canManageChat = isPlatformAdmin || hasScope("org:admin");
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
-  const canViewRisk = isSuperAdmin || hasScope("org:admin");
+  const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
   // Header transcript filter — which message types to show (all on by default)
@@ -719,6 +760,9 @@ function ChatDetailPanel({
   const chatLoading =
     transcript.isLoading || (riskWindowed && riskTranscript.isLoading);
   const chatLoadHasErrors = active.isError;
+  // Mirrors the `chat` fallback above: either load having 403'd is enough to
+  // tell "you can't see this" apart from "this doesn't exist".
+  const chatLoadForbidden = transcript.isForbidden || active.isForbidden;
 
   const {
     mutate: searchLogs,
@@ -1031,7 +1075,14 @@ function ChatDetailPanel({
   }
 
   if (!chat) {
-    return (
+    return chatLoadForbidden ? (
+      <div className="p-8">
+        <SheetTitle>Permission denied</SheetTitle>
+        <SheetDescription>
+          You don&apos;t have access to view this chat session.
+        </SheetDescription>
+      </div>
+    ) : (
       <div className="p-8">
         <SheetTitle>Not found</SheetTitle>
         <SheetDescription>

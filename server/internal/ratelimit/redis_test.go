@@ -49,9 +49,7 @@ func TestRedisStoreConcurrentRespectsBurst(t *testing.T) {
 	)
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			res, err := limiter.Allow(t.Context(), "hot")
 			mu.Lock()
 			defer mu.Unlock()
@@ -61,7 +59,7 @@ func TestRedisStoreConcurrentRespectsBurst(t *testing.T) {
 			case res.Allowed:
 				allowed++
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

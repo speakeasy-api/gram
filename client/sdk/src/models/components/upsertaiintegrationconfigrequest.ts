@@ -11,6 +11,10 @@ export type UpsertAIIntegrationConfigRequest = {
    */
   apiKey: string;
   /**
+   * How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.
+   */
+  billingMode?: string | undefined;
+  /**
    * Whether the integration should be active.
    */
   enabled: boolean;
@@ -27,6 +31,7 @@ export type UpsertAIIntegrationConfigRequest = {
 /** @internal */
 export type UpsertAIIntegrationConfigRequest$Outbound = {
   api_key: string;
+  billing_mode?: string | undefined;
   enabled: boolean;
   external_organization_id?: string | undefined;
   provider: string;
@@ -39,6 +44,7 @@ export const UpsertAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     apiKey: z.string(),
+    billingMode: z.optional(z.string()),
     enabled: z.boolean(),
     externalOrganizationId: z.optional(z.string()),
     provider: z.string(),
@@ -46,6 +52,7 @@ export const UpsertAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       apiKey: "api_key",
+      billingMode: "billing_mode",
       externalOrganizationId: "external_organization_id",
     });
   }),

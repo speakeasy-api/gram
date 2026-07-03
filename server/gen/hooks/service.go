@@ -26,6 +26,9 @@ type Service interface {
 	// Endpoint for Codex hook events. Handles SessionStart, PreToolUse,
 	// PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
 	Codex(context.Context, *CodexPayload) (res *CodexHookResult, err error)
+	// Feature-first unified endpoint for hook events from supported coding
+	// assistants.
+	Ingest(context.Context, *IngestPayload) (res *IngestHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -54,7 +57,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"claude", "cursor", "codex", "logs", "metrics"}
+var MethodNames = [6]string{"claude", "cursor", "codex", "ingest", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -262,6 +265,169 @@ type CursorPayload struct {
 	// Execution duration in milliseconds, excluding approval wait time
 	// (afterMCPExecution only)
 	Duration *float64
+}
+
+// Feature-specific payloads. Hooks populate only the blocks needed for the
+// event.
+type HookIngestData struct {
+	Prompt       *HookPromptData
+	ToolCall     *HookToolCallData
+	Mcp          *HookMCPData
+	Usage        *HookUsageData
+	Message      *HookMessageData
+	Skill        *HookSkillData
+	Notification *HookNotificationData
+}
+
+// Canonical Gram feature event.
+type HookIngestEvent struct {
+	// Canonical Gram hook event type.
+	Type string
+	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+	OccurredAt *string
+}
+
+// Agent session and turn identity, independent of provider naming.
+type HookIngestSession struct {
+	// Stable conversation or session identifier.
+	ID *string
+	// Generation, request, or turn identifier.
+	TurnID *string
+	// Current working directory when the event fired.
+	Cwd *string
+	// Model identifier reported by the local agent.
+	Model *string
+}
+
+// Metadata about the local hook adapter that translated a provider event into
+// the Gram hook contract.
+type HookIngestSource struct {
+	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
+	Adapter string
+	// Adapter implementation version.
+	AdapterVersion *string
+	// Provider-native event name, if one exists.
+	RawEventName *string
+	// Hostname of the machine that emitted the hook event.
+	Hostname *string
+}
+
+// MCP feature payload.
+type HookMCPData struct {
+	// Provider-reported MCP server name.
+	ServerName *string
+	// Stable server identity inferred by the hook adapter.
+	ServerIdentity *string
+	// MCP server URL, when available.
+	URL *string
+	// MCP server command, when available.
+	Command *string
+	// JSON-encoded MCP tool result, when reported as a string.
+	ResultJSON *string
+}
+
+// Assistant/user message payload.
+type HookMessageData struct {
+	// Message text.
+	Text *string
+	// Message role, e.g. assistant or user.
+	Role *string
+	// Message or thinking-block duration in milliseconds, when reported.
+	DurationMs *float64
+}
+
+// Local agent notification payload.
+type HookNotificationData struct {
+	// Notification type.
+	Type *string
+	// Notification title.
+	Title *string
+	// Notification message.
+	Message *string
+}
+
+// Prompt feature payload.
+type HookPromptData struct {
+	// User prompt text.
+	Text *string
+}
+
+// Skill activation payload.
+type HookSkillData struct {
+	// Activated skill name.
+	Name string
+	// Skill source or namespace, if available.
+	Source *string
+}
+
+// Tool call feature payload.
+type HookToolCallData struct {
+	// Provider tool call identifier.
+	ID *string
+	// Tool name.
+	Name *string
+	// Tool input payload.
+	Input any
+	// Tool output payload.
+	Output any
+	// Tool error payload.
+	Error any
+	// Whether the failure was caused by user interruption.
+	IsInterrupt *bool
+	// Permission type requested by the agent, when applicable.
+	PermissionType *string
+	// Tool execution duration in milliseconds, when reported.
+	DurationMs *float64
+	// Provider-reported tool call status, when available.
+	Status *string
+}
+
+// Token and cost usage payload.
+type HookUsageData struct {
+	// Input token count.
+	InputTokens *int
+	// Output token count.
+	OutputTokens *int
+	// Cache read token count.
+	CacheReadTokens *int
+	// Cache write token count.
+	CacheWriteTokens *int
+	// Reported cost.
+	Cost *float64
+	// Agent loop count, when reported.
+	LoopCount *int
+	// Provider-reported usage or session status, when available.
+	Status *string
+}
+
+// IngestHookResult is the result type of the hooks service ingest method.
+type IngestHookResult struct {
+	// Whether the local hook should allow or deny the action.
+	Decision string
+	// Machine-readable decision reason.
+	Reason *string
+	// User-facing decision message.
+	Message *string
+	// Optional side-effect hints for hook SDKs.
+	Effects map[string]any
+}
+
+// IngestPayload is the payload type of the hooks service ingest method.
+type IngestPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Contract version. The current version is hook.ingest.v1.
+	SchemaVersion string
+	// Optional per-invocation token reused across retries so the server stores a
+	// redelivered event exactly once.
+	IdempotencyKey *string
+	Source         *HookIngestSource
+	Session        *HookIngestSession
+	Event          *HookIngestEvent
+	Data           *HookIngestData
+	// Original provider payload for debugging. The backend does not use this for
+	// feature behavior.
+	Raw any
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

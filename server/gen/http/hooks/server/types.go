@@ -160,6 +160,20 @@ type CodexRequestBody struct {
 	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
 }
 
+// IngestRequestBody is the type of the "hooks" service "ingest" endpoint HTTP
+// request body.
+type IngestRequestBody struct {
+	// Contract version. The current version is hook.ingest.v1.
+	SchemaVersion *string                       `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	Source        *HookIngestSourceRequestBody  `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	Session       *HookIngestSessionRequestBody `form:"session,omitempty" json:"session,omitempty" xml:"session,omitempty"`
+	Event         *HookIngestEventRequestBody   `form:"event,omitempty" json:"event,omitempty" xml:"event,omitempty"`
+	Data          *HookIngestDataRequestBody    `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
+	// Original provider payload for debugging. The backend does not use this for
+	// feature behavior.
+	Raw any `form:"raw,omitempty" json:"raw,omitempty" xml:"raw,omitempty"`
+}
+
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
 // request body.
 type LogsRequestBody struct {
@@ -215,6 +229,19 @@ type CodexResponseBody struct {
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
 	// Reason for the decision, shown to the user
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// IngestResponseBody is the type of the "hooks" service "ingest" endpoint HTTP
+// response body.
+type IngestResponseBody struct {
+	// Whether the local hook should allow or deny the action.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// Machine-readable decision reason.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// User-facing decision message.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Optional side-effect hints for hook SDKs.
+	Effects map[string]any `form:"effects,omitempty" json:"effects,omitempty" xml:"effects,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -757,6 +784,186 @@ type CodexGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// IngestUnauthorizedResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "unauthorized" error.
+type IngestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestForbiddenResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "forbidden" error.
+type IngestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestBadRequestResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "bad_request" error.
+type IngestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestNotFoundResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "not_found" error.
+type IngestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestConflictResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "conflict" error.
+type IngestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestUnsupportedMediaResponseBody is the type of the "hooks" service
+// "ingest" endpoint HTTP response body for the "unsupported_media" error.
+type IngestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestInvalidResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "invalid" error.
+type IngestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestInvariantViolationResponseBody is the type of the "hooks" service
+// "ingest" endpoint HTTP response body for the "invariant_violation" error.
+type IngestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestUnexpectedResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "unexpected" error.
+type IngestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// IngestGatewayErrorResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "gateway_error" error.
+type IngestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // LogsUnauthorizedResponseBody is the type of the "hooks" service "logs"
 // endpoint HTTP response body for the "unauthorized" error.
 type LogsUnauthorizedResponseBody struct {
@@ -1117,6 +1324,138 @@ type MetricsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// HookIngestSourceRequestBody is used to define fields on request body types.
+type HookIngestSourceRequestBody struct {
+	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
+	Adapter *string `form:"adapter,omitempty" json:"adapter,omitempty" xml:"adapter,omitempty"`
+	// Adapter implementation version.
+	AdapterVersion *string `form:"adapter_version,omitempty" json:"adapter_version,omitempty" xml:"adapter_version,omitempty"`
+	// Provider-native event name, if one exists.
+	RawEventName *string `form:"raw_event_name,omitempty" json:"raw_event_name,omitempty" xml:"raw_event_name,omitempty"`
+	// Hostname of the machine that emitted the hook event.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+}
+
+// HookIngestSessionRequestBody is used to define fields on request body types.
+type HookIngestSessionRequestBody struct {
+	// Stable conversation or session identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Generation, request, or turn identifier.
+	TurnID *string `form:"turn_id,omitempty" json:"turn_id,omitempty" xml:"turn_id,omitempty"`
+	// Current working directory when the event fired.
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Model identifier reported by the local agent.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+}
+
+// HookIngestEventRequestBody is used to define fields on request body types.
+type HookIngestEventRequestBody struct {
+	// Canonical Gram hook event type.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+	OccurredAt *string `form:"occurred_at,omitempty" json:"occurred_at,omitempty" xml:"occurred_at,omitempty"`
+}
+
+// HookIngestDataRequestBody is used to define fields on request body types.
+type HookIngestDataRequestBody struct {
+	Prompt       *HookPromptDataRequestBody       `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	ToolCall     *HookToolCallDataRequestBody     `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	Mcp          *HookMCPDataRequestBody          `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
+	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
+	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+}
+
+// HookPromptDataRequestBody is used to define fields on request body types.
+type HookPromptDataRequestBody struct {
+	// User prompt text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+}
+
+// HookToolCallDataRequestBody is used to define fields on request body types.
+type HookToolCallDataRequestBody struct {
+	// Provider tool call identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Tool name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Tool input payload.
+	Input any `form:"input,omitempty" json:"input,omitempty" xml:"input,omitempty"`
+	// Tool output payload.
+	Output any `form:"output,omitempty" json:"output,omitempty" xml:"output,omitempty"`
+	// Tool error payload.
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Whether the failure was caused by user interruption.
+	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
+	// Permission type requested by the agent, when applicable.
+	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
+	// Tool execution duration in milliseconds, when reported.
+	DurationMs *float64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// Provider-reported tool call status, when available.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// HookMCPDataRequestBody is used to define fields on request body types.
+type HookMCPDataRequestBody struct {
+	// Provider-reported MCP server name.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Stable server identity inferred by the hook adapter.
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+	// MCP server URL, when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// MCP server command, when available.
+	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
+	// JSON-encoded MCP tool result, when reported as a string.
+	ResultJSON *string `form:"result_json,omitempty" json:"result_json,omitempty" xml:"result_json,omitempty"`
+}
+
+// HookUsageDataRequestBody is used to define fields on request body types.
+type HookUsageDataRequestBody struct {
+	// Input token count.
+	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output token count.
+	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read token count.
+	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache write token count.
+	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// Reported cost.
+	Cost *float64 `form:"cost,omitempty" json:"cost,omitempty" xml:"cost,omitempty"`
+	// Agent loop count, when reported.
+	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
+	// Provider-reported usage or session status, when available.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// HookMessageDataRequestBody is used to define fields on request body types.
+type HookMessageDataRequestBody struct {
+	// Message text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Message role, e.g. assistant or user.
+	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Message or thinking-block duration in milliseconds, when reported.
+	DurationMs *float64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+}
+
+// HookSkillDataRequestBody is used to define fields on request body types.
+type HookSkillDataRequestBody struct {
+	// Activated skill name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Skill source or namespace, if available.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+}
+
+// HookNotificationDataRequestBody is used to define fields on request body
+// types.
+type HookNotificationDataRequestBody struct {
+	// Notification type.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Notification title.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Notification message.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // OTELResourceLogRequestBody is used to define fields on request body types.
 type OTELResourceLogRequestBody struct {
 	// Resource information
@@ -1303,6 +1642,25 @@ func NewCodexResponseBody(res *hooks.CodexHookResult) *CodexResponseBody {
 	body := &CodexResponseBody{
 		Decision: res.Decision,
 		Reason:   res.Reason,
+	}
+	return body
+}
+
+// NewIngestResponseBody builds the HTTP response body from the result of the
+// "ingest" endpoint of the "hooks" service.
+func NewIngestResponseBody(res *hooks.IngestHookResult) *IngestResponseBody {
+	body := &IngestResponseBody{
+		Decision: res.Decision,
+		Reason:   res.Reason,
+		Message:  res.Message,
+	}
+	if res.Effects != nil {
+		body.Effects = make(map[string]any, len(res.Effects))
+		for key, val := range res.Effects {
+			tk := key
+			tv := val
+			body.Effects[tk] = tv
+		}
 	}
 	return body
 }
@@ -1727,6 +2085,146 @@ func NewCodexGatewayErrorResponseBody(res *goa.ServiceError) *CodexGatewayErrorR
 	return body
 }
 
+// NewIngestUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "ingest" endpoint of the "hooks" service.
+func NewIngestUnauthorizedResponseBody(res *goa.ServiceError) *IngestUnauthorizedResponseBody {
+	body := &IngestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestForbiddenResponseBody builds the HTTP response body from the result
+// of the "ingest" endpoint of the "hooks" service.
+func NewIngestForbiddenResponseBody(res *goa.ServiceError) *IngestForbiddenResponseBody {
+	body := &IngestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestBadRequestResponseBody builds the HTTP response body from the
+// result of the "ingest" endpoint of the "hooks" service.
+func NewIngestBadRequestResponseBody(res *goa.ServiceError) *IngestBadRequestResponseBody {
+	body := &IngestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestNotFoundResponseBody builds the HTTP response body from the result
+// of the "ingest" endpoint of the "hooks" service.
+func NewIngestNotFoundResponseBody(res *goa.ServiceError) *IngestNotFoundResponseBody {
+	body := &IngestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestConflictResponseBody builds the HTTP response body from the result
+// of the "ingest" endpoint of the "hooks" service.
+func NewIngestConflictResponseBody(res *goa.ServiceError) *IngestConflictResponseBody {
+	body := &IngestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "ingest" endpoint of the "hooks" service.
+func NewIngestUnsupportedMediaResponseBody(res *goa.ServiceError) *IngestUnsupportedMediaResponseBody {
+	body := &IngestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestInvalidResponseBody builds the HTTP response body from the result
+// of the "ingest" endpoint of the "hooks" service.
+func NewIngestInvalidResponseBody(res *goa.ServiceError) *IngestInvalidResponseBody {
+	body := &IngestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "ingest" endpoint of the "hooks" service.
+func NewIngestInvariantViolationResponseBody(res *goa.ServiceError) *IngestInvariantViolationResponseBody {
+	body := &IngestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestUnexpectedResponseBody builds the HTTP response body from the
+// result of the "ingest" endpoint of the "hooks" service.
+func NewIngestUnexpectedResponseBody(res *goa.ServiceError) *IngestUnexpectedResponseBody {
+	body := &IngestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewIngestGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "ingest" endpoint of the "hooks" service.
+func NewIngestGatewayErrorResponseBody(res *goa.ServiceError) *IngestGatewayErrorResponseBody {
+	body := &IngestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLogsUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "logs" endpoint of the "hooks" service.
 func NewLogsUnauthorizedResponseBody(res *goa.ServiceError) *LogsUnauthorizedResponseBody {
@@ -2127,6 +2625,27 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 	return v
 }
 
+// NewIngestPayload builds a hooks service ingest endpoint payload.
+func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string) *hooks.IngestPayload {
+	v := &hooks.IngestPayload{
+		SchemaVersion: *body.SchemaVersion,
+		Raw:           body.Raw,
+	}
+	v.Source = unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(body.Source)
+	if body.Session != nil {
+		v.Session = unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession(body.Session)
+	}
+	v.Event = unmarshalHookIngestEventRequestBodyToHooksHookIngestEvent(body.Event)
+	if body.Data != nil {
+		v.Data = unmarshalHookIngestDataRequestBodyToHooksHookIngestData(body.Data)
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.IdempotencyKey = idempotencyKey
+
+	return v
+}
+
 // NewLogsPayload builds a hooks service logs endpoint payload.
 func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.LogsPayload {
 	v := &hooks.LogsPayload{}
@@ -2199,6 +2718,35 @@ func ValidateCodexRequestBody(body *CodexRequestBody) (err error) {
 	return
 }
 
+// ValidateIngestRequestBody runs the validations defined on IngestRequestBody
+func ValidateIngestRequestBody(body *IngestRequestBody) (err error) {
+	if body.SchemaVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema_version", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Event == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event", "body"))
+	}
+	if body.Source != nil {
+		if err2 := ValidateHookIngestSourceRequestBody(body.Source); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Event != nil {
+		if err2 := ValidateHookIngestEventRequestBody(body.Event); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Data != nil {
+		if err2 := ValidateHookIngestDataRequestBody(body.Data); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateLogsRequestBody runs the validations defined on LogsRequestBody
 func ValidateLogsRequestBody(body *LogsRequestBody) (err error) {
 	for _, e := range body.ResourceLogs {
@@ -2219,6 +2767,52 @@ func ValidateMetricsRequestBody(body *MetricsRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateHookIngestSourceRequestBody runs the validations defined on
+// HookIngestSourceRequestBody
+func ValidateHookIngestSourceRequestBody(body *HookIngestSourceRequestBody) (err error) {
+	if body.Adapter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("adapter", "body"))
+	}
+	return
+}
+
+// ValidateHookIngestEventRequestBody runs the validations defined on
+// HookIngestEventRequestBody
+func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported"}))
+		}
+	}
+	if body.OccurredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.occurred_at", *body.OccurredAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateHookIngestDataRequestBody runs the validations defined on
+// HookIngestDataRequestBody
+func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err error) {
+	if body.Skill != nil {
+		if err2 := ValidateHookSkillDataRequestBody(body.Skill); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateHookSkillDataRequestBody runs the validations defined on
+// HookSkillDataRequestBody
+func ValidateHookSkillDataRequestBody(body *HookSkillDataRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

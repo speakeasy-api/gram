@@ -230,6 +230,8 @@ export function InsightsToolsContent(): JSX.Element {
     handleRoleSelectionChange,
     roleFilterPending,
     roleEmails,
+    accountType,
+    handleAccountTypeChange,
   } = useObserveFilters({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
@@ -285,6 +287,7 @@ export function InsightsToolsContent(): JSX.Element {
         userFilters,
         hookSourceFilters,
         selectedHookTypes,
+        accountType,
       ],
       queryFn: () =>
         unwrapAsync(
@@ -300,6 +303,7 @@ export function InsightsToolsContent(): JSX.Element {
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources:
                 hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
+              accountType: accountType || undefined,
             },
           }),
         ),
@@ -422,6 +426,8 @@ export function InsightsToolsContent(): JSX.Element {
           summaryData={summaryData}
           summaryPending={summaryPending}
           summaryIsError={summaryIsError}
+          accountType={accountType}
+          onAccountTypeChange={handleAccountTypeChange}
         />
       )}
     </>
@@ -457,6 +463,8 @@ function HooksInnerContent({
   summaryData,
   summaryPending,
   summaryIsError,
+  accountType,
+  onAccountTypeChange,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -487,6 +495,8 @@ function HooksInnerContent({
   summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -552,6 +562,8 @@ function HooksInnerContent({
           onClearCustomRange={onClearCustomRange}
           projectSlug={projectSlug}
           serverNameMappings={serverNameMappings}
+          accountType={accountType}
+          onAccountTypeChange={onAccountTypeChange}
         />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">

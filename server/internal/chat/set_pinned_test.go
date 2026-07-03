@@ -78,9 +78,10 @@ func TestService_SetPinned_MissingChat(t *testing.T) {
 func TestService_ListChats_PinnedFilter(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	// Org admin sees all project chats (no per-user scoping), so the filter under
-	// test is what splits the result rather than the caller's identity.
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	// A chat:read holder sees all project chats (no per-user scoping), so the
+	// filter under test is what splits the result rather than the caller's
+	// identity.
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
 	pinnedID := seedChat(t, ctx, ti, "", "ext-user", "Pinned Chat")
 	unpinnedID := seedChat(t, ctx, ti, "", "ext-user", "Unpinned Chat")

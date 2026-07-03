@@ -216,11 +216,6 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
 			defer db.Close()
 
 			err = o11y.StartObservers(meterProvider, db)

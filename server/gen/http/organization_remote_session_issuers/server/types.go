@@ -52,6 +52,10 @@ type CreateIssuerRequestBody struct {
 	// When true, the MCP client registers and transacts directly with this issuer.
 	// Default false.
 	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the
@@ -82,6 +86,9 @@ type UpdateIssuerRequestBody struct {
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	Oidc                              *bool    `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
 	Passthrough                       *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
 // MoveIssuerRequestBody is the type of the "organizationRemoteSessionIssuers"
@@ -102,8 +109,9 @@ type CreateClientRequestBody struct {
 	// organization.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -113,6 +121,26 @@ type CreateClientRequestBody struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// CreateCimdClientRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// request body.
+type CreateCimdClientRequestBody struct {
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization and advertise client_id_metadata_document_supported.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -205,9 +233,12 @@ type CreateIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the
@@ -251,9 +282,12 @@ type GetIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -299,9 +333,12 @@ type UpdateIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
@@ -336,9 +373,12 @@ type MoveIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListClientsResponseBody is the type of the
@@ -355,8 +395,10 @@ type ListClientsResponseBody struct {
 type GetClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -364,8 +406,12 @@ type GetClientResponseBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
-	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
-	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
@@ -413,8 +459,10 @@ type ListClientSessionsResponseBody struct {
 type CreateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -422,8 +470,50 @@ type CreateClientResponseBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
-	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
-	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateCimdClientResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body.
+type CreateCimdClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level clients.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
@@ -445,8 +535,10 @@ type CreateClientResponseBody struct {
 type UpdateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -454,8 +546,12 @@ type UpdateClientResponseBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
-	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
-	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
@@ -2982,6 +3078,196 @@ type CreateClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateCimdClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateCimdClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateCimdClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateCimdClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateCimdClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateCimdClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateCimdClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateCimdClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateCimdClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateCimdClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateClientUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -4166,9 +4452,12 @@ type RemoteSessionIssuerResponseBody struct {
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // OrganizationRemoteSessionClientResponseBody is used to define fields on
@@ -4188,8 +4477,10 @@ type OrganizationRemoteSessionClientResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -4197,8 +4488,12 @@ type RemoteSessionClientResponseBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
-	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
-	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
@@ -4267,21 +4562,22 @@ type RemoteSessionResponseBody struct {
 // service.
 func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerResponseBody {
 	body := &CreateIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -4335,21 +4631,22 @@ func NewListIssuersResponseBody(res *organizationremotesessionissuers.ListOrgani
 // the "getIssuer" endpoint of the "organizationRemoteSessionIssuers" service.
 func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponseBody {
 	body := &GetIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -4401,21 +4698,22 @@ func NewGetIssuerDeletePreflightResponseBody(res *organizationremotesessionissue
 // service.
 func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerResponseBody {
 	body := &UpdateIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -4448,21 +4746,22 @@ func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerRe
 // the "moveIssuer" endpoint of the "organizationRemoteSessionIssuers" service.
 func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerResponseBody {
 	body := &MoveIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		Slug:                  res.Slug,
-		Issuer:                res.Issuer,
-		Name:                  res.Name,
-		LogoAssetID:           res.LogoAssetID,
-		AuthorizationEndpoint: res.AuthorizationEndpoint,
-		TokenEndpoint:         res.TokenEndpoint,
-		RegistrationEndpoint:  res.RegistrationEndpoint,
-		JwksURI:               res.JwksURI,
-		Oidc:                  res.Oidc,
-		Passthrough:           res.Passthrough,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                                res.ID,
+		ProjectID:                         res.ProjectID,
+		OrganizationID:                    res.OrganizationID,
+		Slug:                              res.Slug,
+		Issuer:                            res.Issuer,
+		Name:                              res.Name,
+		LogoAssetID:                       res.LogoAssetID,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		CreatedAt:                         res.CreatedAt,
+		UpdatedAt:                         res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -4518,8 +4817,10 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 	body := &GetClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
+		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
@@ -4611,8 +4912,45 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 	body := &CreateClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
+		ClientIDMetadataURI:     res.ClientIDMetadataURI,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		Audience:                res.Audience,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.UserSessionIssuerIds != nil {
+		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
+		for i, val := range res.UserSessionIssuerIds {
+			body.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		body.UserSessionIssuerIds = []string{}
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewCreateCimdClientResponseBody builds the HTTP response body from the
+// result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimdClientResponseBody {
+	body := &CreateCimdClientResponseBody{
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
@@ -4644,8 +4982,10 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 	body := &UpdateClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
+		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
@@ -6658,6 +6998,156 @@ func NewCreateClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateClien
 	return body
 }
 
+// NewCreateCimdClientUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateCimdClientUnauthorizedResponseBody {
+	body := &CreateCimdClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientForbiddenResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientForbiddenResponseBody(res *goa.ServiceError) *CreateCimdClientForbiddenResponseBody {
+	body := &CreateCimdClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientBadRequestResponseBody(res *goa.ServiceError) *CreateCimdClientBadRequestResponseBody {
+	body := &CreateCimdClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientNotFoundResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientNotFoundResponseBody(res *goa.ServiceError) *CreateCimdClientNotFoundResponseBody {
+	body := &CreateCimdClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientConflictResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientConflictResponseBody(res *goa.ServiceError) *CreateCimdClientConflictResponseBody {
+	body := &CreateCimdClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateCimdClientUnsupportedMediaResponseBody {
+	body := &CreateCimdClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientInvalidResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientInvalidResponseBody(res *goa.ServiceError) *CreateCimdClientInvalidResponseBody {
+	body := &CreateCimdClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateCimdClientInvariantViolationResponseBody {
+	body := &CreateCimdClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientUnexpectedResponseBody(res *goa.ServiceError) *CreateCimdClientUnexpectedResponseBody {
+	body := &CreateCimdClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewCreateCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateCimdClientGatewayErrorResponseBody {
+	body := &CreateCimdClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateClientUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "updateClient" endpoint of the
 // "organizationRemoteSessionIssuers" service.
@@ -7562,17 +8052,18 @@ func NewRevokeAllClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *
 // createIssuer endpoint payload.
 func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateIssuerPayload {
 	v := &organizationremotesessionissuers.CreateIssuerPayload{
-		ProjectID:             body.ProjectID,
-		Slug:                  *body.Slug,
-		Issuer:                *body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		ProjectID:                         body.ProjectID,
+		Slug:                              *body.Slug,
+		Issuer:                            *body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -7642,17 +8133,18 @@ func NewGetIssuerDeletePreflightPayload(id string, sessionToken *string, apikeyT
 // updateIssuer endpoint payload.
 func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.UpdateIssuerPayload {
 	v := &organizationremotesessionissuers.UpdateIssuerPayload{
-		ID:                    *body.ID,
-		Slug:                  body.Slug,
-		Issuer:                body.Issuer,
-		Name:                  body.Name,
-		LogoAssetID:           body.LogoAssetID,
-		AuthorizationEndpoint: body.AuthorizationEndpoint,
-		TokenEndpoint:         body.TokenEndpoint,
-		RegistrationEndpoint:  body.RegistrationEndpoint,
-		JwksURI:               body.JwksURI,
-		Oidc:                  body.Oidc,
-		Passthrough:           body.Passthrough,
+		ID:                                *body.ID,
+		Slug:                              body.Slug,
+		Issuer:                            body.Issuer,
+		Name:                              body.Name,
+		LogoAssetID:                       body.LogoAssetID,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		Oidc:                              body.Oidc,
+		Passthrough:                       body.Passthrough,
+		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -7777,6 +8269,26 @@ func NewCreateClientPayload(body *CreateClientRequestBody, sessionToken *string,
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewCreateCimdClientPayload builds a organizationRemoteSessionIssuers service
+// createCimdClient endpoint payload.
+func NewCreateCimdClientPayload(body *CreateCimdClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateCimdClientPayload {
+	v := &organizationremotesessionissuers.CreateCimdClientPayload{
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		ProjectID:             body.ProjectID,
+		Audience:              body.Audience,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -7939,6 +8451,35 @@ func ValidateCreateClientRequestBody(body *CreateClientRequestBody) (err error) 
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
+	return
+}
+
+// ValidateCreateCimdClientRequestBody runs the validations defined on
+// CreateCimdClientRequestBody
+func ValidateCreateCimdClientRequestBody(body *CreateCimdClientRequestBody) (err error) {
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	for _, e := range body.Scope {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))

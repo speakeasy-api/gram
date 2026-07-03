@@ -46,6 +46,16 @@ import (
 
 // newTokenEndpointRequest assembles a request and handles encoding
 // credentials based on the configuration set by the client.
+//
+// CIMD invariant: a Client ID Metadata Document client is public — its row
+// carries no client_secret (enforced by the remote_session_clients
+// client_id_metadata_uri CHECK constraint) and its token_endpoint_auth_method
+// is "none". Both credential branches below are gated on a non-empty
+// clientSecret, so a CIMD client never puts a secret in the body and never
+// reaches HTTP Basic auth. The guard that matters is the empty secret, not the
+// method: ResolveTokenEndpointAuthMethod maps unknown values to Basic, so it is
+// the absent secret — not method=none — that keeps the public CIMD path off
+// Basic auth.
 func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
 	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
 		form.Set("client_secret", clientSecret)
@@ -56,6 +66,8 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	// clientSecret is always empty for CIMD/public clients, so this never runs
+	// for them regardless of the resolved method.
 	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
@@ -88,6 +100,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 	ctx context.Context,
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
+	resource string,
 ) (string, error) {
 	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
@@ -100,7 +113,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 		return "", fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	tok, err := m.validateAndRefresh(ctx, sess)
+	tok, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		return "", nil
 	}
@@ -141,10 +154,13 @@ func (m *ChallengeManager) ResolveAccessToken(
 // attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
 func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
-	projectID, userSessionIssuerID uuid.UUID,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
+	resource string,
 ) (map[uuid.UUID]string, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}
@@ -169,7 +185,7 @@ func (m *ChallengeManager) ResolveAccessTokens(
 
 	tokens := make(map[uuid.UUID]string, len(clients))
 	for _, c := range clients {
-		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject)
+		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject, resource)
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
@@ -203,6 +219,7 @@ const defaultNoExpiryRefreshInterval = time.Hour
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (string, error) {
 	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
 
@@ -230,7 +247,7 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !hasRefresh {
 		return "", ErrNoValidToken
 	}
-	return m.refreshAccessToken(ctx, sess)
+	return m.refreshAccessToken(ctx, sess, resource)
 }
 
 // refreshAccessToken is the lazy-path wrapper: it runs the shared refresh and
@@ -238,8 +255,9 @@ func (m *ChallengeManager) validateAndRefresh(
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (string, error) {
-	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess)
+	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess, resource)
 	if err != nil {
 		return "", err
 	}
@@ -265,6 +283,7 @@ func refreshSessionTokens(
 	enc *encryption.Client,
 	policy *guardian.Policy,
 	sess remotesessions_repo.RemoteSession,
+	resource string,
 ) (remotesessions_repo.RemoteSession, string, error) {
 	var zero remotesessions_repo.RemoteSession
 
@@ -297,6 +316,9 @@ func refreshSessionTokens(
 	form.Set("client_id", client.ExternalClientID)
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
+	}
+	if resource != "" {
+		form.Set("resource", resource)
 	}
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)

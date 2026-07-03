@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.38.1**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -22,4 +22,4 @@
 
 ### maxHeight?
 
-> `optional` **maxHeight**: `string` \| `number`
+> `optional` **maxHeight?**: `string` \| `number`

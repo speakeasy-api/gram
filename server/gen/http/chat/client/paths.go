@@ -41,3 +41,8 @@ func SetPinnedChatPath() string {
 func SubmitFeedbackChatPath() string {
 	return "/rpc/chat.submitFeedback"
 }
+
+// ListSourcesChatPath returns the URL path to the chat service listSources HTTP endpoint.
+func ListSourcesChatPath() string {
+	return "/rpc/chat.listSources"
+}

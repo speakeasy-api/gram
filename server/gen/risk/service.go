@@ -37,6 +37,10 @@ type Service interface {
 	// `match` value — a non-sensitive server URL or command identifier — is passed
 	// through verbatim.
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
+	// Return the plaintext match for a single risk result, on demand. Gated on the
+	// chat:read scope for the result's chat (not org:admin) — reveal is a
+	// discrete, audited access event distinct from listing redacted results.
+	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get risk overview metrics and trend data for the current project.
@@ -132,7 +136,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [33]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -223,6 +227,9 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
@@ -742,6 +749,16 @@ type RiskRuleBreakdownResult struct {
 	Total int64
 }
 
+// RiskUnmaskResultResult is the result type of the risk service
+// unmaskRiskResult method.
+type RiskUnmaskResultResult struct {
+	// The risk result ID.
+	ID string
+	// The plaintext matched secret or sensitive data for this result. Empty string
+	// when the finding has no top-level match (e.g. a spans-only finding).
+	Match string
+}
+
 // RiskUserBreakdownResult is the result type of the risk service
 // getRiskUserBreakdown method.
 type RiskUserBreakdownResult struct {
@@ -862,6 +879,16 @@ type TriggerRiskAnalysisPayload struct {
 	Limit int32
 }
 
+// UnmaskRiskResultPayload is the payload type of the risk service
+// unmaskRiskResult method.
+type UnmaskRiskResultPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk result ID.
+	ID string
+}
+
 // UpdateCustomDetectionRulePayload is the payload type of the risk service
 // updateCustomDetectionRule method.
 type UpdateCustomDetectionRulePayload struct {
@@ -921,6 +948,9 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
