@@ -27,8 +27,17 @@ gram_hooks_read_auth() {
   GRAM_HOOKS_CACHED_API_KEY="$(gram_hooks_auth_value "$path" "api_key")"
   GRAM_HOOKS_CACHED_PROJECT="$(gram_hooks_auth_value "$path" "project")"
   GRAM_HOOKS_CACHED_EMAIL="$(gram_hooks_auth_value "$path" "email")"
+  GRAM_HOOKS_CACHED_ORG="$(gram_hooks_auth_value "$path" "org")"
   [ "$GRAM_HOOKS_CACHED_SERVER_URL" = "$server_url" ] || return 1
   [ -n "$GRAM_HOOKS_CACHED_API_KEY" ] || return 1
+  # A cache minted for another organization must not authenticate this
+  # plugin: with shared project slugs like "default", its events would land
+  # in — and enforce policies from — the wrong org. Caches from before org
+  # stamping carry no org and stay usable.
+  if [ -n "${gram_hooks_org_hint:-}" ] && [ -n "$GRAM_HOOKS_CACHED_ORG" ] &&
+    [ "$GRAM_HOOKS_CACHED_ORG" != "${gram_hooks_org_hint:-}" ]; then
+    return 1
+  fi
 }
 
 gram_hooks_write_auth() {
@@ -36,6 +45,7 @@ gram_hooks_write_auth() {
   local api_key="$2"
   local project="$3"
   local email="${4:-}"
+  local org="${5:-}"
   local path
   path="$(gram_hooks_auth_file)"
   mkdir -p "$(dirname "$path")" || return 1
@@ -49,6 +59,7 @@ gram_hooks_write_auth() {
     printf 'api_key=%s\n' "$api_key"
     printf 'project=%s\n' "$project"
     printf 'email=%s\n' "$email"
+    printf 'org=%s\n' "$org"
   } >"$tmp" || {
     rm -f "$tmp"
     umask "$old_umask"
@@ -440,13 +451,14 @@ gram_hooks_login() {
     return 1
   fi
 
-  local api_key="" project="" email="" pair pairs
+  local api_key="" project="" email="" org="" pair pairs
   IFS='&' read -r -a pairs <<<"$query"
   for pair in "${pairs[@]}"; do
     case "$pair" in
       api_key=*) api_key="$(gram_hooks_urldecode "${pair#api_key=}")" ;;
       project=*) project="$(gram_hooks_urldecode "${pair#project=}")" ;;
       email=*) email="$(gram_hooks_urldecode "${pair#email=}")" ;;
+      organization_id=*) org="$(gram_hooks_urldecode "${pair#organization_id=}")" ;;
     esac
   done
   if [ -z "$api_key" ]; then
@@ -456,7 +468,12 @@ gram_hooks_login() {
   if [ -z "$project" ]; then
     project="$project_hint"
   fi
-  if ! gram_hooks_write_auth "$server_url" "$api_key" "$project" "$email"; then
+  # Older dashboards omit organization_id on the callback; the login URL
+  # pinned the mint to the plugin's org, so fall back to that hint.
+  if [ -z "$org" ]; then
+    org="${gram_hooks_org_hint:-}"
+  fi
+  if ! gram_hooks_write_auth "$server_url" "$api_key" "$project" "$email" "$org"; then
     echo "Speakeasy hooks: could not cache the new hooks API key." >&2
     return 1
   fi

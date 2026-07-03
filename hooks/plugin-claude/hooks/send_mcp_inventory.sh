@@ -43,6 +43,7 @@ fi
 
 api_key="${GRAM_HOOKS_API_KEY:-}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
+gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
 
 # No env key: fall back to the credentials the browser login flow cached
 # (auth_preflight.sh / login.sh) so the inventory lands attributed. auth.sh

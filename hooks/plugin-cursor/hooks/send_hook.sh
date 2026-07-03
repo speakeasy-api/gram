@@ -18,6 +18,7 @@ server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 # the legacy GRAM_API_KEY/GRAM_PROJECT_SLUG names for backward compatibility.
 api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
+gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
 
 debug() {
   if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then

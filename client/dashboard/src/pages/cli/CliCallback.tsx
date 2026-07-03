@@ -111,6 +111,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
           key,
           selectedProjectSlug,
           session.user.email,
+          session.activeOrganizationId,
         ),
       )
       .catch((err) => {
@@ -247,6 +248,7 @@ async function transmitKey(
   apiKey: string,
   projectSlug: string | null,
   userEmail: string,
+  organizationId?: string | null,
 ): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
@@ -255,6 +257,11 @@ async function transmitKey(
   }
   if (userEmail) {
     url.searchParams.set("email", userEmail);
+  }
+  // The receiving client binds its credential cache to this org so a cache
+  // minted here is never reused by a plugin generated for a different org.
+  if (organizationId) {
+    url.searchParams.set("organization_id", organizationId);
   }
 
   window.location.replace(url.toString());
