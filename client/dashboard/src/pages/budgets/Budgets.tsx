@@ -137,7 +137,9 @@ function BudgetsContent(): JSX.Element {
       />
       <RuleSheet
         open={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
         rule={editing ?? undefined}
         onSubmit={handleUpdate}
         onDelete={handleDelete}
