@@ -137,15 +137,18 @@ gram_hooks_login_success_html() {
 
 # gram_hooks_login_handle_request reads one HTTP request from stdin (the nc
 # pipe), captures the /callback query string into a file, and writes the
-# response to stdout (piped back to the client through the fifo). Requests
-# without api_key (favicon, probes) get a 204 so the serve loop keeps waiting
-# for the dashboard's real redirect. The callback must echo the unguessable
-# state token minted for this attempt — anyone on this machine can reach the
+# response to stdout (piped back to the client through the fifo). The probe
+# path echoes a per-attempt marker so the readiness check can tell this
+# listener apart from whatever else answers on the port; other requests
+# without api_key (favicon) get a 204 so the serve loop keeps waiting for the
+# dashboard's real redirect. The callback must echo the unguessable state
+# token minted for this attempt — anyone on this machine can reach the
 # listener, and without the token a racing local process could inject its own
 # key and reroute telemetry to an attacker-controlled project.
 gram_hooks_login_handle_request() {
   local dir="$1"
   local state="$2"
+  local probe="$3"
   local request_line="" line="" path_query=""
   IFS= read -r -t 10 request_line || request_line=""
   request_line="${request_line%$'\r'}"
@@ -173,6 +176,9 @@ gram_hooks_login_handle_request() {
           ;;
       esac
       ;;
+    /gram-probe*)
+      gram_hooks_login_http_response 200 "gram-hooks-probe-ok:${probe}"
+      ;;
     *)
       gram_hooks_login_http_response 204 ""
       ;;
@@ -192,21 +198,30 @@ gram_hooks_login_serve() {
   local dir="$2"
   local port="$3"
   local state="$4"
+  local probe="$5"
   local requests=0
   while [ "$requests" -lt 32 ] && [ ! -e "$dir/stop" ] && [ ! -s "$dir/query" ]; do
-    gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" "$state" >"$dir/fifo"
+    gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" "$state" "$probe" >"$dir/fifo"
     requests=$((requests + 1))
   done
 }
 
+# The probe must see this attempt's marker, not just any HTTP response: if the
+# random port is already bound by another local service, nc's bind fails while
+# a bare connectivity check against that service would still succeed — and the
+# browser would then deliver the freshly minted key to the wrong process.
 gram_hooks_login_probe() {
   local port="$1"
-  local i=0
+  local probe="$2"
+  local i=0 body=""
   while [ "$i" -lt 3 ]; do
     i=$((i + 1))
-    if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:${port}/gram-probe" 2>/dev/null; then
-      return 0
-    fi
+    body="$(curl -s --max-time 2 "http://127.0.0.1:${port}/gram-probe" 2>/dev/null)" || body=""
+    case "$body" in
+      *"gram-hooks-probe-ok:${probe}"*)
+        return 0
+        ;;
+    esac
     sleep 1
   done
   return 1
@@ -328,6 +343,13 @@ gram_hooks_login() {
     gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
     return 1
   fi
+  # Separate marker for the readiness probe: it is echoed to anyone who asks,
+  # so it must never be the state token.
+  local probe
+  probe="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  if [ -z "$probe" ]; then
+    probe="$(openssl rand -hex 8 2>/dev/null)"
+  fi
 
   GRAM_HOOKS_LOGIN_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/gram-hooks-login.XXXXXX")" || return 1
   local dir="$GRAM_HOOKS_LOGIN_TMPDIR"
@@ -344,10 +366,10 @@ gram_hooks_login() {
       tries=$((tries + 1))
       port=$(( (${RANDOM:-17} % 45000) + 20000 ))
       rm -f "$dir/query" "$dir/stop"
-      gram_hooks_login_serve "$style" "$dir" "$port" "$state" &
+      gram_hooks_login_serve "$style" "$dir" "$port" "$state" "$probe" &
       GRAM_HOOKS_LOGIN_SERVER_PID=$!
       GRAM_HOOKS_LOGIN_PORT="$port"
-      if gram_hooks_login_probe "$port"; then
+      if gram_hooks_login_probe "$port" "$probe"; then
         started=1
         break 2
       fi

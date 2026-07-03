@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2267,6 +2268,83 @@ gram_hooks_build_canonical_payload "$res" "test-host"
 	require.NotEqual(t, reqAID, reqBID, "distinct same-tool codex requests must not collide")
 	require.Equal(t, reqAID, resAID, "first completion must pop the first request's id, not the permission prompt's")
 	require.Equal(t, reqBID, resBID, "second completion must pop the second request's id")
+}
+
+// TestRenderHookPayloadNormalizationCodexMCPExactServerNameWins pins the codex
+// MCP config lookup semantics when server names collide after sanitizing: an
+// exact name match must win, and without one a sanitized match only resolves
+// when it is unambiguous.
+func TestRenderHookPayloadNormalizationCodexMCPExactServerNameWins(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for the codex MCP metadata lookup")
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	codexStub := `#!/usr/bin/env bash
+if [ "$1" = "mcp" ] && [ "$2" = "list" ]; then
+  cat <<'JSON'
+[
+  {"name":"Linear-Server","transport":{"type":"stdio","command":"npx","args":["colliding-linear-mcp"]}},
+  {"name":"Linear_Server","transport":{"type":"stdio","command":"npx","args":["linear-mcp"]}},
+  {"name":"Other-Server","transport":{"type":"stdio","command":"npx","args":["other-a"]}},
+  {"name":"Other.Server","transport":{"type":"stdio","command":"npx","args":["other-b"]}}
+]
+JSON
+fi
+`
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(codexStub), 0o755))
+
+	scriptPath := filepath.Join(dir, "lookup.sh")
+	script := renderHookPayloadNormalizationSnippet("codex") + `
+printf 'exact:'
+gram_hooks_codex_mcp_metadata "Linear_Server" | tr '\n' ';'
+printf '\nambiguous:'
+gram_hooks_codex_mcp_metadata "Other_Server" | tr '\n' ';'
+printf '\n'
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), "command=npx linear-mcp", "exact server name must win over a sanitized collision")
+	require.NotContains(t, string(output), "colliding-linear-mcp")
+	require.Contains(t, string(output), "ambiguous:\n", "ambiguous sanitized matches must resolve to nothing")
+}
+
+// TestSharedAuthScriptLoginProbeVerifiesListenerIdentity covers the login
+// readiness probe: it must accept only this attempt's handler (which echoes
+// the per-attempt probe marker) and reject an unrelated localhost service
+// that happens to answer 200 on the chosen port — otherwise the browser
+// callback would deliver a freshly minted key to the wrong process.
+func TestSharedAuthScriptLoginProbeVerifiesListenerIdentity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(foreign.Close)
+	foreignPort := foreign.URL[strings.LastIndex(foreign.URL, ":")+1:]
+
+	script := `. ./auth.sh
+work="$(mktemp -d)"
+printf 'GET /gram-probe HTTP/1.1\r\n\r\n' | gram_hooks_login_handle_request "$work" state-token probe-token
+printf '\n'
+if gram_hooks_login_probe "$1" probe-token; then echo FOREIGN-ACCEPTED; else echo FOREIGN-REJECTED; fi
+`
+	cmd := exec.Command("bash", "-c", script, "probe-test", foreignPort)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), "gram-hooks-probe-ok:probe-token", "handler must echo the per-attempt probe marker")
+	require.Contains(t, string(output), "FOREIGN-REJECTED", "probe must not accept a listener that lacks the marker")
 }
 
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {

@@ -543,7 +543,9 @@ gram_hooks_codex_mcp_metadata() {
       elif ($arg | test("://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)")) then
         {out: (.out + ["***"]), next: false}
       else {out: (.out + [$arg]), next: false} end) | .out;
-    map(select(.name == $server or (.name | sanitize) == $server)) | .[0] as $m |
+    (map(select(.name == $server)) | .[0]) as $exact |
+    map(select((.name | sanitize) == $server)) as $fuzzy |
+    ($exact // (if ($fuzzy | length) == 1 then $fuzzy[0] else null end)) as $m |
     if $m == null then
       empty
     else
