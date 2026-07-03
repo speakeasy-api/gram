@@ -288,7 +288,7 @@ export function MCPServerStatusDropdown({
         <button
           type="button"
           disabled={!canWrite || update.isPending}
-          className="text-foreground hover:bg-muted trans border-border -my-0.5 flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span
             className={cn(
@@ -310,9 +310,14 @@ export function MCPServerStatusDropdown({
             className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
           >
             {option.value === server.visibility ? (
-              <span className="bg-muted mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full">
+              <span
+                className={cn(
+                  "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                  option.dotClass,
+                )}
+              >
                 <Check
-                  className="text-foreground h-2.5 w-2.5"
+                  className="text-background h-2.5 w-2.5"
                   strokeWidth={4}
                 />
               </span>
