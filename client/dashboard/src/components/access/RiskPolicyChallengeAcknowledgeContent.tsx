@@ -26,7 +26,7 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
     useState<SubmissionResult>("idle");
   const [declined, setDeclined] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const { mutateAsync: acknowledgeChallenge } =
+  const { mutateAsync: acknowledgeChallenge, isPending } =
     useRiskAcknowledgePolicyChallengeMutation();
 
   // The ack token is a bearer credential delivered in the URL fragment (see
@@ -50,7 +50,13 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
       // the fragment from the address bar / history, so it isn't left sitting in
       // a shared screen, browser history, or a copy-pasted URL.
       sessionStorage.setItem(ACK_TOKEN_STORAGE_KEY, ackToken);
-      window.history.replaceState(null, "", window.location.pathname);
+      // Drop only the token-bearing fragment; preserve any query string so other
+      // routing/context params survive.
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
     }
   }, [ackToken]);
 
@@ -70,7 +76,7 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
     if (!submission) {
       submission = acknowledgeChallenge({
         request: {
-          acknowledgeRiskPolicyChallengeForm: {
+          acknowledgeRiskPolicyChallengeRequestBody: {
             ackToken: storedAckToken,
           },
         },
@@ -118,7 +124,7 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
         <GramLogo className="w-25" variant="vertical" />
         <AcknowledgeMessage
           state={state}
-          isPending={state === "submitting"}
+          isPending={isPending}
           onRetry={() => {
             setSubmissionResult("idle");
             setRetryCount((count) => count + 1);
@@ -277,7 +283,7 @@ function AcknowledgeMessage({
       <Type muted small className="text-center">
         {isPending ? "Recording acknowledgement..." : "Preparing..."}
       </Type>
-      <Button variant="tertiary" onClick={onDecline}>
+      <Button variant="tertiary" onClick={onDecline} disabled={isPending}>
         <Button.Text>Decline</Button.Text>
       </Button>
     </Stack>

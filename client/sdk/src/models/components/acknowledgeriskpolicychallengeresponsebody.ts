@@ -16,7 +16,7 @@ export type AcknowledgeRiskPolicyChallengeResponseBody = {
   /**
    * RFC3339 time until which the acknowledgement suppresses re-challenge.
    */
-  expiresAt?: string | undefined;
+  expiresAt?: Date | undefined;
   /**
    * The policy that issued the warning.
    */
@@ -28,7 +28,9 @@ export const AcknowledgeRiskPolicyChallengeResponseBody$inboundSchema:
   z.ZodMiniType<AcknowledgeRiskPolicyChallengeResponseBody, unknown> = z.pipe(
     z.object({
       acknowledged: z.boolean(),
-      expires_at: z.optional(z.string()),
+      expires_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       policy_name: z.optional(z.string()),
     }),
     z.transform((v) => {

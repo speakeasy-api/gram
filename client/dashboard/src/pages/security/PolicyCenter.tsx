@@ -2392,7 +2392,10 @@ function PromptPolicySheetBody({
               <SummaryRow label="Scope" chips={summaryScopes} />
               <SummaryRow
                 label="Action"
-                chips={[ACTION_BADGE_CONFIG[formAction].label]}
+                chips={[
+                  (ACTION_BADGE_CONFIG[formAction] ?? ACTION_BADGE_CONFIG.flag)
+                    .label,
+                ]}
               />
             </div>
           </div>
@@ -3141,7 +3144,12 @@ function PolicySheetBody({
                 <SummaryRow label="Scope" chips={summaryScopes} />
                 <SummaryRow
                   label="Action"
-                  chips={[ACTION_BADGE_CONFIG[formAction].label]}
+                  chips={[
+                    (
+                      ACTION_BADGE_CONFIG[formAction] ??
+                      ACTION_BADGE_CONFIG.flag
+                    ).label,
+                  ]}
                 />
               </div>
             </div>

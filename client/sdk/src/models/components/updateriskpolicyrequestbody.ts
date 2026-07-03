@@ -16,8 +16,8 @@ import {
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
-  Block: "block",
   Warn: "warn",
+  Block: "block",
 } as const;
 /**
  * Policy action: flag, warn (challenge), or block.

@@ -18,8 +18,8 @@ import {
  */
 export const RiskPolicyAction = {
   Flag: "flag",
-  Block: "block",
   Warn: "warn",
+  Block: "block",
 } as const;
 /**
  * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).
