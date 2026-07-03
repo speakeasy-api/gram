@@ -1610,6 +1610,106 @@ printf '{}\n200'
 		"sibling feature plugin URLs must be discovered for plugin-prefixed MCP calls")
 }
 
+// TestRenderHookScriptClaudeEnrichesURLFromCoworkConnectorConfig covers the
+// Cowork/cmux environment, where MCP tool names carry connector UUID prefixes
+// that never match .mcp.json display names: the run's local_<rid>.json maps
+// connector UUID -> URL (newest sibling when the per-run file is not written
+// yet), and without it UUID-prefixed Gram-hosted calls lose their URL
+// evidence and Shadow MCP blocks them.
+func TestRenderHookScriptClaudeEnrichesURLFromCoworkConnectorConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Claude MCP URL enrichment")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	hooksDir := filepath.Join(dir, "plugin", "hooks")
+	runsDir := filepath.Join(dir, "runs")
+	connectorUUID := "019a2f3e-7c41-7d2a-b5c9-3f2ab416778b"
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(runsDir, "local_run1", "outputs"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(runsDir, "local_run2", "outputs"), 0o755))
+	hookPath := filepath.Join(hooksDir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "local_run1.json"), []byte(`{"remoteMcpServersConfig":[{"uuid":"`+connectorUUID+`","name":"Slack","url":"https://app.getgram.ai/mcp/int-slack"}]}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"CLAUDE_PLUGIN_ROOT="+filepath.Join(dir, "plugin"),
+		"CLAUDE_PROJECT_DIR="+filepath.Join(runsDir, "local_run1", "outputs"),
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	stdin := `{"hook_event_name":"PreToolUse","session_id":"sess-cowork","tool_name":"mcp__` + connectorUUID + `__send_message","tool_input":{"q":"x"}}`
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	// The per-run config may not exist yet when the hook fires; the newest
+	// sibling local_*.json must then resolve the connector.
+	siblingEnv := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "CLAUDE_PROJECT_DIR=") {
+			kv = "CLAUDE_PROJECT_DIR=" + filepath.Join(runsDir, "local_run2", "outputs")
+		}
+		siblingEnv = append(siblingEnv, kv)
+	}
+	sibling := exec.Command("bash", hookPath)
+	sibling.Stdin = strings.NewReader(stdin)
+	sibling.Env = siblingEnv
+	output, err = sibling.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 3, "expected two captured ingest payloads")
+	for i := range 2 {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[i])), &parsed))
+		mcp := requireMapValue(t, requireMapValue(t, parsed, "data"), "mcp")
+		require.Equal(t, "https://app.getgram.ai/mcp/int-slack", mcp["url"],
+			"cowork connector UUIDs must resolve to their configured MCP URL")
+		require.Equal(t, "Slack", mcp["server_name"],
+			"evidence must carry the connector display name, not the UUID")
+	}
+}
+
 // TestRenderAuthPreflightScriptObservabilityModeFailsOpen verifies the
 // observability-mode preflight neither blocks nor stalls session start: a
 // fresh machine exits 0 without opening a browser (no interactive login

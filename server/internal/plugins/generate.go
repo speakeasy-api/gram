@@ -2153,6 +2153,55 @@ gram_hooks_enrich_claude_mcp_payload() {
     [ "$ambiguous" -eq 0 ] || break
   done
 
+  # Cowork/cmux sessions name MCP tools by connector UUID, which never
+  # matches a .mcp.json display name. The run's connector config maps
+  # UUID -> URL: CLAUDE_PROJECT_DIR is .../local_<rid>/outputs and the config
+  # sits one directory up as .../local_<rid>.json, falling back to the newest
+  # sibling when the per-run file has not been written yet. Without this
+  # lookup, UUID-prefixed Gram-hosted calls arrive with no URL evidence and
+  # Shadow MCP blocks the customer's own tools.
+  if [ -z "$matched_url" ] && [ "$ambiguous" -eq 0 ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    local cowork_json="" candidate_local_dir cowork_parent sibling_json connector_uuid
+    candidate_local_dir="$(dirname "$CLAUDE_PROJECT_DIR")"
+    if [ -f "${candidate_local_dir}.json" ]; then
+      cowork_json="${candidate_local_dir}.json"
+    else
+      cowork_parent="$(dirname "$candidate_local_dir")"
+      if [ -d "$cowork_parent" ]; then
+        sibling_json="$(ls -t "$cowork_parent"/local_*.json 2>/dev/null | head -1)"
+        if [ -n "$sibling_json" ] && [ -f "$sibling_json" ]; then
+          cowork_json="$sibling_json"
+        fi
+      fi
+    fi
+    if [ -n "$cowork_json" ]; then
+      rows=$(jq -r '
+        (.remoteMcpServersConfig // [])[]
+        | [
+            (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // ""),
+            (.name // .displayName // .display_name // ""),
+            (.url // .serverUrl // .server_url // "")
+          ]
+        | @tsv' "$cowork_json" 2>/dev/null) || rows=""
+      while IFS=$'\t' read -r connector_uuid name url; do
+        [ -n "$url" ] || continue
+        if [ "$connector_uuid" != "$server_identity" ] &&
+          [ "$(gram_hooks_sanitize_claude_mcp_name "$name")" != "$server_identity" ]; then
+          continue
+        fi
+        if [ -z "$matched_url" ]; then
+          matched_name="${name:-$connector_uuid}"
+          matched_url="$url"
+          continue
+        fi
+        if [ "$matched_url" != "$url" ]; then
+          ambiguous=1
+          break
+        fi
+      done <<< "$rows"
+    fi
+  fi
+
   if [ -z "$matched_url" ] || [ "$ambiguous" -ne 0 ]; then
     printf '%s' "$input"
     return
