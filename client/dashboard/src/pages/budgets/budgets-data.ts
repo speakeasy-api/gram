@@ -3,73 +3,6 @@ import type { ActorRecord } from "./budget-cel";
 import { ACTOR_ATTRIBUTES, matchActors } from "./budget-cel";
 
 /* -------------------------------------------------------------------------- */
-/*  Models & providers                                                         */
-/* -------------------------------------------------------------------------- */
-
-/** Cost tier of a model — drives how much of an actor's spend is "in scope"
- *  when a rule is scoped to specific models/providers. */
-type ModelTier = "frontier" | "standard" | "open";
-
-export interface ModelDef {
-  id: string;
-  label: string;
-  provider: string;
-  tier: ModelTier;
-}
-
-export const PROVIDERS = ["OpenAI", "Anthropic", "Google", "Mistral"] as const;
-
-export const MODELS: ModelDef[] = [
-  { id: "gpt-5.4", label: "GPT-5.4", provider: "OpenAI", tier: "frontier" },
-  {
-    id: "gpt-5-mini",
-    label: "GPT-5 mini",
-    provider: "OpenAI",
-    tier: "standard",
-  },
-  {
-    id: "claude-opus-4.8",
-    label: "Claude Opus 4.8",
-    provider: "Anthropic",
-    tier: "frontier",
-  },
-  {
-    id: "claude-sonnet-5",
-    label: "Claude Sonnet 5",
-    provider: "Anthropic",
-    tier: "standard",
-  },
-  {
-    id: "gemini-3-pro",
-    label: "Gemini 3 Pro",
-    provider: "Google",
-    tier: "frontier",
-  },
-  {
-    id: "gemini-3-flash",
-    label: "Gemini 3 Flash",
-    provider: "Google",
-    tier: "standard",
-  },
-  {
-    id: "mistral-large",
-    label: "Mistral Large",
-    provider: "Mistral",
-    tier: "open",
-  },
-];
-
-export const MODEL_BY_ID = new Map(MODELS.map((m) => [m.id, m]));
-
-/** Approximate share of an actor's spend attributable to each tier — used to
- *  estimate in-scope spend when a rule targets specific models/providers. */
-const TIER_SHARE: Record<ModelTier, number> = {
-  frontier: 0.65,
-  standard: 0.3,
-  open: 0.05,
-};
-
-/* -------------------------------------------------------------------------- */
 /*  Actors (mocked directory-synced users)                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -221,36 +154,60 @@ const MOCK_ACTORS: MockActor[] = [
   },
 ];
 
+/** Everyone in the mock directory — the denominator for people rollups. */
+export const DIRECTORY_USER_COUNT = MOCK_ACTORS.length;
+
 /* -------------------------------------------------------------------------- */
-/*  Rules                                                                      */
+/*  Rules (v1: one condition, fixed windows, flag-or-block)                    */
 /* -------------------------------------------------------------------------- */
 
 export type BudgetWindow = "daily" | "weekly" | "monthly";
-export type WindowReset = "fixed" | "rolling";
-export type BreachAction = "block" | "route_fallback" | "alert_only";
+/** Mirrors the security policy actions: flag for review, or block requests. */
+export type RuleAction = "flag" | "block";
 
 export interface SpendRule {
   id: string;
   name: string;
   description: string;
-  /** CEL predicate over actor attributes — who the rule applies to. */
+  /** Single CEL comparison over actor attributes — who the rule applies to. */
   targetExpr: string;
   limitUsd: number;
+  /** Fixed calendar window: resets at midnight / Monday / the 1st. */
   window: BudgetWindow;
-  reset: WindowReset;
-  /** Models the limit applies to; empty = all models. */
-  models: string[];
-  /** Providers the limit applies to; empty = all providers. */
-  providers: string[];
-  breachAction: BreachAction;
-  /** Fallback model when breachAction is route_fallback. */
-  fallbackModel: string;
+  /** Percent of the budget (1–99) at which the rule turns Approaching and a
+   *  threshold-warning event fires. */
+  warnAtPct: number;
+  action: RuleAction;
   /** Whether the rule is on. Disabled rules are ignored at request time. */
   enabled: boolean;
+  /** Monotonic config version. Material edits bump it — see MATERIAL_FIELDS. */
+  version: number;
+  /** When evaluation last (re)started: creation or the last material edit.
+   *  Spend before this instant does not count against the rule. */
+  evaluatedFrom: string;
   createdAt: string;
 }
 
-export type RuleDraft = Omit<SpendRule, "id" | "createdAt">;
+export type RuleDraft = Omit<
+  SpendRule,
+  "id" | "createdAt" | "version" | "evaluatedFrom"
+>;
+
+/** Versioned identity for a rule, following the platform URN shape
+ *  (`tools:http:petstore:getUser`). Events record the URN they fired under,
+ *  which pins the exact config that produced them — the live rule may have
+ *  moved on to a newer version since. */
+export function ruleUrn(rule: Pick<SpendRule, "id" | "version">): string {
+  return `spend_rules:${rule.id}:v${rule.version}`;
+}
+
+export function parseRuleUrn(
+  urn: string,
+): { id: string; version: number } | null {
+  const match = /^spend_rules:(.+):v(\d+)$/.exec(urn);
+  if (!match) return null;
+  return { id: match[1]!, version: Number(match[2]!) };
+}
 
 export const WINDOW_LABELS: Record<BudgetWindow, string> = {
   daily: "Daily",
@@ -258,15 +215,14 @@ export const WINDOW_LABELS: Record<BudgetWindow, string> = {
   monthly: "Monthly",
 };
 
-export const BREACH_ACTION_LABELS: Record<BreachAction, string> = {
-  block: "Block requests",
-  route_fallback: "Route to fallback model",
-  alert_only: "Alert only",
+export const RULE_ACTION_LABELS: Record<RuleAction, string> = {
+  flag: "Flag",
+  block: "Block",
 };
 
 let nextId = 1;
-function makeId(): string {
-  return `rule_${Date.now().toString(36)}_${nextId++}`;
+function makeId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${nextId++}`;
 }
 
 const SEED_RULES: SpendRule[] = [
@@ -274,16 +230,18 @@ const SEED_RULES: SpendRule[] = [
     id: "rule_seed_eng",
     name: "Engineering frontier cap",
     description:
-      "Engineers get a generous monthly budget on frontier models, then fall back to a cheaper model.",
-    targetExpr: 'department_name == "Engineering" && job_title != "Manager"',
+      "Engineering gets a generous monthly budget. Overspend is flagged for review.",
+    targetExpr: 'department_name == "Engineering"',
     limitUsd: 5000,
     window: "monthly",
-    reset: "fixed",
-    models: ["gpt-5.4", "claude-opus-4.8", "gemini-3-pro"],
-    providers: [],
-    breachAction: "route_fallback",
-    fallbackModel: "gpt-5-mini",
+    warnAtPct: 80,
+    action: "flag",
     enabled: true,
+    // v1 capped at $4,000 and breached in June; the limit was raised to
+    // $5,000 on Jun 20, which restarted evaluation as v2. The June breach
+    // event still references spend_rules:rule_seed_eng:v1.
+    version: 2,
+    evaluatedFrom: "2026-06-20T15:00:00.000Z",
     createdAt: "2026-06-01T00:00:00.000Z",
   },
   {
@@ -294,168 +252,209 @@ const SEED_RULES: SpendRule[] = [
     targetExpr: 'employee_type == "intern"',
     limitUsd: 200,
     window: "monthly",
-    reset: "fixed",
-    models: [],
-    providers: [],
-    breachAction: "block",
-    fallbackModel: "",
+    warnAtPct: 80,
+    action: "block",
     enabled: true,
+    version: 1,
+    evaluatedFrom: "2026-06-05T00:00:00.000Z",
     createdAt: "2026-06-05T00:00:00.000Z",
   },
   {
     id: "rule_seed_ml",
-    name: "ML team alert threshold",
+    name: "ML team watch",
     description:
-      "Watch the data science team's spend and alert admins when it crosses the threshold.",
+      "Watch the data science team's spend and flag overspend for review.",
     targetExpr: '"ml-team" in groups',
-    limitUsd: 8000,
+    limitUsd: 3500,
     window: "monthly",
-    reset: "rolling",
-    models: [],
-    providers: ["Anthropic", "OpenAI"],
-    breachAction: "alert_only",
-    fallbackModel: "",
+    warnAtPct: 80,
+    action: "flag",
     enabled: true,
+    version: 1,
+    evaluatedFrom: "2026-06-10T00:00:00.000Z",
     createdAt: "2026-06-10T00:00:00.000Z",
   },
   {
     id: "rule_seed_contractors",
     name: "Contractor weekly guardrail",
     description:
-      "Contractors get a weekly budget on frontier models to keep short engagements predictable.",
+      "Contractors get a weekly budget to keep short engagements predictable.",
     targetExpr: 'employee_type == "contractor"',
     limitUsd: 400,
     window: "weekly",
-    reset: "rolling",
-    models: ["gpt-5.4", "claude-opus-4.8"],
-    providers: [],
-    breachAction: "route_fallback",
-    fallbackModel: "mistral-large",
+    // Small weekly budgets burn fast — warn earlier than the default.
+    warnAtPct: 50,
+    action: "block",
     enabled: false,
+    version: 1,
+    evaluatedFrom: "2026-06-14T00:00:00.000Z",
     createdAt: "2026-06-14T00:00:00.000Z",
   },
 ];
 
 /* -------------------------------------------------------------------------- */
-/*  Events (mocked budget outcomes)                                            */
+/*  Rule status (lifecycle state derived from usage)                           */
 /* -------------------------------------------------------------------------- */
+
+export type RuleStatus = "healthy" | "approaching" | "flagging" | "blocking";
+
+export const RULE_STATUS_LABELS: Record<RuleStatus, string> = {
+  healthy: "Healthy",
+  approaching: "Approaching",
+  flagging: "Flagging",
+  blocking: "Blocking",
+};
+
+/**
+ * Current lifecycle state of a rule: healthy → approaching (past the rule's
+ * warn threshold) → flagging/blocking (over limit, depending on the rule's
+ * action). Null when the rule is disabled or its target can't be evaluated.
+ */
+export function ruleStatus(
+  rule: Pick<SpendRule, "action" | "enabled" | "warnAtPct">,
+  usage: RuleUsage,
+): RuleStatus | null {
+  if (!rule.enabled || usage.matched === null) return null;
+  if (usage.utilization >= 1) {
+    return rule.action === "block" ? "blocking" : "flagging";
+  }
+  if (usage.utilization >= rule.warnAtPct / 100) return "approaching";
+  return "healthy";
+}
+
+/** Human countdown until the rule's fixed window resets, e.g. "27d 5h". */
+export function timeUntilWindowReset(window: BudgetWindow): string {
+  const now = new Date();
+  let next: Date;
+  switch (window) {
+    case "daily":
+      next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      break;
+    case "weekly": {
+      const day = (now.getDay() + 6) % 7; // Monday = 0
+      next = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + (7 - day),
+      );
+      break;
+    }
+    case "monthly":
+      next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      break;
+  }
+  const hours = Math.max(
+    1,
+    Math.round((next.getTime() - now.getTime()) / 3_600_000),
+  );
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainder = hours % 24;
+  return remainder > 0 ? `${days}d ${remainder}h` : `${days}d`;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Events (budget lifecycle transitions, not per-request noise)               */
+/* -------------------------------------------------------------------------- */
+
+/** Two event kinds for v1: a rule passed its warn threshold, or it breached
+ *  its budget. A breach on a block rule also means requests are now rejected —
+ *  that consequence lives in the breach summary rather than a separate event.
+ *  Rule config changes are not budget events; they go to the standard audit
+ *  log. */
+export type SpendEventType = "warning" | "breach";
+
+export const SPEND_EVENT_TYPE_LABELS: Record<SpendEventType, string> = {
+  // Each rule sets its own warn threshold; the event summary records the
+  // percentage that applied when the event fired.
+  warning: "Threshold warning",
+  breach: "Budget breached",
+};
 
 export interface SpendControlEvent {
   id: string;
   occurredAt: string;
-  actorName: string;
-  actorEmail: string;
+  type: SpendEventType;
+  /** Versioned URN of the rule config the event fired under. The live rule
+   *  may be newer (or deleted) — the URN pins how to read the numbers here. */
+  ruleUrn: string;
+  /** Rule name at the time of the event. Survives renames and deletes. */
   ruleName: string;
-  action: BreachAction;
-  model: string;
-  fallbackModel?: string;
-  spendUsd: number;
-  limitUsd: number;
+  /** One-line human explanation of what happened and what it means. */
+  summary: string;
+  spendUsd?: number;
+  limitUsd?: number;
 }
 
-export const SPEND_CONTROL_EVENTS: SpendControlEvent[] = [
+/** Seeded history. Note the Engineering arc: v1 (capped at $4,000) breached
+ *  in June, then the limit was raised to $5,000 — bumping the rule to v2 and
+ *  restarting evaluation — and the July warning fired under v2. The v1 breach
+ *  stays interpretable via its URN even though the live config moved on. */
+const SEED_EVENTS: SpendControlEvent[] = [
   {
-    id: "evt_budget_001",
-    occurredAt: "2026-07-02T12:58:00.000Z",
-    actorName: "Sam Rivera",
-    actorEmail: "sam@acme.com",
+    id: "evt_b_001",
+    occurredAt: "2026-07-03T13:47:00.000Z",
+    type: "breach",
+    ruleUrn: "spend_rules:rule_seed_ml:v1",
+    ruleName: "ML team watch",
+    summary:
+      "Data Science crossed its $3,500 monthly budget. Requests still flow — overspend is flagged for review.",
+    spendUsd: 3540,
+    limitUsd: 3500,
+  },
+  {
+    id: "evt_b_003",
+    occurredAt: "2026-07-02T21:38:00.000Z",
+    type: "breach",
+    ruleUrn: "spend_rules:rule_seed_interns:v1",
     ruleName: "Intern hard limit",
-    action: "block",
-    model: "claude-opus-4.8",
-    spendUsd: 214,
+    summary:
+      "Interns crossed their $200 monthly budget two days into the window. Requests from 2 matched people are rejected until the window resets on Aug 1.",
+    spendUsd: 204,
     limitUsd: 200,
   },
   {
-    id: "evt_budget_002",
-    occurredAt: "2026-07-02T11:43:00.000Z",
-    actorName: "Omar Vasquez",
-    actorEmail: "omar@contractor.dev",
-    ruleName: "Contractor weekly guardrail",
-    action: "route_fallback",
-    model: "claude-opus-4.8",
-    fallbackModel: "mistral-large",
-    spendUsd: 436,
-    limitUsd: 400,
-  },
-  {
-    id: "evt_budget_003",
-    occurredAt: "2026-07-02T09:21:00.000Z",
-    actorName: "Kenji Watanabe",
-    actorEmail: "kenji@acme.com",
-    ruleName: "ML team alert threshold",
-    action: "alert_only",
-    model: "gpt-5.4",
-    spendUsd: 8420,
-    limitUsd: 8000,
-  },
-  {
-    id: "evt_budget_004",
-    occurredAt: "2026-07-01T17:08:00.000Z",
-    actorName: "Grace Lindqvist",
-    actorEmail: "grace@acme.com",
+    id: "evt_b_004",
+    occurredAt: "2026-07-02T16:05:00.000Z",
+    type: "warning",
+    ruleUrn: "spend_rules:rule_seed_eng:v2",
     ruleName: "Engineering frontier cap",
-    action: "route_fallback",
-    model: "gemini-3-pro",
-    fallbackModel: "gpt-5-mini",
-    spendUsd: 5210,
+    summary:
+      "Engineering passed its 80% warn threshold with 28 days left in the window.",
+    spendUsd: 4020,
     limitUsd: 5000,
   },
   {
-    id: "evt_budget_005",
-    occurredAt: "2026-07-01T14:32:00.000Z",
-    actorName: "Mira Haddad",
-    actorEmail: "mira@acme.com",
+    id: "evt_b_005",
+    occurredAt: "2026-07-01T23:30:00.000Z",
+    type: "warning",
+    ruleUrn: "spend_rules:rule_seed_ml:v1",
+    ruleName: "ML team watch",
+    summary: "Data Science passed its 80% warn threshold.",
+    spendUsd: 2840,
+    limitUsd: 3500,
+  },
+  {
+    id: "evt_b_006",
+    occurredAt: "2026-07-01T20:10:00.000Z",
+    type: "warning",
+    ruleUrn: "spend_rules:rule_seed_interns:v1",
     ruleName: "Intern hard limit",
-    action: "block",
-    model: "gpt-5.4",
-    spendUsd: 206,
+    summary:
+      "Interns passed their 80% warn threshold within the first day of the window.",
+    spendUsd: 163,
     limitUsd: 200,
   },
   {
-    id: "evt_budget_006",
-    occurredAt: "2026-07-01T10:05:00.000Z",
-    actorName: "Kenji Watanabe",
-    actorEmail: "kenji@acme.com",
-    ruleName: "ML team alert threshold",
-    action: "alert_only",
-    model: "claude-opus-4.8",
-    spendUsd: 8110,
-    limitUsd: 8000,
-  },
-  {
-    id: "evt_budget_007",
-    occurredAt: "2026-06-30T19:47:00.000Z",
-    actorName: "Omar Vasquez",
-    actorEmail: "omar@contractor.dev",
-    ruleName: "Contractor weekly guardrail",
-    action: "route_fallback",
-    model: "gpt-5.4",
-    fallbackModel: "mistral-large",
-    spendUsd: 402,
-    limitUsd: 400,
-  },
-  {
-    id: "evt_budget_008",
-    occurredAt: "2026-06-30T15:12:00.000Z",
-    actorName: "Sam Rivera",
-    actorEmail: "sam@acme.com",
-    ruleName: "Intern hard limit",
-    action: "block",
-    model: "gemini-3-pro",
-    spendUsd: 231,
-    limitUsd: 200,
-  },
-  {
-    id: "evt_budget_009",
-    occurredAt: "2026-06-30T08:26:00.000Z",
-    actorName: "Ada Okafor",
-    actorEmail: "ada@acme.com",
+    id: "evt_b_009",
+    occurredAt: "2026-06-18T09:12:00.000Z",
+    type: "breach",
+    ruleUrn: "spend_rules:rule_seed_eng:v1",
     ruleName: "Engineering frontier cap",
-    action: "route_fallback",
-    model: "claude-opus-4.8",
-    fallbackModel: "gpt-5-mini",
-    spendUsd: 5480,
-    limitUsd: 5000,
+    summary:
+      "Engineering crossed its $4,000 monthly budget. Requests still flow — overspend is flagged for review.",
+    spendUsd: 4085,
+    limitUsd: 4000,
   },
 ];
 
@@ -463,11 +462,18 @@ export const SPEND_CONTROL_EVENTS: SpendControlEvent[] = [
 /*  In-memory store (prototype only — no persistence, resets on reload)        */
 /* -------------------------------------------------------------------------- */
 
+interface BudgetSnapshot {
+  rules: SpendRule[];
+  events: SpendControlEvent[];
+}
+
 let rules: SpendRule[] = [...SEED_RULES];
+let events: SpendControlEvent[] = [...SEED_EVENTS];
+let snapshot: BudgetSnapshot = { rules, events };
 const listeners = new Set<() => void>();
 
 function emit(): void {
-  rules = [...rules];
+  snapshot = { rules: [...rules], events: [...events] };
   for (const listener of listeners) listener();
 }
 
@@ -480,24 +486,41 @@ function subscribe(listener: () => void): () => void {
 
 export interface BudgetStore {
   rules: SpendRule[];
+  events: SpendControlEvent[];
   addRule: (draft: RuleDraft) => SpendRule;
   updateRule: (id: string, patch: Partial<RuleDraft>) => void;
   removeRule: (id: string) => void;
 }
 
+/** Fields that change what the rule evaluates. Editing any of them bumps the
+ *  version and restarts evaluation from scratch — accumulated window state is
+ *  dropped, and the old version lives on only in the events it produced.
+ *  Renames, description tweaks, and enable/disable keep state. The change
+ *  itself is recorded in the standard audit log, not as a budget event. */
+const MATERIAL_FIELDS = [
+  "targetExpr",
+  "limitUsd",
+  "window",
+  "warnAtPct",
+  "action",
+] as const;
+
 export function useBudgetStore(): BudgetStore {
-  const snapshot = useSyncExternalStore(
+  const snap = useSyncExternalStore(
     subscribe,
-    () => rules,
-    () => rules,
+    () => snapshot,
+    () => snapshot,
   );
 
   return {
-    rules: snapshot,
+    rules: snap.rules,
+    events: snap.events,
     addRule: (draft) => {
       const rule: SpendRule = {
         ...draft,
-        id: makeId(),
+        id: makeId("rule"),
+        version: 1,
+        evaluatedFrom: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       };
       rules.push(rule);
@@ -505,10 +528,23 @@ export function useBudgetStore(): BudgetStore {
       return rule;
     },
     updateRule: (id, patch) => {
-      rules = rules.map((r) => (r.id === id ? { ...r, ...patch } : r));
+      rules = rules.map((r) => {
+        if (r.id !== id) return r;
+        const next = { ...r, ...patch };
+        const material = MATERIAL_FIELDS.some(
+          (field) => next[field] !== r[field],
+        );
+        if (!material) return next;
+        return {
+          ...next,
+          version: r.version + 1,
+          evaluatedFrom: new Date().toISOString(),
+        };
+      });
       emit();
     },
     removeRule: (id) => {
+      // Events of a removed rule stay — their URN keeps them interpretable.
       rules = rules.filter((r) => r.id !== id);
       emit();
     },
@@ -519,51 +555,72 @@ export function useBudgetStore(): BudgetStore {
 /*  Spend estimation                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** Fraction of a full monthly spend attributable to the rule's model/provider
- *  scope. Returns 1 when unscoped (applies to everything). */
-function scopeFraction(models: string[], providers: string[]): number {
-  if (models.length > 0) {
-    const tiers = new Set(
-      models.map((id) => MODEL_BY_ID.get(id)?.tier).filter(Boolean),
-    );
-    let share = 0;
-    for (const tier of tiers) share += TIER_SHARE[tier as ModelTier];
-    return Math.min(1, share || 0.1);
-  }
-  if (providers.length > 0) {
-    return Math.min(1, providers.length / PROVIDERS.length + 0.15);
-  }
-  return 1;
-}
-
-/** Fraction of the current window that has elapsed — makes the "spend so far"
- *  bar move deterministically with the calendar rather than looking static. */
-function windowElapsedFraction(window: BudgetWindow): number {
-  const now = new Date();
+function windowStart(window: BudgetWindow, now: Date): Date {
   switch (window) {
-    case "daily": {
-      const secs = now.getHours() * 3600 + now.getMinutes() * 60;
-      return secs / (24 * 3600);
-    }
+    case "daily":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
     case "weekly": {
       const day = (now.getDay() + 6) % 7; // Monday = 0
-      return (day + now.getHours() / 24) / 7;
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
     }
+    case "monthly":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+}
+
+function windowLengthMs(window: BudgetWindow, now: Date): number {
+  switch (window) {
+    case "daily":
+      return 24 * 3_600_000;
+    case "weekly":
+      return 7 * 24 * 3_600_000;
     case "monthly": {
       const daysInMonth = new Date(
         now.getFullYear(),
         now.getMonth() + 1,
         0,
       ).getDate();
-      return (now.getDate() - 1 + now.getHours() / 24) / daysInMonth;
+      return daysInMonth * 24 * 3_600_000;
     }
   }
+}
+
+/** Fractions of the current window the rule evaluates over. A rule (re)starts
+ *  evaluating at `evaluatedFrom` — spend before that instant never counts, so
+ *  a rule edited mid-window accumulates from the edit, not the window start.
+ *  `elapsed` covers evaluation start → now; `total` covers evaluation start →
+ *  window end (what a full-pace projection can reach). */
+function evaluationFractions(
+  window: BudgetWindow,
+  evaluatedFrom?: string,
+): { elapsed: number; total: number } {
+  const now = new Date();
+  const start = windowStart(window, now);
+  const lengthMs = windowLengthMs(window, now);
+  const from = evaluatedFrom ? new Date(evaluatedFrom) : start;
+  const effective = from > start ? from : start;
+  const clamp = (fraction: number) => Math.min(1, Math.max(0, fraction));
+  return {
+    elapsed: clamp((now.getTime() - effective.getTime()) / lengthMs),
+    total: clamp((start.getTime() + lengthMs - effective.getTime()) / lengthMs),
+  };
 }
 
 const WINDOW_FACTOR: Record<BudgetWindow, number> = {
   daily: 1 / 30,
   weekly: 7 / 30,
   monthly: 1,
+};
+
+/** Authored current-window spend for the seed rules so the prototype demos
+ *  every state (approaching, flagging, blocking) regardless of today's date.
+ *  Keyed by versioned URN: a material edit bumps the version, the lookup
+ *  misses, and the rule starts evaluating from scratch. */
+const SEEDED_WINDOW_SPEND: Record<string, number> = {
+  "spend_rules:rule_seed_eng:v2": 4180, // 83.6% of $5,000 → approaching
+  "spend_rules:rule_seed_interns:v1": 212, // 106% of $200, block → blocking
+  "spend_rules:rule_seed_ml:v1": 3720, // 106% of $3,500, flag → flagging
+  "spend_rules:rule_seed_contractors:v1": 118, // ~30% of $400; disabled anyway
 };
 
 export interface RuleUsage {
@@ -581,10 +638,8 @@ export interface RuleUsage {
 
 /** Estimate a rule's usage against the mock directory. Deterministic. */
 export function estimateRuleUsage(
-  rule: Pick<
-    SpendRule,
-    "targetExpr" | "limitUsd" | "window" | "models" | "providers"
-  >,
+  rule: Pick<SpendRule, "targetExpr" | "limitUsd" | "window"> &
+    Partial<Pick<SpendRule, "id" | "version" | "evaluatedFrom">>,
   actors: MockActor[] = MOCK_ACTORS,
 ): RuleUsage {
   const matched = matchActors(rule.targetExpr, actors);
@@ -592,10 +647,19 @@ export function estimateRuleUsage(
     (sum, actor) => sum + actor.monthlySpendUsd,
     0,
   );
-  const inScopeMonthly =
-    monthlyBase * scopeFraction(rule.models, rule.providers);
-  const projected = inScopeMonthly * WINDOW_FACTOR[rule.window];
-  const current = projected * windowElapsedFraction(rule.window);
+  const windowBase = monthlyBase * WINDOW_FACTOR[rule.window];
+  const seeded =
+    rule.id !== undefined && rule.version !== undefined
+      ? SEEDED_WINDOW_SPEND[ruleUrn({ id: rule.id, version: rule.version })]
+      : undefined;
+  const { elapsed, total } = evaluationFractions(
+    rule.window,
+    rule.evaluatedFrom,
+  );
+  const current = seeded ?? windowBase * elapsed;
+  // Full-pace spend over the part of the window the rule evaluates. A rule
+  // edited mid-window can't retroactively spend the part it wasn't watching.
+  const projected = Math.max(windowBase * total, current);
   const utilization =
     rule.limitUsd > 0 ? Math.min(1.5, current / rule.limitUsd) : 0;
   return {
@@ -604,6 +668,64 @@ export function estimateRuleUsage(
     projectedSpendUsd: projected,
     utilization,
     projectedOverLimit: projected > rule.limitUsd,
+  };
+}
+
+export interface ActorSpendRow {
+  actor: MockActor;
+  /** This actor's estimated share of the rule's current-window spend, in USD. */
+  spendUsd: number;
+  /** Fraction of the rule's current-window spend attributable to this actor. */
+  share: number;
+}
+
+/** Per-person contribution to a rule's current-window spend, largest first.
+ *  Answers "which individuals drove this budget" in the rule drill-down. */
+export function ruleActorBreakdown(
+  rule: Pick<SpendRule, "targetExpr" | "limitUsd" | "window"> &
+    Partial<Pick<SpendRule, "id" | "version" | "evaluatedFrom">>,
+): ActorSpendRow[] {
+  const usage = estimateRuleUsage(rule);
+  const matched = usage.matched ?? [];
+  const monthlyBase = matched.reduce(
+    (sum, actor) => sum + actor.monthlySpendUsd,
+    0,
+  );
+  if (monthlyBase === 0) return [];
+  return matched
+    .map((actor) => {
+      const share = actor.monthlySpendUsd / monthlyBase;
+      return { actor, spendUsd: usage.currentSpendUsd * share, share };
+    })
+    .sort((a, b) => b.spendUsd - a.spendUsd);
+}
+
+export interface CoveredSpendSummary {
+  /** Sum of enabled rules' current-window spend, in USD. */
+  currentUsd: number;
+  /** Upper bound: sum of enabled rules' limits, in USD. */
+  budgetUsd: number;
+  /** Unique people covered by at least one enabled rule. */
+  peopleCount: number;
+}
+
+/** Org-level rollup for the summary cards. Numerator and denominator are the
+ *  same shape — per-rule sums — so a person under two budgets counts against
+ *  both, exactly like both limits count toward the total. The people count is
+ *  deduplicated, since a person is covered or not. */
+export function coveredSpendSummary(rules: SpendRule[]): CoveredSpendSummary {
+  const enabled = rules.filter((rule) => rule.enabled);
+  const people = new Set<string>();
+  let currentUsd = 0;
+  for (const rule of enabled) {
+    const usage = estimateRuleUsage(rule);
+    currentUsd += usage.currentSpendUsd;
+    for (const actor of usage.matched ?? []) people.add(actor.id);
+  }
+  return {
+    currentUsd,
+    budgetUsd: enabled.reduce((sum, rule) => sum + rule.limitUsd, 0),
+    peopleCount: people.size,
   };
 }
 
@@ -617,17 +739,6 @@ export function formatUsd(amount: number): string {
     currency: "USD",
     maximumFractionDigits: amount >= 100 ? 0 : 2,
   }).format(amount);
-}
-
-/** Short human summary of a rule's model/provider scope. */
-export function scopeSummary(models: string[], providers: string[]): string {
-  if (models.length > 0) {
-    const labels = models.map((id) => MODEL_BY_ID.get(id)?.label ?? id);
-    if (labels.length <= 2) return labels.join(", ");
-    return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
-  }
-  if (providers.length > 0) return providers.join(", ");
-  return "All models";
 }
 
 export function targetSummary(expr: string): string {
@@ -697,11 +808,8 @@ export function defaultRuleDraft(): RuleDraft {
     targetExpr: 'department_name == "Engineering"',
     limitUsd: 1000,
     window: "monthly",
-    reset: "fixed",
-    models: [],
-    providers: [],
-    breachAction: "block",
-    fallbackModel: "",
+    warnAtPct: 80,
+    action: "block",
     enabled: true,
   };
 }

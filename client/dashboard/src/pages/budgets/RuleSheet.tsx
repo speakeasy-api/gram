@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/sheet";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
 import { Check, Trash2, Users } from "lucide-react";
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 import {
@@ -29,33 +28,40 @@ import {
 } from "./budget-cel";
 import { UsageBar } from "./budget-shared";
 import {
-  BREACH_ACTION_LABELS,
-  MODELS,
-  PROVIDERS,
   WINDOW_LABELS,
   defaultRuleDraft,
   estimateRuleUsage,
   formatUsd,
-  type BreachAction,
   type BudgetWindow,
   type MockActor,
+  type RuleAction,
   type RuleDraft,
   type SpendRule,
-  type WindowReset,
 } from "./budgets-data";
 
 const WINDOWS: BudgetWindow[] = ["daily", "weekly", "monthly"];
-const BREACH_ACTIONS: BreachAction[] = [
-  "block",
-  "route_fallback",
-  "alert_only",
+
+const ACTION_OPTIONS: {
+  value: RuleAction;
+  title: string;
+  hint: string;
+}[] = [
+  {
+    value: "flag",
+    title: "Flag",
+    hint: "Keep requests flowing and record budget events for admins to review.",
+  },
+  {
+    value: "block",
+    title: "Block",
+    hint: "Reject further requests from matched people until the window resets.",
+  },
 ];
-const BREACH_ACTION_HINTS: Record<BreachAction, string> = {
-  block: "Reject further requests from matched actors once the limit is hit.",
-  route_fallback:
-    "Keep actors productive by downgrading them to a cheaper fallback model.",
-  alert_only:
-    "Never block — just record the overage and (later) notify admins.",
+
+const WINDOW_RESET_HINTS: Record<BudgetWindow, string> = {
+  daily: "Fixed window — resets at midnight.",
+  weekly: "Fixed window — resets every Monday.",
+  monthly: "Fixed window — resets on the 1st of each month.",
 };
 
 type ConditionOperator =
@@ -68,7 +74,6 @@ type ConditionOperator =
   | "includes";
 
 interface TargetCondition {
-  id: string;
   attribute: string;
   operator: ConditionOperator;
   value: string;
@@ -93,21 +98,20 @@ const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   includes: "includes",
 };
 
-let nextConditionId = 1;
-
 function toDraft(rule: SpendRule): RuleDraft {
-  const { id: _id, createdAt: _createdAt, ...draft } = rule;
+  const {
+    id: _id,
+    createdAt: _createdAt,
+    version: _version,
+    evaluatedFrom: _evaluatedFrom,
+    ...draft
+  } = rule;
   return draft;
-}
-
-function makeConditionId(): string {
-  return `cond_${nextConditionId++}`;
 }
 
 function makeDefaultCondition(): TargetCondition {
   const attr = ACTOR_ATTRIBUTES[0]!;
   return {
-    id: makeConditionId(),
     attribute: attr.name,
     operator: operatorsForAttribute(attr)[0]!,
     value: attr.samples[0] ?? "",
@@ -131,15 +135,11 @@ function attributeLabel(name: string): string {
     .join(" ");
 }
 
-function parseTargetConditions(expr: string): TargetCondition[] {
-  const parts = expr
-    .split(/\s+&&\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const parsed = parts
-    .map(parseTargetCondition)
-    .filter((condition) => condition !== null);
-  return parsed.length > 0 ? parsed : [makeDefaultCondition()];
+/** Parse a stored expression into a single builder condition (v1: rules carry
+ *  exactly one condition; legacy AND expressions collapse to their first). */
+function parseSingleCondition(expr: string): TargetCondition {
+  const first = expr.split(/\s+&&\s+/)[0]?.trim() ?? "";
+  return parseTargetCondition(first) ?? makeDefaultCondition();
 }
 
 function parseTargetCondition(part: string): TargetCondition | null {
@@ -187,7 +187,6 @@ function makeConditionFromParts(
   const operators = operatorsForAttribute(attr);
   if (attr.name !== attributeName || !operators.includes(operator)) return null;
   return {
-    id: makeConditionId(),
     attribute: attr.name,
     operator,
     value: attr.samples.includes(value) ? value : (attr.samples[0] ?? value),
@@ -205,10 +204,6 @@ function operatorFromMethod(method: string): ConditionOperator {
     default:
       return "contains";
   }
-}
-
-function targetConditionsToExpr(conditions: TargetCondition[]): string {
-  return conditions.map(targetConditionToExpr).join(" && ");
 }
 
 function targetConditionToExpr(condition: TargetCondition): string {
@@ -286,39 +281,35 @@ function RuleForm({
 
   const usage = useMemo(
     () =>
+      // Pass the identity through when editing so the preview shows the same
+      // (seeded) current spend as the rules table. Saving a material change
+      // bumps the version and restarts evaluation from scratch.
       estimateRuleUsage({
         targetExpr: draft.targetExpr,
         limitUsd: draft.limitUsd,
         window: draft.window,
-        models: draft.models,
-        providers: draft.providers,
+        ...(rule
+          ? {
+              id: rule.id,
+              version: rule.version,
+              evaluatedFrom: rule.evaluatedFrom,
+            }
+          : {}),
       }),
-    [
-      draft.targetExpr,
-      draft.limitUsd,
-      draft.window,
-      draft.models,
-      draft.providers,
-    ],
+    [draft.targetExpr, draft.limitUsd, draft.window, rule],
   );
 
   const targetError = validateBudgetCel(draft.targetExpr);
   const canSubmit =
-    draft.name.trim() !== "" &&
-    !targetError &&
-    draft.limitUsd > 0 &&
-    (draft.breachAction !== "route_fallback" || draft.fallbackModel !== "");
-
-  const toggleInList = (list: string[], value: string): string[] =>
-    list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+    draft.name.trim() !== "" && !targetError && draft.limitUsd > 0;
 
   return (
     <>
       <SheetHeader className="px-6 pt-6">
         <SheetTitle>{rule ? "Edit rule" : "New spend rule"}</SheetTitle>
         <SheetDescription>
-          Set a budget for a set of actors, scoped to models and a time window,
-          and choose what happens when the budget is spent.
+          Give a group of people a fixed-window budget and choose what happens
+          when it is spent.
         </SheetDescription>
       </SheetHeader>
 
@@ -344,17 +335,19 @@ function RuleForm({
         <div className="space-y-2">
           <Label className="text-sm font-medium">Applies to</Label>
           <p className="text-muted-foreground text-xs">
-            Choose directory-synced attributes to define who this budget covers.
+            Pick one directory-synced attribute to define who this budget
+            covers. Need to combine attributes? Create a second rule — the
+            strictest matching rule wins.
           </p>
-          <TargetConditionBuilder
+          <TargetConditionField
             value={draft.targetExpr}
             onChange={(targetExpr) => patch({ targetExpr })}
           />
           <MatchedActors matched={usage.matched} />
         </div>
 
-        {/* Limit + window */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Limit + window + warn threshold */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Field label="Budget limit">
             <div className="flex items-center">
               <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center rounded-l-md border border-r-0 px-3 text-sm">
@@ -389,132 +382,65 @@ function RuleForm({
               </SelectContent>
             </Select>
           </Field>
-        </div>
 
-        <Field label="Window reset">
-          <RadioGroup
-            value={draft.reset}
-            onValueChange={(v) => patch({ reset: v as WindowReset })}
-            className="flex gap-4"
-          >
-            <RadioPill
-              id="reset-fixed"
-              value="fixed"
-              label="Fixed"
-              hint="Resets on a calendar boundary"
-            />
-            <RadioPill
-              id="reset-rolling"
-              value="rolling"
-              label="Rolling"
-              hint="Trailing window from now"
-            />
-          </RadioGroup>
-        </Field>
-
-        {/* Scope: providers + models */}
-        <div className="space-y-3">
-          <div>
-            <Label className="text-sm font-medium">Scope</Label>
-            <p className="text-muted-foreground text-xs">
-              Limit only counts spend on the selected models or providers. Leave
-              empty to cover all AI spend.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-              Providers
+          <Field label="Warn at">
+            <div className="flex items-center">
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={draft.warnAtPct}
+                onChange={(e) =>
+                  patch({
+                    warnAtPct: Math.min(
+                      99,
+                      Math.max(1, Number(e.target.value) || 0),
+                    ),
+                  })
+                }
+                className="border-input dark:bg-input/30 h-9 w-full min-w-0 rounded-l-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+              <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center rounded-r-md border border-l-0 px-3 text-sm">
+                %
+              </span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {PROVIDERS.map((provider) => (
-                <Chip
-                  key={provider}
-                  label={provider}
-                  active={draft.providers.includes(provider)}
-                  onClick={() =>
-                    patch({
-                      providers: toggleInList(draft.providers, provider),
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-              Models
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {MODELS.map((model) => (
-                <Chip
-                  key={model.id}
-                  label={model.label}
-                  active={draft.models.includes(model.id)}
-                  onClick={() =>
-                    patch({ models: toggleInList(draft.models, model.id) })
-                  }
-                />
-              ))}
-            </div>
-          </div>
+          </Field>
         </div>
+        <p className="text-muted-foreground -mt-4 text-xs">
+          {WINDOW_RESET_HINTS[draft.window]} Turns Approaching and records a
+          warning event at {draft.warnAtPct}% of the budget.
+        </p>
 
         {/* On breach */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">
             When the budget is spent
           </Label>
-          <p className="text-muted-foreground text-xs">
-            If multiple budgets match a request, the strictest exhausted budget
-            decides automatically.
-          </p>
           <RadioGroup
-            value={draft.breachAction}
-            onValueChange={(v) => patch({ breachAction: v as BreachAction })}
+            value={draft.action}
+            onValueChange={(v) => patch({ action: v as RuleAction })}
             className="gap-2"
           >
-            {BREACH_ACTIONS.map((action) => (
+            {ACTION_OPTIONS.map((option) => (
               <label
-                key={action}
-                htmlFor={`breach-${action}`}
+                key={option.value}
+                htmlFor={`action-${option.value}`}
                 className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5"
               >
                 <RadioGroupItem
-                  id={`breach-${action}`}
-                  value={action}
+                  id={`action-${option.value}`}
+                  value={option.value}
                   className="mt-0.5"
                 />
                 <div className="min-w-0">
-                  <div className="text-sm">{BREACH_ACTION_LABELS[action]}</div>
+                  <div className="text-sm">{option.title}</div>
                   <div className="text-muted-foreground text-xs">
-                    {BREACH_ACTION_HINTS[action]}
+                    {option.hint}
                   </div>
                 </div>
               </label>
             ))}
           </RadioGroup>
-          {draft.breachAction === "route_fallback" && (
-            <div className="pt-1">
-              <Label className="text-muted-foreground mb-1 block text-xs">
-                Fallback model
-              </Label>
-              <Select
-                value={draft.fallbackModel}
-                onValueChange={(fallbackModel) => patch({ fallbackModel })}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose a cheaper model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODELS.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.label} · {model.provider}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
 
         {/* Usage preview */}
@@ -533,10 +459,14 @@ function RuleForm({
             </p>
           ) : (
             <>
-              <UsageBar usage={usage} limitUsd={draft.limitUsd} />
+              <UsageBar
+                usage={usage}
+                limitUsd={draft.limitUsd}
+                warnAtPct={draft.warnAtPct}
+              />
               <ProjectedBreachText
                 overLimit={usage.projectedOverLimit}
-                action={draft.breachAction}
+                action={draft.action}
               />
             </>
           )}
@@ -612,94 +542,35 @@ function MatchedActors({
   );
 }
 
-function TargetConditionBuilder({
+/** Single attribute/operator/value picker backing the rule's target
+ *  expression. v1 deliberately allows exactly one condition per rule. */
+function TargetConditionField({
   value,
   onChange,
 }: {
   value: string;
   onChange: (value: string) => void;
 }): JSX.Element {
-  const [conditions, setConditions] = useState<TargetCondition[]>(() =>
-    parseTargetConditions(value),
+  const [condition, setCondition] = useState<TargetCondition>(() =>
+    parseSingleCondition(value),
   );
 
-  const updateConditions = (next: TargetCondition[]) => {
-    setConditions(next);
-    onChange(targetConditionsToExpr(next));
+  const update = (next: TargetCondition) => {
+    setCondition(next);
+    onChange(targetConditionToExpr(next));
   };
 
-  return (
-    <div className="space-y-2">
-      <div className="space-y-2">
-        {conditions.map((condition, index) => (
-          <TargetConditionRow
-            key={condition.id}
-            condition={condition}
-            index={index}
-            canRemove={conditions.length > 1}
-            onChange={(nextCondition) =>
-              updateConditions(
-                conditions.map((c) =>
-                  c.id === condition.id ? nextCondition : c,
-                ),
-              )
-            }
-            onRemove={() =>
-              updateConditions(conditions.filter((c) => c.id !== condition.id))
-            }
-          />
-        ))}
-      </div>
-      <div className="flex items-center justify-between">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            updateConditions([...conditions, makeDefaultCondition()])
-          }
-        >
-          Add condition
-        </Button>
-        <p className="text-muted-foreground text-xs">
-          Conditions are combined with AND.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function TargetConditionRow({
-  condition,
-  index,
-  canRemove,
-  onChange,
-  onRemove,
-}: {
-  condition: TargetCondition;
-  index: number;
-  canRemove: boolean;
-  onChange: (condition: TargetCondition) => void;
-  onRemove: () => void;
-}): JSX.Element {
   const attribute = actorAttribute(condition.attribute);
   const operators = operatorsForAttribute(attribute);
-  const samples = attribute.samples;
 
   return (
     <div className="space-y-2 rounded-md border p-3">
-      {index > 0 && (
-        <div className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-          And
-        </div>
-      )}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_1fr_auto]">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_1fr]">
         <Select
           value={condition.attribute}
           onValueChange={(attributeName) => {
             const nextAttribute = actorAttribute(attributeName);
-            onChange({
-              ...condition,
+            update({
               attribute: attributeName,
               operator: operatorsForAttribute(nextAttribute)[0]!,
               value: nextAttribute.samples[0] ?? "",
@@ -720,7 +591,7 @@ function TargetConditionRow({
         <Select
           value={condition.operator}
           onValueChange={(operator) =>
-            onChange({ ...condition, operator: operator as ConditionOperator })
+            update({ ...condition, operator: operator as ConditionOperator })
           }
         >
           <SelectTrigger className="w-full">
@@ -737,29 +608,20 @@ function TargetConditionRow({
         <Select
           value={condition.value}
           onValueChange={(nextValue) =>
-            onChange({ ...condition, value: nextValue })
+            update({ ...condition, value: nextValue })
           }
         >
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {samples.map((sample) => (
+            {attribute.samples.map((sample) => (
               <SelectItem key={sample} value={sample}>
                 {sample}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRemove}
-          disabled={!canRemove}
-        >
-          Remove
-        </Button>
       </div>
       <p className="text-muted-foreground text-xs">{attribute.description}</p>
     </div>
@@ -771,27 +633,19 @@ function ProjectedBreachText({
   action,
 }: {
   overLimit: boolean;
-  action: BreachAction;
+  action: RuleAction;
 }): JSX.Element | null {
   if (!overLimit) return null;
 
+  const outcome =
+    action === "block"
+      ? "block requests from matched people"
+      : "flag overspend for review";
   return (
     <p className="text-destructive text-xs">
-      Projected to exceed the limit. This gate would {breachOutcome(action)}{" "}
-      unless a stricter matching budget applies.
+      Projected to exceed the limit this window. This rule would {outcome}.
     </p>
   );
-}
-
-function breachOutcome(action: BreachAction): string {
-  switch (action) {
-    case "block":
-      return "block requests";
-    case "route_fallback":
-      return "route requests to the fallback model";
-    case "alert_only":
-      return "flag requests";
-  }
 }
 
 function Field({
@@ -806,55 +660,5 @@ function Field({
       <Label className="text-sm font-medium">{label}</Label>
       {children}
     </div>
-  );
-}
-
-function RadioPill({
-  id,
-  value,
-  label,
-  hint,
-}: {
-  id: string;
-  value: string;
-  label: string;
-  hint: string;
-}): JSX.Element {
-  return (
-    <label
-      htmlFor={id}
-      className="hover:bg-muted/40 flex flex-1 cursor-pointer items-start gap-2 rounded-md border px-3 py-2"
-    >
-      <RadioGroupItem id={id} value={value} className="mt-0.5" />
-      <div className="min-w-0">
-        <div className="text-sm">{label}</div>
-        <div className="text-muted-foreground text-xs">{hint}</div>
-      </div>
-    </label>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-2.5 py-1 text-xs transition-colors",
-        active
-          ? "border-primary bg-primary/10 text-foreground"
-          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
   );
 }
