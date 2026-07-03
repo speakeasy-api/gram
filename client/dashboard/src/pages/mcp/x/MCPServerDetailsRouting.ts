@@ -1,12 +1,6 @@
 import type { useRoutes } from "@/routes";
 
-const VALID_TABS = [
-  "overview",
-  "tools",
-  "analytics",
-  "team-access",
-  "settings",
-] as const;
+const VALID_TABS = ["overview", "tools", "team-access", "settings"] as const;
 const LEGACY_AUTHENTICATION_TAB = "authentication";
 
 export type TabValue = (typeof VALID_TABS)[number];
@@ -84,8 +78,6 @@ export function mcpServerTabHref(
       return routes.mcp.x.overview.href(mcpServerSlug);
     case "tools":
       return routes.mcp.x.tools.href(mcpServerSlug);
-    case "analytics":
-      return routes.mcp.x.analytics.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
     case "settings":

@@ -12,7 +12,13 @@ import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { Button as MoonshineButton } from "@speakeasy-api/moonshine";
-import { ArrowLeft, BookOpen, Download, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Download,
+  ExternalLink,
+  Info,
+} from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
 
@@ -216,9 +222,9 @@ function ClaudeCodeInstallContent({
           Roll out to your team via Managed Settings
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Push the marketplace to every Claude Code install in your organization
-          through Claude.ai's Managed Settings — no per-user install command
-          required.
+          Push the marketplace to every Claude Code installation in your
+          organization through Claude.ai's Managed Settings — no per-user
+          install command required.
         </p>
 
         <InstallSteps
@@ -263,25 +269,28 @@ function ClaudeCodeInstallContent({
               code: managedSettingsJson ?? undefined,
               language: "json",
               children: managedSettingsJson ? (
-                <p className="text-muted-foreground text-xs">
-                  {!pluginSlug && (
-                    <>
-                      Replace{" "}
-                      <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                        &lt;plugin-slug&gt;
-                      </code>{" "}
-                      with the slug of the plugin you want to enable. Use{" "}
-                    </>
-                  )}
-                  {pluginSlug && "Use "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                    strictKnownMarketplaces
-                  </code>{" "}
-                  instead of{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                    extraKnownMarketplaces
-                  </code>{" "}
-                  to lock the org to this marketplace and reject all others.
+                <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+                  <Info className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    {!pluginSlug && (
+                      <>
+                        Replace{" "}
+                        <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                          &lt;plugin-slug&gt;
+                        </code>{" "}
+                        with the slug of the plugin you want to enable. Use{" "}
+                      </>
+                    )}
+                    {pluginSlug && "Use "}
+                    <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                      strictKnownMarketplaces
+                    </code>{" "}
+                    instead of{" "}
+                    <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                      extraKnownMarketplaces
+                    </code>{" "}
+                    to lock the org to this marketplace and reject all others.
+                  </span>
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm italic">

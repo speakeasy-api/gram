@@ -217,7 +217,16 @@ function renderMcpDetailTabContent(
 ): React.ReactNode {
   switch (tab) {
     case "overview":
-      return <MCPOverviewTab toolset={toolset} />;
+      return (
+        <MCPOverviewTab
+          server={{
+            kind: "toolset",
+            id: toolset.id,
+            slug: toolset.slug,
+            name: toolset.name,
+          }}
+        />
+      );
     case "tools":
       return <MCPToolsTab toolset={toolset} />;
     case "resources":

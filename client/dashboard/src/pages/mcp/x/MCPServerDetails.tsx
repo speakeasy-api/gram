@@ -24,7 +24,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
@@ -33,25 +33,16 @@ import {
   isLegacyAuthenticationTabPath,
   mcpServerTabHref,
 } from "./MCPServerDetailsRouting";
-import { AnalyticsTab } from "./tabs/AnalyticsTab";
-import { OverviewTab } from "./tabs/OverviewTab";
+import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { ToolsTab } from "./tabs/ToolsTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
-import { MCP_SERVER_URL_SECTION_ID } from "./tabs/settings/sections/ServerUrlSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 
-const MCP_X_TAB_URLS = [
-  "overview",
-  "tools",
-  "analytics",
-  "team-access",
-  "settings",
-];
+const MCP_X_TAB_URLS = ["overview", "tools", "team-access", "settings"];
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
@@ -61,18 +52,6 @@ export default function MCPServerDetails(): JSX.Element {
     location.pathname,
     idOrSlug,
   );
-
-  const handleShowServerUrlSettings = () => {
-    void navigate(
-      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
-    );
-  };
-
-  const handleShowAuthentication = () => {
-    void navigate(
-      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
-    );
-  };
 
   const {
     data: mcpServer,
@@ -128,13 +107,17 @@ export default function MCPServerDetails(): JSX.Element {
     switch (activeTab) {
       case "overview":
         return (
-          <OverviewTab
-            mcpServer={mcpServer}
-            endpoints={endpoints}
-            isLoadingEndpoints={isLoadingEndpoints}
-            onShowEndpoints={handleShowServerUrlSettings}
-            onShowAuthentication={handleShowAuthentication}
-          />
+          mcpServer &&
+          mcpServer.slug && (
+            <MCPOverviewTab
+              server={{
+                kind: "mcp-server",
+                id: mcpServer.id,
+                slug: mcpServer.slug,
+                name: mcpServer.name ?? "MCP Server",
+              }}
+            />
+          )
         );
       case "tools":
         return (
@@ -146,8 +129,6 @@ export default function MCPServerDetails(): JSX.Element {
             />
           )
         );
-      case "analytics":
-        return <AnalyticsTab mcpServer={mcpServer} />;
       case "team-access":
         return (
           isRbacEnabled &&

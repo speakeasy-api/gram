@@ -5,8 +5,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
-import { Toolset } from "@/lib/toolTypes";
-import { Plugin } from "@gram/client/models/components";
+import { Plugin, PluginServer } from "@gram/client/models/components";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import {
   invalidateAllPlugins,
@@ -24,6 +23,13 @@ import { AlertTriangle, ChevronDown, CircleCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
+import { HostedServerRef } from "./MCPOverviewTab";
+
+function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
+  return ref.kind === "toolset"
+    ? server.toolsetId === ref.id
+    : server.mcpServerId === ref.id;
+}
 
 // A little fanned stack of client badges — purely decorative, gestures at
 // "this is what publishing unlocks" without claiming these are the only
@@ -68,9 +74,9 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
 }
 
 export function PluginStatusBanner({
-  toolset,
+  server,
 }: {
-  toolset: Toolset;
+  server: HostedServerRef;
 }): React.JSX.Element | null {
   const queryClient = useQueryClient();
   const { data } = usePlugins();
@@ -86,7 +92,7 @@ export function PluginStatusBanner({
   // not on every unrelated `data` refetch.
   const memberKey = (data?.plugins ?? [])
     .filter((plugin) =>
-      plugin.servers?.some((server) => server.toolsetId === toolset.id),
+      plugin.servers?.some((s) => serverMatchesRef(s, server)),
     )
     .map((plugin) => plugin.id)
     .sort()
@@ -105,7 +111,7 @@ export function PluginStatusBanner({
 
   const plugins = data.plugins;
   const memberPlugins = plugins.filter((plugin) =>
-    plugin.servers?.some((server) => server.toolsetId === toolset.id),
+    plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
   const memberIdSet = new Set(memberPlugins.map((plugin) => plugin.id));
@@ -140,16 +146,17 @@ export function PluginStatusBanner({
             request: {
               addPluginServerForm: {
                 pluginId,
-                toolsetId: toolset.id,
-                displayName: toolset.name,
+                ...(server.kind === "toolset"
+                  ? { toolsetId: server.id }
+                  : { mcpServerId: server.id }),
                 policy: "required",
               },
             },
           }),
         ),
         ...toRemove.map((plugin) => {
-          const serverId = plugin.servers?.find(
-            (server) => server.toolsetId === toolset.id,
+          const serverId = plugin.servers?.find((s) =>
+            serverMatchesRef(s, server),
           )?.id;
           if (!serverId) return Promise.resolve();
           return removeServerMutation.mutateAsync({
@@ -194,14 +201,14 @@ export function PluginStatusBanner({
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-orange-50 via-slate-50 to-orange-100 transition-opacity duration-700 ease-in-out",
+          "absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-50 to-orange-100 transition-opacity duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/70",
           isPublished ? "opacity-0" : "opacity-100",
         )}
       />
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-emerald-50/10 via-slate-50 to-emerald-100/70 transition-opacity duration-700 ease-in-out",
+          "absolute inset-0 bg-gradient-to-br from-emerald-50/10 via-slate-50 to-emerald-100/70 transition-opacity duration-700 ease-in-out dark:from-emerald-950/60 dark:via-neutral-800 dark:to-emerald-900/70",
           isPublished ? "opacity-100" : "opacity-0",
         )}
       />

@@ -84,7 +84,7 @@ export function McpSidebarNavShell({
 
         <SidebarDivider className="my-2 px-1" />
 
-        <SidebarEyebrow align="card">MCP Overview</SidebarEyebrow>
+        <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
 
         {cardContent && (
           <li className="px-2 pt-2 pb-4 group-data-[collapsible=icon]:hidden">
