@@ -102,7 +102,8 @@ function MCPOverview() {
     void refetchMcpServers();
     void refetchEndpoints();
   };
-  const isRefreshing = isFetchingMcpServers || isFetchingEndpoints;
+  const isRefreshing =
+    isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
   // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
   // cutover will introduce toolset-backed rows that today still render
   // through the existing Hosted MCPCard path via useToolsets().
