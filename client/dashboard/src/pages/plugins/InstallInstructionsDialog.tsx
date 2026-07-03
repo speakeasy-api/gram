@@ -1,5 +1,6 @@
+import { CodeBlock } from "@/components/code";
+import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -137,36 +138,20 @@ function ClaudeCodeInstallContent({
         <h3 className="mb-2 text-sm font-semibold">
           Install in your Claude Code instance
         </h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <p className="text-muted-foreground mb-3 text-sm">
           Run this command from inside Claude Code to register the marketplace
           for your user account:
         </p>
         {installCommand ? (
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{installCommand}</code>
-              <CopyButton
-                size="inline"
-                text={installCommand}
-                tooltip="Copy install command"
-              />
-            </div>
-          </div>
+          <CodeBlock language="bash">{installCommand}</CodeBlock>
         ) : (
           <p className="text-muted-foreground text-sm italic">
             Re-publish to mint a marketplace install URL.
           </p>
         )}
         {pluginInstallCommand ? (
-          <div className="bg-muted/50 mt-3 rounded-lg p-4 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{pluginInstallCommand}</code>
-              <CopyButton
-                size="inline"
-                text={pluginInstallCommand}
-                tooltip="Copy plugin install command"
-              />
-            </div>
+          <div className="mt-3">
+            <CodeBlock language="bash">{pluginInstallCommand}</CodeBlock>
           </div>
         ) : (
           <p className="text-muted-foreground mt-3 text-xs">
@@ -189,96 +174,86 @@ function ClaudeCodeInstallContent({
           required.
         </p>
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Open Managed Settings on Claude.ai
-            </h4>
-            <p className="text-muted-foreground text-sm">
-              Sign in to{" "}
-              <a
-                href="https://claude.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-500 hover:text-sky-600 hover:underline"
-              >
-                claude.ai
-              </a>{" "}
-              as an organization admin, navigate to{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Organization settings → Claude Code
-              </code>
-              , then click{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Manage
-              </code>{" "}
-              under{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Managed Settings
-              </code>
-              .
-            </p>
-          </div>
-
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              2.{" "}
-              {pluginSlug
+        <InstallSteps
+          steps={[
+            {
+              title: "Open Managed Settings on Claude.ai",
+              description: (
+                <>
+                  Sign in to{" "}
+                  <a
+                    href="https://claude.ai/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    claude.ai
+                  </a>{" "}
+                  as an organization admin, navigate to{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Organization settings → Claude Code
+                  </code>
+                  , then click{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Manage
+                  </code>{" "}
+                  under{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Managed Settings
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: pluginSlug
                 ? "Register the marketplace and enable the plugin"
-                : "Add the marketplace to settings.json"}
-            </h4>
-            <p className="text-muted-foreground mb-2 text-sm">
-              Merge this entry into the org's managed{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                settings.json
-              </code>
-              {pluginSlug
-                ? " — this registers the marketplace and enables this specific plugin for every developer in one step:"
-                : ":"}
-            </p>
-            {managedSettingsJson ? (
-              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <pre className="overflow-x-auto whitespace-pre-wrap">
-                    {managedSettingsJson}
-                  </pre>
-                  <CopyButton
-                    size="inline"
-                    text={managedSettingsJson}
-                    tooltip="Copy settings.json snippet"
-                  />
-                </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm italic">
-                Re-publish to mint a marketplace install URL.
-              </p>
-            )}
-            <p className="text-muted-foreground mt-2 text-xs">
-              Use{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                strictKnownMarketplaces
-              </code>{" "}
-              instead of{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                extraKnownMarketplaces
-              </code>{" "}
-              to lock the org to this marketplace and reject all others.
-            </p>
-          </div>
+                : "Add the marketplace to settings.json",
+              description: (
+                <>
+                  Merge this entry into the org's managed{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    settings.json
+                  </code>
+                  {pluginSlug
+                    ? " — this registers the marketplace and enables this specific plugin for every developer in one step:"
+                    : ":"}
+                </>
+              ),
+              code: managedSettingsJson ?? undefined,
+              language: "json",
+              children: managedSettingsJson ? (
+                <p className="text-muted-foreground text-xs">
+                  Use{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    strictKnownMarketplaces
+                  </code>{" "}
+                  instead of{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    extraKnownMarketplaces
+                  </code>{" "}
+                  to lock the org to this marketplace and reject all others.
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm italic">
+                  Re-publish to mint a marketplace install URL.
+                </p>
+              ),
+            },
+          ]}
+        />
 
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href={CLAUDE_CODE_SETTINGS_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              Claude Code settings docs
-            </a>
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" asChild className="mt-4">
+          <a
+            href={CLAUDE_CODE_SETTINGS_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Claude Code settings docs
+          </a>
+        </Button>
       </div>
     </div>
   );
@@ -311,79 +286,66 @@ function ClaudeCoworkInstallContent({
           per-user install command.
         </p>
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Open Organization settings on Claude.ai
-            </h4>
-            <p className="text-muted-foreground text-sm">
-              Sign in to{" "}
-              <a
-                href="https://claude.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-500 hover:text-sky-600 hover:underline"
-              >
-                claude.ai
-              </a>{" "}
-              as an organization admin and navigate to{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Organization settings → Plugins
-              </code>
-              , then click{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Add plugin
-              </code>
-              .
-            </p>
-          </div>
+        <InstallSteps
+          steps={[
+            {
+              title: "Open Organization settings on Claude.ai",
+              description: (
+                <>
+                  Sign in to{" "}
+                  <a
+                    href="https://claude.ai/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    claude.ai
+                  </a>{" "}
+                  as an organization admin and navigate to{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Organization settings → Plugins
+                  </code>
+                  , then click{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Add plugin
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: "Add the GitHub source",
+              description: (
+                <>
+                  Select{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    GitHub
+                  </code>{" "}
+                  as the source and enter your repo:
+                </>
+              ),
+              code: repoSlug,
+              language: "text",
+            },
+            {
+              title: "Authorize Claude's GitHub App",
+              description:
+                "The Claude GitHub App must be installed on this repository so Cowork can sync from it. If the repo doesn't appear in the picker, install the app and retry.",
+            },
+          ]}
+        />
 
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              2. Add the GitHub source
-            </h4>
-            <p className="text-muted-foreground mb-2 text-sm">
-              Select{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                GitHub
-              </code>{" "}
-              as the source and enter your repo:
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <code className="break-all">{repoSlug}</code>
-                <CopyButton
-                  size="inline"
-                  text={repoSlug}
-                  tooltip="Copy repository slug"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              3. Authorize Claude's GitHub App
-            </h4>
-            <p className="text-muted-foreground text-sm">
-              The Claude GitHub App must be installed on this repository so
-              Cowork can sync from it. If the repo doesn't appear in the picker,
-              install the app and retry.
-            </p>
-          </div>
-
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href={COWORK_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              Cowork setup guide
-            </a>
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" asChild className="mt-4">
+          <a
+            href={COWORK_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Cowork setup guide
+          </a>
+        </Button>
       </div>
     </div>
   );
@@ -416,54 +378,42 @@ function CursorInstallContent({
           member.
         </p>
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Open your Cursor team dashboard
-            </h4>
-            <p className="text-muted-foreground text-sm">
-              Sign in to{" "}
-              <a
-                href={CURSOR_DASHBOARD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-500 hover:text-sky-600 hover:underline"
-              >
-                cursor.com/dashboard
-              </a>{" "}
-              as a team admin.
-            </p>
-          </div>
-
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              2. Import the marketplace
-            </h4>
-            <p className="text-muted-foreground mb-2 text-sm">
-              Navigate to{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                Settings → Plugins → Import
-              </code>{" "}
-              and paste the repository URL:
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <code className="break-all">{repoUrl}</code>
-                <CopyButton
-                  size="inline"
-                  text={repoUrl}
-                  tooltip="Copy repository URL"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              3. Mark the plugin as required{pluginName ? "" : " (recommended)"}
-            </h4>
-            <p className="text-muted-foreground text-sm">
-              {pluginName ? (
+        <InstallSteps
+          steps={[
+            {
+              title: "Open your Cursor team dashboard",
+              description: (
+                <>
+                  Sign in to{" "}
+                  <a
+                    href={CURSOR_DASHBOARD_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    cursor.com/dashboard
+                  </a>{" "}
+                  as a team admin.
+                </>
+              ),
+            },
+            {
+              title: "Import the marketplace",
+              description: (
+                <>
+                  Navigate to{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Settings → Plugins → Import
+                  </code>{" "}
+                  and paste the repository URL:
+                </>
+              ),
+              code: repoUrl,
+              language: "text",
+            },
+            {
+              title: `Mark the plugin as required${pluginName ? "" : " (recommended)"}`,
+              description: pluginName ? (
                 <>
                   In Cursor's team marketplace settings, mark the{" "}
                   <code className="bg-muted rounded px-1 py-0.5 text-xs">
@@ -474,22 +424,22 @@ function CursorInstallContent({
                 </>
               ) : (
                 "In Cursor's team marketplace settings, mark the appropriate plugin(s) as required so their tools are available to every team member without per-user setup."
-              )}
-            </p>
-          </div>
+              ),
+            },
+          ]}
+        />
 
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href={CURSOR_DASHBOARD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              Open Cursor dashboard
-            </a>
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" asChild className="mt-4">
+          <a
+            href={CURSOR_DASHBOARD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Open Cursor dashboard
+          </a>
+        </Button>
       </div>
     </div>
   );
@@ -593,64 +543,52 @@ function CodexInstallContent({
           Manual setup
         </p>
 
-        <div>
-          <h4 className="mb-2 text-sm font-semibold">
-            1. Register the marketplace
-          </h4>
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{addCommand}</code>
-              <CopyButton
-                size="inline"
-                text={addCommand}
-                tooltip="Copy marketplace add command"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h4 className="mb-2 text-sm font-semibold">
-            2. Enable hooks and the plugin in{" "}
-            <code className="text-sm">~/.codex/config.toml</code>
-          </h4>
-          <p className="text-muted-foreground mb-3 text-sm">
-            Hooks are behind a feature flag and the plugin must be explicitly
-            enabled. Add all of the following to{" "}
-            <code className="bg-muted rounded px-1 py-0.5 text-xs">
-              ~/.codex/config.toml
-            </code>
-            :
-          </p>
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-            <div className="flex items-start justify-between gap-2">
-              <pre className="whitespace-pre-wrap">{configBlock}</pre>
-              <CopyButton
-                size="inline"
-                text={configBlock}
-                tooltip="Copy config entries"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h4 className="mb-2 text-sm font-semibold">
-            3. Approve hooks in Codex
-          </h4>
-          <p className="text-muted-foreground text-sm">
-            After restarting Codex, open{" "}
-            <code className="bg-muted rounded px-1 py-0.5 text-xs">
-              Settings → Hooks
-            </code>{" "}
-            and enable each hook listed under the{" "}
-            <code className="bg-muted rounded px-1 py-0.5 text-xs">
-              {pluginName}
-            </code>{" "}
-            plugin. Codex requires manual approval for each hook event before it
-            will fire.
-          </p>
-        </div>
+        <InstallSteps
+          steps={[
+            {
+              title: "Register the marketplace",
+              code: addCommand,
+              language: "bash",
+            },
+            {
+              title: (
+                <>
+                  Enable hooks and the plugin in{" "}
+                  <code className="text-sm">~/.codex/config.toml</code>
+                </>
+              ),
+              description: (
+                <>
+                  Hooks are behind a feature flag and the plugin must be
+                  explicitly enabled. Add all of the following to{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    ~/.codex/config.toml
+                  </code>
+                  :
+                </>
+              ),
+              code: configBlock,
+              language: "toml",
+            },
+            {
+              title: "Approve hooks in Codex",
+              description: (
+                <>
+                  After restarting Codex, open{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    Settings → Hooks
+                  </code>{" "}
+                  and enable each hook listed under the{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    {pluginName}
+                  </code>{" "}
+                  plugin. Codex requires manual approval for each hook event
+                  before it will fire.
+                </>
+              ),
+            },
+          ]}
+        />
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" asChild>
