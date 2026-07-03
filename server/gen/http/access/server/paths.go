@@ -82,6 +82,11 @@ func ListShadowMCPInventoryAccessPath() string {
 	return "/rpc/access.listShadowMCPInventory"
 }
 
+// ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
+func ListShadowMCPInventoryUsersAccessPath() string {
+	return "/rpc/access.shadowMcp.inventory.users.list"
+}
+
 // CreateShadowMCPAccessRuleAccessPath returns the URL path to the access service createShadowMCPAccessRule HTTP endpoint.
 func CreateShadowMCPAccessRuleAccessPath() string {
 	return "/rpc/access.createShadowMcpRule"
