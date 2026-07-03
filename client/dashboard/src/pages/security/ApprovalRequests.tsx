@@ -22,7 +22,10 @@ export default function ApprovalRequests(): JSX.Element {
               access rules.
             </Page.Section.Description>
             <Page.Section.Body>
-              <ApprovalRequestsContent projectSlug={project.slug} />
+              <ApprovalRequestsContent
+                projectID={project.id}
+                projectSlug={project.slug}
+              />
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>
