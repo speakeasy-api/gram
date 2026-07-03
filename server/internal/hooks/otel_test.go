@@ -125,9 +125,19 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
-	timestamp := time.Unix(0, 1780468942284000000)
 
-	err := ti.service.Logs(ctx, codexLogsPayload(tokenBearingRecord()))
+	// Stamp the usage row with a recent time rather than tokenBearingRecord's
+	// fixed 2026-06-03 constant. telemetry_logs carries a 30-day TTL on
+	// time_unix_nano (server/clickhouse/schema.sql), so an absolute past
+	// timestamp ages out: once wall-clock passes constant+30d the row is
+	// TTL-expired and evicted on the next merge (which concurrent inserts from
+	// the parallel suite trigger), making this test rot into a flake. A relative
+	// timestamp keeps the row inside the retention window forever.
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := tokenBearingRecord()
+	rec.ObservedTimeUnixNano = new(nanoString(timestamp))
+
+	err := ti.service.Logs(ctx, codexLogsPayload(rec))
 	require.NoError(t, err)
 
 	codexLogs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, timestamp, 1)
