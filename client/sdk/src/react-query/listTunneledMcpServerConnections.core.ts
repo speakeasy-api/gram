@@ -8,24 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { tunneledMcpGetServerConnections } from "../funcs/tunneledMcpGetServerConnections.js";
+import { tunneledMcpListServerConnections } from "../funcs/tunneledMcpListServerConnections.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetTunneledMcpServerConnectionsQueryData =
+export type ListTunneledMcpServerConnectionsQueryData =
   components.TunneledMcpServerConnections;
 
-export function prefetchGetTunneledMcpServerConnections(
+export function prefetchListTunneledMcpServerConnections(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildGetTunneledMcpServerConnectionsQuery(
+    ...buildListTunneledMcpServerConnectionsQuery(
       client$,
       request,
       security,
@@ -34,27 +34,27 @@ export function prefetchGetTunneledMcpServerConnections(
   });
 }
 
-export function buildGetTunneledMcpServerConnectionsQuery(
+export function buildListTunneledMcpServerConnectionsQuery(
   client$: GramCore,
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<GetTunneledMcpServerConnectionsQueryData>;
+  ) => Promise<ListTunneledMcpServerConnectionsQueryData>;
 } {
   return {
-    queryKey: queryKeyGetTunneledMcpServerConnections({
+    queryKey: queryKeyListTunneledMcpServerConnections({
       id: request.id,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
     }),
-    queryFn: async function getTunneledMcpServerConnectionsQueryFn(
+    queryFn: async function listTunneledMcpServerConnectionsQueryFn(
       ctx,
-    ): Promise<GetTunneledMcpServerConnectionsQueryData> {
+    ): Promise<ListTunneledMcpServerConnectionsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -66,7 +66,7 @@ export function buildGetTunneledMcpServerConnectionsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(tunneledMcpGetServerConnections(
+      return unwrapAsync(tunneledMcpListServerConnections(
         client$,
         request,
         security,
@@ -76,7 +76,7 @@ export function buildGetTunneledMcpServerConnectionsQuery(
   };
 }
 
-export function queryKeyGetTunneledMcpServerConnections(
+export function queryKeyListTunneledMcpServerConnections(
   parameters: {
     id: string;
     gramSession?: string | undefined;
@@ -84,5 +84,5 @@ export function queryKeyGetTunneledMcpServerConnections(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "tunneledMcp", "getServerConnections", parameters];
+  return ["@gram/client", "tunneledMcp", "listServerConnections", parameters];
 }

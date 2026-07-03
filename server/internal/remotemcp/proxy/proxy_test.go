@@ -32,18 +32,18 @@ import (
 
 const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
 
-func TestServerIdentity_DistinguishesTunnelledBackend(t *testing.T) {
+func TestServerIdentity_DistinguishesTunneledBackend(t *testing.T) {
 	t.Parallel()
 
 	identity := proxy.ServerIdentity{
-		RemoteMCPServerID:    "",
-		TunnelledMCPServerID: "tun-abc",
-		McpServerID:          "mcp-abc",
+		RemoteMCPServerID:   "",
+		TunneledMCPServerID: "tun-abc",
+		McpServerID:         "mcp-abc",
 	}
 
 	require.Equal(t, "tun-abc", identity.SourceID())
 	require.Equal(t, "tunneledmcp", identity.ToolURNKind())
-	require.Contains(t, identity.AppendAttributes(nil), attr.TunnelledMCPServerID("tun-abc"))
+	require.Contains(t, identity.AppendAttributes(nil), attr.TunneledMCPServerID("tun-abc"))
 	require.NotContains(t, identity.AppendAttributes(nil), attr.RemoteMCPServerID("tun-abc"))
 }
 
@@ -62,9 +62,9 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 		Metrics:              nil,
 		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
 		Identity: proxy.ServerIdentity{
-			RemoteMCPServerID:    "",
-			TunnelledMCPServerID: "",
-			McpServerID:          "",
+			RemoteMCPServerID:   "",
+			TunneledMCPServerID: "",
+			McpServerID:         "",
 		},
 		RemoteURL:                         upstreamURL,
 		Headers:                           nil,
@@ -1066,9 +1066,9 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
 	p.Identity = proxy.ServerIdentity{
-		RemoteMCPServerID:    "srv-abc",
-		TunnelledMCPServerID: "",
-		McpServerID:          "mcp-abc",
+		RemoteMCPServerID:   "srv-abc",
+		TunneledMCPServerID: "",
+		McpServerID:         "mcp-abc",
 	}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))

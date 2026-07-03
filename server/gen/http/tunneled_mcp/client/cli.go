@@ -122,13 +122,13 @@ func BuildGetServerPayload(tunneledMcpGetServerID string, tunneledMcpGetServerSe
 	return v, nil
 }
 
-// BuildGetServerConnectionsPayload builds the payload for the tunneledMcp
-// getServerConnections endpoint from CLI flags.
-func BuildGetServerConnectionsPayload(tunneledMcpGetServerConnectionsID string, tunneledMcpGetServerConnectionsSessionToken string, tunneledMcpGetServerConnectionsApikeyToken string, tunneledMcpGetServerConnectionsProjectSlugInput string) (*tunneledmcp.GetServerConnectionsPayload, error) {
+// BuildListServerConnectionsPayload builds the payload for the tunneledMcp
+// listServerConnections endpoint from CLI flags.
+func BuildListServerConnectionsPayload(tunneledMcpListServerConnectionsID string, tunneledMcpListServerConnectionsSessionToken string, tunneledMcpListServerConnectionsApikeyToken string, tunneledMcpListServerConnectionsProjectSlugInput string) (*tunneledmcp.ListServerConnectionsPayload, error) {
 	var err error
 	var id string
 	{
-		id = tunneledMcpGetServerConnectionsID
+		id = tunneledMcpListServerConnectionsID
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
@@ -136,23 +136,23 @@ func BuildGetServerConnectionsPayload(tunneledMcpGetServerConnectionsID string, 
 	}
 	var sessionToken *string
 	{
-		if tunneledMcpGetServerConnectionsSessionToken != "" {
-			sessionToken = &tunneledMcpGetServerConnectionsSessionToken
+		if tunneledMcpListServerConnectionsSessionToken != "" {
+			sessionToken = &tunneledMcpListServerConnectionsSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if tunneledMcpGetServerConnectionsApikeyToken != "" {
-			apikeyToken = &tunneledMcpGetServerConnectionsApikeyToken
+		if tunneledMcpListServerConnectionsApikeyToken != "" {
+			apikeyToken = &tunneledMcpListServerConnectionsApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if tunneledMcpGetServerConnectionsProjectSlugInput != "" {
-			projectSlugInput = &tunneledMcpGetServerConnectionsProjectSlugInput
+		if tunneledMcpListServerConnectionsProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpListServerConnectionsProjectSlugInput
 		}
 	}
-	v := &tunneledmcp.GetServerConnectionsPayload{}
+	v := &tunneledmcp.ListServerConnectionsPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

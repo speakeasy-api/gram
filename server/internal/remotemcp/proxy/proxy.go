@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -74,29 +75,31 @@ const (
 
 // ServerIdentity bundles the correlation ids the proxy stamps onto its
 // telemetry. RemoteMCPServerID is populated for remote_mcp_servers-backed
-// proxies, TunnelledMCPServerID is populated for tunneled_mcp_servers-backed
+// proxies, TunneledMCPServerID is populated for tunneled_mcp_servers-backed
 // proxies, and McpServerID is the fronting mcp_servers row id users manage.
 // Keeping these distinct prevents tunneled IDs from being recorded as remote
 // MCP server IDs, while still threading the fronting server id alongside either
 // backend id.
 type ServerIdentity struct {
-	RemoteMCPServerID    string
-	TunnelledMCPServerID string
-	McpServerID          string
+	RemoteMCPServerID   string
+	TunneledMCPServerID string
+	McpServerID         string
 }
 
 func (i ServerIdentity) SourceID() string {
 	if i.RemoteMCPServerID != "" {
 		return i.RemoteMCPServerID
 	}
-	return i.TunnelledMCPServerID
+	return i.TunneledMCPServerID
 }
 
 func (i ServerIdentity) ToolURNKind() string {
-	if i.TunnelledMCPServerID != "" && i.RemoteMCPServerID == "" {
-		return "tunneledmcp"
+	// Remote MCP servers share the canonical externalmcp URN kind; only a
+	// tunnel-only identity maps to the tunneledmcp kind.
+	if i.TunneledMCPServerID != "" && i.RemoteMCPServerID == "" {
+		return string(urn.ToolKindTunneledMCP)
 	}
-	return "externalmcp"
+	return string(urn.ToolKindExternalMCP)
 }
 
 func (i ServerIdentity) SlogAttrs() []slog.Attr {
@@ -104,8 +107,8 @@ func (i ServerIdentity) SlogAttrs() []slog.Attr {
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
 	}
-	if i.TunnelledMCPServerID != "" {
-		attrs = append(attrs, attr.SlogTunnelledMCPServerID(i.TunnelledMCPServerID))
+	if i.TunneledMCPServerID != "" {
+		attrs = append(attrs, attr.SlogTunneledMCPServerID(i.TunneledMCPServerID))
 	}
 	if i.McpServerID != "" {
 		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
@@ -117,8 +120,8 @@ func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
 	}
-	if i.TunnelledMCPServerID != "" {
-		attrs = append(attrs, attr.TunnelledMCPServerID(i.TunnelledMCPServerID))
+	if i.TunneledMCPServerID != "" {
+		attrs = append(attrs, attr.TunneledMCPServerID(i.TunneledMCPServerID))
 	}
 	if i.McpServerID != "" {
 		attrs = append(attrs, attr.McpServerID(i.McpServerID))

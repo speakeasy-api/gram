@@ -33758,10 +33758,10 @@ paths:
       x-speakeasy-name-override: getServer
       x-speakeasy-react-hook:
         name: GetTunneledMcpServer
-  /rpc/tunneledMcp.getServerConnections:
+  /rpc/tunneledMcp.listServerConnections:
     get:
-      description: Get live tunnel connections for a tunneled MCP server
-      operationId: getTunneledMcpServerConnections
+      description: List live tunnel connections for a tunneled MCP server
+      operationId: listTunneledMcpServerConnections
       parameters:
         - allowEmptyValue: true
           description: The ID of the tunneled MCP server
@@ -33860,12 +33860,12 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
-      summary: getServerConnections tunneledMcp
+      summary: listServerConnections tunneledMcp
       tags:
         - tunneledMcp
-      x-speakeasy-name-override: getServerConnections
+      x-speakeasy-name-override: listServerConnections
       x-speakeasy-react-hook:
-        name: GetTunneledMcpServerConnections
+        name: ListTunneledMcpServerConnections
   /rpc/tunneledMcp.listServers:
     get:
       description: List all tunneled MCP server sources for a project

@@ -94,8 +94,8 @@ var _ = Service("tunneledMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTunneledMcpServer"}`)
 	})
 
-	Method("getServerConnections", func() {
-		Description("Get live tunnel connections for a tunneled MCP server")
+	Method("listServerConnections", func() {
+		Description("List live tunnel connections for a tunneled MCP server")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the tunneled MCP server", func() {
@@ -110,7 +110,7 @@ var _ = Service("tunneledMcp", func() {
 		Result(TunneledMcpServerConnections)
 
 		HTTP(func() {
-			GET("/rpc/tunneledMcp.getServerConnections")
+			GET("/rpc/tunneledMcp.listServerConnections")
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -118,9 +118,9 @@ var _ = Service("tunneledMcp", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getTunneledMcpServerConnections")
-		Meta("openapi:extension:x-speakeasy-name-override", "getServerConnections")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTunneledMcpServerConnections"}`)
+		Meta("openapi:operationId", "listTunneledMcpServerConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listServerConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListTunneledMcpServerConnections"}`)
 	})
 
 	Method("updateServer", func() {

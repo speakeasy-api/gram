@@ -740,14 +740,14 @@ func DecodeGetServerResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
-// BuildGetServerConnectionsRequest instantiates a HTTP request object with
-// method and path set to call the "tunneledMcp" service "getServerConnections"
-// endpoint
-func (c *Client) BuildGetServerConnectionsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerConnectionsTunneledMcpPath()}
+// BuildListServerConnectionsRequest instantiates a HTTP request object with
+// method and path set to call the "tunneledMcp" service
+// "listServerConnections" endpoint
+func (c *Client) BuildListServerConnectionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListServerConnectionsTunneledMcpPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("tunneledMcp", "getServerConnections", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("tunneledMcp", "listServerConnections", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -756,13 +756,13 @@ func (c *Client) BuildGetServerConnectionsRequest(ctx context.Context, v any) (*
 	return req, nil
 }
 
-// EncodeGetServerConnectionsRequest returns an encoder for requests sent to
-// the tunneledMcp getServerConnections server.
-func EncodeGetServerConnectionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListServerConnectionsRequest returns an encoder for requests sent to
+// the tunneledMcp listServerConnections server.
+func EncodeListServerConnectionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*tunneledmcp.GetServerConnectionsPayload)
+		p, ok := v.(*tunneledmcp.ListServerConnectionsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("tunneledMcp", "getServerConnections", "*tunneledmcp.GetServerConnectionsPayload", v)
+			return goahttp.ErrInvalidType("tunneledMcp", "listServerConnections", "*tunneledmcp.ListServerConnectionsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -783,10 +783,10 @@ func EncodeGetServerConnectionsRequest(encoder func(*http.Request) goahttp.Encod
 	}
 }
 
-// DecodeGetServerConnectionsResponse returns a decoder for responses returned
-// by the tunneledMcp getServerConnections endpoint. restoreBody controls
+// DecodeListServerConnectionsResponse returns a decoder for responses returned
+// by the tunneledMcp listServerConnections endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
-// DecodeGetServerConnectionsResponse may return the following errors:
+// DecodeListServerConnectionsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -798,7 +798,7 @@ func EncodeGetServerConnectionsRequest(encoder func(*http.Request) goahttp.Encod
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGetServerConnectionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListServerConnectionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -815,169 +815,169 @@ func DecodeGetServerConnectionsResponse(decoder func(*http.Response) goahttp.Dec
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GetServerConnectionsResponseBody
+				body ListServerConnectionsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsResponseBody(&body)
+			err = ValidateListServerConnectionsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			res := NewGetServerConnectionsTunneledMcpServerConnectionsOK(&body)
+			res := NewListServerConnectionsTunneledMcpServerConnectionsOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body GetServerConnectionsUnauthorizedResponseBody
+				body ListServerConnectionsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsUnauthorizedResponseBody(&body)
+			err = ValidateListServerConnectionsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsUnauthorized(&body)
+			return nil, NewListServerConnectionsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GetServerConnectionsForbiddenResponseBody
+				body ListServerConnectionsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsForbiddenResponseBody(&body)
+			err = ValidateListServerConnectionsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsForbidden(&body)
+			return nil, NewListServerConnectionsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GetServerConnectionsBadRequestResponseBody
+				body ListServerConnectionsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsBadRequestResponseBody(&body)
+			err = ValidateListServerConnectionsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsBadRequest(&body)
+			return nil, NewListServerConnectionsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GetServerConnectionsNotFoundResponseBody
+				body ListServerConnectionsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsNotFoundResponseBody(&body)
+			err = ValidateListServerConnectionsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsNotFound(&body)
+			return nil, NewListServerConnectionsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GetServerConnectionsConflictResponseBody
+				body ListServerConnectionsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsConflictResponseBody(&body)
+			err = ValidateListServerConnectionsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsConflict(&body)
+			return nil, NewListServerConnectionsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GetServerConnectionsUnsupportedMediaResponseBody
+				body ListServerConnectionsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsUnsupportedMediaResponseBody(&body)
+			err = ValidateListServerConnectionsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsUnsupportedMedia(&body)
+			return nil, NewListServerConnectionsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GetServerConnectionsInvalidResponseBody
+				body ListServerConnectionsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsInvalidResponseBody(&body)
+			err = ValidateListServerConnectionsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsInvalid(&body)
+			return nil, NewListServerConnectionsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GetServerConnectionsInvariantViolationResponseBody
+					body ListServerConnectionsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 				}
-				err = ValidateGetServerConnectionsInvariantViolationResponseBody(&body)
+				err = ValidateListServerConnectionsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+					return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 				}
-				return nil, NewGetServerConnectionsInvariantViolation(&body)
+				return nil, NewListServerConnectionsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GetServerConnectionsUnexpectedResponseBody
+					body ListServerConnectionsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 				}
-				err = ValidateGetServerConnectionsUnexpectedResponseBody(&body)
+				err = ValidateListServerConnectionsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+					return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 				}
-				return nil, NewGetServerConnectionsUnexpected(&body)
+				return nil, NewListServerConnectionsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerConnections", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("tunneledMcp", "listServerConnections", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GetServerConnectionsGatewayErrorResponseBody
+				body ListServerConnectionsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "listServerConnections", err)
 			}
-			err = ValidateGetServerConnectionsGatewayErrorResponseBody(&body)
+			err = ValidateListServerConnectionsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerConnections", err)
+				return nil, goahttp.ErrValidationError("tunneledMcp", "listServerConnections", err)
 			}
-			return nil, NewGetServerConnectionsGatewayError(&body)
+			return nil, NewListServerConnectionsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerConnections", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("tunneledMcp", "listServerConnections", resp.StatusCode, string(body))
 		}
 	}
 }

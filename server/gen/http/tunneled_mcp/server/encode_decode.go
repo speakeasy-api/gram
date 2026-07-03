@@ -701,23 +701,23 @@ func EncodeGetServerError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// EncodeGetServerConnectionsResponse returns an encoder for responses returned
-// by the tunneledMcp getServerConnections endpoint.
-func EncodeGetServerConnectionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListServerConnectionsResponse returns an encoder for responses
+// returned by the tunneledMcp listServerConnections endpoint.
+func EncodeListServerConnectionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*types.TunneledMcpServerConnections)
 		enc := encoder(ctx, w)
-		body := NewGetServerConnectionsResponseBody(res)
+		body := NewListServerConnectionsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetServerConnectionsRequest returns a decoder for requests sent to the
-// tunneledMcp getServerConnections endpoint.
-func DecodeGetServerConnectionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*tunneledmcp.GetServerConnectionsPayload, error) {
-	return func(r *http.Request) (*tunneledmcp.GetServerConnectionsPayload, error) {
-		var payload *tunneledmcp.GetServerConnectionsPayload
+// DecodeListServerConnectionsRequest returns a decoder for requests sent to
+// the tunneledMcp listServerConnections endpoint.
+func DecodeListServerConnectionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*tunneledmcp.ListServerConnectionsPayload, error) {
+	return func(r *http.Request) (*tunneledmcp.ListServerConnectionsPayload, error) {
+		var payload *tunneledmcp.ListServerConnectionsPayload
 		var (
 			id               string
 			sessionToken     *string
@@ -745,7 +745,7 @@ func DecodeGetServerConnectionsRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetServerConnectionsPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListServerConnectionsPayload(id, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -772,9 +772,9 @@ func DecodeGetServerConnectionsRequest(mux goahttp.Muxer, decoder func(*http.Req
 	}
 }
 
-// EncodeGetServerConnectionsError returns an encoder for errors returned by
-// the getServerConnections tunneledMcp endpoint.
-func EncodeGetServerConnectionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListServerConnectionsError returns an encoder for errors returned by
+// the listServerConnections tunneledMcp endpoint.
+func EncodeListServerConnectionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -791,7 +791,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsUnauthorizedResponseBody(res)
+				body = NewListServerConnectionsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -805,7 +805,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsForbiddenResponseBody(res)
+				body = NewListServerConnectionsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -819,7 +819,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsBadRequestResponseBody(res)
+				body = NewListServerConnectionsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -833,7 +833,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsNotFoundResponseBody(res)
+				body = NewListServerConnectionsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -847,7 +847,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsConflictResponseBody(res)
+				body = NewListServerConnectionsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -861,7 +861,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsUnsupportedMediaResponseBody(res)
+				body = NewListServerConnectionsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -875,7 +875,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsInvalidResponseBody(res)
+				body = NewListServerConnectionsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -889,7 +889,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsInvariantViolationResponseBody(res)
+				body = NewListServerConnectionsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -903,7 +903,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsUnexpectedResponseBody(res)
+				body = NewListServerConnectionsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -917,7 +917,7 @@ func EncodeGetServerConnectionsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetServerConnectionsGatewayErrorResponseBody(res)
+				body = NewListServerConnectionsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

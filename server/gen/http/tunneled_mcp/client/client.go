@@ -29,9 +29,9 @@ type Client struct {
 	// endpoint.
 	GetServerDoer goahttp.Doer
 
-	// GetServerConnections Doer is the HTTP client used to make requests to the
-	// getServerConnections endpoint.
-	GetServerConnectionsDoer goahttp.Doer
+	// ListServerConnections Doer is the HTTP client used to make requests to the
+	// listServerConnections endpoint.
+	ListServerConnectionsDoer goahttp.Doer
 
 	// UpdateServer Doer is the HTTP client used to make requests to the
 	// updateServer endpoint.
@@ -65,18 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateServerDoer:         doer,
-		ListServersDoer:          doer,
-		GetServerDoer:            doer,
-		GetServerConnectionsDoer: doer,
-		UpdateServerDoer:         doer,
-		RotateServerKeyDoer:      doer,
-		DeleteServerDoer:         doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		CreateServerDoer:          doer,
+		ListServersDoer:           doer,
+		GetServerDoer:             doer,
+		ListServerConnectionsDoer: doer,
+		UpdateServerDoer:          doer,
+		RotateServerKeyDoer:       doer,
+		DeleteServerDoer:          doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -152,15 +152,15 @@ func (c *Client) GetServer() goa.Endpoint {
 	}
 }
 
-// GetServerConnections returns an endpoint that makes HTTP requests to the
-// tunneledMcp service getServerConnections server.
-func (c *Client) GetServerConnections() goa.Endpoint {
+// ListServerConnections returns an endpoint that makes HTTP requests to the
+// tunneledMcp service listServerConnections server.
+func (c *Client) ListServerConnections() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetServerConnectionsRequest(c.encoder)
-		decodeResponse = DecodeGetServerConnectionsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListServerConnectionsRequest(c.encoder)
+		decodeResponse = DecodeListServerConnectionsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetServerConnectionsRequest(ctx, v)
+		req, err := c.BuildListServerConnectionsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -168,9 +168,9 @@ func (c *Client) GetServerConnections() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetServerConnectionsDoer.Do(req)
+		resp, err := c.ListServerConnectionsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("tunneledMcp", "getServerConnections", err)
+			return nil, goahttp.ErrRequestError("tunneledMcp", "listServerConnections", err)
 		}
 		return decodeResponse(resp)
 	}

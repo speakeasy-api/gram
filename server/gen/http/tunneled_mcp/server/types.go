@@ -79,9 +79,9 @@ type GetServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// GetServerConnectionsResponseBody is the type of the "tunneledMcp" service
-// "getServerConnections" endpoint HTTP response body.
-type GetServerConnectionsResponseBody struct {
+// ListServerConnectionsResponseBody is the type of the "tunneledMcp" service
+// "listServerConnections" endpoint HTTP response body.
+type ListServerConnectionsResponseBody struct {
 	// Live tunnel connections currently visible in Redis
 	Connections []*TunneledMcpConnectionResponseBody `form:"connections" json:"connections" xml:"connections"`
 	// Number of active tunnel connections currently visible in Redis
@@ -675,10 +675,10 @@ type GetServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsUnauthorizedResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "unauthorized" error.
-type GetServerConnectionsUnauthorizedResponseBody struct {
+// ListServerConnectionsUnauthorizedResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListServerConnectionsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -694,10 +694,10 @@ type GetServerConnectionsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsForbiddenResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsForbiddenResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "forbidden" error.
-type GetServerConnectionsForbiddenResponseBody struct {
+type ListServerConnectionsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -713,10 +713,10 @@ type GetServerConnectionsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsBadRequestResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsBadRequestResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "bad_request" error.
-type GetServerConnectionsBadRequestResponseBody struct {
+type ListServerConnectionsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -732,10 +732,10 @@ type GetServerConnectionsBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsNotFoundResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsNotFoundResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "not_found" error.
-type GetServerConnectionsNotFoundResponseBody struct {
+type ListServerConnectionsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -751,10 +751,10 @@ type GetServerConnectionsNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsConflictResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsConflictResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "conflict" error.
-type GetServerConnectionsConflictResponseBody struct {
+type ListServerConnectionsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -770,10 +770,10 @@ type GetServerConnectionsConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsUnsupportedMediaResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GetServerConnectionsUnsupportedMediaResponseBody struct {
+// ListServerConnectionsUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListServerConnectionsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -789,10 +789,10 @@ type GetServerConnectionsUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsInvalidResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the "invalid"
-// error.
-type GetServerConnectionsInvalidResponseBody struct {
+// ListServerConnectionsInvalidResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
+// "invalid" error.
+type ListServerConnectionsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -808,10 +808,10 @@ type GetServerConnectionsInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsInvariantViolationResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GetServerConnectionsInvariantViolationResponseBody struct {
+// ListServerConnectionsInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListServerConnectionsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -827,10 +827,10 @@ type GetServerConnectionsInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsUnexpectedResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "unexpected" error.
-type GetServerConnectionsUnexpectedResponseBody struct {
+type ListServerConnectionsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -846,10 +846,10 @@ type GetServerConnectionsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetServerConnectionsGatewayErrorResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "gateway_error" error.
-type GetServerConnectionsGatewayErrorResponseBody struct {
+// ListServerConnectionsGatewayErrorResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListServerConnectionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1523,10 +1523,10 @@ func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBo
 	return body
 }
 
-// NewGetServerConnectionsResponseBody builds the HTTP response body from the
-// result of the "getServerConnections" endpoint of the "tunneledMcp" service.
-func NewGetServerConnectionsResponseBody(res *types.TunneledMcpServerConnections) *GetServerConnectionsResponseBody {
-	body := &GetServerConnectionsResponseBody{
+// NewListServerConnectionsResponseBody builds the HTTP response body from the
+// result of the "listServerConnections" endpoint of the "tunneledMcp" service.
+func NewListServerConnectionsResponseBody(res *types.TunneledMcpServerConnections) *ListServerConnectionsResponseBody {
+	body := &ListServerConnectionsResponseBody{
 		ActiveConnectionCount:      res.ActiveConnectionCount,
 		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
 	}
@@ -1997,11 +1997,11 @@ func NewGetServerGatewayErrorResponseBody(res *goa.ServiceError) *GetServerGatew
 	return body
 }
 
-// NewGetServerConnectionsUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "getServerConnections" endpoint of the
+// NewListServerConnectionsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listServerConnections" endpoint of the
 // "tunneledMcp" service.
-func NewGetServerConnectionsUnauthorizedResponseBody(res *goa.ServiceError) *GetServerConnectionsUnauthorizedResponseBody {
-	body := &GetServerConnectionsUnauthorizedResponseBody{
+func NewListServerConnectionsUnauthorizedResponseBody(res *goa.ServiceError) *ListServerConnectionsUnauthorizedResponseBody {
+	body := &ListServerConnectionsUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2012,11 +2012,11 @@ func NewGetServerConnectionsUnauthorizedResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
-// NewGetServerConnectionsForbiddenResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsForbiddenResponseBody(res *goa.ServiceError) *GetServerConnectionsForbiddenResponseBody {
-	body := &GetServerConnectionsForbiddenResponseBody{
+func NewListServerConnectionsForbiddenResponseBody(res *goa.ServiceError) *ListServerConnectionsForbiddenResponseBody {
+	body := &ListServerConnectionsForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2027,11 +2027,11 @@ func NewGetServerConnectionsForbiddenResponseBody(res *goa.ServiceError) *GetSer
 	return body
 }
 
-// NewGetServerConnectionsBadRequestResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsBadRequestResponseBody(res *goa.ServiceError) *GetServerConnectionsBadRequestResponseBody {
-	body := &GetServerConnectionsBadRequestResponseBody{
+func NewListServerConnectionsBadRequestResponseBody(res *goa.ServiceError) *ListServerConnectionsBadRequestResponseBody {
+	body := &ListServerConnectionsBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2042,11 +2042,11 @@ func NewGetServerConnectionsBadRequestResponseBody(res *goa.ServiceError) *GetSe
 	return body
 }
 
-// NewGetServerConnectionsNotFoundResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsNotFoundResponseBody(res *goa.ServiceError) *GetServerConnectionsNotFoundResponseBody {
-	body := &GetServerConnectionsNotFoundResponseBody{
+func NewListServerConnectionsNotFoundResponseBody(res *goa.ServiceError) *ListServerConnectionsNotFoundResponseBody {
+	body := &ListServerConnectionsNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2057,11 +2057,11 @@ func NewGetServerConnectionsNotFoundResponseBody(res *goa.ServiceError) *GetServ
 	return body
 }
 
-// NewGetServerConnectionsConflictResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsConflictResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsConflictResponseBody(res *goa.ServiceError) *GetServerConnectionsConflictResponseBody {
-	body := &GetServerConnectionsConflictResponseBody{
+func NewListServerConnectionsConflictResponseBody(res *goa.ServiceError) *ListServerConnectionsConflictResponseBody {
+	body := &ListServerConnectionsConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2072,11 +2072,11 @@ func NewGetServerConnectionsConflictResponseBody(res *goa.ServiceError) *GetServ
 	return body
 }
 
-// NewGetServerConnectionsUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getServerConnections" endpoint of the
+// NewListServerConnectionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listServerConnections" endpoint of the
 // "tunneledMcp" service.
-func NewGetServerConnectionsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerConnectionsUnsupportedMediaResponseBody {
-	body := &GetServerConnectionsUnsupportedMediaResponseBody{
+func NewListServerConnectionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListServerConnectionsUnsupportedMediaResponseBody {
+	body := &ListServerConnectionsUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2087,11 +2087,11 @@ func NewGetServerConnectionsUnsupportedMediaResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewGetServerConnectionsInvalidResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsInvalidResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsInvalidResponseBody(res *goa.ServiceError) *GetServerConnectionsInvalidResponseBody {
-	body := &GetServerConnectionsInvalidResponseBody{
+func NewListServerConnectionsInvalidResponseBody(res *goa.ServiceError) *ListServerConnectionsInvalidResponseBody {
+	body := &ListServerConnectionsInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2102,11 +2102,11 @@ func NewGetServerConnectionsInvalidResponseBody(res *goa.ServiceError) *GetServe
 	return body
 }
 
-// NewGetServerConnectionsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "getServerConnections" endpoint of the
+// NewListServerConnectionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listServerConnections" endpoint of the
 // "tunneledMcp" service.
-func NewGetServerConnectionsInvariantViolationResponseBody(res *goa.ServiceError) *GetServerConnectionsInvariantViolationResponseBody {
-	body := &GetServerConnectionsInvariantViolationResponseBody{
+func NewListServerConnectionsInvariantViolationResponseBody(res *goa.ServiceError) *ListServerConnectionsInvariantViolationResponseBody {
+	body := &ListServerConnectionsInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2117,11 +2117,11 @@ func NewGetServerConnectionsInvariantViolationResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewGetServerConnectionsUnexpectedResponseBody builds the HTTP response body
-// from the result of the "getServerConnections" endpoint of the "tunneledMcp"
+// NewListServerConnectionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listServerConnections" endpoint of the "tunneledMcp"
 // service.
-func NewGetServerConnectionsUnexpectedResponseBody(res *goa.ServiceError) *GetServerConnectionsUnexpectedResponseBody {
-	body := &GetServerConnectionsUnexpectedResponseBody{
+func NewListServerConnectionsUnexpectedResponseBody(res *goa.ServiceError) *ListServerConnectionsUnexpectedResponseBody {
+	body := &ListServerConnectionsUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2132,11 +2132,11 @@ func NewGetServerConnectionsUnexpectedResponseBody(res *goa.ServiceError) *GetSe
 	return body
 }
 
-// NewGetServerConnectionsGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "getServerConnections" endpoint of the
+// NewListServerConnectionsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listServerConnections" endpoint of the
 // "tunneledMcp" service.
-func NewGetServerConnectionsGatewayErrorResponseBody(res *goa.ServiceError) *GetServerConnectionsGatewayErrorResponseBody {
-	body := &GetServerConnectionsGatewayErrorResponseBody{
+func NewListServerConnectionsGatewayErrorResponseBody(res *goa.ServiceError) *ListServerConnectionsGatewayErrorResponseBody {
+	body := &ListServerConnectionsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2606,10 +2606,10 @@ func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, p
 	return v
 }
 
-// NewGetServerConnectionsPayload builds a tunneledMcp service
-// getServerConnections endpoint payload.
-func NewGetServerConnectionsPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.GetServerConnectionsPayload {
-	v := &tunneledmcp.GetServerConnectionsPayload{}
+// NewListServerConnectionsPayload builds a tunneledMcp service
+// listServerConnections endpoint payload.
+func NewListServerConnectionsPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.ListServerConnectionsPayload {
+	v := &tunneledmcp.ListServerConnectionsPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

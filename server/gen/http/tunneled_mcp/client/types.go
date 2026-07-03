@@ -79,9 +79,9 @@ type GetServerResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// GetServerConnectionsResponseBody is the type of the "tunneledMcp" service
-// "getServerConnections" endpoint HTTP response body.
-type GetServerConnectionsResponseBody struct {
+// ListServerConnectionsResponseBody is the type of the "tunneledMcp" service
+// "listServerConnections" endpoint HTTP response body.
+type ListServerConnectionsResponseBody struct {
 	// Live tunnel connections currently visible in Redis
 	Connections []*TunneledMcpConnectionResponseBody `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -675,10 +675,10 @@ type GetServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsUnauthorizedResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "unauthorized" error.
-type GetServerConnectionsUnauthorizedResponseBody struct {
+// ListServerConnectionsUnauthorizedResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListServerConnectionsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -694,10 +694,10 @@ type GetServerConnectionsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsForbiddenResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsForbiddenResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "forbidden" error.
-type GetServerConnectionsForbiddenResponseBody struct {
+type ListServerConnectionsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -713,10 +713,10 @@ type GetServerConnectionsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsBadRequestResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsBadRequestResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "bad_request" error.
-type GetServerConnectionsBadRequestResponseBody struct {
+type ListServerConnectionsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -732,10 +732,10 @@ type GetServerConnectionsBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsNotFoundResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsNotFoundResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "not_found" error.
-type GetServerConnectionsNotFoundResponseBody struct {
+type ListServerConnectionsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -751,10 +751,10 @@ type GetServerConnectionsNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsConflictResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsConflictResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "conflict" error.
-type GetServerConnectionsConflictResponseBody struct {
+type ListServerConnectionsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -770,10 +770,10 @@ type GetServerConnectionsConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsUnsupportedMediaResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GetServerConnectionsUnsupportedMediaResponseBody struct {
+// ListServerConnectionsUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListServerConnectionsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -789,10 +789,10 @@ type GetServerConnectionsUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsInvalidResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the "invalid"
-// error.
-type GetServerConnectionsInvalidResponseBody struct {
+// ListServerConnectionsInvalidResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
+// "invalid" error.
+type ListServerConnectionsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -808,10 +808,10 @@ type GetServerConnectionsInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsInvariantViolationResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GetServerConnectionsInvariantViolationResponseBody struct {
+// ListServerConnectionsInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListServerConnectionsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -827,10 +827,10 @@ type GetServerConnectionsInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsUnexpectedResponseBody is the type of the "tunneledMcp"
-// service "getServerConnections" endpoint HTTP response body for the
+// ListServerConnectionsUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "listServerConnections" endpoint HTTP response body for the
 // "unexpected" error.
-type GetServerConnectionsUnexpectedResponseBody struct {
+type ListServerConnectionsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -846,10 +846,10 @@ type GetServerConnectionsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetServerConnectionsGatewayErrorResponseBody is the type of the
-// "tunneledMcp" service "getServerConnections" endpoint HTTP response body for
-// the "gateway_error" error.
-type GetServerConnectionsGatewayErrorResponseBody struct {
+// ListServerConnectionsGatewayErrorResponseBody is the type of the
+// "tunneledMcp" service "listServerConnections" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListServerConnectionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1998,9 +1998,10 @@ func NewGetServerGatewayError(body *GetServerGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
-// NewGetServerConnectionsTunneledMcpServerConnectionsOK builds a "tunneledMcp"
-// service "getServerConnections" endpoint result from a HTTP "OK" response.
-func NewGetServerConnectionsTunneledMcpServerConnectionsOK(body *GetServerConnectionsResponseBody) *types.TunneledMcpServerConnections {
+// NewListServerConnectionsTunneledMcpServerConnectionsOK builds a
+// "tunneledMcp" service "listServerConnections" endpoint result from a HTTP
+// "OK" response.
+func NewListServerConnectionsTunneledMcpServerConnectionsOK(body *ListServerConnectionsResponseBody) *types.TunneledMcpServerConnections {
 	v := &types.TunneledMcpServerConnections{
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
@@ -2017,9 +2018,9 @@ func NewGetServerConnectionsTunneledMcpServerConnectionsOK(body *GetServerConnec
 	return v
 }
 
-// NewGetServerConnectionsUnauthorized builds a tunneledMcp service
-// getServerConnections endpoint unauthorized error.
-func NewGetServerConnectionsUnauthorized(body *GetServerConnectionsUnauthorizedResponseBody) *goa.ServiceError {
+// NewListServerConnectionsUnauthorized builds a tunneledMcp service
+// listServerConnections endpoint unauthorized error.
+func NewListServerConnectionsUnauthorized(body *ListServerConnectionsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2032,9 +2033,9 @@ func NewGetServerConnectionsUnauthorized(body *GetServerConnectionsUnauthorizedR
 	return v
 }
 
-// NewGetServerConnectionsForbidden builds a tunneledMcp service
-// getServerConnections endpoint forbidden error.
-func NewGetServerConnectionsForbidden(body *GetServerConnectionsForbiddenResponseBody) *goa.ServiceError {
+// NewListServerConnectionsForbidden builds a tunneledMcp service
+// listServerConnections endpoint forbidden error.
+func NewListServerConnectionsForbidden(body *ListServerConnectionsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2047,9 +2048,9 @@ func NewGetServerConnectionsForbidden(body *GetServerConnectionsForbiddenRespons
 	return v
 }
 
-// NewGetServerConnectionsBadRequest builds a tunneledMcp service
-// getServerConnections endpoint bad_request error.
-func NewGetServerConnectionsBadRequest(body *GetServerConnectionsBadRequestResponseBody) *goa.ServiceError {
+// NewListServerConnectionsBadRequest builds a tunneledMcp service
+// listServerConnections endpoint bad_request error.
+func NewListServerConnectionsBadRequest(body *ListServerConnectionsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2062,9 +2063,9 @@ func NewGetServerConnectionsBadRequest(body *GetServerConnectionsBadRequestRespo
 	return v
 }
 
-// NewGetServerConnectionsNotFound builds a tunneledMcp service
-// getServerConnections endpoint not_found error.
-func NewGetServerConnectionsNotFound(body *GetServerConnectionsNotFoundResponseBody) *goa.ServiceError {
+// NewListServerConnectionsNotFound builds a tunneledMcp service
+// listServerConnections endpoint not_found error.
+func NewListServerConnectionsNotFound(body *ListServerConnectionsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2077,9 +2078,9 @@ func NewGetServerConnectionsNotFound(body *GetServerConnectionsNotFoundResponseB
 	return v
 }
 
-// NewGetServerConnectionsConflict builds a tunneledMcp service
-// getServerConnections endpoint conflict error.
-func NewGetServerConnectionsConflict(body *GetServerConnectionsConflictResponseBody) *goa.ServiceError {
+// NewListServerConnectionsConflict builds a tunneledMcp service
+// listServerConnections endpoint conflict error.
+func NewListServerConnectionsConflict(body *ListServerConnectionsConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2092,9 +2093,9 @@ func NewGetServerConnectionsConflict(body *GetServerConnectionsConflictResponseB
 	return v
 }
 
-// NewGetServerConnectionsUnsupportedMedia builds a tunneledMcp service
-// getServerConnections endpoint unsupported_media error.
-func NewGetServerConnectionsUnsupportedMedia(body *GetServerConnectionsUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListServerConnectionsUnsupportedMedia builds a tunneledMcp service
+// listServerConnections endpoint unsupported_media error.
+func NewListServerConnectionsUnsupportedMedia(body *ListServerConnectionsUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2107,9 +2108,9 @@ func NewGetServerConnectionsUnsupportedMedia(body *GetServerConnectionsUnsupport
 	return v
 }
 
-// NewGetServerConnectionsInvalid builds a tunneledMcp service
-// getServerConnections endpoint invalid error.
-func NewGetServerConnectionsInvalid(body *GetServerConnectionsInvalidResponseBody) *goa.ServiceError {
+// NewListServerConnectionsInvalid builds a tunneledMcp service
+// listServerConnections endpoint invalid error.
+func NewListServerConnectionsInvalid(body *ListServerConnectionsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2122,9 +2123,9 @@ func NewGetServerConnectionsInvalid(body *GetServerConnectionsInvalidResponseBod
 	return v
 }
 
-// NewGetServerConnectionsInvariantViolation builds a tunneledMcp service
-// getServerConnections endpoint invariant_violation error.
-func NewGetServerConnectionsInvariantViolation(body *GetServerConnectionsInvariantViolationResponseBody) *goa.ServiceError {
+// NewListServerConnectionsInvariantViolation builds a tunneledMcp service
+// listServerConnections endpoint invariant_violation error.
+func NewListServerConnectionsInvariantViolation(body *ListServerConnectionsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2137,9 +2138,9 @@ func NewGetServerConnectionsInvariantViolation(body *GetServerConnectionsInvaria
 	return v
 }
 
-// NewGetServerConnectionsUnexpected builds a tunneledMcp service
-// getServerConnections endpoint unexpected error.
-func NewGetServerConnectionsUnexpected(body *GetServerConnectionsUnexpectedResponseBody) *goa.ServiceError {
+// NewListServerConnectionsUnexpected builds a tunneledMcp service
+// listServerConnections endpoint unexpected error.
+func NewListServerConnectionsUnexpected(body *ListServerConnectionsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2152,9 +2153,9 @@ func NewGetServerConnectionsUnexpected(body *GetServerConnectionsUnexpectedRespo
 	return v
 }
 
-// NewGetServerConnectionsGatewayError builds a tunneledMcp service
-// getServerConnections endpoint gateway_error error.
-func NewGetServerConnectionsGatewayError(body *GetServerConnectionsGatewayErrorResponseBody) *goa.ServiceError {
+// NewListServerConnectionsGatewayError builds a tunneledMcp service
+// listServerConnections endpoint gateway_error error.
+func NewListServerConnectionsGatewayError(body *ListServerConnectionsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2743,9 +2744,9 @@ func ValidateGetServerResponseBody(body *GetServerResponseBody) (err error) {
 	return
 }
 
-// ValidateGetServerConnectionsResponseBody runs the validations defined on
-// GetServerConnectionsResponseBody
-func ValidateGetServerConnectionsResponseBody(body *GetServerConnectionsResponseBody) (err error) {
+// ValidateListServerConnectionsResponseBody runs the validations defined on
+// ListServerConnectionsResponseBody
+func ValidateListServerConnectionsResponseBody(body *ListServerConnectionsResponseBody) (err error) {
 	if body.Connections == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connections", "body"))
 	}
@@ -3563,9 +3564,9 @@ func ValidateGetServerGatewayErrorResponseBody(body *GetServerGatewayErrorRespon
 	return
 }
 
-// ValidateGetServerConnectionsUnauthorizedResponseBody runs the validations
-// defined on getServerConnections_unauthorized_response_body
-func ValidateGetServerConnectionsUnauthorizedResponseBody(body *GetServerConnectionsUnauthorizedResponseBody) (err error) {
+// ValidateListServerConnectionsUnauthorizedResponseBody runs the validations
+// defined on listServerConnections_unauthorized_response_body
+func ValidateListServerConnectionsUnauthorizedResponseBody(body *ListServerConnectionsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3587,9 +3588,9 @@ func ValidateGetServerConnectionsUnauthorizedResponseBody(body *GetServerConnect
 	return
 }
 
-// ValidateGetServerConnectionsForbiddenResponseBody runs the validations
-// defined on getServerConnections_forbidden_response_body
-func ValidateGetServerConnectionsForbiddenResponseBody(body *GetServerConnectionsForbiddenResponseBody) (err error) {
+// ValidateListServerConnectionsForbiddenResponseBody runs the validations
+// defined on listServerConnections_forbidden_response_body
+func ValidateListServerConnectionsForbiddenResponseBody(body *ListServerConnectionsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3611,9 +3612,9 @@ func ValidateGetServerConnectionsForbiddenResponseBody(body *GetServerConnection
 	return
 }
 
-// ValidateGetServerConnectionsBadRequestResponseBody runs the validations
-// defined on getServerConnections_bad_request_response_body
-func ValidateGetServerConnectionsBadRequestResponseBody(body *GetServerConnectionsBadRequestResponseBody) (err error) {
+// ValidateListServerConnectionsBadRequestResponseBody runs the validations
+// defined on listServerConnections_bad_request_response_body
+func ValidateListServerConnectionsBadRequestResponseBody(body *ListServerConnectionsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3635,9 +3636,9 @@ func ValidateGetServerConnectionsBadRequestResponseBody(body *GetServerConnectio
 	return
 }
 
-// ValidateGetServerConnectionsNotFoundResponseBody runs the validations
-// defined on getServerConnections_not_found_response_body
-func ValidateGetServerConnectionsNotFoundResponseBody(body *GetServerConnectionsNotFoundResponseBody) (err error) {
+// ValidateListServerConnectionsNotFoundResponseBody runs the validations
+// defined on listServerConnections_not_found_response_body
+func ValidateListServerConnectionsNotFoundResponseBody(body *ListServerConnectionsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3659,9 +3660,9 @@ func ValidateGetServerConnectionsNotFoundResponseBody(body *GetServerConnections
 	return
 }
 
-// ValidateGetServerConnectionsConflictResponseBody runs the validations
-// defined on getServerConnections_conflict_response_body
-func ValidateGetServerConnectionsConflictResponseBody(body *GetServerConnectionsConflictResponseBody) (err error) {
+// ValidateListServerConnectionsConflictResponseBody runs the validations
+// defined on listServerConnections_conflict_response_body
+func ValidateListServerConnectionsConflictResponseBody(body *ListServerConnectionsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3683,9 +3684,9 @@ func ValidateGetServerConnectionsConflictResponseBody(body *GetServerConnections
 	return
 }
 
-// ValidateGetServerConnectionsUnsupportedMediaResponseBody runs the
-// validations defined on getServerConnections_unsupported_media_response_body
-func ValidateGetServerConnectionsUnsupportedMediaResponseBody(body *GetServerConnectionsUnsupportedMediaResponseBody) (err error) {
+// ValidateListServerConnectionsUnsupportedMediaResponseBody runs the
+// validations defined on listServerConnections_unsupported_media_response_body
+func ValidateListServerConnectionsUnsupportedMediaResponseBody(body *ListServerConnectionsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3707,9 +3708,9 @@ func ValidateGetServerConnectionsUnsupportedMediaResponseBody(body *GetServerCon
 	return
 }
 
-// ValidateGetServerConnectionsInvalidResponseBody runs the validations defined
-// on getServerConnections_invalid_response_body
-func ValidateGetServerConnectionsInvalidResponseBody(body *GetServerConnectionsInvalidResponseBody) (err error) {
+// ValidateListServerConnectionsInvalidResponseBody runs the validations
+// defined on listServerConnections_invalid_response_body
+func ValidateListServerConnectionsInvalidResponseBody(body *ListServerConnectionsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3731,9 +3732,10 @@ func ValidateGetServerConnectionsInvalidResponseBody(body *GetServerConnectionsI
 	return
 }
 
-// ValidateGetServerConnectionsInvariantViolationResponseBody runs the
-// validations defined on getServerConnections_invariant_violation_response_body
-func ValidateGetServerConnectionsInvariantViolationResponseBody(body *GetServerConnectionsInvariantViolationResponseBody) (err error) {
+// ValidateListServerConnectionsInvariantViolationResponseBody runs the
+// validations defined on
+// listServerConnections_invariant_violation_response_body
+func ValidateListServerConnectionsInvariantViolationResponseBody(body *ListServerConnectionsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3755,9 +3757,9 @@ func ValidateGetServerConnectionsInvariantViolationResponseBody(body *GetServerC
 	return
 }
 
-// ValidateGetServerConnectionsUnexpectedResponseBody runs the validations
-// defined on getServerConnections_unexpected_response_body
-func ValidateGetServerConnectionsUnexpectedResponseBody(body *GetServerConnectionsUnexpectedResponseBody) (err error) {
+// ValidateListServerConnectionsUnexpectedResponseBody runs the validations
+// defined on listServerConnections_unexpected_response_body
+func ValidateListServerConnectionsUnexpectedResponseBody(body *ListServerConnectionsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3779,9 +3781,9 @@ func ValidateGetServerConnectionsUnexpectedResponseBody(body *GetServerConnectio
 	return
 }
 
-// ValidateGetServerConnectionsGatewayErrorResponseBody runs the validations
-// defined on getServerConnections_gateway_error_response_body
-func ValidateGetServerConnectionsGatewayErrorResponseBody(body *GetServerConnectionsGatewayErrorResponseBody) (err error) {
+// ValidateListServerConnectionsGatewayErrorResponseBody runs the validations
+// defined on listServerConnections_gateway_error_response_body
+func ValidateListServerConnectionsGatewayErrorResponseBody(body *ListServerConnectionsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -53,10 +53,11 @@ func main() {
 	defer keys.Close()
 
 	gw, err := gateway.New(gateway.Config{
-		AdvertiseAddr:       advertiseAddr,
-		MaxStreamsPerTunnel: 256,
-		MaxSessions:         maxSessions,
-		ForwardToken:        forwardToken,
+		AdvertiseAddr: advertiseAddr,
+		// MaxStreamsPerTunnel left unset: gateway.New applies its
+		// defaultMaxStreamsPerTunnel so the cap has a single source of truth.
+		MaxSessions:  maxSessions,
+		ForwardToken: forwardToken,
 	}, keys, routes, logger)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway init failed", slog.Any("error", err))

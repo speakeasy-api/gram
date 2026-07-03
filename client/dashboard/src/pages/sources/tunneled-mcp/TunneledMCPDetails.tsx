@@ -36,7 +36,7 @@ import {
   invalidateAllGetTunneledMcpServer,
   invalidateAllTunneledMcpServers,
   useGetTunneledMcpServer,
-  useGetTunneledMcpServerConnections,
+  useListTunneledMcpServerConnections,
   useMcpEndpoints,
   useMcpServers,
   useUpdateTunneledMcpServerMutation,
@@ -118,7 +118,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
   const {
     data: tunneledMcpServerConnections,
     isLoading: isLoadingConnections,
-  } = useGetTunneledMcpServerConnections(
+  } = useListTunneledMcpServerConnections(
     getTunneledMcpServerArgs(tunneledMcpServerId),
     undefined,
     {

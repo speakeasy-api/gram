@@ -6,7 +6,7 @@ import type {
   TunneledMcpServer,
 } from "@gram/client/models/components";
 import {
-  invalidateAllGetTunneledMcpServerConnections,
+  invalidateAllListTunneledMcpServerConnections,
   invalidateAllGetTunneledMcpServer,
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
@@ -188,7 +188,7 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
         invalidateAllGetTunneledMcpServer(queryClient, {
           refetchType: "all",
         }),
-        invalidateAllGetTunneledMcpServerConnections(queryClient, {
+        invalidateAllListTunneledMcpServerConnections(queryClient, {
           refetchType: "all",
         }),
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
@@ -221,7 +221,7 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
     onSuccess: async () => {
       await Promise.all([
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllGetTunneledMcpServerConnections(queryClient, {
+        invalidateAllListTunneledMcpServerConnections(queryClient, {
           refetchType: "all",
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),

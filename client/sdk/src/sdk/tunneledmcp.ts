@@ -5,7 +5,7 @@
 import { tunneledMcpCreateServer } from "../funcs/tunneledMcpCreateServer.js";
 import { tunneledMcpDeleteServer } from "../funcs/tunneledMcpDeleteServer.js";
 import { tunneledMcpGetServer } from "../funcs/tunneledMcpGetServer.js";
-import { tunneledMcpGetServerConnections } from "../funcs/tunneledMcpGetServerConnections.js";
+import { tunneledMcpListServerConnections } from "../funcs/tunneledMcpListServerConnections.js";
 import { tunneledMcpListServers } from "../funcs/tunneledMcpListServers.js";
 import { tunneledMcpRotateServerKey } from "../funcs/tunneledMcpRotateServerKey.js";
 import { tunneledMcpUpdateServer } from "../funcs/tunneledMcpUpdateServer.js";
@@ -73,17 +73,17 @@ export class TunneledMcp extends ClientSDK {
   }
 
   /**
-   * getServerConnections tunneledMcp
+   * listServerConnections tunneledMcp
    *
    * @remarks
-   * Get live tunnel connections for a tunneled MCP server
+   * List live tunnel connections for a tunneled MCP server
    */
-  async getServerConnections(
-    request: operations.GetTunneledMcpServerConnectionsRequest,
-    security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+  async listServerConnections(
+    request: operations.ListTunneledMcpServerConnectionsRequest,
+    security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.TunneledMcpServerConnections> {
-    return unwrapAsync(tunneledMcpGetServerConnections(
+    return unwrapAsync(tunneledMcpListServerConnections(
       this,
       request,
       security,

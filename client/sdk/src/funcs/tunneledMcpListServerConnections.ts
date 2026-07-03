@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,15 +29,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getServerConnections tunneledMcp
+ * listServerConnections tunneledMcp
  *
  * @remarks
- * Get live tunnel connections for a tunneled MCP server
+ * List live tunnel connections for a tunneled MCP server
  */
-export function tunneledMcpGetServerConnections(
+export function tunneledMcpListServerConnections(
   client: GramCore,
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +63,8 @@ export function tunneledMcpGetServerConnections(
 
 async function $do(
   client: GramCore,
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -86,7 +87,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.GetTunneledMcpServerConnectionsRequest$outboundSchema,
+        operations.ListTunneledMcpServerConnectionsRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -97,7 +98,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/tunneledMcp.getServerConnections")();
+  const path = pathToFunc("/rpc/tunneledMcp.listServerConnections")();
 
   const query = encodeFormQuery({
     "id": payload.id,
@@ -149,7 +150,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getTunneledMcpServerConnections",
+    operationID: "listTunneledMcpServerConnections",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -179,19 +180,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

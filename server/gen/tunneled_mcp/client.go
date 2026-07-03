@@ -16,25 +16,25 @@ import (
 
 // Client is the "tunneledMcp" service client.
 type Client struct {
-	CreateServerEndpoint         goa.Endpoint
-	ListServersEndpoint          goa.Endpoint
-	GetServerEndpoint            goa.Endpoint
-	GetServerConnectionsEndpoint goa.Endpoint
-	UpdateServerEndpoint         goa.Endpoint
-	RotateServerKeyEndpoint      goa.Endpoint
-	DeleteServerEndpoint         goa.Endpoint
+	CreateServerEndpoint          goa.Endpoint
+	ListServersEndpoint           goa.Endpoint
+	GetServerEndpoint             goa.Endpoint
+	ListServerConnectionsEndpoint goa.Endpoint
+	UpdateServerEndpoint          goa.Endpoint
+	RotateServerKeyEndpoint       goa.Endpoint
+	DeleteServerEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "tunneledMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, getServerConnections, updateServer, rotateServerKey, deleteServer goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, listServerConnections, updateServer, rotateServerKey, deleteServer goa.Endpoint) *Client {
 	return &Client{
-		CreateServerEndpoint:         createServer,
-		ListServersEndpoint:          listServers,
-		GetServerEndpoint:            getServer,
-		GetServerConnectionsEndpoint: getServerConnections,
-		UpdateServerEndpoint:         updateServer,
-		RotateServerKeyEndpoint:      rotateServerKey,
-		DeleteServerEndpoint:         deleteServer,
+		CreateServerEndpoint:          createServer,
+		ListServersEndpoint:           listServers,
+		GetServerEndpoint:             getServer,
+		ListServerConnectionsEndpoint: listServerConnections,
+		UpdateServerEndpoint:          updateServer,
+		RotateServerKeyEndpoint:       rotateServerKey,
+		DeleteServerEndpoint:          deleteServer,
 	}
 }
 
@@ -104,9 +104,9 @@ func (c *Client) GetServer(ctx context.Context, p *GetServerPayload) (res *types
 	return ires.(*types.TunneledMcpServer), nil
 }
 
-// GetServerConnections calls the "getServerConnections" endpoint of the
+// ListServerConnections calls the "listServerConnections" endpoint of the
 // "tunneledMcp" service.
-// GetServerConnections may return the following errors:
+// ListServerConnections may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -118,9 +118,9 @@ func (c *Client) GetServer(ctx context.Context, p *GetServerPayload) (res *types
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetServerConnections(ctx context.Context, p *GetServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error) {
+func (c *Client) ListServerConnections(ctx context.Context, p *ListServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error) {
 	var ires any
-	ires, err = c.GetServerConnectionsEndpoint(ctx, p)
+	ires, err = c.ListServerConnectionsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

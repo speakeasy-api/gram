@@ -22,9 +22,9 @@ func newCounterInterceptorForTest(t *testing.T) *ToolsCallOTELCounterInterceptor
 	t.Helper()
 	logger := testenv.NewLogger(t)
 	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), proxy.ServerIdentity{
-		RemoteMCPServerID:    "srv-test",
-		TunnelledMCPServerID: "",
-		McpServerID:          "mcp-test",
+		RemoteMCPServerID:   "srv-test",
+		TunneledMCPServerID: "",
+		McpServerID:         "mcp-test",
 	}, logger)
 }
 

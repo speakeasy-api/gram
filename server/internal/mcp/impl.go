@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -588,7 +589,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
-	authToken := AuthorizationBearerToken(r)
+	authToken := httpheaders.AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
 	tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, extraUpstreamTokens)
@@ -1171,7 +1172,7 @@ func parseTagsFilter(raw string) []string {
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
 // returns 401.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
@@ -1192,7 +1193,7 @@ func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.Respons
 // the caller supplies an Authorization or Gram-Chat-Session token. Missing
 // tokens are not an error; an invalid supplied token is.
 func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 	if token == "" {
 		return ctx, nil
 	}

@@ -22,9 +22,9 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemetry.NewStub(testenv.NewLogger(t)), proxy.ServerIdentity{
-		RemoteMCPServerID:    "server-id",
-		TunnelledMCPServerID: "",
-		McpServerID:          "mcp-server-id",
+		RemoteMCPServerID:   "server-id",
+		TunneledMCPServerID: "",
+		McpServerID:         "mcp-server-id",
 	}, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-clickhouse-log", interceptor.Name())
 }
@@ -51,9 +51,9 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	})
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
-		RemoteMCPServerID:    serverID,
-		TunnelledMCPServerID: "",
-		McpServerID:          mcpServerID,
+		RemoteMCPServerID:   serverID,
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
 	}, logger)
 
 	req := &proxy.ToolsCallRequest{
@@ -149,9 +149,9 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 	})
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
-		RemoteMCPServerID:    serverID,
-		TunnelledMCPServerID: "",
-		McpServerID:          mcpServerID,
+		RemoteMCPServerID:   serverID,
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
 	}, logger)
 
 	// Skip the request side so the response has no stashed start time.
@@ -215,9 +215,9 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 	serverID := uuid.New().String()
 	mcpServerID := uuid.New().String()
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
-		RemoteMCPServerID:    serverID,
-		TunnelledMCPServerID: "",
-		McpServerID:          mcpServerID,
+		RemoteMCPServerID:   serverID,
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
 	}, logger)
 
 	// Deliberately call without an auth context on ctx — the response side
@@ -358,9 +358,9 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	})
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
-		RemoteMCPServerID:    serverID,
-		TunnelledMCPServerID: "",
-		McpServerID:          mcpServerID,
+		RemoteMCPServerID:   serverID,
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
 	}, logger)
 
 	req := &proxy.ToolsCallRequest{

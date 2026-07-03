@@ -26,9 +26,9 @@ const (
 // mcp_servers id for the telemetry interceptor tests, so assertions can tell
 // the two correlation dimensions apart.
 var testServerIdentity = proxy.ServerIdentity{
-	RemoteMCPServerID:    testServerID,
-	TunnelledMCPServerID: "",
-	McpServerID:          testMcpServerID,
+	RemoteMCPServerID:   testServerID,
+	TunneledMCPServerID: "",
+	McpServerID:         testMcpServerID,
 }
 
 func newAuthzEngineForTest(t *testing.T) *authz.Engine {

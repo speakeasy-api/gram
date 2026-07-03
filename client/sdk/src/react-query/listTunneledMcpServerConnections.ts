@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildGetTunneledMcpServerConnectionsQuery,
-  GetTunneledMcpServerConnectionsQueryData,
-  prefetchGetTunneledMcpServerConnections,
-  queryKeyGetTunneledMcpServerConnections,
-} from "./getTunneledMcpServerConnections.core.js";
+  buildListTunneledMcpServerConnectionsQuery,
+  ListTunneledMcpServerConnectionsQueryData,
+  prefetchListTunneledMcpServerConnections,
+  queryKeyListTunneledMcpServerConnections,
+} from "./listTunneledMcpServerConnections.core.js";
 export {
-  buildGetTunneledMcpServerConnectionsQuery,
-  type GetTunneledMcpServerConnectionsQueryData,
-  prefetchGetTunneledMcpServerConnections,
-  queryKeyGetTunneledMcpServerConnections,
+  buildListTunneledMcpServerConnectionsQuery,
+  type ListTunneledMcpServerConnectionsQueryData,
+  prefetchListTunneledMcpServerConnections,
+  queryKeyListTunneledMcpServerConnections,
 };
 
-export type GetTunneledMcpServerConnectionsQueryError =
+export type ListTunneledMcpServerConnectionsQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,25 +53,25 @@ export type GetTunneledMcpServerConnectionsQueryError =
   | SDKValidationError;
 
 /**
- * getServerConnections tunneledMcp
+ * listServerConnections tunneledMcp
  *
  * @remarks
- * Get live tunnel connections for a tunneled MCP server
+ * List live tunnel connections for a tunneled MCP server
  */
-export function useGetTunneledMcpServerConnections(
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+export function useListTunneledMcpServerConnections(
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: QueryHookOptions<
-    GetTunneledMcpServerConnectionsQueryData,
-    GetTunneledMcpServerConnectionsQueryError
+    ListTunneledMcpServerConnectionsQueryData,
+    ListTunneledMcpServerConnectionsQueryError
   >,
 ): UseQueryResult<
-  GetTunneledMcpServerConnectionsQueryData,
-  GetTunneledMcpServerConnectionsQueryError
+  ListTunneledMcpServerConnectionsQueryData,
+  ListTunneledMcpServerConnectionsQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildGetTunneledMcpServerConnectionsQuery(
+    ...buildListTunneledMcpServerConnectionsQuery(
       client,
       request,
       security,
@@ -82,25 +82,25 @@ export function useGetTunneledMcpServerConnections(
 }
 
 /**
- * getServerConnections tunneledMcp
+ * listServerConnections tunneledMcp
  *
  * @remarks
- * Get live tunnel connections for a tunneled MCP server
+ * List live tunnel connections for a tunneled MCP server
  */
-export function useGetTunneledMcpServerConnectionsSuspense(
-  request: operations.GetTunneledMcpServerConnectionsRequest,
-  security?: operations.GetTunneledMcpServerConnectionsSecurity | undefined,
+export function useListTunneledMcpServerConnectionsSuspense(
+  request: operations.ListTunneledMcpServerConnectionsRequest,
+  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    GetTunneledMcpServerConnectionsQueryData,
-    GetTunneledMcpServerConnectionsQueryError
+    ListTunneledMcpServerConnectionsQueryData,
+    ListTunneledMcpServerConnectionsQueryError
   >,
 ): UseSuspenseQueryResult<
-  GetTunneledMcpServerConnectionsQueryData,
-  GetTunneledMcpServerConnectionsQueryError
+  ListTunneledMcpServerConnectionsQueryData,
+  ListTunneledMcpServerConnectionsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildGetTunneledMcpServerConnectionsQuery(
+    ...buildListTunneledMcpServerConnectionsQuery(
       client,
       request,
       security,
@@ -110,7 +110,7 @@ export function useGetTunneledMcpServerConnectionsSuspense(
   });
 }
 
-export function setGetTunneledMcpServerConnectionsData(
+export function setListTunneledMcpServerConnectionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -120,17 +120,17 @@ export function setGetTunneledMcpServerConnectionsData(
       gramProject?: string | undefined;
     },
   ],
-  data: GetTunneledMcpServerConnectionsQueryData,
-): GetTunneledMcpServerConnectionsQueryData | undefined {
-  const key = queryKeyGetTunneledMcpServerConnections(...queryKeyBase);
+  data: ListTunneledMcpServerConnectionsQueryData,
+): ListTunneledMcpServerConnectionsQueryData | undefined {
+  const key = queryKeyListTunneledMcpServerConnections(...queryKeyBase);
 
-  return client.setQueryData<GetTunneledMcpServerConnectionsQueryData>(
+  return client.setQueryData<ListTunneledMcpServerConnectionsQueryData>(
     key,
     data,
   );
 }
 
-export function invalidateGetTunneledMcpServerConnections(
+export function invalidateListTunneledMcpServerConnections(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -147,18 +147,18 @@ export function invalidateGetTunneledMcpServerConnections(
     queryKey: [
       "@gram/client",
       "tunneledMcp",
-      "getServerConnections",
+      "listServerConnections",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllGetTunneledMcpServerConnections(
+export function invalidateAllListTunneledMcpServerConnections(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "tunneledMcp", "getServerConnections"],
+    queryKey: ["@gram/client", "tunneledMcp", "listServerConnections"],
   });
 }

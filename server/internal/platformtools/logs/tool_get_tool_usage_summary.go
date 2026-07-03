@@ -80,6 +80,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		HostedToolsetSlugs: input.HostedToolsetSlugs,
 		ShadowServerNames:  input.ShadowServerNames,
 		UserFilters:        nil,
+		AccountType:        nil,
 		HookSources:        input.HookSources,
 	})
 	if err != nil {

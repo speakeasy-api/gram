@@ -16,13 +16,13 @@ import (
 
 // Endpoints wraps the "tunneledMcp" service endpoints.
 type Endpoints struct {
-	CreateServer         goa.Endpoint
-	ListServers          goa.Endpoint
-	GetServer            goa.Endpoint
-	GetServerConnections goa.Endpoint
-	UpdateServer         goa.Endpoint
-	RotateServerKey      goa.Endpoint
-	DeleteServer         goa.Endpoint
+	CreateServer          goa.Endpoint
+	ListServers           goa.Endpoint
+	GetServer             goa.Endpoint
+	ListServerConnections goa.Endpoint
+	UpdateServer          goa.Endpoint
+	RotateServerKey       goa.Endpoint
+	DeleteServer          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "tunneledMcp" service with endpoints.
@@ -30,13 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateServer:         NewCreateServerEndpoint(s, a.APIKeyAuth),
-		ListServers:          NewListServersEndpoint(s, a.APIKeyAuth),
-		GetServer:            NewGetServerEndpoint(s, a.APIKeyAuth),
-		GetServerConnections: NewGetServerConnectionsEndpoint(s, a.APIKeyAuth),
-		UpdateServer:         NewUpdateServerEndpoint(s, a.APIKeyAuth),
-		RotateServerKey:      NewRotateServerKeyEndpoint(s, a.APIKeyAuth),
-		DeleteServer:         NewDeleteServerEndpoint(s, a.APIKeyAuth),
+		CreateServer:          NewCreateServerEndpoint(s, a.APIKeyAuth),
+		ListServers:           NewListServersEndpoint(s, a.APIKeyAuth),
+		GetServer:             NewGetServerEndpoint(s, a.APIKeyAuth),
+		ListServerConnections: NewListServerConnectionsEndpoint(s, a.APIKeyAuth),
+		UpdateServer:          NewUpdateServerEndpoint(s, a.APIKeyAuth),
+		RotateServerKey:       NewRotateServerKeyEndpoint(s, a.APIKeyAuth),
+		DeleteServer:          NewDeleteServerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -45,7 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateServer = m(e.CreateServer)
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
-	e.GetServerConnections = m(e.GetServerConnections)
+	e.ListServerConnections = m(e.ListServerConnections)
 	e.UpdateServer = m(e.UpdateServer)
 	e.RotateServerKey = m(e.RotateServerKey)
 	e.DeleteServer = m(e.DeleteServer)
@@ -228,11 +228,11 @@ func NewGetServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 	}
 }
 
-// NewGetServerConnectionsEndpoint returns an endpoint function that calls the
-// method "getServerConnections" of service "tunneledMcp".
-func NewGetServerConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListServerConnectionsEndpoint returns an endpoint function that calls the
+// method "listServerConnections" of service "tunneledMcp".
+func NewListServerConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetServerConnectionsPayload)
+		p := req.(*ListServerConnectionsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -283,7 +283,7 @@ func NewGetServerConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		if err != nil {
 			return nil, err
 		}
-		return s.GetServerConnections(ctx, p)
+		return s.ListServerConnections(ctx, p)
 	}
 }
 

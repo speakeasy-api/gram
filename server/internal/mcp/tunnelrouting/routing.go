@@ -20,8 +20,9 @@ import (
 
 const (
 	// ErrorHeader is set by the gateway when a tunneled forward fails before the
-	// backend MCP response can be relayed.
-	ErrorHeader = "X-Gram-Tunnel-Error"
+	// backend MCP response can be relayed. Aliased to the shared wire constant so
+	// gateway and gram-server routing agree on the header name.
+	ErrorHeader = wire.HeaderTunnelError
 
 	clientAffinityAuthPrefix = "auth"
 )
@@ -108,13 +109,13 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 
 		tunnelErr := resp.Header.Get(ErrorHeader)
 		switch tunnelErr {
-		case "no-live-session":
+		case wire.TunnelErrorNoLiveSession:
 			if selectedAddr != "" {
 				if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
 					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
 				}
 			}
-		case "substream-failed":
+		case wire.TunnelErrorSubstreamFailed:
 		default:
 			return nil, nil
 		}
@@ -124,7 +125,7 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
 		}
 		exclude := map[string]struct{}{selectedAddr: {}}
-		if tunnelErr == "substream-failed" {
+		if tunnelErr == wire.TunnelErrorSubstreamFailed {
 			exclude = nil
 		}
 		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)

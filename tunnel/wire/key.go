@@ -21,6 +21,24 @@ const (
 	HeaderTunnelForwardToken    = "X-Gram-Tunnel-Forward-Token"
 	HeaderTunnelServiceVersion  = "X-Gram-Tunnel-Service-Version"
 	HeaderTunnelServiceMetadata = "X-Gram-Tunnel-Service-Metadata"
+	// HeaderTunnelError carries a TunnelError* status when a tunneled forward
+	// fails before the backend MCP response can be relayed. Set by the gateway
+	// and by gram-server routing; read by the retry/failover policy.
+	HeaderTunnelError = "X-Gram-Tunnel-Error"
+)
+
+// Tunnel forward error statuses reported in HeaderTunnelError. Callers switch on
+// these to decide retry/failover: *NoLiveSession and *SubstreamFailed are
+// gateway-side (a route was picked but the agent session was gone/broken);
+// *NoRoute, *InvalidRoute, *RouteStoreUnavailable and *RouteLookupFailed are
+// gram-server-side (routing could not select a gateway owner at all).
+const (
+	TunnelErrorNoLiveSession         = "no-live-session"
+	TunnelErrorSubstreamFailed       = "substream-failed"
+	TunnelErrorNoRoute               = "no-route"
+	TunnelErrorInvalidRoute          = "invalid-route"
+	TunnelErrorRouteStoreUnavailable = "route-store-unavailable"
+	TunnelErrorRouteLookupFailed     = "route-lookup-failed"
 )
 
 // NewKey returns one-time plaintext plus the stored SHA-256 hash.

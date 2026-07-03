@@ -31,6 +31,12 @@ const (
 // killed established sessions too. 10k leaves headroom to shed instead.
 const defaultMaxSessions = 10_000
 
+// defaultMaxStreamsPerTunnel caps concurrent yamux substreams multiplexed over
+// a single agent session. It bounds per-tunnel fan-out so one busy source can't
+// starve the session. Callers that leave Config.MaxStreamsPerTunnel unset (0)
+// fall back to this value.
+const defaultMaxStreamsPerTunnel = 256
+
 var errMissingForwardToken = errors.New("tunnel gateway forward token is required")
 
 type Config struct {
@@ -58,7 +64,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 		return nil, errMissingForwardToken
 	}
 	if cfg.MaxStreamsPerTunnel <= 0 {
-		cfg.MaxStreamsPerTunnel = 256
+		cfg.MaxStreamsPerTunnel = defaultMaxStreamsPerTunnel
 	}
 	if cfg.MaxSessions <= 0 {
 		cfg.MaxSessions = defaultMaxSessions
@@ -347,7 +353,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	entry, ok := g.reg.beginForward(tunnelID, consumerSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
 	if !ok {
 		// Distinguish known tunnel/no live session from auth failures.
-		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
+		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
 		http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
 		return
 	}
@@ -373,7 +379,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
 			g.logger.Warn("tunnel forward failed",
 				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-			rw.Header().Set("X-Gram-Tunnel-Error", "substream-failed")
+			rw.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorSubstreamFailed)
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}

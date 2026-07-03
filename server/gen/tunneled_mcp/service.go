@@ -23,8 +23,8 @@ type Service interface {
 	ListServers(context.Context, *ListServersPayload) (res *ListTunneledMcpServersResult, err error)
 	// Get a tunneled MCP server by ID
 	GetServer(context.Context, *GetServerPayload) (res *types.TunneledMcpServer, err error)
-	// Get live tunnel connections for a tunneled MCP server
-	GetServerConnections(context.Context, *GetServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error)
+	// List live tunnel connections for a tunneled MCP server
+	ListServerConnections(context.Context, *ListServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error)
 	// Update a tunneled MCP server source
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.TunneledMcpServer, err error)
 	// Rotate a tunneled MCP server source key. Returns the new tunnel key once.
@@ -53,7 +53,7 @@ const ServiceName = "tunneledMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createServer", "listServers", "getServer", "getServerConnections", "updateServer", "rotateServerKey", "deleteServer"}
+var MethodNames = [7]string{"createServer", "listServers", "getServer", "listServerConnections", "updateServer", "rotateServerKey", "deleteServer"}
 
 // CreateServerPayload is the payload type of the tunneledMcp service
 // createServer method.
@@ -83,9 +83,9 @@ type DeleteServerPayload struct {
 	ProjectSlugInput *string
 }
 
-// GetServerConnectionsPayload is the payload type of the tunneledMcp service
-// getServerConnections method.
-type GetServerConnectionsPayload struct {
+// GetServerPayload is the payload type of the tunneledMcp service getServer
+// method.
+type GetServerPayload struct {
 	// The ID of the tunneled MCP server
 	ID               string
 	SessionToken     *string
@@ -93,9 +93,9 @@ type GetServerConnectionsPayload struct {
 	ProjectSlugInput *string
 }
 
-// GetServerPayload is the payload type of the tunneledMcp service getServer
-// method.
-type GetServerPayload struct {
+// ListServerConnectionsPayload is the payload type of the tunneledMcp service
+// listServerConnections method.
+type ListServerConnectionsPayload struct {
 	// The ID of the tunneled MCP server
 	ID               string
 	SessionToken     *string

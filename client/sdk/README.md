@@ -625,7 +625,7 @@ run();
 * [createServer](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
 * [deleteServer](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
 * [getServer](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
-* [getServerConnections](docs/sdks/tunneledmcp/README.md#getserverconnections) - getServerConnections tunneledMcp
+* [listServerConnections](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
 * [listServers](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
 * [rotateServerKey](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
 * [updateServer](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
@@ -1024,7 +1024,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`tunneledMcpCreateServer`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
 - [`tunneledMcpDeleteServer`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
 - [`tunneledMcpGetServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
-- [`tunneledMcpGetServerConnections`](docs/sdks/tunneledmcp/README.md#getserverconnections) - getServerConnections tunneledMcp
+- [`tunneledMcpListServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
 - [`tunneledMcpListServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
 - [`tunneledMcpRotateServerKey`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
 - [`tunneledMcpUpdateServer`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
@@ -1211,7 +1211,6 @@ To learn about this feature and how to get started, check
 - [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
 - [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`useGetTunneledMcpServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
-- [`useGetTunneledMcpServerConnections`](docs/sdks/tunneledmcp/README.md#getserverconnections) - getServerConnections tunneledMcp
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalRemoteSessionClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
@@ -1260,6 +1259,7 @@ To learn about this feature and how to get started, check
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 - [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`useListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`useListTunneledMcpServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth

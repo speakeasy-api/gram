@@ -123,9 +123,9 @@ func (f *ProxyManager) Build(
 	}
 
 	return f.BuildTarget(logger, proxy.ServerIdentity{
-		RemoteMCPServerID:    server.ID.String(),
-		TunnelledMCPServerID: "",
-		McpServerID:          mcpServerID,
+		RemoteMCPServerID:   server.ID.String(),
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
 	}, server.Url, configured, visibility, projectID, upstreamAuth)
 }
 

@@ -217,7 +217,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	return s.tunnelManager.serverView(ctx, server), nil
 }
 
-func (s *Service) GetServerConnections(ctx context.Context, payload *gen.GetServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
+func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)

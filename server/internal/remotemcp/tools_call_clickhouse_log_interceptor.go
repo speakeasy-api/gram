@@ -144,8 +144,8 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if i.identity.RemoteMCPServerID != "" {
 		logAttrs[attr.RemoteMCPServerIDKey] = i.identity.RemoteMCPServerID
 	}
-	if i.identity.TunnelledMCPServerID != "" {
-		logAttrs[attr.TunnelledMCPServerIDKey] = i.identity.TunnelledMCPServerID
+	if i.identity.TunneledMCPServerID != "" {
+		logAttrs[attr.TunneledMCPServerIDKey] = i.identity.TunneledMCPServerID
 	}
 	if i.identity.McpServerID != "" {
 		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID
