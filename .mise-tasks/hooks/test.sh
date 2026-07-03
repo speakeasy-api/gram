@@ -46,7 +46,7 @@ else
   db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) VALUES (:'org_id', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING"
   echo "Enabled session_capture for org: ${org_id}"
 
-  user_row=$(db_query -v org_id="$org_id" <<<"SELECT u.id, u.email FROM users u JOIN organization_user_relationships our ON our.user_id = u.id WHERE our.organization_id = :'org_id' AND our.deleted_at IS NULL AND u.deleted_at IS NULL LIMIT 1" 2>/dev/null || true)
+  user_row=$(db_query -v org_id="$org_id" <<<"SELECT u.id, u.email FROM users u JOIN organization_user_relationships our ON our.user_id = u.id WHERE our.organization_id = :'org_id' AND our.deleted_at IS NULL AND u.deleted_at IS NULL ORDER BY u.created_at ASC LIMIT 1" 2>/dev/null || true)
   if [ -z "$user_row" ]; then
     echo "Warning: no active users for org '${org_id}' in DB — skipping API key provisioning and hook attribution."
   else
