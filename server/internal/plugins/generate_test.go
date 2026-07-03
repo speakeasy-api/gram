@@ -1395,8 +1395,14 @@ printf '{}\n200'
 	output, err = secretCmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 
+	secretURL := exec.Command("bash", hookPath)
+	secretURL.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution","conversation_id":"sess-mcp-id","mcp_server_name":"baz","url":"https://user:hunter2@mcp.example.com/sse?api_key=sk-urlsecret456&region=us#frag","tool_name":"lookup"}`)
+	secretURL.Env = env
+	output, err = secretURL.CombinedOutput()
+	require.NoError(t, err, string(output))
+
 	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
-	require.Len(t, chunks, 4, "expected three captured ingest payloads")
+	require.Len(t, chunks, 5, "expected four captured ingest payloads")
 
 	var stdioPayload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &stdioPayload))
@@ -1420,6 +1426,18 @@ printf '{}\n200'
 	require.NotContains(t, secretMCP["server_identity"], "sk-verysecret123")
 	require.Equal(t, "npx server-bar --api-key ***", secretMCP["command"])
 	require.Equal(t, "npx server-bar --api-key ***", secretMCP["server_identity"])
+	require.NotContains(t, strings.TrimSpace(chunks[2]), "sk-verysecret123",
+		"the raw payload echo must not leak the command credential either")
+
+	// Provider-supplied URLs can embed credentials too: basic-auth userinfo
+	// and secret-named query values must not reach telemetry or evidence.
+	var secretURLPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[3])), &secretURLPayload))
+	secretURLMCP := requireMapValue(t, requireMapValue(t, secretURLPayload, "data"), "mcp")
+	require.Equal(t, "https://mcp.example.com/sse?api_key=***&region=us", secretURLMCP["url"],
+		"userinfo, fragment and secret query values must be stripped from MCP URLs")
+	require.NotContains(t, strings.TrimSpace(chunks[3]), "hunter2")
+	require.NotContains(t, strings.TrimSpace(chunks[3]), "sk-urlsecret456")
 }
 
 // TestRenderHookScriptClaudeStdioMCPIdentityFromSanitizedMCPJSONName verifies
@@ -2345,6 +2363,37 @@ if gram_hooks_login_probe "$1" probe-token; then echo FOREIGN-ACCEPTED; else ech
 	require.NoError(t, err, string(output))
 	require.Contains(t, string(output), "gram-hooks-probe-ok:probe-token", "handler must echo the per-attempt probe marker")
 	require.Contains(t, string(output), "FOREIGN-REJECTED", "probe must not accept a listener that lacks the marker")
+}
+
+// TestSharedAuthScriptRejectsCachedAuthFromOtherOrg verifies the credential
+// cache is bound to the generating plugin's organization: a cache minted for
+// org B must not authenticate a plugin generated for org A even when the
+// server URL matches, while same-org caches and org-less caches from before
+// stamping stay usable.
+func TestSharedAuthScriptRejectsCachedAuthFromOtherOrg(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	script := `. ./auth.sh
+export GRAM_HOOKS_AUTH_FILE="$PWD/auth.env"
+gram_hooks_write_auth https://gram.test key-123 default dev@example.com org-b || exit 90
+gram_hooks_org_hint="org-a"
+if gram_hooks_read_auth https://gram.test; then echo MISMATCH-ACCEPTED; else echo MISMATCH-REJECTED; fi
+gram_hooks_org_hint="org-b"
+if gram_hooks_read_auth https://gram.test; then echo MATCH-ACCEPTED; else echo MATCH-REJECTED; fi
+gram_hooks_write_auth https://gram.test key-123 default dev@example.com || exit 91
+gram_hooks_org_hint="org-a"
+if gram_hooks_read_auth https://gram.test; then echo LEGACY-ACCEPTED; else echo LEGACY-REJECTED; fi
+`
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), "MISMATCH-REJECTED", "another org's cache must not authenticate this plugin")
+	require.Contains(t, string(output), "MATCH-ACCEPTED")
+	require.Contains(t, string(output), "LEGACY-ACCEPTED", "pre-stamping caches without an org must stay usable")
 }
 
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {

@@ -555,6 +555,88 @@ gram_hooks_codex_mcp_metadata() {
   ' | head -n 2
 }
 
+# gram_hooks_redact_url strips credentials from an MCP server URL before it
+# becomes telemetry or Shadow MCP evidence: basic-auth userinfo and fragments
+# are dropped and secret-named query values are masked. Host, path and
+# non-secret parameters survive so the evidence stays matchable.
+gram_hooks_redact_url() {
+  local url="$1"
+  [ -n "$url" ] || return 0
+  local fragmentless="${url%%%%#*}"
+  local base="${fragmentless%%%%\?*}"
+  local query=""
+  case "$fragmentless" in
+    *\?*) query="${fragmentless#*\?}" ;;
+  esac
+  case "$base" in
+    *://*@*)
+      local scheme="${base%%%%://*}" rest="${base#*://}" authority path=""
+      authority="${rest%%%%/*}"
+      case "$rest" in
+        */*) path="/${rest#*/}" ;;
+      esac
+      authority="${authority##*@}"
+      base="${scheme}://${authority}${path}"
+      ;;
+  esac
+  if [ -z "$query" ]; then
+    printf '%%s' "$base"
+    return 0
+  fi
+  local out="" pair key lower
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    case "$pair" in
+      *=*)
+        key="${pair%%%%=*}"
+        lower="$(printf '%%s' "$key" | tr '[:upper:]' '[:lower:]')"
+        case "$lower" in
+          *key* | *token* | *secret* | *password* | *passwd* | *credential* | *auth*)
+            pair="${key}=***"
+            ;;
+        esac
+        ;;
+    esac
+    if [ -n "$out" ]; then
+      out="${out}&${pair}"
+    else
+      out="$pair"
+    fi
+  done <<GRAM_HOOKS_QUERY
+$(printf '%%s\n' "$query" | tr '&' '\n')
+GRAM_HOOKS_QUERY
+  printf '%%s?%%s' "$base" "$out"
+}
+
+# gram_hooks_scrub_raw_payload rewrites the secret-bearing top-level keys of
+# the provider payload before it is echoed under "raw" (a debugging aid the
+# backend never reads): url/mcp_server_url/command can carry credentials, and
+# redacting data.mcp alone would leave the same values in the echo. Without
+# jq the payload cannot be rewritten, so raw is dropped instead of leaking.
+gram_hooks_scrub_raw_payload() {
+  local payload="$1"
+  case "$payload" in
+    *\"url\"* | *\"mcp_server_url\"* | *\"command\"*) ;;
+    *)
+      printf '%%s' "$payload"
+      return 0
+      ;;
+  esac
+  if command -v jq >/dev/null 2>&1; then
+    local url mcp_url command
+    url="$(gram_hooks_redact_url "$(gram_hooks_json_string_value "$payload" "url")")"
+    mcp_url="$(gram_hooks_redact_url "$(gram_hooks_json_string_value "$payload" "mcp_server_url")")"
+    command="$(gram_hooks_redact_command_string "$(gram_hooks_json_string_value "$payload" "command")")"
+    printf '%%s' "$payload" | jq -c --arg url "$url" --arg mcp_url "$mcp_url" --arg command "$command" '
+      if type == "object" then
+        (if has("url") then .url = $url else . end) |
+        (if has("mcp_server_url") then .mcp_server_url = $mcp_url else . end) |
+        (if has("command") then .command = $command else . end)
+      else . end' 2>/dev/null && return 0
+  fi
+  printf 'null'
+}
+
 # gram_hooks_redact_command_string applies the same argument redaction as the
 # config-discovery paths to a provider-supplied command line, so credentials
 # passed as stdio server arguments never reach telemetry or block evidence.
@@ -803,7 +885,7 @@ gram_hooks_build_canonical_payload() {
     "$(gram_hooks_json_string_member "occurred_at" "$(gram_hooks_json_string_value "$payload" "occurred_at")")")
 
   data_members="$(gram_hooks_canonical_data_members "$payload" "$event_type")"
-  raw_json="$(gram_hooks_json_raw_or_string "$payload")"
+  raw_json="$(gram_hooks_json_raw_or_string "$(gram_hooks_scrub_raw_payload "$payload")")"
 
   printf '{"schema_version":"hook.ingest.v1","source":{%%s},"event":{%%s}' "$source_members" "$event_members"
   if [ -n "$session_members" ]; then
@@ -898,6 +980,11 @@ gram_hooks_canonical_data_members() {
       [ -n "$mcp_command" ] || mcp_command="$(printf '%%s\n' "$mcp_metadata" | sed -n 's/^command=//p')"
     fi
   fi
+  # URLs from provider payloads and config lookups can embed credentials
+  # (basic-auth userinfo, secret query params); strip them here so every
+  # downstream use — telemetry, identity, block evidence — sees the redacted
+  # form only.
+  mcp_url="$(gram_hooks_redact_url "$mcp_url")"
   # Identity is what Shadow MCP approvals are scoped to. Pin stdio servers to
   # their launch command — the server alias is mutable and must not inherit an
   # approval after being repointed at a different command. URL servers carry
