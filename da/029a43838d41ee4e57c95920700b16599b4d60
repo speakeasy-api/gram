@@ -1,0 +1,77 @@
+server/internal/risk/eval_guardrail_test.go
+  s_089467948c9c63::t_6dd960586af25f 65-82,99,113-116,123-126
+  s_089467948c9c63::t_f6b0650f0234be 100,117,127
+.changeset/eval-guardrail-cost-latency.md
+  s_089467948c9c63::t_76e9ebe3b32e65 2-5
+  s_089467948c9c63::t_231e131020ec36 1
+server/internal/risk/prompt_policy_scanner_test.go
+  s_089467948c9c63::t_823f452127a25d 49-60,113,136,161,180,216
+server/design/risk/design.go
+  s_089467948c9c63::t_2f8d22019fc343 1325-1329,1331,1342-1343,1346
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_089467948c9c63::t_1a483fdbbae658 8,29-39,94,102,104,107-110,128-138
+server/internal/riskjudge/judge_test.go
+  s_089467948c9c63::t_5c5b26949d5548 10
+  s_089467948c9c63::t_cc6575c49b064d 13-14,150-185,230-263
+  s_2f42666f5475a4::t_ad87cf4b48d16a 264
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_089467948c9c63::t_8be002cff4d1df 39-47,69
+server/internal/risk/scanner.go
+  s_089467948c9c63::t_d720d93bd31ea4 552
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_089467948c9c63::t_96f54b9bdc87e8 42-50
+server/internal/riskjudge/judge.go
+  s_089467948c9c63::t_0b918bea8152a1 164-170,175,187-193,196-197,200-201,204-210,214-224
+  s_089467948c9c63::t_8ecb148cd90d2c 262,265,269,278,288-300
+  s_089467948c9c63::t_20aad1c2826cc1 284
+server/internal/background/activities/risk_analysis/llm_judge.go
+  s_089467948c9c63::t_7662e6601b4f44 28-29,131,134-138
+server/internal/risk/impl.go
+  s_089467948c9c63::t_b7cc57c364d2b9 2392-2393,2399-2400,2402-2413,2418-2423
+.speakeasy/out.openapi.yaml
+  s_2f42666f5475a4::t_55a9a8bc07b873 44249-44256,44267-44268,44273-44276,44281-44288,44299-44302,44313-44316,44325-44329
+client/sdk/.speakeasy/gen.lock
+  s_2f42666f5475a4::t_407700b5a9bf21 4776
+client/sdk/src/models/components/promptguardrailevalresult.ts
+  s_2f42666f5475a4::t_31efbc28324a31 31-38,54-55,62-63
+client/sdk/src/models/components/promptguardrailmessageverdict.ts
+  s_2f42666f5475a4::t_5918faf93cc039 15-18,23-30,43-46,59-62,71,73-74,78,82,86-88,91,93
+server/gen/http/openapi3.json
+  s_2f42666f5475a4::t_c0ce25df69f8fe 1
+server/gen/http/openapi3.yaml
+  s_2f42666f5475a4::t_6af4b49be8d9ed 44669-44676,44687-44688,44693-44696,44701-44708,44719-44722,44733-44736,44745-44749
+server/gen/http/risk/client/encode_decode.go
+  s_2f42666f5475a4::t_c2a010d0530f5f 9624-9635
+server/gen/http/risk/client/types.go
+  s_2f42666f5475a4::t_3d8a2f53514746 1055-1059,8597-8607,14891-14895,16715-16720,26474-26488
+server/gen/http/risk/server/encode_decode.go
+  s_2f42666f5475a4::t_74445e6c012808 9374-9385
+server/gen/http/risk/server/types.go
+  s_2f42666f5475a4::t_3d56d7a1e87eb4 1057-1061,8585-8595,9486-9490
+server/gen/risk/service.go
+  s_2f42666f5475a4::t_f12e6578f00229 660-664,686-696
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "da029a43838d41ee4e57c95920700b16599b4d60",
+  "prompts": {},
+  "sessions": {
+    "s_089467948c9c63": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-4852-7a72-a0e5-364dd5de18e9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_2f42666f5475a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-487a-7ee3-90a3-cadb1fec725f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
