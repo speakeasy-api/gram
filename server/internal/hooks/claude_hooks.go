@@ -684,15 +684,23 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	s.refreshMCPListTTL(ctx, sessionID)
 
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	authContextUserEmail := payloadUserEmail
 
 	// Both plugin-authenticated and OTEL-only requests go through the same
 	// Redis-buffered flow: persist when session metadata is in the cache,
 	// buffer otherwise so flushPendingHooks can re-persist with full
 	// attribution once /rpc/hooks.otel.logs lands. Newer plugin hooks may
 	// carry user_email from the device agent; use it immediately when present
-	// so Claude can attribute hooks before OTEL logs arrive. Older hooks still
-	// fall back to buffering.
-	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, payloadUserEmail)
+	// so Claude can attribute hooks before OTEL logs arrive. As a last resort,
+	// use the authenticated API-key user's email: shared keys may identify the
+	// key owner rather than the human at the keyboard, so cached OTEL metadata
+	// and payload email always take precedence over this fallback.
+	if authContextUserEmail == "" {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.Email != nil {
+			authContextUserEmail = strings.TrimSpace(*authCtx.Email)
+		}
+	}
+	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, authContextUserEmail)
 
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
@@ -708,7 +716,7 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		return
 	}
 
-	if hasAuthMetadata && payloadUserEmail != "" {
+	if hasAuthMetadata && authContextUserEmail != "" {
 		go s.persistHook(ctx, payload, &authMetadata)
 		return
 	}

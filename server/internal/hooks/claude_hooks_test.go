@@ -819,11 +819,18 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	assert.Equal(t, prompt, msgs[0].Content)
 }
 
-func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *testing.T) {
+func TestClaude_RecordHook_PersistsAuthContextEmailWhenPayloadAndCacheMissEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.Email)
 
 	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello before otel metadata"
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
@@ -834,10 +841,22 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	assert.Equal(t, prompt, msgs[0].Content)
+	assert.Equal(t, *authCtx.Email, msgs[0].ExternalUserID.String)
+
 	var buffered []gen.ClaudePayload
 	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
-	require.Len(t, buffered, 1)
-	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
+	assert.Empty(t, buffered)
 }
 
 func TestClaude_RecordHook_DoesNotUseAuthUserIDWhenPayloadEmailDoesNotResolve(t *testing.T) {
