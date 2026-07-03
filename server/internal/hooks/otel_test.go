@@ -125,9 +125,14 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
-	timestamp := time.Unix(0, 1780468942284000000)
+	// The telemetry_logs table has a 30-day TTL, so the fixture's static
+	// timestamp must be replaced with a recent one to survive insertion.
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 
-	err := ti.service.Logs(ctx, codexLogsPayload(tokenBearingRecord()))
+	rec := tokenBearingRecord()
+	rec.ObservedTimeUnixNano = new(nanoString(timestamp))
+
+	err := ti.service.Logs(ctx, codexLogsPayload(rec))
 	require.NoError(t, err)
 
 	codexLogs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, timestamp, 1)
