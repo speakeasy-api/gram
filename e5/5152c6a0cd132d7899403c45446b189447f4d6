@@ -1,0 +1,35 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_2f42666f5475a4::t_dea34c9de31b87 99-108
+  s_2f42666f5475a4::t_1167984d80cec2 1990,2003-2071,2097,2101-2105,2110-2117
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_2f42666f5475a4::t_466cb3aee8bf06 78-82,84-87,100-101,105-106,114-145
+  s_2f42666f5475a4::t_c7818cdc0240cf 453,462-468,489-492
+  s_2f42666f5475a4::t_15eb363f01b48a 441,518,579-585,612,639,685,901,946
+  s_2f42666f5475a4::t_df0d744847ea75 102-104
+  s_2f42666f5475a4::t_e1f5f783c2b8f8 760,769-794
+  s_2f42666f5475a4::t_85701da30de261 962
+  s_2f42666f5475a4::t_c67d9ed7e28fa2 1014,1023
+  s_2f42666f5475a4::t_e8f228f0bc3507 335,342,361-365,370-376,405-411
+  s_2f42666f5475a4::t_ade01b67d44502 5
+  s_2f42666f5475a4::t_cfb0e5fc0e46e4 99,107-113
+  s_2f42666f5475a4::t_6ebf67247b02ce 529,533-539,560-563
+  s_2f42666f5475a4::t_c913d0c1bfa1aa 146
+.changeset/eval-transcript-reuse.md
+  s_2f42666f5475a4::t_c4289039782692 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e55152c6a0cd132d7899403c45446b189447f4d6",
+  "prompts": {},
+  "sessions": {
+    "s_2f42666f5475a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-487a-7ee3-90a3-cadb1fec725f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
