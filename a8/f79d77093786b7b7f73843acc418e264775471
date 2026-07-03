@@ -1,0 +1,19 @@
+server/internal/plugins/generate.go
+  s_328fa4953f14a5::t_024d2b03af41ea 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a8f79d77093786b7b7f73843acc418e264775471",
+  "prompts": {},
+  "sessions": {
+    "s_328fa4953f14a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2962-a155-77c3-a896-f68f4c6836c9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
