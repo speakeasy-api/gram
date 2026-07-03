@@ -2224,11 +2224,16 @@ func TestRenderHookPayloadNormalizationCodexSynthIDs(t *testing.T) {
 	scriptPath := filepath.Join(dir, "normalize.sh")
 	// Completions run through the async sender, so a second request can fire
 	// before the first completion is processed: the ledger is a FIFO queue,
-	// exercised here in the interleaved order (reqA, reqB, resA, resB).
+	// exercised here in the interleaved order (reqA, reqB, resA, resB). The
+	// leading PermissionRequest also normalizes to tool.requested but has no
+	// completion, so it must not occupy a queue slot.
 	script := renderHookPayloadNormalizationSnippet("codex") + `
+perm='{"hook_event_name":"PermissionRequest","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"ls"},"permission_type":"exec"}'
 req_a='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"ls"}}'
 req_b='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"whoami"}}'
 res='{"hook_event_name":"PostToolUse","session_id":"sess-codex","tool_name":"shell","tool_output":{"stdout":"ok"}}'
+gram_hooks_build_canonical_payload "$perm" "test-host"
+printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$req_a" "test-host"
 printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$req_b" "test-host"
@@ -2245,7 +2250,7 @@ gram_hooks_build_canonical_payload "$res" "test-host"
 	require.NoError(t, err, string(output))
 
 	chunks := strings.Split(string(output), "\n---GRAM---\n")
-	require.Len(t, chunks, 4)
+	require.Len(t, chunks, 5)
 
 	toolID := func(raw string) string {
 		var parsed map[string]any
@@ -2254,13 +2259,13 @@ gram_hooks_build_canonical_payload "$res" "test-host"
 		id, _ := toolCall["id"].(string)
 		return id
 	}
-	reqAID := toolID(chunks[0])
-	reqBID := toolID(chunks[1])
-	resAID := toolID(chunks[2])
-	resBID := toolID(chunks[3])
+	reqAID := toolID(chunks[1])
+	reqBID := toolID(chunks[2])
+	resAID := toolID(chunks[3])
+	resBID := toolID(chunks[4])
 	require.NotEmpty(t, reqAID)
 	require.NotEqual(t, reqAID, reqBID, "distinct same-tool codex requests must not collide")
-	require.Equal(t, reqAID, resAID, "first completion must pop the first request's id")
+	require.Equal(t, reqAID, resAID, "first completion must pop the first request's id, not the permission prompt's")
 	require.Equal(t, reqBID, resBID, "second completion must pop the second request's id")
 }
 

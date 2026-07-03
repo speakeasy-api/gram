@@ -452,7 +452,11 @@ gram_hooks_synth_tool_id() {
     return 0
   fi
   [ -n "$hash" ] || return 0
-  if [ -n "$state_path" ] && [ "$event_type" = "tool.requested" ]; then
+  # Only native PreToolUse enqueues: PermissionRequest also normalizes to
+  # tool.requested but has no matching completion, so queueing it would leave
+  # a stale id for the next completion to pop.
+  if [ -n "$state_path" ] && [ "$event_type" = "tool.requested" ] &&
+    [ "$(gram_hooks_native_event_name "$payload")" = "PreToolUse" ]; then
     printf 'hook_synth_%%s\n' "$hash" >>"$state_path" 2>/dev/null || true
     # Bound the queue so missed completions cannot grow it without limit.
     if [ "$(wc -l <"$state_path" 2>/dev/null)" -gt 32 ] 2>/dev/null; then
