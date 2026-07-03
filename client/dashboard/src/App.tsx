@@ -138,7 +138,10 @@ function AppContent() {
   if (cliFlow) {
     return (
       <CliCallback
+        keyScope={cliFlow.keyScope}
         localCallbackUrl={cliFlow.cliCallbackUrl}
+        projectSlug={cliFlow.projectSlug}
+        organizationId={cliFlow.organizationId}
         codeChallenge={cliFlow.codeChallenge}
         codeChallengeMethod={cliFlow.codeChallengeMethod}
       />
@@ -429,17 +432,36 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
     ));
 };
 
-function useCliAuthFlow() {
+type LocalAuthFlow = {
+  cliCallbackUrl: string;
+  keyScope: "producer" | "hooks";
+  projectSlug: string | null;
+  organizationId: string | null;
+  codeChallenge: string | null;
+  codeChallengeMethod: string | null;
+};
+
+function useCliAuthFlow(): LocalAuthFlow | null {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
+  const keyScope = searchParams.get("key_scope");
+  const projectSlug = searchParams.get("project");
+  const organizationId = searchParams.get("organization_id");
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod = searchParams.get("code_challenge_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl, codeChallenge, codeChallengeMethod };
+    return {
+      cliCallbackUrl,
+      keyScope: keyScope === "hooks" ? "hooks" : "producer",
+      projectSlug,
+      organizationId,
+      codeChallenge,
+      codeChallengeMethod,
+    };
   }
 
   return null;
