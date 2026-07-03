@@ -1,3 +1,8 @@
+-- atlas:nolint PG306 CD101
+-- PG306/CD101 are false positives here: atlas diffs the rename as drop+add of
+-- the FK, but the DDL below is ALTER ... RENAME CONSTRAINT (catalog-only, no
+-- scan, no write lock). BC101/BC102 (backward-incompatible rename) are left
+-- visible on purpose — the rename is coordinated with the code deploy.
 -- Rename the tunnelled_* MCP objects to the single-l "tunneled" spelling used
 -- across the Go code, SDK, and dashboard. In-place ALTER ... RENAME (no drops):
 -- the values are all NULL / the table is empty (feature unreleased), and renames
