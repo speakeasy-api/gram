@@ -2222,15 +2222,20 @@ func TestRenderHookPayloadNormalizationCodexSynthIDs(t *testing.T) {
 
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "normalize.sh")
+	// Completions run through the async sender, so a second request can fire
+	// before the first completion is processed: the ledger is a FIFO queue,
+	// exercised here in the interleaved order (reqA, reqB, resA, resB).
 	script := renderHookPayloadNormalizationSnippet("codex") + `
 req_a='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"ls"}}'
-res_a='{"hook_event_name":"PostToolUse","session_id":"sess-codex","tool_name":"shell","tool_output":{"stdout":"ok"}}'
 req_b='{"hook_event_name":"PreToolUse","session_id":"sess-codex","tool_name":"shell","tool_input":{"command":"whoami"}}'
+res='{"hook_event_name":"PostToolUse","session_id":"sess-codex","tool_name":"shell","tool_output":{"stdout":"ok"}}'
 gram_hooks_build_canonical_payload "$req_a" "test-host"
 printf '\n---GRAM---\n'
-gram_hooks_build_canonical_payload "$res_a" "test-host"
-printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$req_b" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$res" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$res" "test-host"
 `
 	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
 
@@ -2240,7 +2245,7 @@ gram_hooks_build_canonical_payload "$req_b" "test-host"
 	require.NoError(t, err, string(output))
 
 	chunks := strings.Split(string(output), "\n---GRAM---\n")
-	require.Len(t, chunks, 3)
+	require.Len(t, chunks, 4)
 
 	toolID := func(raw string) string {
 		var parsed map[string]any
@@ -2250,11 +2255,13 @@ gram_hooks_build_canonical_payload "$req_b" "test-host"
 		return id
 	}
 	reqAID := toolID(chunks[0])
-	resAID := toolID(chunks[1])
-	reqBID := toolID(chunks[2])
+	reqBID := toolID(chunks[1])
+	resAID := toolID(chunks[2])
+	resBID := toolID(chunks[3])
 	require.NotEmpty(t, reqAID)
-	require.Equal(t, reqAID, resAID, "a codex result must reuse its request's synthetic id")
 	require.NotEqual(t, reqAID, reqBID, "distinct same-tool codex requests must not collide")
+	require.Equal(t, reqAID, resAID, "first completion must pop the first request's id")
+	require.Equal(t, reqBID, resBID, "second completion must pop the second request's id")
 }
 
 func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {

@@ -368,21 +368,35 @@ gram_hooks_tool_output_value() {
   printf '%%s' "$output"
 }
 
-# gram_hooks_codex_synth_state_path stores the in-flight synthetic tool id
-# for one (session, tool) pair. Codex runs one tool call at a time per
-# session, so a single remembered id is enough to hand the request's id to
-# its completion.
+# gram_hooks_codex_synth_state_path stores the in-flight synthetic tool ids
+# for one (install, session, tool) tuple. Scoped by the hook's server URL and
+# project (script-level globals in every generated sender, mirroring the
+# cursor prompt marker) so distinct installs never consume each other's state.
 gram_hooks_codex_synth_state_path() {
   local session_id="$1"
   local tool_name="$2"
-  local state_home state_dir safe_id
+  local state_home state_dir safe_id safe_install
   [ -n "$session_id" ] || return 1
   state_home="${XDG_STATE_HOME:-${HOME}/.local/state}"
   state_dir="${state_home}/gram/hooks/codex-tools"
   mkdir -p "$state_dir" 2>/dev/null || return 1
   chmod 700 "${state_home}/gram" "${state_home}/gram/hooks" "$state_dir" 2>/dev/null || true
+  safe_install="$(printf '%%s' "${server_url:-}" | tr -c 'A-Za-z0-9_.-' '_')__$(printf '%%s' "${project_slug:-}" | tr -c 'A-Za-z0-9_.-' '_')"
   safe_id="$(printf '%%s' "${session_id}__${tool_name}" | tr -c 'A-Za-z0-9_.-' '_')"
-  printf '%%s/%%s.id' "$state_dir" "$safe_id"
+  printf '%%s/%%s__%%s.ids' "$state_dir" "$safe_install" "$safe_id"
+}
+
+# gram_hooks_codex_synth_pop_id removes and prints the oldest queued id.
+gram_hooks_codex_synth_pop_id() {
+  local state_path="$1"
+  local first
+  [ -r "$state_path" ] || return 0
+  first="$(sed -n '1p' "$state_path" 2>/dev/null)"
+  if sed '1d' "$state_path" >"$state_path.tmp" 2>/dev/null; then
+    mv "$state_path.tmp" "$state_path" 2>/dev/null || rm -f "$state_path.tmp"
+  fi
+  [ -s "$state_path" ] || rm -f "$state_path" 2>/dev/null
+  printf '%%s' "$first"
 }
 
 # gram_hooks_synth_tool_id derives a stable tool-call id when the provider
@@ -409,9 +423,11 @@ gram_hooks_synth_tool_id() {
     state_path="$(gram_hooks_codex_synth_state_path "${conv_id}|${gen_id}" "$tool_name")" || state_path=""
     case "$event_type" in
       tool.completed | tool.failed)
-        if [ -n "$state_path" ] && [ -r "$state_path" ]; then
-          hash="$(cat "$state_path" 2>/dev/null)"
-          rm -f "$state_path" 2>/dev/null || true
+        # Completions run through the async sender and can lag behind the
+        # next same-tool request, so ids are queued FIFO rather than held in
+        # a single overwritten slot.
+        if [ -n "$state_path" ]; then
+          hash="$(gram_hooks_codex_synth_pop_id "$state_path")"
           if [ -n "$hash" ]; then
             printf '%%s' "$hash"
             return 0
@@ -437,7 +453,11 @@ gram_hooks_synth_tool_id() {
   fi
   [ -n "$hash" ] || return 0
   if [ -n "$state_path" ] && [ "$event_type" = "tool.requested" ]; then
-    printf 'hook_synth_%%s' "$hash" >"$state_path" 2>/dev/null || true
+    printf 'hook_synth_%%s\n' "$hash" >>"$state_path" 2>/dev/null || true
+    # Bound the queue so missed completions cannot grow it without limit.
+    if [ "$(wc -l <"$state_path" 2>/dev/null)" -gt 32 ] 2>/dev/null; then
+      tail -n 32 "$state_path" >"$state_path.tmp" 2>/dev/null && mv "$state_path.tmp" "$state_path" 2>/dev/null || rm -f "$state_path.tmp"
+    fi
   fi
   printf 'hook_synth_%%s' "$hash"
 }
