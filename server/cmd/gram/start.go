@@ -263,6 +263,11 @@ func newStartCommand() *cli.Command {
 			Required: true,
 			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
 		},
+		&cli.StringSliceFlag{
+			Name:    "tunnel-gateway-cidr-blocks",
+			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -834,6 +839,7 @@ func newStartCommand() *cli.Command {
 				remoteProxyManager,
 				route.NewRedis(redisClient),
 				c.String("tunnel-forward-token"),
+				c.StringSlice("tunnel-gateway-cidr-blocks"),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

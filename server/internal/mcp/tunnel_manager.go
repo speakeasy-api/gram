@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -23,13 +24,21 @@ type tunnelManager struct {
 	routes       route.Store
 	forwardToken string
 	proxyManager *remotemcp.ProxyManager
+	// gatewayCIDRs are the CIDR blocks tunnel gateway advertise addresses live
+	// in (typically the cluster pod range). They are allowlisted past the
+	// guardian egress policy for tunnel forwards only — gateway addresses come
+	// from the trusted route store, but the default policy blocks RFC1918 and
+	// would otherwise reject every in-cluster gateway dial. Empty means no
+	// relaxation: tunnels to private addresses then fail closed.
+	gatewayCIDRs []string
 }
 
-func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string) *tunnelManager {
 	return &tunnelManager{
 		routes:       routes,
 		forwardToken: forwardToken,
 		proxyManager: proxyManager,
+		gatewayCIDRs: gatewayCIDRs,
 	}
 }
 
@@ -84,6 +93,9 @@ func (m *tunnelManager) buildProxy(
 		upstreamAuth,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	if len(m.gatewayCIDRs) > 0 {
+		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
+	}
 	return p, nil
 }
 

@@ -693,6 +693,7 @@ func newWorkerCommand() *cli.Command {
 				nil,
 				route.NewRouteTable(),
 				"",
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

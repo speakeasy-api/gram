@@ -262,6 +262,7 @@ func NewService(
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
+	tunnelGatewayCIDRs []string,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -337,7 +338,7 @@ func NewService(
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager),
+		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 	}
 }
 

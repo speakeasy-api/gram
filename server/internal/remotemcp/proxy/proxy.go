@@ -148,8 +148,18 @@ type Proxy struct {
 	// connections across distinct Remote MCP Servers without ever reusing
 	// them.
 	GuardianPolicy *guardian.Policy
-	Logger         *slog.Logger
-	Tracer         trace.Tracer
+
+	// GuardianClientOptions are applied to every HTTP client built from
+	// GuardianPolicy for this target. Remote MCP targets leave this nil so
+	// user-controlled upstream URLs get the policy's full SSRF enforcement.
+	// Tunnel-backed targets use guardian.WithAllowedCIDRBlocks to permit
+	// dialing the tunnel gateway's cluster-internal (RFC1918) advertise
+	// address — those addresses come from the trusted route store, not from
+	// user input.
+	GuardianClientOptions []guardian.ClientOption
+
+	Logger *slog.Logger
+	Tracer trace.Tracer
 
 	// NonStreamingTimeout bounds the connect+headers phase for every
 	// upstream request, plus the body read for non-streaming responses.
@@ -670,7 +680,7 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	resp, err := p.GuardianPolicy.Client().Do(upstreamReq)
+	resp, err := p.GuardianPolicy.Client(p.GuardianClientOptions...).Do(upstreamReq)
 	if err != nil {
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent

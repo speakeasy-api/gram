@@ -54,13 +54,14 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	require.NoError(t, err)
 
 	return &proxy.Proxy{
-		GuardianPolicy:       policy,
-		Logger:               testenv.NewLogger(t),
-		Tracer:               testenv.NewTracerProvider(t).Tracer("test"),
-		NonStreamingTimeout:  5 * time.Second,
-		StreamingTimeout:     5 * time.Second,
-		Metrics:              nil,
-		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
+		GuardianPolicy:        policy,
+		GuardianClientOptions: nil,
+		Logger:                testenv.NewLogger(t),
+		Tracer:                testenv.NewTracerProvider(t).Tracer("test"),
+		NonStreamingTimeout:   5 * time.Second,
+		StreamingTimeout:      5 * time.Second,
+		Metrics:               nil,
+		MaxBufferedBodyBytes:  proxy.DefaultMaxBufferedBodyBytes,
 		Identity: proxy.ServerIdentity{
 			RemoteMCPServerID:   "",
 			TunneledMCPServerID: "",

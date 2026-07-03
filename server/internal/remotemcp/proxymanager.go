@@ -203,6 +203,7 @@ func (f *ProxyManager) BuildTarget(
 	// without touching the proxy package again.
 	return &proxy.Proxy{
 		GuardianPolicy:          f.guardianPolicy,
+		GuardianClientOptions:   nil,
 		Logger:                  logger,
 		Tracer:                  f.tracer,
 		NonStreamingTimeout:     proxy.DefaultNonStreamingTimeout,
