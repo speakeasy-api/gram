@@ -538,6 +538,33 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ClearShadowMCPInventoryServerAccess", "type": "mutation"}`)
 	})
 
+	Method("batchAllowShadowMCPInventoryServers", func() {
+		Description("Allow selected project-scoped Shadow MCP server URLs in one setup action.")
+		Security(security.Session)
+
+		Payload(func() {
+			Required("project_id", "servers")
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("servers", ArrayOf(ShadowMCPInventoryBatchAllowServer), "Shadow MCP server URLs selected from inventory.")
+			Attribute("reason", String)
+			security.SessionPayload()
+		})
+
+		Result(BatchAllowShadowMCPInventoryServersResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.inventory.batchAllow")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "batchAllowShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "batchAllowShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BatchAllowShadowMCPInventoryServers", "type": "mutation"}`)
+	})
+
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
 		Security(security.Session)
@@ -1145,6 +1172,29 @@ var ShadowMCPInventoryAccessStateResult = Type("ShadowMCPInventoryAccessState", 
 		Enum("none", "allowed", "denied")
 	})
 	Attribute("rule", ShadowMCPInventoryAccessRuleMatchModel)
+})
+
+var ShadowMCPInventoryBatchAllowServer = Type("ShadowMCPInventoryBatchAllowServer", func() {
+	Required("server_url")
+
+	Attribute("server_url", String)
+	Attribute("server_name", String)
+})
+
+var ShadowMCPInventoryBatchAllowResult = Type("ShadowMCPInventoryBatchAllowResult", func() {
+	Required("server_url", "success")
+
+	Attribute("server_url", String)
+	Attribute("success", Boolean)
+	Attribute("access_state", ShadowMCPInventoryAccessStateResult)
+	Attribute("error_code", String)
+	Attribute("error_message", String)
+})
+
+var BatchAllowShadowMCPInventoryServersResult = Type("BatchAllowShadowMCPInventoryServersResult", func() {
+	Required("results")
+
+	Attribute("results", ArrayOf(ShadowMCPInventoryBatchAllowResult))
 })
 
 var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {

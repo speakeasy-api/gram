@@ -102,6 +102,11 @@ func ClearShadowMCPInventoryServerAccessAccessPath() string {
 	return "/rpc/access.shadowMcp.inventory.clear"
 }
 
+// BatchAllowShadowMCPInventoryServersAccessPath returns the URL path to the access service batchAllowShadowMCPInventoryServers HTTP endpoint.
+func BatchAllowShadowMCPInventoryServersAccessPath() string {
+	return "/rpc/access.shadowMcp.inventory.batchAllow"
+}
+
 // CreateShadowMCPAccessRuleAccessPath returns the URL path to the access service createShadowMCPAccessRule HTTP endpoint.
 func CreateShadowMCPAccessRuleAccessPath() string {
 	return "/rpc/access.createShadowMcpRule"

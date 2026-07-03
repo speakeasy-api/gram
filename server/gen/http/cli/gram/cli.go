@@ -78,7 +78,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-approval-requests|create-shadow-mcp-approval-request|approve-shadow-mcp-approval-request|deny-shadow-mcp-approval-request|list-shadow-mcp-access-rules|list-shadow-mcp-inventory|list-shadow-mcp-inventory-users|allow-shadow-mcp-inventory-server|block-shadow-mcp-inventory-server|clear-shadow-mcp-inventory-server-access|create-shadow-mcp-access-rule|update-shadow-mcp-access-rule|delete-shadow-mcp-access-rule|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-approval-requests|create-shadow-mcp-approval-request|approve-shadow-mcp-approval-request|deny-shadow-mcp-approval-request|list-shadow-mcp-access-rules|list-shadow-mcp-inventory|list-shadow-mcp-inventory-users|allow-shadow-mcp-inventory-server|block-shadow-mcp-inventory-server|clear-shadow-mcp-inventory-server-access|batch-allow-shadow-mcp-inventory-servers|create-shadow-mcp-access-rule|update-shadow-mcp-access-rule|delete-shadow-mcp-access-rule|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
 		"agent get-plugins",
 		"ai-integrations (get-config|upsert-config|delete-config)",
@@ -257,6 +257,10 @@ func ParseEndpoint(
 		accessClearShadowMCPInventoryServerAccessFlags            = flag.NewFlagSet("clear-shadow-mcp-inventory-server-access", flag.ExitOnError)
 		accessClearShadowMCPInventoryServerAccessBodyFlag         = accessClearShadowMCPInventoryServerAccessFlags.String("body", "REQUIRED", "")
 		accessClearShadowMCPInventoryServerAccessSessionTokenFlag = accessClearShadowMCPInventoryServerAccessFlags.String("session-token", "", "")
+
+		accessBatchAllowShadowMCPInventoryServersFlags            = flag.NewFlagSet("batch-allow-shadow-mcp-inventory-servers", flag.ExitOnError)
+		accessBatchAllowShadowMCPInventoryServersBodyFlag         = accessBatchAllowShadowMCPInventoryServersFlags.String("body", "REQUIRED", "")
+		accessBatchAllowShadowMCPInventoryServersSessionTokenFlag = accessBatchAllowShadowMCPInventoryServersFlags.String("session-token", "", "")
 
 		accessCreateShadowMCPAccessRuleFlags            = flag.NewFlagSet("create-shadow-mcp-access-rule", flag.ExitOnError)
 		accessCreateShadowMCPAccessRuleBodyFlag         = accessCreateShadowMCPAccessRuleFlags.String("body", "REQUIRED", "")
@@ -2378,6 +2382,7 @@ func ParseEndpoint(
 	accessAllowShadowMCPInventoryServerFlags.Usage = accessAllowShadowMCPInventoryServerUsage
 	accessBlockShadowMCPInventoryServerFlags.Usage = accessBlockShadowMCPInventoryServerUsage
 	accessClearShadowMCPInventoryServerAccessFlags.Usage = accessClearShadowMCPInventoryServerAccessUsage
+	accessBatchAllowShadowMCPInventoryServersFlags.Usage = accessBatchAllowShadowMCPInventoryServersUsage
 	accessCreateShadowMCPAccessRuleFlags.Usage = accessCreateShadowMCPAccessRuleUsage
 	accessUpdateShadowMCPAccessRuleFlags.Usage = accessUpdateShadowMCPAccessRuleUsage
 	accessDeleteShadowMCPAccessRuleFlags.Usage = accessDeleteShadowMCPAccessRuleUsage
@@ -3049,6 +3054,9 @@ func ParseEndpoint(
 
 			case "clear-shadow-mcp-inventory-server-access":
 				epf = accessClearShadowMCPInventoryServerAccessFlags
+
+			case "batch-allow-shadow-mcp-inventory-servers":
+				epf = accessBatchAllowShadowMCPInventoryServersFlags
 
 			case "create-shadow-mcp-access-rule":
 				epf = accessCreateShadowMCPAccessRuleFlags
@@ -4426,6 +4434,9 @@ func ParseEndpoint(
 			case "clear-shadow-mcp-inventory-server-access":
 				endpoint = c.ClearShadowMCPInventoryServerAccess()
 				data, err = accessc.BuildClearShadowMCPInventoryServerAccessPayload(*accessClearShadowMCPInventoryServerAccessBodyFlag, *accessClearShadowMCPInventoryServerAccessSessionTokenFlag)
+			case "batch-allow-shadow-mcp-inventory-servers":
+				endpoint = c.BatchAllowShadowMCPInventoryServers()
+				data, err = accessc.BuildBatchAllowShadowMCPInventoryServersPayload(*accessBatchAllowShadowMCPInventoryServersBodyFlag, *accessBatchAllowShadowMCPInventoryServersSessionTokenFlag)
 			case "create-shadow-mcp-access-rule":
 				endpoint = c.CreateShadowMCPAccessRule()
 				data, err = accessc.BuildCreateShadowMCPAccessRulePayload(*accessCreateShadowMCPAccessRuleBodyFlag, *accessCreateShadowMCPAccessRuleSessionTokenFlag)
@@ -5805,6 +5816,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    allow-shadow-mcp-inventory-server: Allow a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.`)
 	fmt.Fprintln(os.Stderr, `    block-shadow-mcp-inventory-server: Block a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.`)
 	fmt.Fprintln(os.Stderr, `    clear-shadow-mcp-inventory-server-access: Clear the explicit project-scoped URL access rule for a Shadow MCP server URL.`)
+	fmt.Fprintln(os.Stderr, `    batch-allow-shadow-mcp-inventory-servers: Allow selected project-scoped Shadow MCP server URLs in one setup action.`)
 	fmt.Fprintln(os.Stderr, `    create-shadow-mcp-access-rule: Create a managed Shadow MCP access rule.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-access-rule: Update a managed Shadow MCP access rule.`)
 	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-access-rule: Delete a managed Shadow MCP access rule.`)
@@ -6230,6 +6242,26 @@ func accessClearShadowMCPInventoryServerAccessUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access clear-shadow-mcp-inventory-server-access --body '{\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\",\n      \"server_url\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func accessBatchAllowShadowMCPInventoryServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access batch-allow-shadow-mcp-inventory-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Allow selected project-scoped Shadow MCP server URLs in one setup action.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access batch-allow-shadow-mcp-inventory-servers --body '{\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\",\n      \"servers\": [\n         {\n            \"server_name\": \"abc123\",\n            \"server_url\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func accessCreateShadowMCPAccessRuleUsage() {

@@ -2816,6 +2816,94 @@ paths:
             x-speakeasy-react-hook:
                 name: AllowShadowMCPInventoryServer
                 type: mutation
+    /rpc/access.shadowMcp.inventory.batchAllow:
+        post:
+            description: Allow selected project-scoped Shadow MCP server URLs in one setup action.
+            operationId: batchAllowShadowMCPInventoryServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BatchAllowShadowMCPInventoryServersRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BatchAllowShadowMCPInventoryServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: batchAllowShadowMCPInventoryServers access
+            tags:
+                - access
+            x-speakeasy-name-override: batchAllowShadowMCPInventoryServers
+            x-speakeasy-react-hook:
+                name: BatchAllowShadowMCPInventoryServers
+                type: mutation
     /rpc/access.shadowMcp.inventory.block:
         post:
             description: Block a project-scoped Shadow MCP server URL by creating or updating its explicit URL access rule.
@@ -39088,6 +39176,31 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        BatchAllowShadowMCPInventoryServersRequestBody:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    format: uuid
+                reason:
+                    type: string
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryBatchAllowServer'
+                    description: Shadow MCP server URLs selected from inventory.
+            required:
+                - project_id
+                - servers
+        BatchAllowShadowMCPInventoryServersResult:
+            type: object
+            properties:
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryBatchAllowResult'
+            required:
+                - results
         BuiltinExclusionCategory:
             type: object
             properties:
@@ -51047,6 +51160,31 @@ components:
                 - canonical_server_url
                 - url_host
                 - access
+        ShadowMCPInventoryBatchAllowResult:
+            type: object
+            properties:
+                access_state:
+                    $ref: '#/components/schemas/ShadowMCPInventoryAccessState'
+                error_code:
+                    type: string
+                error_message:
+                    type: string
+                server_url:
+                    type: string
+                success:
+                    type: boolean
+            required:
+                - server_url
+                - success
+        ShadowMCPInventoryBatchAllowServer:
+            type: object
+            properties:
+                server_name:
+                    type: string
+                server_url:
+                    type: string
+            required:
+                - server_url
         ShadowMCPInventoryServer:
             type: object
             properties:

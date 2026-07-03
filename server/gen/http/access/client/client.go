@@ -93,6 +93,10 @@ type Client struct {
 	// requests to the clearShadowMCPInventoryServerAccess endpoint.
 	ClearShadowMCPInventoryServerAccessDoer goahttp.Doer
 
+	// BatchAllowShadowMCPInventoryServers Doer is the HTTP client used to make
+	// requests to the batchAllowShadowMCPInventoryServers endpoint.
+	BatchAllowShadowMCPInventoryServersDoer goahttp.Doer
+
 	// CreateShadowMCPAccessRule Doer is the HTTP client used to make requests to
 	// the createShadowMCPAccessRule endpoint.
 	CreateShadowMCPAccessRuleDoer goahttp.Doer
@@ -168,6 +172,7 @@ func NewClient(
 		AllowShadowMCPInventoryServerDoer:       doer,
 		BlockShadowMCPInventoryServerDoer:       doer,
 		ClearShadowMCPInventoryServerAccessDoer: doer,
+		BatchAllowShadowMCPInventoryServersDoer: doer,
 		CreateShadowMCPAccessRuleDoer:           doer,
 		UpdateShadowMCPAccessRuleDoer:           doer,
 		DeleteShadowMCPAccessRuleDoer:           doer,
@@ -636,6 +641,30 @@ func (c *Client) ClearShadowMCPInventoryServerAccess() goa.Endpoint {
 		resp, err := c.ClearShadowMCPInventoryServerAccessDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "clearShadowMCPInventoryServerAccess", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BatchAllowShadowMCPInventoryServers returns an endpoint that makes HTTP
+// requests to the access service batchAllowShadowMCPInventoryServers server.
+func (c *Client) BatchAllowShadowMCPInventoryServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBatchAllowShadowMCPInventoryServersRequest(c.encoder)
+		decodeResponse = DecodeBatchAllowShadowMCPInventoryServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBatchAllowShadowMCPInventoryServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BatchAllowShadowMCPInventoryServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "batchAllowShadowMCPInventoryServers", err)
 		}
 		return decodeResponse(resp)
 	}

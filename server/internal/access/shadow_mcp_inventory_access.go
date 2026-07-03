@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -32,6 +33,8 @@ type shadowMCPInventoryServerAccessRuleSetResult struct {
 	UpdatedFrom *accesscontrol.AccessRule
 }
 
+const shadowMCPInventoryBatchAllowMaxSize = 200
+
 func (s *Service) AllowShadowMCPInventoryServer(ctx context.Context, payload *gen.AllowShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryAccessState, error) {
 	return s.setShadowMCPInventoryServerAccess(ctx, shadowMCPInventoryServerAccessForm{
 		ProjectID:   payload.ProjectID,
@@ -40,6 +43,75 @@ func (s *Service) AllowShadowMCPInventoryServer(ctx context.Context, payload *ge
 		Reason:      payload.Reason,
 		Disposition: accesscontrol.DispositionAllowed,
 	})
+}
+
+func (s *Service) BatchAllowShadowMCPInventoryServers(ctx context.Context, payload *gen.BatchAllowShadowMCPInventoryServersPayload) (*gen.BatchAllowShadowMCPInventoryServersResult, error) {
+	ac, err := s.requireOrgAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(payload.Servers) > shadowMCPInventoryBatchAllowMaxSize {
+		return nil, oops.E(oops.CodeBadRequest, nil, "batch allow supports at most %d shadow mcp server urls", shadowMCPInventoryBatchAllowMaxSize).LogError(ctx, s.logger)
+	}
+
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
+		return nil, err
+	}
+
+	results := make([]*gen.ShadowMCPInventoryBatchAllowResult, 0, len(payload.Servers))
+	for _, server := range payload.Servers {
+		result := &gen.ShadowMCPInventoryBatchAllowResult{
+			ServerURL:    "",
+			Success:      false,
+			AccessState:  nil,
+			ErrorCode:    nil,
+			ErrorMessage: nil,
+		}
+		if server == nil {
+			code := string(oops.CodeBadRequest)
+			message := "server is required"
+			result.ErrorCode = &code
+			result.ErrorMessage = &message
+			results = append(results, result)
+			continue
+		}
+		result.ServerURL = server.ServerURL
+
+		inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(server.ServerURL)
+		if !ok {
+			code := "invalid_url"
+			message := "invalid shadow mcp server url"
+			result.ErrorCode = &code
+			result.ErrorMessage = &message
+			results = append(results, result)
+			continue
+		}
+
+		state, err := s.setShadowMCPInventoryServerAccessForTarget(ctx, ac, projectID, inventoryURL, shadowMCPInventoryServerAccessForm{
+			ProjectID:   payload.ProjectID,
+			ServerURL:   server.ServerURL,
+			ServerName:  server.ServerName,
+			Reason:      payload.Reason,
+			Disposition: accesscontrol.DispositionAllowed,
+		})
+		if err != nil {
+			code, message := shadowMCPInventoryBatchAllowError(err)
+			result.ErrorCode = &code
+			result.ErrorMessage = &message
+			results = append(results, result)
+			continue
+		}
+
+		result.Success = true
+		result.AccessState = state
+		results = append(results, result)
+	}
+
+	return &gen.BatchAllowShadowMCPInventoryServersResult{Results: results}, nil
 }
 
 func (s *Service) BlockShadowMCPInventoryServer(ctx context.Context, payload *gen.BlockShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryAccessState, error) {
@@ -120,6 +192,10 @@ func (s *Service) setShadowMCPInventoryServerAccess(ctx context.Context, form sh
 		return nil, err
 	}
 
+	return s.setShadowMCPInventoryServerAccessForTarget(ctx, ac, projectID, inventoryURL, form)
+}
+
+func (s *Service) setShadowMCPInventoryServerAccessForTarget(ctx context.Context, ac *contextvalues.AuthContext, projectID uuid.UUID, inventoryURL shadowmcp.InventoryURL, form shadowMCPInventoryServerAccessForm) (*gen.ShadowMCPInventoryAccessState, error) {
 	rule := buildShadowMCPInventoryServerAccessRule(ac.ActiveOrganizationID, ac.UserID, projectID.String(), inventoryURL, form)
 	existingRule, err := s.accessStore.GetRuleByMatch(
 		ctx,
@@ -161,6 +237,14 @@ func (s *Service) setShadowMCPInventoryServerAccess(ctx context.Context, form sh
 	}
 
 	return s.buildShadowMCPInventoryAccessState(ctx, ac.ActiveOrganizationID, projectID.String(), inventoryURL)
+}
+
+func shadowMCPInventoryBatchAllowError(err error) (string, string) {
+	var oopsErr *oops.ShareableError
+	if errors.As(err, &oopsErr) {
+		return string(oopsErr.Code), oopsErr.Error()
+	}
+	return string(oops.CodeUnexpected), "allow shadow mcp inventory server"
 }
 
 func (s *Service) createShadowMCPInventoryServerAccessRule(ctx context.Context, rule accesscontrol.AccessRule) (shadowMCPInventoryServerAccessRuleSetResult, error) {

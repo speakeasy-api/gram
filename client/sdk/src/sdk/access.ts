@@ -4,6 +4,7 @@
 
 import { accessAllowShadowMCPInventoryServer } from "../funcs/accessAllowShadowMCPInventoryServer.js";
 import { accessApproveShadowMCPApprovalRequest } from "../funcs/accessApproveShadowMCPApprovalRequest.js";
+import { accessBatchAllowShadowMCPInventoryServers } from "../funcs/accessBatchAllowShadowMCPInventoryServers.js";
 import { accessBlockShadowMCPInventoryServer } from "../funcs/accessBlockShadowMCPInventoryServer.js";
 import { accessClearShadowMCPInventoryServerAccess } from "../funcs/accessClearShadowMCPInventoryServerAccess.js";
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
@@ -428,6 +429,27 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ShadowMCPInventoryAccessState> {
     return unwrapAsync(accessAllowShadowMCPInventoryServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * batchAllowShadowMCPInventoryServers access
+   *
+   * @remarks
+   * Allow selected project-scoped Shadow MCP server URLs in one setup action.
+   */
+  async batchAllowShadowMCPInventoryServers(
+    request: operations.BatchAllowShadowMCPInventoryServersRequest,
+    security?:
+      | operations.BatchAllowShadowMCPInventoryServersSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<components.BatchAllowShadowMCPInventoryServersResult> {
+    return unwrapAsync(accessBatchAllowShadowMCPInventoryServers(
       this,
       request,
       security,

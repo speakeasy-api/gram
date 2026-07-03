@@ -23,6 +23,7 @@ export * from "./assistantsUpdate.js";
 export * from "./attachUserSessionIssuer.js";
 export * from "./auditLogFacets.js";
 export * from "./auditLogs.js";
+export * from "./batchAllowShadowMCPInventoryServers.js";
 export * from "./blockShadowMCPInventoryServer.js";
 export * from "./builtinExclusions.js";
 export * from "./challengeBuckets.js";

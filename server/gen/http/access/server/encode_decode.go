@@ -4170,6 +4170,220 @@ func EncodeClearShadowMCPInventoryServerAccessError(encoder func(context.Context
 	}
 }
 
+// EncodeBatchAllowShadowMCPInventoryServersResponse returns an encoder for
+// responses returned by the access batchAllowShadowMCPInventoryServers
+// endpoint.
+func EncodeBatchAllowShadowMCPInventoryServersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.BatchAllowShadowMCPInventoryServersResult)
+		enc := encoder(ctx, w)
+		body := NewBatchAllowShadowMCPInventoryServersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeBatchAllowShadowMCPInventoryServersRequest returns a decoder for
+// requests sent to the access batchAllowShadowMCPInventoryServers endpoint.
+func DecodeBatchAllowShadowMCPInventoryServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.BatchAllowShadowMCPInventoryServersPayload, error) {
+	return func(r *http.Request) (*access.BatchAllowShadowMCPInventoryServersPayload, error) {
+		var payload *access.BatchAllowShadowMCPInventoryServersPayload
+		var (
+			body BatchAllowShadowMCPInventoryServersRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateBatchAllowShadowMCPInventoryServersRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewBatchAllowShadowMCPInventoryServersPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeBatchAllowShadowMCPInventoryServersError returns an encoder for errors
+// returned by the batchAllowShadowMCPInventoryServers access endpoint.
+func EncodeBatchAllowShadowMCPInventoryServersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBatchAllowShadowMCPInventoryServersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCreateShadowMCPAccessRuleResponse returns an encoder for responses
 // returned by the access createShadowMCPAccessRule endpoint.
 func EncodeCreateShadowMCPAccessRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -6449,6 +6663,54 @@ func marshalAccessShadowMCPInventoryUserToShadowMCPInventoryUserResponseBody(v *
 		UserKey:          v.UserKey,
 		LastCalled:       v.LastCalled,
 		ObservedUseCount: v.ObservedUseCount,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPInventoryBatchAllowServerRequestBodyToAccessShadowMCPInventoryBatchAllowServer
+// builds a value of type *access.ShadowMCPInventoryBatchAllowServer from a
+// value of type *ShadowMCPInventoryBatchAllowServerRequestBody.
+func unmarshalShadowMCPInventoryBatchAllowServerRequestBodyToAccessShadowMCPInventoryBatchAllowServer(v *ShadowMCPInventoryBatchAllowServerRequestBody) *access.ShadowMCPInventoryBatchAllowServer {
+	res := &access.ShadowMCPInventoryBatchAllowServer{
+		ServerURL:  *v.ServerURL,
+		ServerName: v.ServerName,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryBatchAllowResultToShadowMCPInventoryBatchAllowResultResponseBody
+// builds a value of type *ShadowMCPInventoryBatchAllowResultResponseBody from
+// a value of type *access.ShadowMCPInventoryBatchAllowResult.
+func marshalAccessShadowMCPInventoryBatchAllowResultToShadowMCPInventoryBatchAllowResultResponseBody(v *access.ShadowMCPInventoryBatchAllowResult) *ShadowMCPInventoryBatchAllowResultResponseBody {
+	res := &ShadowMCPInventoryBatchAllowResultResponseBody{
+		ServerURL:    v.ServerURL,
+		Success:      v.Success,
+		ErrorCode:    v.ErrorCode,
+		ErrorMessage: v.ErrorMessage,
+	}
+	if v.AccessState != nil {
+		res.AccessState = marshalAccessShadowMCPInventoryAccessStateToShadowMCPInventoryAccessStateResponseBody(v.AccessState)
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryAccessStateToShadowMCPInventoryAccessStateResponseBody
+// builds a value of type *ShadowMCPInventoryAccessStateResponseBody from a
+// value of type *access.ShadowMCPInventoryAccessState.
+func marshalAccessShadowMCPInventoryAccessStateToShadowMCPInventoryAccessStateResponseBody(v *access.ShadowMCPInventoryAccessState) *ShadowMCPInventoryAccessStateResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPInventoryAccessStateResponseBody{
+		CanonicalServerURL: v.CanonicalServerURL,
+		URLHost:            v.URLHost,
+		Access:             v.Access,
+	}
+	if v.Rule != nil {
+		res.Rule = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v.Rule)
 	}
 
 	return res

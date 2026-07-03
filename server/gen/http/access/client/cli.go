@@ -822,6 +822,51 @@ func BuildClearShadowMCPInventoryServerAccessPayload(accessClearShadowMCPInvento
 	return v, nil
 }
 
+// BuildBatchAllowShadowMCPInventoryServersPayload builds the payload for the
+// access batchAllowShadowMCPInventoryServers endpoint from CLI flags.
+func BuildBatchAllowShadowMCPInventoryServersPayload(accessBatchAllowShadowMCPInventoryServersBody string, accessBatchAllowShadowMCPInventoryServersSessionToken string) (*access.BatchAllowShadowMCPInventoryServersPayload, error) {
+	var err error
+	var body BatchAllowShadowMCPInventoryServersRequestBody
+	{
+		err = json.Unmarshal([]byte(accessBatchAllowShadowMCPInventoryServersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\",\n      \"servers\": [\n         {\n            \"server_name\": \"abc123\",\n            \"server_url\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Servers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessBatchAllowShadowMCPInventoryServersSessionToken != "" {
+			sessionToken = &accessBatchAllowShadowMCPInventoryServersSessionToken
+		}
+	}
+	v := &access.BatchAllowShadowMCPInventoryServersPayload{
+		ProjectID: body.ProjectID,
+		Reason:    body.Reason,
+	}
+	if body.Servers != nil {
+		v.Servers = make([]*access.ShadowMCPInventoryBatchAllowServer, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = marshalShadowMCPInventoryBatchAllowServerRequestBodyToAccessShadowMCPInventoryBatchAllowServer(val)
+		}
+	} else {
+		v.Servers = []*access.ShadowMCPInventoryBatchAllowServer{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
 func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {

@@ -119,6 +119,15 @@ type ClearShadowMCPInventoryServerAccessRequestBody struct {
 	Reason    *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
+// BatchAllowShadowMCPInventoryServersRequestBody is the type of the "access"
+// service "batchAllowShadowMCPInventoryServers" endpoint HTTP request body.
+type BatchAllowShadowMCPInventoryServersRequestBody struct {
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Shadow MCP server URLs selected from inventory.
+	Servers []*ShadowMCPInventoryBatchAllowServerRequestBody `form:"servers" json:"servers" xml:"servers"`
+	Reason  *string                                          `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP request body.
 type CreateShadowMCPAccessRuleRequestBody struct {
@@ -392,6 +401,12 @@ type ClearShadowMCPInventoryServerAccessResponseBody struct {
 	URLHost            *string                                        `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
 	Access             *string                                        `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersResponseBody is the type of the "access"
+// service "batchAllowShadowMCPInventoryServers" endpoint HTTP response body.
+type BatchAllowShadowMCPInventoryServersResponseBody struct {
+	Results []*ShadowMCPInventoryBatchAllowResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
 }
 
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
@@ -3980,6 +3995,196 @@ type ClearShadowMCPInventoryServerAccessGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// BatchAllowShadowMCPInventoryServersUnauthorizedResponseBody is the type of
+// the "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "unauthorized" error.
+type BatchAllowShadowMCPInventoryServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersForbiddenResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "forbidden" error.
+type BatchAllowShadowMCPInventoryServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersBadRequestResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "bad_request" error.
+type BatchAllowShadowMCPInventoryServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersNotFoundResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "not_found" error.
+type BatchAllowShadowMCPInventoryServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersConflictResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "conflict" error.
+type BatchAllowShadowMCPInventoryServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody is the type
+// of the "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "unsupported_media" error.
+type BatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersInvalidResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "invalid" error.
+type BatchAllowShadowMCPInventoryServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersInvariantViolationResponseBody is the
+// type of the "access" service "batchAllowShadowMCPInventoryServers" endpoint
+// HTTP response body for the "invariant_violation" error.
+type BatchAllowShadowMCPInventoryServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersUnexpectedResponseBody is the type of the
+// "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "unexpected" error.
+type BatchAllowShadowMCPInventoryServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BatchAllowShadowMCPInventoryServersGatewayErrorResponseBody is the type of
+// the "access" service "batchAllowShadowMCPInventoryServers" endpoint HTTP
+// response body for the "gateway_error" error.
+type BatchAllowShadowMCPInventoryServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
 // "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -5851,6 +6056,32 @@ type ShadowMCPInventoryUserResponseBody struct {
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 }
 
+// ShadowMCPInventoryBatchAllowServerRequestBody is used to define fields on
+// request body types.
+type ShadowMCPInventoryBatchAllowServerRequestBody struct {
+	ServerURL  string  `form:"server_url" json:"server_url" xml:"server_url"`
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+}
+
+// ShadowMCPInventoryBatchAllowResultResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryBatchAllowResultResponseBody struct {
+	ServerURL    *string                                    `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	Success      *bool                                      `form:"success,omitempty" json:"success,omitempty" xml:"success,omitempty"`
+	AccessState  *ShadowMCPInventoryAccessStateResponseBody `form:"access_state,omitempty" json:"access_state,omitempty" xml:"access_state,omitempty"`
+	ErrorCode    *string                                    `form:"error_code,omitempty" json:"error_code,omitempty" xml:"error_code,omitempty"`
+	ErrorMessage *string                                    `form:"error_message,omitempty" json:"error_message,omitempty" xml:"error_message,omitempty"`
+}
+
+// ShadowMCPInventoryAccessStateResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryAccessStateResponseBody struct {
+	CanonicalServerURL *string                                        `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
+	URLHost            *string                                        `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
+	Access             *string                                        `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
+	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+}
+
 // AuthzChallengeResponseBody is used to define fields on response body types.
 type AuthzChallengeResponseBody struct {
 	// Unique challenge identifier.
@@ -6142,6 +6373,29 @@ func NewClearShadowMCPInventoryServerAccessRequestBody(p *access.ClearShadowMCPI
 		ProjectID: p.ProjectID,
 		ServerURL: p.ServerURL,
 		Reason:    p.Reason,
+	}
+	return body
+}
+
+// NewBatchAllowShadowMCPInventoryServersRequestBody builds the HTTP request
+// body from the payload of the "batchAllowShadowMCPInventoryServers" endpoint
+// of the "access" service.
+func NewBatchAllowShadowMCPInventoryServersRequestBody(p *access.BatchAllowShadowMCPInventoryServersPayload) *BatchAllowShadowMCPInventoryServersRequestBody {
+	body := &BatchAllowShadowMCPInventoryServersRequestBody{
+		ProjectID: p.ProjectID,
+		Reason:    p.Reason,
+	}
+	if p.Servers != nil {
+		body.Servers = make([]*ShadowMCPInventoryBatchAllowServerRequestBody, len(p.Servers))
+		for i, val := range p.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAccessShadowMCPInventoryBatchAllowServerToShadowMCPInventoryBatchAllowServerRequestBody(val)
+		}
+	} else {
+		body.Servers = []*ShadowMCPInventoryBatchAllowServerRequestBody{}
 	}
 	return body
 }
@@ -9418,6 +9672,174 @@ func NewClearShadowMCPInventoryServerAccessGatewayError(body *ClearShadowMCPInve
 	return v
 }
 
+// NewBatchAllowShadowMCPInventoryServersResultOK builds a "access" service
+// "batchAllowShadowMCPInventoryServers" endpoint result from a HTTP "OK"
+// response.
+func NewBatchAllowShadowMCPInventoryServersResultOK(body *BatchAllowShadowMCPInventoryServersResponseBody) *access.BatchAllowShadowMCPInventoryServersResult {
+	v := &access.BatchAllowShadowMCPInventoryServersResult{}
+	v.Results = make([]*access.ShadowMCPInventoryBatchAllowResult, len(body.Results))
+	for i, val := range body.Results {
+		if val == nil {
+			v.Results[i] = nil
+			continue
+		}
+		v.Results[i] = unmarshalShadowMCPInventoryBatchAllowResultResponseBodyToAccessShadowMCPInventoryBatchAllowResult(val)
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersUnauthorized builds a access service
+// batchAllowShadowMCPInventoryServers endpoint unauthorized error.
+func NewBatchAllowShadowMCPInventoryServersUnauthorized(body *BatchAllowShadowMCPInventoryServersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersForbidden builds a access service
+// batchAllowShadowMCPInventoryServers endpoint forbidden error.
+func NewBatchAllowShadowMCPInventoryServersForbidden(body *BatchAllowShadowMCPInventoryServersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersBadRequest builds a access service
+// batchAllowShadowMCPInventoryServers endpoint bad_request error.
+func NewBatchAllowShadowMCPInventoryServersBadRequest(body *BatchAllowShadowMCPInventoryServersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersNotFound builds a access service
+// batchAllowShadowMCPInventoryServers endpoint not_found error.
+func NewBatchAllowShadowMCPInventoryServersNotFound(body *BatchAllowShadowMCPInventoryServersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersConflict builds a access service
+// batchAllowShadowMCPInventoryServers endpoint conflict error.
+func NewBatchAllowShadowMCPInventoryServersConflict(body *BatchAllowShadowMCPInventoryServersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersUnsupportedMedia builds a access
+// service batchAllowShadowMCPInventoryServers endpoint unsupported_media error.
+func NewBatchAllowShadowMCPInventoryServersUnsupportedMedia(body *BatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersInvalid builds a access service
+// batchAllowShadowMCPInventoryServers endpoint invalid error.
+func NewBatchAllowShadowMCPInventoryServersInvalid(body *BatchAllowShadowMCPInventoryServersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersInvariantViolation builds a access
+// service batchAllowShadowMCPInventoryServers endpoint invariant_violation
+// error.
+func NewBatchAllowShadowMCPInventoryServersInvariantViolation(body *BatchAllowShadowMCPInventoryServersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersUnexpected builds a access service
+// batchAllowShadowMCPInventoryServers endpoint unexpected error.
+func NewBatchAllowShadowMCPInventoryServersUnexpected(body *BatchAllowShadowMCPInventoryServersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBatchAllowShadowMCPInventoryServersGatewayError builds a access service
+// batchAllowShadowMCPInventoryServers endpoint gateway_error error.
+func NewBatchAllowShadowMCPInventoryServersGatewayError(body *BatchAllowShadowMCPInventoryServersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateShadowMCPAccessRuleResultCreated builds a "access" service
 // "createShadowMCPAccessRule" endpoint result from a HTTP "Created" response.
 func NewCreateShadowMCPAccessRuleResultCreated(body *CreateShadowMCPAccessRuleResponseBody) *access.CreateShadowMCPAccessRuleResult {
@@ -11371,6 +11793,22 @@ func ValidateClearShadowMCPInventoryServerAccessResponseBody(body *ClearShadowMC
 	if body.Rule != nil {
 		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.Rule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersResponseBody runs the validations
+// defined on BatchAllowShadowMCPInventoryServersResponseBody
+func ValidateBatchAllowShadowMCPInventoryServersResponseBody(body *BatchAllowShadowMCPInventoryServersResponseBody) (err error) {
+	if body.Results == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("results", "body"))
+	}
+	for _, e := range body.Results {
+		if e != nil {
+			if err2 := ValidateShadowMCPInventoryBatchAllowResultResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -16130,6 +16568,256 @@ func ValidateClearShadowMCPInventoryServerAccessGatewayErrorResponseBody(body *C
 	return
 }
 
+// ValidateBatchAllowShadowMCPInventoryServersUnauthorizedResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_unauthorized_response_body
+func ValidateBatchAllowShadowMCPInventoryServersUnauthorizedResponseBody(body *BatchAllowShadowMCPInventoryServersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersForbiddenResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_forbidden_response_body
+func ValidateBatchAllowShadowMCPInventoryServersForbiddenResponseBody(body *BatchAllowShadowMCPInventoryServersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersBadRequestResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_bad_request_response_body
+func ValidateBatchAllowShadowMCPInventoryServersBadRequestResponseBody(body *BatchAllowShadowMCPInventoryServersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersNotFoundResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_not_found_response_body
+func ValidateBatchAllowShadowMCPInventoryServersNotFoundResponseBody(body *BatchAllowShadowMCPInventoryServersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersConflictResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_conflict_response_body
+func ValidateBatchAllowShadowMCPInventoryServersConflictResponseBody(body *BatchAllowShadowMCPInventoryServersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody runs
+// the validations defined on
+// batchAllowShadowMCPInventoryServers_unsupported_media_response_body
+func ValidateBatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody(body *BatchAllowShadowMCPInventoryServersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersInvalidResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_invalid_response_body
+func ValidateBatchAllowShadowMCPInventoryServersInvalidResponseBody(body *BatchAllowShadowMCPInventoryServersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersInvariantViolationResponseBody
+// runs the validations defined on
+// batchAllowShadowMCPInventoryServers_invariant_violation_response_body
+func ValidateBatchAllowShadowMCPInventoryServersInvariantViolationResponseBody(body *BatchAllowShadowMCPInventoryServersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersUnexpectedResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_unexpected_response_body
+func ValidateBatchAllowShadowMCPInventoryServersUnexpectedResponseBody(body *BatchAllowShadowMCPInventoryServersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBatchAllowShadowMCPInventoryServersGatewayErrorResponseBody runs the
+// validations defined on
+// batchAllowShadowMCPInventoryServers_gateway_error_response_body
+func ValidateBatchAllowShadowMCPInventoryServersGatewayErrorResponseBody(body *BatchAllowShadowMCPInventoryServersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreateShadowMCPAccessRuleUnauthorizedResponseBody runs the
 // validations defined on createShadowMCPAccessRule_unauthorized_response_body
 func ValidateCreateShadowMCPAccessRuleUnauthorizedResponseBody(body *CreateShadowMCPAccessRuleUnauthorizedResponseBody) (err error) {
@@ -18756,6 +19444,48 @@ func ValidateShadowMCPInventoryUserResponseBody(body *ShadowMCPInventoryUserResp
 	}
 	if body.LastCalled != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateShadowMCPInventoryBatchAllowResultResponseBody runs the validations
+// defined on ShadowMCPInventoryBatchAllowResultResponseBody
+func ValidateShadowMCPInventoryBatchAllowResultResponseBody(body *ShadowMCPInventoryBatchAllowResultResponseBody) (err error) {
+	if body.ServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
+	}
+	if body.Success == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success", "body"))
+	}
+	if body.AccessState != nil {
+		if err2 := ValidateShadowMCPInventoryAccessStateResponseBody(body.AccessState); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateShadowMCPInventoryAccessStateResponseBody runs the validations
+// defined on ShadowMCPInventoryAccessStateResponseBody
+func ValidateShadowMCPInventoryAccessStateResponseBody(body *ShadowMCPInventoryAccessStateResponseBody) (err error) {
+	if body.CanonicalServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_server_url", "body"))
+	}
+	if body.URLHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url_host", "body"))
+	}
+	if body.Access == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
+	}
+	if body.Access != nil {
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "denied"}))
+		}
+	}
+	if body.Rule != nil {
+		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.Rule); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

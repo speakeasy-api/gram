@@ -76,6 +76,8 @@ trackedFiles:
   docs/models/components/authzchallengeprincipaltype.md: {}
   docs/models/components/authzchallengereason.md: {}
   docs/models/components/authzchallengeresolutiontype.md: {}
+  docs/models/components/batchallowshadowmcpinventoryserversrequestbody.md: {}
+  docs/models/components/batchallowshadowmcpinventoryserversresult.md: {}
   docs/models/components/builtinexclusioncategory.md: {}
   docs/models/components/builtinexclusionentry.md: {}
   docs/models/components/canonicaltoolattributes.md: {}
@@ -595,6 +597,8 @@ trackedFiles:
   docs/models/components/shadowmcpinventoryaccessrulematchdisposition.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematchmatchbreadth.md: {}
   docs/models/components/shadowmcpinventoryaccessstate.md: {}
+  docs/models/components/shadowmcpinventorybatchallowresult.md: {}
+  docs/models/components/shadowmcpinventorybatchallowserver.md: {}
   docs/models/components/shadowmcpinventoryserver.md: {}
   docs/models/components/shadowmcpinventoryserveraccess.md: {}
   docs/models/components/shadowmcpinventoryserveraccessform.md: {}
@@ -801,6 +805,8 @@ trackedFiles:
   docs/models/operations/authcallbackresponse.md: {}
   docs/models/operations/authloginrequest.md: {}
   docs/models/operations/authloginresponse.md: {}
+  docs/models/operations/batchallowshadowmcpinventoryserversrequest.md: {}
+  docs/models/operations/batchallowshadowmcpinventoryserverssecurity.md: {}
   docs/models/operations/blockshadowmcpinventoryserverrequest.md: {}
   docs/models/operations/blockshadowmcpinventoryserversecurity.md: {}
   docs/models/operations/captureeventrequest.md: {}
@@ -1976,6 +1982,7 @@ trackedFiles:
   src/core.ts: {}
   src/funcs/accessAllowShadowMCPInventoryServer.ts: {}
   src/funcs/accessApproveShadowMCPApprovalRequest.ts: {}
+  src/funcs/accessBatchAllowShadowMCPInventoryServers.ts: {}
   src/funcs/accessBlockShadowMCPInventoryServer.ts: {}
   src/funcs/accessClearShadowMCPInventoryServerAccess.ts: {}
   src/funcs/accessCreateRole.ts: {}
@@ -2387,6 +2394,8 @@ trackedFiles:
   src/models/components/authorizerequestbody.ts: {}
   src/models/components/authorizeresponsebody.ts: {}
   src/models/components/authzchallenge.ts: {}
+  src/models/components/batchallowshadowmcpinventoryserversrequestbody.ts: {}
+  src/models/components/batchallowshadowmcpinventoryserversresult.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
   src/models/components/builtinexclusionentry.ts: {}
   src/models/components/canonicaltoolattributes.ts: {}
@@ -2817,6 +2826,8 @@ trackedFiles:
   src/models/components/shadowmcpapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryaccessrulematch.ts: {}
   src/models/components/shadowmcpinventoryaccessstate.ts: {}
+  src/models/components/shadowmcpinventorybatchallowresult.ts: {}
+  src/models/components/shadowmcpinventorybatchallowserver.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/shadowmcpinventoryserveraccessform.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
@@ -2949,6 +2960,7 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/batchallowshadowmcpinventoryservers.ts: {}
   src/models/operations/blockshadowmcpinventoryserver.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
@@ -3336,6 +3348,7 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/batchAllowShadowMCPInventoryServers.ts: {}
   src/react-query/blockShadowMCPInventoryServer.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
@@ -4038,6 +4051,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  batchAllowShadowMCPInventoryServers:
+    speakeasy-default-batch-allow-shadow-MCP-inventory-servers:
+      requestBody:
+        application/json: {"project_id": "9803e852-d05f-46f8-a7fb-7d90510e068e", "servers": [{"server_url": "https://decisive-blowgun.org"}]}
+      responses:
+        "200":
+          application/json: {"results": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   blockShadowMCPInventoryServer:
     speakeasy-default-block-shadow-MCP-inventory-server:
       requestBody:

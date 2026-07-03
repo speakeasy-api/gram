@@ -35,6 +35,7 @@ type Endpoints struct {
 	AllowShadowMCPInventoryServer       goa.Endpoint
 	BlockShadowMCPInventoryServer       goa.Endpoint
 	ClearShadowMCPInventoryServerAccess goa.Endpoint
+	BatchAllowShadowMCPInventoryServers goa.Endpoint
 	CreateShadowMCPAccessRule           goa.Endpoint
 	UpdateShadowMCPAccessRule           goa.Endpoint
 	DeleteShadowMCPAccessRule           goa.Endpoint
@@ -70,6 +71,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AllowShadowMCPInventoryServer:       NewAllowShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
 		BlockShadowMCPInventoryServer:       NewBlockShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
 		ClearShadowMCPInventoryServerAccess: NewClearShadowMCPInventoryServerAccessEndpoint(s, a.APIKeyAuth),
+		BatchAllowShadowMCPInventoryServers: NewBatchAllowShadowMCPInventoryServersEndpoint(s, a.APIKeyAuth),
 		CreateShadowMCPAccessRule:           NewCreateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
 		UpdateShadowMCPAccessRule:           NewUpdateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
 		DeleteShadowMCPAccessRule:           NewDeleteShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
@@ -103,6 +105,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AllowShadowMCPInventoryServer = m(e.AllowShadowMCPInventoryServer)
 	e.BlockShadowMCPInventoryServer = m(e.BlockShadowMCPInventoryServer)
 	e.ClearShadowMCPInventoryServerAccess = m(e.ClearShadowMCPInventoryServerAccess)
+	e.BatchAllowShadowMCPInventoryServers = m(e.BatchAllowShadowMCPInventoryServers)
 	e.CreateShadowMCPAccessRule = m(e.CreateShadowMCPAccessRule)
 	e.UpdateShadowMCPAccessRule = m(e.UpdateShadowMCPAccessRule)
 	e.DeleteShadowMCPAccessRule = m(e.DeleteShadowMCPAccessRule)
@@ -657,6 +660,30 @@ func NewClearShadowMCPInventoryServerAccessEndpoint(s Service, authAPIKeyFn secu
 			return nil, err
 		}
 		return s.ClearShadowMCPInventoryServerAccess(ctx, p)
+	}
+}
+
+// NewBatchAllowShadowMCPInventoryServersEndpoint returns an endpoint function
+// that calls the method "batchAllowShadowMCPInventoryServers" of service
+// "access".
+func NewBatchAllowShadowMCPInventoryServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BatchAllowShadowMCPInventoryServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BatchAllowShadowMCPInventoryServers(ctx, p)
 	}
 }
 

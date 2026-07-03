@@ -57,6 +57,99 @@ func TestService_AllowShadowMCPInventoryServer_CanonicalizesAndIsIdempotent(t *t
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestService_BatchAllowShadowMCPInventoryServers_AllowsSelectedURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.BatchAllowShadowMCPInventoryServers(ctx, &gen.BatchAllowShadowMCPInventoryServersPayload{
+		ProjectID: projectID,
+		Servers: []*gen.ShadowMCPInventoryBatchAllowServer{
+			{ServerURL: "https://batch-one.example.com/mcp?token=ignored", ServerName: conv.PtrEmpty("Batch One")},
+			{ServerURL: "HTTPS://Batch-Two.Example.Com:443/mcp#fragment", ServerName: conv.PtrEmpty("Batch Two")},
+			{ServerURL: "https://batch-one.example.com/mcp?different=ignored", ServerName: conv.PtrEmpty("Batch One Duplicate")},
+		},
+		Reason: conv.PtrEmpty("Allow selected servers during setup"),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 3)
+
+	first := result.Results[0]
+	require.True(t, first.Success)
+	require.Nil(t, first.ErrorCode)
+	require.NotNil(t, first.AccessState)
+	require.Equal(t, "https://batch-one.example.com/mcp", first.AccessState.CanonicalServerURL)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, first.AccessState.Access)
+	require.NotNil(t, first.AccessState.Rule)
+	require.Equal(t, "Batch One", first.AccessState.Rule.DisplayName)
+
+	second := result.Results[1]
+	require.True(t, second.Success)
+	require.NotNil(t, second.AccessState)
+	require.Equal(t, "https://batch-two.example.com/mcp", second.AccessState.CanonicalServerURL)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, second.AccessState.Access)
+
+	duplicate := result.Results[2]
+	require.True(t, duplicate.Success)
+	require.NotNil(t, duplicate.AccessState)
+	require.Equal(t, first.AccessState.Rule.ID, duplicate.AccessState.Rule.ID)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+2, afterCount)
+}
+
+func TestService_BatchAllowShadowMCPInventoryServers_ReturnsPerURLErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	result, err := ti.service.BatchAllowShadowMCPInventoryServers(ctx, &gen.BatchAllowShadowMCPInventoryServersPayload{
+		ProjectID: projectID,
+		Servers: []*gen.ShadowMCPInventoryBatchAllowServer{
+			{ServerURL: "not a url"},
+			{ServerURL: "https://valid-batch.example.com/mcp"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 2)
+	require.False(t, result.Results[0].Success)
+	require.Nil(t, result.Results[0].AccessState)
+	require.Equal(t, "invalid_url", *result.Results[0].ErrorCode)
+	require.NotEmpty(t, *result.Results[0].ErrorMessage)
+	require.True(t, result.Results[1].Success)
+	require.NotNil(t, result.Results[1].AccessState)
+	require.Equal(t, "https://valid-batch.example.com/mcp", result.Results[1].AccessState.CanonicalServerURL)
+}
+
+func TestService_BatchAllowShadowMCPInventoryServers_RejectsTooManyURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	servers := make([]*gen.ShadowMCPInventoryBatchAllowServer, shadowMCPInventoryBatchAllowMaxSize+1)
+	for i := range servers {
+		servers[i] = &gen.ShadowMCPInventoryBatchAllowServer{ServerURL: "https://too-many.example.com/mcp"}
+	}
+
+	_, err := ti.service.BatchAllowShadowMCPInventoryServers(ctx, &gen.BatchAllowShadowMCPInventoryServersPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		Servers:   servers,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestService_BlockShadowMCPInventoryServer_UpdatesExistingURLRule(t *testing.T) {
 	t.Parallel()
 
@@ -217,6 +310,18 @@ func TestService_ShadowMCPInventoryServerAccess_ForbiddenWithoutOrgAdminGrant(t 
 				_, err := ti.service.ClearShadowMCPInventoryServerAccess(ctx, &gen.ClearShadowMCPInventoryServerAccessPayload{
 					ProjectID: projectID,
 					ServerURL: "https://forbidden.example.com/mcp",
+				})
+				return err
+			},
+		},
+		{
+			name: "batch allow",
+			run: func(ctx context.Context, ti *testInstance, projectID string) error {
+				_, err := ti.service.BatchAllowShadowMCPInventoryServers(ctx, &gen.BatchAllowShadowMCPInventoryServersPayload{
+					ProjectID: projectID,
+					Servers: []*gen.ShadowMCPInventoryBatchAllowServer{
+						{ServerURL: "https://forbidden.example.com/mcp"},
+					},
 				})
 				return err
 			},

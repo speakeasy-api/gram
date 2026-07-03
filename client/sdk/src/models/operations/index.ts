@@ -12,6 +12,7 @@ export * from "./attachservertocollection.js";
 export * from "./attachusersessionissuer.js";
 export * from "./authcallback.js";
 export * from "./authlogin.js";
+export * from "./batchallowshadowmcpinventoryservers.js";
 export * from "./blockshadowmcpinventoryserver.js";
 export * from "./captureevent.js";
 export * from "./checkmcpendpointslugavailability.js";

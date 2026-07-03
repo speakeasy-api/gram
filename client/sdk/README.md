@@ -153,6 +153,7 @@ run();
 * [listShadowMCPAccessRules](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 * [allowShadowMCPInventoryServer](docs/sdks/access/README.md#allowshadowmcpinventoryserver) - allowShadowMCPInventoryServer access
+* [batchAllowShadowMCPInventoryServers](docs/sdks/access/README.md#batchallowshadowmcpinventoryservers) - batchAllowShadowMCPInventoryServers access
 * [blockShadowMCPInventoryServer](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
 * [clearShadowMCPInventoryServerAccess](docs/sdks/access/README.md#clearshadowmcpinventoryserveraccess) - clearShadowMCPInventoryServerAccess access
 * [listShadowMCPInventory](docs/sdks/access/README.md#listshadowmcpinventory) - listShadowMCPInventory access
@@ -701,6 +702,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 - [`accessAllowShadowMCPInventoryServer`](docs/sdks/access/README.md#allowshadowmcpinventoryserver) - allowShadowMCPInventoryServer access
 - [`accessApproveShadowMCPApprovalRequest`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
+- [`accessBatchAllowShadowMCPInventoryServers`](docs/sdks/access/README.md#batchallowshadowmcpinventoryservers) - batchAllowShadowMCPInventoryServers access
 - [`accessBlockShadowMCPInventoryServer`](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
 - [`accessClearShadowMCPInventoryServerAccess`](docs/sdks/access/README.md#clearshadowmcpinventoryserveraccess) - clearShadowMCPInventoryServerAccess access
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
@@ -1111,6 +1113,7 @@ To learn about this feature and how to get started, check
 - [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useBatchAllowShadowMCPInventoryServersMutation`](docs/sdks/access/README.md#batchallowshadowmcpinventoryservers) - batchAllowShadowMCPInventoryServers access
 - [`useBlockShadowMCPInventoryServerMutation`](docs/sdks/access/README.md#blockshadowmcpinventoryserver) - blockShadowMCPInventoryServer access
 - [`useBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
