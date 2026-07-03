@@ -2563,13 +2563,33 @@ def strip_root_dotted_key(text, key):
     root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
     return root + rest
 
+def table_body_bounds(text, table_header):
+    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?\n', text)
+    if not m:
+        return None
+    start = m.end()
+    m2 = re.search(r'(?m)^\[', text[start:])
+    end = start + m2.start() if m2 else len(text)
+    return start, end
+
+def table_has_key(text, table_header, key):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return False
+    body = text[bounds[0]:bounds[1]]
+    return re.search(r'(?m)^' + re.escape(key) + r'\s*=', body) is not None
+
 def ensure_table_entry(text, table_header, key, value):
-    if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
+    if table_has_key(text, table_header, key):
         return text
-    if table_header not in text:
+    if table_body_bounds(text, table_header) is None:
         return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    idx = text.index(table_header) + len(table_header)
-    return text[:idx] + '\n' + key + ' = ' + value + text[idx:]
+    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?\n', text)
+    idx = m.end()
+    return text[:idx] + key + ' = ' + value + '\n' + text[idx:]
+
+def has_table_header(text, header):
+    return re.search(r'(?m)^' + re.escape(header) + r'(?:\s*(?:#.*)?)?\s*$', text) is not None
 
 `)
 
@@ -2582,7 +2602,8 @@ content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
-if not re.search(r'(?m)^\[hooks\.state\]', content):
+# Qualified [hooks.state."…"] sections do not require a bare parent header.
+if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^\[hooks\.state\.', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
 
 for state_key, trusted_hash in [
@@ -2594,7 +2615,7 @@ for state_key, trusted_hash in [
 
 	b.WriteString(`]:
     section = f'[hooks.state."{state_key}"]'
-    if section not in content:
+    if not has_table_header(content, section):
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
         content = content.rstrip('\n') + '\n' + entry
     else:

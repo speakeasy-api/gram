@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3245,6 +3247,63 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	return home, callLog
 }
 
+func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {
+	var b strings.Builder
+	b.WriteString("[features]\nhooks = true\nplugin_hooks = true\njs_repl = true\n\n")
+	b.WriteString("[hooks.state]\n\n")
+	for _, approval := range approvals {
+		fmt.Fprintf(&b, "[hooks.state.%q]\nenabled = true\ntrusted_hash = %q\n\n", approval.StateKey, approval.TrustedHash)
+	}
+	fmt.Fprintf(&b, "[plugins.%q]\nenabled = true\n", plugin+"@"+marketplace)
+	return b.String()
+}
+
+func runCodexInstallScriptTimes(t *testing.T, script []byte, existingConfig string, times int) string {
+	t.Helper()
+	require.Positive(t, times)
+
+	home, _ := runCodexInstallScript(t, script, existingConfig)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err)
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err)
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	for range times - 1 {
+		cmd := exec.Command(bashPath, scriptPath)
+		cmd.Env = []string{
+			"HOME=" + home,
+			"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+		}
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "install script failed on repeat run: %s", out)
+	}
+
+	return string(requireFileBytes(t, configPath))
+}
+
+func countTableHeaderLines(config, header string) int {
+	pattern := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(header) + `(?:\s*(?:#.*)?)?\s*$`)
+	return len(pattern.FindAllStringIndex(config, -1))
+}
+
+func countTableKeyLines(config, tableHeader, key string) int {
+	bounds := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(tableHeader) + `(?:\s*(?:#.*)?)?\n`).FindStringIndex(config)
+	if bounds == nil {
+		return 0
+	}
+	body := config[bounds[1]:]
+	if next := regexp.MustCompile(`(?m)^\[`).FindStringIndex(body); next != nil {
+		body = body[:next[0]]
+	}
+	pattern := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `\s*=`)
+	return len(pattern.FindAllStringIndex(body, -1))
+}
+
 func TestGenerateCodexObservabilityPluginScriptEnrichesMCPMetadataOnDemand(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -3434,6 +3493,48 @@ func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
 	require.Equal(t, 1, strings.Count(patched, "[features]"))
 	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"))
 	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"))
+}
+
+// Running install.sh twice against a config that already contains every entry
+// the script writes must not duplicate TOML keys — duplicate keys make Codex
+// refuse to load config.toml entirely.
+func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+	require.NotEmpty(t, approvals)
+
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	seeded := seededCodexInstallConfig(plugin, marketplace, approvals)
+	patched := runCodexInstallScriptTimes(t, script, seeded, 2)
+
+	var decoded map[string]any
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err, "patched config.toml must remain valid TOML without duplicate keys")
+
+	require.Equal(t, 1, countTableHeaderLines(patched, "[features]"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "hooks"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "plugin_hooks"))
+	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
+	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
+	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
+
+	for _, approval := range approvals {
+		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)
+		require.Equal(t, 1, countTableHeaderLines(patched, section), "hook approval section %q must appear exactly once", section)
+		require.Equal(t, 1, countTableKeyLines(patched, section, "enabled"))
+		require.Equal(t, 1, countTableKeyLines(patched, section, "trusted_hash"))
+		require.Contains(t, patched, approval.TrustedHash)
+	}
+
+	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
