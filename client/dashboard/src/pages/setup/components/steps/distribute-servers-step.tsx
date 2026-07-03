@@ -618,8 +618,16 @@ export function DistributeServersStep({
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
-                      pluginName={DEFAULT_PLUGIN_NAME}
-                      pluginSlug={distributedPluginSlug ?? undefined}
+                      candidatePlugins={
+                        distributedPluginSlug
+                          ? [
+                              {
+                                name: DEFAULT_PLUGIN_NAME,
+                                slug: distributedPluginSlug,
+                              },
+                            ]
+                          : undefined
+                      }
                     />
                   </div>
                 )}

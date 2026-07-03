@@ -306,16 +306,11 @@ export function PluginStatusBanner({
                 repoOwner={publishStatus.repoOwner}
                 repoName={publishStatus.repoName}
                 marketplaceUrl={publishStatus.marketplaceUrl}
-                pluginName={
-                  memberPlugins.length === 1
-                    ? memberPlugins[0]?.name
-                    : undefined
-                }
-                pluginSlug={
-                  memberPlugins.length === 1
-                    ? memberPlugins[0]?.slug
-                    : undefined
-                }
+                candidatePlugins={memberPlugins.map((plugin) => ({
+                  name: plugin.name,
+                  slug: plugin.slug,
+                  description: plugin.description,
+                }))}
               />
             </div>
           </>

@@ -10,6 +10,7 @@ import {
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
+import { usePlugins } from "@gram/client/react-query/plugins";
 import { Button as MoonshineButton } from "@speakeasy-api/moonshine";
 import { ArrowLeft, BookOpen, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
@@ -31,6 +32,8 @@ type ContentProps = {
   pluginName?: string;
   /** URL-safe slug for the specific plugin — required for the `<plugin>@<marketplace>` addressing Claude Code and Codex use. */
   pluginSlug?: string;
+  /** Restricts the plugin-picker step to these plugins (e.g. the ones a given MCP server is actually installed to) instead of every plugin in the org. */
+  candidatePlugins?: { name: string; slug: string; description?: string }[];
 };
 
 type Provider =
@@ -74,6 +77,44 @@ const providers: {
   },
 ];
 
+function ExternalTextLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-sky-500 hover:text-sky-600 inline-flex items-center gap-0.5 hover:underline"
+    >
+      {children}
+      <ExternalLink className="size-3" />
+    </a>
+  );
+}
+
+function RelatedLinks({ links }: { links: { href: string; label: string }[] }) {
+  return (
+    <div className="mt-4 space-y-2">
+      <h3 className="text-sm font-semibold">Related links</h3>
+      <ul className="space-y-1.5">
+        {links.map((link) => (
+          <li key={link.href} className="flex items-start gap-1.5">
+            <span className="text-muted-foreground" aria-hidden="true">
+              -
+            </span>
+            <ExternalTextLink href={link.href}>{link.label}</ExternalTextLink>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * Claude Code (individual CLI) install. Two paths covered here:
  *  - per-user registration via the slash command, served by the marketplace
@@ -96,10 +137,10 @@ function ClaudeCodeInstallContent({
   const installCommand = marketplaceUrl
     ? `/plugin marketplace add ${marketplaceUrl}`
     : null;
-  const pluginInstallCommand =
-    pluginSlug && marketplaceName
-      ? `/plugin install ${pluginSlug}@${marketplaceName}`
-      : null;
+  const resolvedPluginSlug = pluginSlug ?? "<plugin-slug>";
+  const pluginInstallCommand = marketplaceName
+    ? `/plugin install ${resolvedPluginSlug}@${marketplaceName}`
+    : null;
 
   // Schema reference: https://code.claude.com/docs/en/settings — under
   // extraKnownMarketplaces (additive; works for managed settings too) and
@@ -107,7 +148,10 @@ function ClaudeCodeInstallContent({
   // marketplace.json "name" (not the GitHub repo name, which can be
   // anything) is what both extraKnownMarketplaces' key and enabledPlugins'
   // `<plugin>@<marketplace>` suffix reference — see
-  // server/internal/plugins/naming/naming.go.
+  // server/internal/plugins/naming/naming.go. Always paired in one snippet
+  // (mirrors the onboarding wizard's Claude Code step) — registering the
+  // marketplace without also enabling a plugin leaves the org with nothing
+  // to actually use.
   const managedSettingsJson =
     marketplaceUrl && marketplaceName
       ? JSON.stringify(
@@ -121,11 +165,9 @@ function ClaudeCodeInstallContent({
                 },
               },
             },
-            ...(pluginSlug && {
-              enabledPlugins: {
-                [`${pluginSlug}@${marketplaceName}`]: true,
-              },
-            }),
+            enabledPlugins: {
+              [`${resolvedPluginSlug}@${marketplaceName}`]: true,
+            },
           },
           null,
           2,
@@ -143,24 +185,29 @@ function ClaudeCodeInstallContent({
           for your user account:
         </p>
         {installCommand ? (
-          <CodeBlock language="bash">{installCommand}</CodeBlock>
+          <CodeBlock language="bash" className="bg-background">
+            {installCommand}
+          </CodeBlock>
         ) : (
           <p className="text-muted-foreground text-sm italic">
             Re-publish to mint a marketplace install URL.
           </p>
         )}
-        {pluginInstallCommand ? (
+        {pluginInstallCommand && (
           <div className="mt-3">
-            <CodeBlock language="bash">{pluginInstallCommand}</CodeBlock>
+            <CodeBlock language="bash" className="bg-background">
+              {pluginInstallCommand}
+            </CodeBlock>
+            {!pluginSlug && (
+              <p className="text-muted-foreground mt-2 text-xs">
+                Replace{" "}
+                <code className="bg-muted rounded px-1 py-0.5">
+                  &lt;plugin-slug&gt;
+                </code>{" "}
+                with the slug of the plugin you want to install.
+              </p>
+            )}
           </div>
-        ) : (
-          <p className="text-muted-foreground mt-3 text-xs">
-            Once registered, install individual plugins with{" "}
-            <code className="bg-muted rounded px-1 py-0.5">
-              /plugin install &lt;name&gt;
-            </code>
-            .
-          </p>
         )}
       </div>
 
@@ -181,14 +228,9 @@ function ClaudeCodeInstallContent({
               description: (
                 <>
                   Sign in to{" "}
-                  <a
-                    href="https://claude.ai/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-500 hover:text-sky-600 hover:underline"
-                  >
+                  <ExternalTextLink href="https://claude.ai/">
                     claude.ai
-                  </a>{" "}
+                  </ExternalTextLink>{" "}
                   as an organization admin, navigate to{" "}
                   <code className="bg-muted rounded px-1 py-0.5 text-xs">
                     Organization settings → Claude Code
@@ -206,25 +248,32 @@ function ClaudeCodeInstallContent({
               ),
             },
             {
-              title: pluginSlug
-                ? "Register the marketplace and enable the plugin"
-                : "Add the marketplace to settings.json",
+              title: "Register the marketplace and enable the plugin",
               description: (
                 <>
                   Merge this entry into the org's managed{" "}
                   <code className="bg-muted rounded px-1 py-0.5 text-xs">
                     settings.json
-                  </code>
-                  {pluginSlug
-                    ? " — this registers the marketplace and enables this specific plugin for every developer in one step:"
-                    : ":"}
+                  </code>{" "}
+                  — this registers the marketplace and enables{" "}
+                  {pluginSlug ? "this specific plugin" : "a plugin"} for every
+                  developer in one step:
                 </>
               ),
               code: managedSettingsJson ?? undefined,
               language: "json",
               children: managedSettingsJson ? (
                 <p className="text-muted-foreground text-xs">
-                  Use{" "}
+                  {!pluginSlug && (
+                    <>
+                      Replace{" "}
+                      <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                        &lt;plugin-slug&gt;
+                      </code>{" "}
+                      with the slug of the plugin you want to enable. Use{" "}
+                    </>
+                  )}
+                  {pluginSlug && "Use "}
                   <code className="bg-muted rounded px-1 py-0.5 text-xs">
                     strictKnownMarketplaces
                   </code>{" "}
@@ -243,17 +292,14 @@ function ClaudeCodeInstallContent({
           ]}
         />
 
-        <Button variant="outline" size="sm" asChild className="mt-4">
-          <a
-            href={CLAUDE_CODE_SETTINGS_DOCS_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2"
-          >
-            <ExternalLink className="size-4" />
-            Claude Code settings docs
-          </a>
-        </Button>
+        <RelatedLinks
+          links={[
+            {
+              href: CLAUDE_CODE_SETTINGS_DOCS_URL,
+              label: "Claude Code settings docs",
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -293,14 +339,9 @@ function ClaudeCoworkInstallContent({
               description: (
                 <>
                   Sign in to{" "}
-                  <a
-                    href="https://claude.ai/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-500 hover:text-sky-600 hover:underline"
-                  >
+                  <ExternalTextLink href="https://claude.ai/">
                     claude.ai
-                  </a>{" "}
+                  </ExternalTextLink>{" "}
                   as an organization admin and navigate to{" "}
                   <code className="bg-muted rounded px-1 py-0.5 text-xs">
                     Organization settings → Plugins
@@ -335,17 +376,9 @@ function ClaudeCoworkInstallContent({
           ]}
         />
 
-        <Button variant="outline" size="sm" asChild className="mt-4">
-          <a
-            href={COWORK_DOCS_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2"
-          >
-            <ExternalLink className="size-4" />
-            Cowork setup guide
-          </a>
-        </Button>
+        <RelatedLinks
+          links={[{ href: COWORK_DOCS_URL, label: "Cowork setup guide" }]}
+        />
       </div>
     </div>
   );
@@ -385,14 +418,9 @@ function CursorInstallContent({
               description: (
                 <>
                   Sign in to{" "}
-                  <a
-                    href={CURSOR_DASHBOARD_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-500 hover:text-sky-600 hover:underline"
-                  >
+                  <ExternalTextLink href={CURSOR_DASHBOARD_URL}>
                     cursor.com/dashboard
-                  </a>{" "}
+                  </ExternalTextLink>{" "}
                   as a team admin.
                 </>
               ),
@@ -429,17 +457,11 @@ function CursorInstallContent({
           ]}
         />
 
-        <Button variant="outline" size="sm" asChild className="mt-4">
-          <a
-            href={CURSOR_DASHBOARD_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2"
-          >
-            <ExternalLink className="size-4" />
-            Open Cursor dashboard
-          </a>
-        </Button>
+        <RelatedLinks
+          links={[
+            { href: CURSOR_DASHBOARD_URL, label: "Open Cursor dashboard" },
+          ]}
+        />
       </div>
     </div>
   );
@@ -470,10 +492,7 @@ function CodexInstallContent({
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
   const addCommand = `codex plugin marketplace add ${repoUrl}`;
 
-  // Falls back to the observability-plugin naming convention (repoName =
-  // "<org-slug>-gram") when no specific plugin is being installed.
-  const pluginName =
-    pluginSlug ?? repoName.replace(/-gram$/, "-observability-codex");
+  const pluginName = pluginSlug ?? "<plugin-slug>";
   const marketplaceSuffix = marketplaceName ?? repoName;
   const featureFlags = `features.hooks = true\nfeatures.plugin_hooks = true`;
   const pluginEntry = `[plugins."${pluginName}@${marketplaceSuffix}"]\nenabled = true`;
@@ -569,6 +588,15 @@ function CodexInstallContent({
               ),
               code: configBlock,
               language: "toml",
+              children: !pluginSlug && (
+                <p className="text-muted-foreground text-xs">
+                  Replace{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    &lt;plugin-slug&gt;
+                  </code>{" "}
+                  with the slug of the plugin you want to enable.
+                </p>
+              ),
             },
             {
               title: "Approve hooks in Codex",
@@ -590,30 +618,18 @@ function CodexInstallContent({
           ]}
         />
 
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href="https://developers.openai.com/codex/hooks"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              Hooks Docs
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <a
-              href="https://developers.openai.com/codex/plugins/build"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              Plugin Docs
-            </a>
-          </Button>
-        </div>
+        <RelatedLinks
+          links={[
+            {
+              href: "https://developers.openai.com/codex/hooks",
+              label: "Hooks Docs",
+            },
+            {
+              href: "https://developers.openai.com/codex/plugins/build",
+              label: "Plugin Docs",
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -633,13 +649,71 @@ function InstallInstructionsDialog({
   ...content
 }: DialogProps) {
   const [selected, setSelected] = useState<Provider | null>(null);
+  const [selectedPluginSlug, setSelectedPluginSlug] = useState<string | null>(
+    content.pluginSlug ?? null,
+  );
+  const [pluginConfirmed, setPluginConfirmed] = useState(false);
   const { data: marketplaceSettings } = useMarketplaceSettings();
+  const { data: pluginsData } = usePlugins();
   const marketplaceName = marketplaceSettings?.effectiveName;
-  const panelIndex = selected ? 1 : 0;
+
+  // Restrict to the plugins this context actually cares about (e.g. the ones
+  // a given MCP server is installed to) when the caller knows them; only fall
+  // back to every org plugin when there's no such context (the marketplace
+  // list page).
+  const candidatePlugins =
+    content.candidatePlugins ??
+    (pluginsData?.plugins ?? []).map((p) => ({
+      name: p.name,
+      slug: p.slug,
+      description: p.description,
+    }));
+  const needsPluginPicker = candidatePlugins.length > 1;
+  const singleCandidate =
+    candidatePlugins.length === 1 ? candidatePlugins[0] : undefined;
+
+  const matchedPlugin = candidatePlugins.find(
+    (p) => p.slug === selectedPluginSlug,
+  );
+  const effectivePluginName = needsPluginPicker
+    ? (matchedPlugin?.name ?? content.pluginName)
+    : (singleCandidate?.name ?? content.pluginName);
+  const effectivePluginSlug = needsPluginPicker
+    ? (matchedPlugin?.slug ?? selectedPluginSlug ?? undefined)
+    : (singleCandidate?.slug ?? content.pluginSlug);
+
+  const totalSteps = needsPluginPicker ? 3 : 2;
+  const stepIndex = needsPluginPicker
+    ? !pluginConfirmed
+      ? 0
+      : selected
+        ? 2
+        : 1
+    : selected
+      ? 1
+      : 0;
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setSelected(null);
+    if (!nextOpen) {
+      setSelected(null);
+      setPluginConfirmed(false);
+      setSelectedPluginSlug(content.pluginSlug ?? null);
+    }
     onOpenChange(nextOpen);
+  };
+
+  const goToStep = (idx: number) => {
+    if (idx >= stepIndex) return;
+    if (needsPluginPicker) {
+      if (idx === 0) {
+        setPluginConfirmed(false);
+        setSelected(null);
+      } else if (idx === 1) {
+        setSelected(null);
+      }
+    } else if (idx === 0) {
+      setSelected(null);
+    }
   };
 
   return (
@@ -649,46 +723,85 @@ function InstallInstructionsDialog({
         className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
       >
         <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
-          {[0, 1].map((idx) => (
+          {Array.from({ length: totalSteps }, (_, idx) => (
             <button
               key={idx}
               type="button"
-              onClick={() => {
-                if (idx === 0 && panelIndex > 0) setSelected(null);
-              }}
+              onClick={() => goToStep(idx)}
               className={cn(
                 "h-1 rounded-full transition-all",
-                idx === panelIndex
+                idx === stepIndex
                   ? "bg-foreground w-6"
-                  : idx < panelIndex
+                  : idx < stepIndex
                     ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
                     : "bg-border w-4",
               )}
             />
           ))}
           <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-            {panelIndex + 1}/2
+            {stepIndex + 1}/{totalSteps}
           </span>
         </div>
 
         <div className="relative flex-1 overflow-hidden">
           <div
             className="flex h-full transition-transform duration-300 ease-in-out"
-            style={{ transform: `translateX(-${panelIndex * 100}%)` }}
+            style={{ transform: `translateX(-${stepIndex * 100}%)` }}
           >
-            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-6 pb-6">
+            {needsPluginPicker && (
+              <div className="w-full min-w-0 shrink-0 space-y-4 overflow-y-auto px-6 pb-6">
+                <div>
+                  <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                    Step 1
+                  </p>
+                  <h3 className="text-foreground mt-1 text-lg font-semibold">
+                    Select a plugin
+                  </h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Choose which plugin you're installing.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {candidatePlugins.map((plugin) => (
+                    <button
+                      key={plugin.slug}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPluginSlug(plugin.slug);
+                        setPluginConfirmed(true);
+                      }}
+                      className={cn(
+                        "border-border bg-card hover:border-primary/50 hover:bg-muted/50 flex cursor-pointer flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors",
+                        plugin.slug === selectedPluginSlug &&
+                          "border-primary bg-primary/5",
+                      )}
+                    >
+                      <span className="text-sm font-medium">{plugin.name}</span>
+                      {plugin.description && (
+                        <span className="text-muted-foreground text-xs">
+                          {plugin.description}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="w-full min-w-0 shrink-0 space-y-4 overflow-y-auto px-6 pb-6">
               <div>
                 <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                  Step 1
+                  Step {needsPluginPicker ? 2 : 1}
                 </p>
                 <h3 className="text-foreground mt-1 text-lg font-semibold">
-                  {content.pluginName
-                    ? `Install ${content.pluginName}`
+                  {effectivePluginName
+                    ? `Install ${effectivePluginName}`
                     : "Distribute your marketplace"}
                 </h3>
                 <p className="text-muted-foreground mt-1 text-sm">
                   Choose where your team runs this{" "}
-                  {content.pluginName ? "plugin" : "marketplace"}.
+                  {effectivePluginName ? "plugin" : "marketplace"}.
                 </p>
               </div>
 
@@ -737,10 +850,10 @@ function InstallInstructionsDialog({
               </div>
             </div>
 
-            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-6 pb-6">
+            <div className="w-full min-w-0 shrink-0 space-y-4 overflow-y-auto px-6 pb-6">
               <div>
                 <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                  Step 2
+                  Step {needsPluginPicker ? 3 : 2}
                 </p>
                 <h3 className="text-foreground mt-1 text-lg font-semibold">
                   {selected && providerLabel(selected)}
@@ -751,7 +864,7 @@ function InstallInstructionsDialog({
                 <ClaudeCodeInstallContent
                   marketplaceUrl={content.marketplaceUrl}
                   marketplaceName={marketplaceName}
-                  pluginSlug={content.pluginSlug}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
               {selected === "claude-cowork" && (
@@ -764,7 +877,7 @@ function InstallInstructionsDialog({
                 <CursorInstallContent
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
-                  pluginName={content.pluginName}
+                  pluginName={effectivePluginName}
                 />
               )}
               {selected === "codex" && (
@@ -772,32 +885,34 @@ function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   marketplaceName={marketplaceName}
-                  pluginSlug={content.pluginSlug}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
             </div>
           </div>
         </div>
 
-        {selected && (
+        {stepIndex > 0 && (
           <div className="border-border flex items-center justify-between border-t px-6 py-4">
             <MoonshineButton
               variant="tertiary"
               size="sm"
-              onClick={() => setSelected(null)}
+              onClick={() => goToStep(stepIndex - 1)}
             >
               <MoonshineButton.LeftIcon>
                 <ArrowLeft className="h-3 w-3" />
               </MoonshineButton.LeftIcon>
               <MoonshineButton.Text>Back</MoonshineButton.Text>
             </MoonshineButton>
-            <MoonshineButton
-              variant="primary"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-            >
-              <MoonshineButton.Text>Done</MoonshineButton.Text>
-            </MoonshineButton>
+            {stepIndex === totalSteps - 1 && (
+              <MoonshineButton
+                variant="primary"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+              >
+                <MoonshineButton.Text>Done</MoonshineButton.Text>
+              </MoonshineButton>
+            )}
           </div>
         )}
       </SheetContent>
