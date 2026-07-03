@@ -17,7 +17,7 @@ type McpServer struct {
 	EnvironmentID       uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
-	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be set.
 	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID

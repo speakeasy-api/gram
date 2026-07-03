@@ -15,7 +15,7 @@ type BillingMetadatum struct {
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
-	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
+	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
 	TunneledMcpServerLimit pgtype.Int4
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz

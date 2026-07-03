@@ -99,10 +99,6 @@ sql:
         out: "../internal/database"
         sql_package: "pgx/v5"
         omit_unused_structs: false
-        rename:
-          tunnelled_mcp_server: TunneledMcpServer
-          tunnelled_mcp_server_id: TunneledMcpServerID
-          tunnelled_mcp_server_limit: TunneledMcpServerLimit
 
   - schema: schema.sql
     queries: ../internal/testenv/queries.sql
@@ -343,8 +339,6 @@ sql:
         out: "../internal/mcpservers/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
-        rename:
-          tunnelled_mcp_server_id: TunneledMcpServerID
 
   - schema: schema.sql
     queries: ../internal/templates/queries.sql
@@ -429,8 +423,6 @@ sql:
         out: "../internal/usage/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
-        rename:
-          tunnelled_mcp_server_limit: TunneledMcpServerLimit
 
   - schema: schema.sql
     queries: ../internal/functions/queries.sql
@@ -543,8 +535,6 @@ sql:
         out: "../internal/tunneledmcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
-        rename:
-          tunnelled_mcp_server: TunneledMcpServer
 
   - schema: schema.sql
     queries: ../internal/thirdparty/workos/queries.sql

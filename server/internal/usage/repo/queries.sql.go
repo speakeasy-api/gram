@@ -13,7 +13,7 @@ import (
 )
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
-SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
+SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
 WHERE organization_id = $1
 `
@@ -82,7 +82,7 @@ INSERT INTO billing_metadata (
   , tum_monthly_token_limit
   , alert_email
   , billing_cycle_anchor_day
-  , tunnelled_mcp_server_limit
+  , tunneled_mcp_server_limit
 ) VALUES (
     $1
   , $2
@@ -94,9 +94,9 @@ ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
-  , tunnelled_mcp_server_limit = EXCLUDED.tunnelled_mcp_server_limit
+  , tunneled_mcp_server_limit = EXCLUDED.tunneled_mcp_server_limit
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {

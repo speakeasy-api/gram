@@ -14,11 +14,11 @@ import (
 
 const countActiveServersByOrganizationID = `-- name: CountActiveServersByOrganizationID :one
 SELECT COUNT(*)
-FROM tunnelled_mcp_servers
-JOIN projects ON projects.id = tunnelled_mcp_servers.project_id
+FROM tunneled_mcp_servers
+JOIN projects ON projects.id = tunneled_mcp_servers.project_id
 WHERE projects.organization_id = $1
   AND projects.deleted IS FALSE
-  AND tunnelled_mcp_servers.deleted IS FALSE
+  AND tunneled_mcp_servers.deleted IS FALSE
 `
 
 func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organizationID string) (int64, error) {
@@ -29,7 +29,7 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 }
 
 const createServer = `-- name: CreateServer :one
-INSERT INTO tunnelled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
@@ -69,7 +69,7 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 }
 
 const deleteServer = `-- name: DeleteServer :one
-UPDATE tunnelled_mcp_servers
+UPDATE tunneled_mcp_servers
 SET
     status = 'revoked',
     deleted_at = clock_timestamp(),
@@ -105,7 +105,7 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 
 const getServerByID = `-- name: GetServerByID :one
 SELECT id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
-FROM tunnelled_mcp_servers
+FROM tunneled_mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
@@ -135,7 +135,7 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (T
 }
 
 const getTunneledMcpServerLimitByOrganizationID = `-- name: GetTunneledMcpServerLimitByOrganizationID :one
-SELECT billing_metadata.tunnelled_mcp_server_limit AS tunneled_mcp_server_limit
+SELECT billing_metadata.tunneled_mcp_server_limit AS tunneled_mcp_server_limit
 FROM organization_metadata
 LEFT JOIN billing_metadata ON billing_metadata.organization_id = organization_metadata.id
 WHERE organization_metadata.id = $1
@@ -150,7 +150,7 @@ func (q *Queries) GetTunneledMcpServerLimitByOrganizationID(ctx context.Context,
 
 const listServersByProjectID = `-- name: ListServersByProjectID :many
 SELECT id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
-FROM tunnelled_mcp_servers
+FROM tunneled_mcp_servers
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
 `
@@ -201,7 +201,7 @@ func (q *Queries) LockOrganizationTunneledMcpLimit(ctx context.Context, organiza
 }
 
 const rotateServerKey = `-- name: RotateServerKey :one
-UPDATE tunnelled_mcp_servers
+UPDATE tunneled_mcp_servers
 SET
     key_hash = $1,
     key_prefix = $2,
@@ -246,7 +246,7 @@ func (q *Queries) RotateServerKey(ctx context.Context, arg RotateServerKeyParams
 }
 
 const updateServer = `-- name: UpdateServer :one
-UPDATE tunnelled_mcp_servers
+UPDATE tunneled_mcp_servers
 SET
     name = $1,
     updated_at = clock_timestamp()
