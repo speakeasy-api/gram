@@ -79,7 +79,7 @@ export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
 const ATTRIBUTE_BY_NAME = new Map(ACTOR_ATTRIBUTES.map((a) => [a.name, a]));
 
 /** String-valued matchers usable via `attr.matcher("...")`. */
-export const STRING_MATCHERS = [
+const STRING_MATCHERS = [
   {
     name: "startsWith",
     signature: 'string.startsWith("...")',
@@ -105,23 +105,6 @@ export const STRING_MATCHERS = [
 const STRING_MATCHER_NAMES = new Set<string>(
   STRING_MATCHERS.map((m) => m.name),
 );
-
-/** Insertable example predicates shown beneath the editor. */
-export const BUDGET_CEL_EXAMPLES: { label: string; expr: string }[] = [
-  { label: "One department", expr: 'department_name == "Engineering"' },
-  {
-    label: "Engineers, not managers",
-    expr: 'department_name == "Engineering" && job_title != "Manager"',
-  },
-  { label: "Interns", expr: 'employee_type == "intern"' },
-  { label: "In a group", expr: '"ml-team" in groups' },
-  {
-    label: "Two divisions",
-    expr: 'division_name == "R&D" || division_name == "Platform"',
-  },
-  { label: "By email domain", expr: 'email.endsWith("@acme.com")' },
-  { label: "Admins", expr: '"admin" in roles' },
-];
 
 /* -------------------------------------------------------------------------- */
 /*  Tiny expression engine: tokenizer -> Pratt-ish parser -> evaluator         */

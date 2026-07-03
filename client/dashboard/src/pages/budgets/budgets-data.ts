@@ -8,7 +8,7 @@ import { ACTOR_ATTRIBUTES, matchActors } from "./budget-cel";
 
 /** Cost tier of a model — drives how much of an actor's spend is "in scope"
  *  when a rule is scoped to specific models/providers. */
-export type ModelTier = "frontier" | "standard" | "open";
+type ModelTier = "frontier" | "standard" | "open";
 
 export interface ModelDef {
   id: string;
@@ -88,7 +88,7 @@ export interface MockActor extends ActorRecord {
   monthlySpendUsd: number;
 }
 
-export const MOCK_ACTORS: MockActor[] = [
+const MOCK_ACTORS: MockActor[] = [
   {
     id: "u_ada",
     name: "Ada Okafor",
@@ -521,7 +521,7 @@ export function useBudgetStore(): BudgetStore {
 
 /** Fraction of a full monthly spend attributable to the rule's model/provider
  *  scope. Returns 1 when unscoped (applies to everything). */
-export function scopeFraction(models: string[], providers: string[]): number {
+function scopeFraction(models: string[], providers: string[]): number {
   if (models.length > 0) {
     const tiers = new Set(
       models.map((id) => MODEL_BY_ID.get(id)?.tier).filter(Boolean),
