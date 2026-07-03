@@ -22,6 +22,7 @@ import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPAccessRules } from "../funcs/accessListShadowMCPAccessRules.js";
 import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMCPApprovalRequests.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
+import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
@@ -424,6 +425,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListShadowMCPInventoryResult> {
     return unwrapAsync(accessListShadowMCPInventory(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listShadowMCPInventoryUsers access
+   *
+   * @remarks
+   * List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
+   */
+  async listShadowMCPInventoryUsers(
+    request: operations.ListShadowMCPInventoryUsersRequest,
+    security?: operations.ListShadowMCPInventoryUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListShadowMCPInventoryUsersResult> {
+    return unwrapAsync(accessListShadowMCPInventoryUsers(
       this,
       request,
       security,

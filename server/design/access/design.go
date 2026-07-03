@@ -431,6 +431,42 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
 	})
 
+	Method("listShadowMCPInventoryUsers", func() {
+		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_url", String, "Shadow MCP server URL to expand.")
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			Required("project_id", "server_url")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.shadowMcp.inventory.users.list")
+			Param("project_id")
+			Param("server_url")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventoryUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
+	})
+
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
 		Security(security.Session)
@@ -1010,6 +1046,22 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
+	Required("user_key", "last_called", "observed_use_count")
+
+	Attribute("user_key", String)
+	Attribute("last_called", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("observed_use_count", Int)
+})
+
+var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult", func() {
+	Required("users")
+	Attribute("users", ArrayOf(ShadowMCPInventoryUserModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 

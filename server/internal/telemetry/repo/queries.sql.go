@@ -35,6 +35,9 @@ var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-
 // ErrInvalidShadowMCPInventoryURLCursor marks malformed shadow MCP inventory URL list cursors.
 var ErrInvalidShadowMCPInventoryURLCursor = errors.New("invalid shadow mcp inventory url cursor")
 
+// ErrInvalidShadowMCPInventoryUserCursor marks malformed shadow MCP inventory user list cursors.
+var ErrInvalidShadowMCPInventoryUserCursor = errors.New("invalid shadow mcp inventory user cursor")
+
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
@@ -299,6 +302,7 @@ type ListShadowMCPInventoryUsersParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
 	Limit              int
+	Cursor             string
 }
 
 type ShadowMCPInventoryUserRow struct {
@@ -330,6 +334,12 @@ type shadowMCPInventoryURLCursor struct {
 	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
 }
 
+type shadowMCPInventoryUserCursor struct {
+	UserKey            string `json:"user_key"`
+	LastCalledUnixNano int64  `json:"last_called_unix_nano"`
+	CallCount          uint64 `json:"call_count"`
+}
+
 func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, error) {
 	payload := shadowMCPInventoryURLCursor{
 		CanonicalServerURL: row.CanonicalServerURL,
@@ -359,6 +369,44 @@ func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCurs
 	}
 	if payload.LastSeenUnixNano == 0 {
 		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last seen is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+
+	return payload, nil
+}
+
+func EncodeShadowMCPInventoryUserCursor(row ShadowMCPInventoryUserRow) (string, error) {
+	payload := shadowMCPInventoryUserCursor{
+		UserKey:            row.UserKey,
+		LastCalledUnixNano: row.LastCalled.UTC().UnixNano(),
+		CallCount:          row.CallCount,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encoding shadow mcp inventory user cursor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeShadowMCPInventoryUserCursor(cursor string) (shadowMCPInventoryUserCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+
+	var payload shadowMCPInventoryUserCursor
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+	if payload.UserKey == "" {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: user key is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.LastCalledUnixNano == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: last called is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.CallCount == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: call count is required", ErrInvalidShadowMCPInventoryUserCursor)
 	}
 
 	return payload, nil
@@ -689,6 +737,15 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 }
 
 func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShadowMCPInventoryUsersParams) ([]ShadowMCPInventoryUserRow, error) {
+	var cursor shadowMCPInventoryUserCursor
+	if arg.Cursor != "" {
+		var err error
+		cursor, err = decodeShadowMCPInventoryUserCursor(arg.Cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
 	if err != nil {
 		return nil, err
@@ -716,6 +773,9 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	}
 
 	userRows := sortedShadowMCPInventoryUsers(users)
+	if arg.Cursor != "" {
+		userRows = shadowMCPInventoryUsersAfterCursor(userRows, cursor)
+	}
 	limit := clampShadowMCPInventoryLimitInt(arg.Limit)
 	if len(userRows) > limit {
 		userRows = userRows[:limit]
@@ -810,6 +870,25 @@ func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) 
 		return userRows[i].UserKey < userRows[j].UserKey
 	})
 	return userRows
+}
+
+func shadowMCPInventoryUsersAfterCursor(userRows []ShadowMCPInventoryUserRow, cursor shadowMCPInventoryUserCursor) []ShadowMCPInventoryUserRow {
+	cursorLastCalled := time.Unix(0, cursor.LastCalledUnixNano).UTC()
+	for i, row := range userRows {
+		switch {
+		case row.CallCount < cursor.CallCount:
+			return userRows[i:]
+		case row.CallCount > cursor.CallCount:
+			continue
+		case row.LastCalled.Before(cursorLastCalled):
+			return userRows[i:]
+		case row.LastCalled.After(cursorLastCalled):
+			continue
+		case row.UserKey > cursor.UserKey:
+			return userRows[i:]
+		}
+	}
+	return nil
 }
 
 func clampShadowMCPInventoryLimit(limit int) uint64 {

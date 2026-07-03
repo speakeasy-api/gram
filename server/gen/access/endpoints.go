@@ -31,6 +31,7 @@ type Endpoints struct {
 	DenyShadowMCPApprovalRequest    goa.Endpoint
 	ListShadowMCPAccessRules        goa.Endpoint
 	ListShadowMCPInventory          goa.Endpoint
+	ListShadowMCPInventoryUsers     goa.Endpoint
 	CreateShadowMCPAccessRule       goa.Endpoint
 	UpdateShadowMCPAccessRule       goa.Endpoint
 	DeleteShadowMCPAccessRule       goa.Endpoint
@@ -62,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 		DenyShadowMCPApprovalRequest:    NewDenyShadowMCPApprovalRequestEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPAccessRules:        NewListShadowMCPAccessRulesEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventory:          NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPInventoryUsers:     NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
 		CreateShadowMCPAccessRule:       NewCreateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
 		UpdateShadowMCPAccessRule:       NewUpdateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
 		DeleteShadowMCPAccessRule:       NewDeleteShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
@@ -91,6 +93,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DenyShadowMCPApprovalRequest = m(e.DenyShadowMCPApprovalRequest)
 	e.ListShadowMCPAccessRules = m(e.ListShadowMCPAccessRules)
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
+	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
 	e.CreateShadowMCPAccessRule = m(e.CreateShadowMCPAccessRule)
 	e.UpdateShadowMCPAccessRule = m(e.UpdateShadowMCPAccessRule)
 	e.DeleteShadowMCPAccessRule = m(e.DeleteShadowMCPAccessRule)
@@ -552,6 +555,29 @@ func NewListShadowMCPInventoryEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 			return nil, err
 		}
 		return s.ListShadowMCPInventory(ctx, p)
+	}
+}
+
+// NewListShadowMCPInventoryUsersEndpoint returns an endpoint function that
+// calls the method "listShadowMCPInventoryUsers" of service "access".
+func NewListShadowMCPInventoryUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListShadowMCPInventoryUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListShadowMCPInventoryUsers(ctx, p)
 	}
 }
 

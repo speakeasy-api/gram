@@ -334,6 +334,7 @@ trackedFiles:
   docs/models/components/listshadowmcpaccessrulesresult.md: {}
   docs/models/components/listshadowmcpapprovalrequestsresult.md: {}
   docs/models/components/listshadowmcpinventoryresult.md: {}
+  docs/models/components/listshadowmcpinventoryusersresult.md: {}
   docs/models/components/listsourcesresult.md: {}
   docs/models/components/listtoolfiltersresult.md: {}
   docs/models/components/listtoolsetsresult.md: {}
@@ -593,6 +594,7 @@ trackedFiles:
   docs/models/components/shadowmcpinventoryaccessrulematchdisposition.md: {}
   docs/models/components/shadowmcpinventoryaccessrulematchmatchbreadth.md: {}
   docs/models/components/shadowmcpinventoryserver.md: {}
+  docs/models/components/shadowmcpinventoryuser.md: {}
   docs/models/components/skillbreakdownrow.md: {}
   docs/models/components/skillsummary.md: {}
   docs/models/components/skilltimeseriespoint.md: {}
@@ -1490,6 +1492,8 @@ trackedFiles:
   docs/models/operations/listshadowmcpapprovalrequestssecurity.md: {}
   docs/models/operations/listshadowmcpinventoryrequest.md: {}
   docs/models/operations/listshadowmcpinventorysecurity.md: {}
+  docs/models/operations/listshadowmcpinventoryusersrequest.md: {}
+  docs/models/operations/listshadowmcpinventoryuserssecurity.md: {}
   docs/models/operations/listtemplatesrequest.md: {}
   docs/models/operations/listtemplatessecurity.md: {}
   docs/models/operations/listtemplatessecurityoption1.md: {}
@@ -1980,6 +1984,7 @@ trackedFiles:
   src/funcs/accessListShadowMCPAccessRules.ts: {}
   src/funcs/accessListShadowMCPApprovalRequests.ts: {}
   src/funcs/accessListShadowMCPInventory.ts: {}
+  src/funcs/accessListShadowMCPInventoryUsers.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
@@ -2592,6 +2597,7 @@ trackedFiles:
   src/models/components/listshadowmcpaccessrulesresult.ts: {}
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
+  src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
@@ -2797,6 +2803,7 @@ trackedFiles:
   src/models/components/shadowmcpapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryaccessrulematch.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
+  src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
@@ -3157,6 +3164,7 @@ trackedFiles:
   src/models/operations/listshadowmcpaccessrules.ts: {}
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
+  src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
   src/models/operations/listtoolsets.ts: {}
@@ -3736,6 +3744,8 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
+  src/react-query/shadowMCPInventoryUsers.core.ts: {}
+  src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
@@ -6491,6 +6501,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listShadowMCPInventoryUsers:
+    speakeasy-default-list-shadow-MCP-inventory-users:
+      parameters:
+        query:
+          project_id: "454ed70e-fcba-4241-bc9b-4f19ab7d47a5"
+          server_url: "https://trustworthy-pine.net"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"users": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listSlackApps:
     speakeasy-default-list-slack-apps:
       responses:
