@@ -25,6 +25,7 @@ import (
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
+	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
 	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
@@ -86,6 +87,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
+		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
@@ -529,6 +531,8 @@ func ParseEndpoint(
 		chatListChatsExternalUserIDFlag    = chatListChatsFlags.String("external-user-id", "", "")
 		chatListChatsSourceFlag            = chatListChatsFlags.String("source", "", "")
 		chatListChatsAssistantIDFlag       = chatListChatsFlags.String("assistant-id", "", "")
+		chatListChatsSourceKindFlag        = chatListChatsFlags.String("source-kind", "", "")
+		chatListChatsExcludeSourceKindFlag = chatListChatsFlags.String("exclude-source-kind", "", "")
 		chatListChatsHasRiskFlag           = chatListChatsFlags.String("has-risk", "", "")
 		chatListChatsAccountTypeFlag       = chatListChatsFlags.String("account-type", "", "")
 		chatListChatsPinnedFlag            = chatListChatsFlags.String("pinned", "", "")
@@ -599,6 +603,15 @@ func ParseEndpoint(
 		chatSessionsRevokeSessionTokenFlag     = chatSessionsRevokeFlags.String("session-token", "", "")
 		chatSessionsRevokeApikeyTokenFlag      = chatSessionsRevokeFlags.String("apikey-token", "", "")
 		chatSessionsRevokeProjectSlugInputFlag = chatSessionsRevokeFlags.String("project-slug-input", "", "")
+
+		cliAuthFlags = flag.NewFlagSet("cli-auth", flag.ContinueOnError)
+
+		cliAuthAuthorizeFlags            = flag.NewFlagSet("authorize", flag.ExitOnError)
+		cliAuthAuthorizeBodyFlag         = cliAuthAuthorizeFlags.String("body", "REQUIRED", "")
+		cliAuthAuthorizeSessionTokenFlag = cliAuthAuthorizeFlags.String("session-token", "", "")
+
+		cliAuthRedeemFlags    = flag.NewFlagSet("redeem", flag.ExitOnError)
+		cliAuthRedeemBodyFlag = cliAuthRedeemFlags.String("body", "REQUIRED", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -2296,6 +2309,10 @@ func ParseEndpoint(
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
 	chatSessionsRevokeFlags.Usage = chatSessionsRevokeUsage
 
+	cliAuthFlags.Usage = cliAuthUsage
+	cliAuthAuthorizeFlags.Usage = cliAuthAuthorizeUsage
+	cliAuthRedeemFlags.Usage = cliAuthRedeemUsage
+
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
 	deploymentsGetLatestDeploymentFlags.Usage = deploymentsGetLatestDeploymentUsage
@@ -2684,6 +2701,8 @@ func ParseEndpoint(
 			svcf = chatFlags
 		case "chat-sessions":
 			svcf = chatSessionsFlags
+		case "cli-auth":
+			svcf = cliAuthFlags
 		case "deployments":
 			svcf = deploymentsFlags
 		case "domains":
@@ -3061,6 +3080,16 @@ func ParseEndpoint(
 
 			case "revoke":
 				epf = chatSessionsRevokeFlags
+
+			}
+
+		case "cli-auth":
+			switch epn {
+			case "authorize":
+				epf = cliAuthAuthorizeFlags
+
+			case "redeem":
+				epf = cliAuthRedeemFlags
 
 			}
 
@@ -4319,7 +4348,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatGenerationFlag, *chatLoadChatLimitFlag, *chatLoadChatBeforeSeqFlag, *chatLoadChatAfterSeqFlag, *chatLoadChatFromStartFlag, *chatLoadChatRiskOnlyFlag, *chatLoadChatQueryFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag)
@@ -4351,6 +4380,16 @@ func ParseEndpoint(
 			case "revoke":
 				endpoint = c.Revoke()
 				data, err = chatsessionsc.BuildRevokePayload(*chatSessionsRevokeTokenFlag, *chatSessionsRevokeSessionTokenFlag, *chatSessionsRevokeApikeyTokenFlag, *chatSessionsRevokeProjectSlugInputFlag)
+			}
+		case "cli-auth":
+			c := cliauthc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "authorize":
+				endpoint = c.Authorize()
+				data, err = cliauthc.BuildAuthorizePayload(*cliAuthAuthorizeBodyFlag, *cliAuthAuthorizeSessionTokenFlag)
+			case "redeem":
+				endpoint = c.Redeem()
+				data, err = cliauthc.BuildRedeemPayload(*cliAuthRedeemBodyFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7055,6 +7094,8 @@ func chatListChatsUsage() {
 	fmt.Fprint(os.Stderr, " -external-user-id STRING")
 	fmt.Fprint(os.Stderr, " -source STRING")
 	fmt.Fprint(os.Stderr, " -assistant-id STRING")
+	fmt.Fprint(os.Stderr, " -source-kind STRING")
+	fmt.Fprint(os.Stderr, " -exclude-source-kind STRING")
 	fmt.Fprint(os.Stderr, " -has-risk STRING")
 	fmt.Fprint(os.Stderr, " -account-type STRING")
 	fmt.Fprint(os.Stderr, " -pinned STRING")
@@ -7079,6 +7120,8 @@ func chatListChatsUsage() {
 	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -source STRING: `)
 	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-source-kind STRING: `)
 	fmt.Fprintln(os.Stderr, `    -has-risk STRING: `)
 	fmt.Fprintln(os.Stderr, `    -account-type STRING: `)
 	fmt.Fprintln(os.Stderr, `    -pinned STRING: `)
@@ -7095,7 +7138,7 @@ func chatListChatsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatLoadChatUsage() {
@@ -7326,6 +7369,55 @@ func chatSessionsRevokeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat-sessions revoke --token \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// cliAuthUsage displays the usage of the cli-auth command and its subcommands.
+func cliAuthUsage() {
+	fmt.Fprintln(os.Stderr, `Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] cli-auth COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin.`)
+	fmt.Fprintln(os.Stderr, `    redeem: Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s cli-auth COMMAND --help\n", os.Args[0])
+}
+func cliAuthAuthorizeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] cli-auth authorize", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth authorize --body '{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func cliAuthRedeemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] cli-auth redeem", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth redeem --body '{\n      \"code\": \"abc123\",\n      \"code_verifier\": \"aaa\"\n   }'")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

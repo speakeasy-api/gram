@@ -52,7 +52,7 @@ import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { handleError } from "@/lib/errors";
+import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -152,9 +152,10 @@ function totalTokensFor(chat: {
 // ContentErrorBoundary and wiping the rest of Risk Events / Chat Logs behind
 // it. Retry resets the boundary and any errored queries in place.
 function ChatDetailErrorFallback({
-  error,
+  error: rawError,
   resetErrorBoundary,
 }: FallbackProps): JSX.Element {
+  const error = toError(rawError);
   handleError(error, { silent: true });
 
   return (

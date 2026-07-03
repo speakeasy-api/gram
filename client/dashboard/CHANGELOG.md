@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.82.0
+
+### Minor Changes
+
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- ab1450f: Break down and filter AI usage by account type — Team (enterprise) vs Personal (individual, e.g. Claude Max) — and by provider (Claude, Codex, Cursor) across Costs, Insights, Agent Sessions, Tool Logs, and Employees. Personal usage is flagged at a glance on sessions and logs, and each employee's linked AI accounts are listed with the option to scope their metrics to a single account.
+- ab1450f: Cost is now shown as an estimate ("Est. cost", with an explanation on hover) wherever it appears in Costs and insights, because the figure is derived from token usage at standard API rates — which only reflects real spend on metered (pay-per-token) accounts, not flat-fee subscription plans like Claude Max/Pro/Team/Enterprise. Admins can declare a provider integration's billing mode (Metered / Flat rate / Unknown) under Settings → Logging & Telemetry; once an account is declared metered, its cost reads as a confident "Cost".
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- Updated dependencies [7ce4d76]
+  - @gram-ai/elements@1.40.1
+
 ## 0.81.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.40.1
+
+### Patch Changes
+
+- 7ce4d76: Hide the assistant message copy button on tool-only turns. A message made up solely of tool calls (and/or reasoning) has no copyable text, so the lone Copy button no longer hangs beneath it.
+
 ## 1.40.0
 
 ### Minor Changes

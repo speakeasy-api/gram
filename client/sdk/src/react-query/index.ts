@@ -32,6 +32,8 @@ export * from "./chatSetPinned.js";
 export * from "./chatSubmitFeedback.js";
 export * from "./checkMcpEndpointSlugAvailability.js";
 export * from "./checkMCPSlugAvailability.js";
+export * from "./cliAuthAuthorize.js";
+export * from "./cliAuthRedeem.js";
 export * from "./cloneClientFromOAuthProxyProvider.js";
 export * from "./cloneEnvironment.js";
 export * from "./cloneToolset.js";

@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@
 
 ### preset?
 
-> `optional` **preset**: [`DateRangePreset`](../type-aliases/DateRangePreset.md) \| `null`
+> `optional` **preset?**: [`DateRangePreset`](../type-aliases/DateRangePreset.md) \| `null`
 
 Current preset value
 
@@ -18,15 +18,15 @@ Current preset value
 
 ### customRange?
 
-> `optional` **customRange**: [`TimeRange`](TimeRange.md) \| `null`
+> `optional` **customRange?**: [`TimeRange`](TimeRange.md) \| `null`
 
 Current custom range
 
 ***
 
-### onPresetChange()?
+### onPresetChange?
 
-> `optional` **onPresetChange**: (`preset`) => `void`
+> `optional` **onPresetChange?**: (`preset`) => `void`
 
 Called when a preset is selected
 
@@ -42,9 +42,9 @@ Called when a preset is selected
 
 ***
 
-### onCustomRangeChange()?
+### onCustomRangeChange?
 
-> `optional` **onCustomRangeChange**: (`from`, `to`, `label?`) => `void`
+> `optional` **onCustomRangeChange?**: (`from`, `to`, `label?`) => `void`
 
 Called when a custom range is selected
 
@@ -68,9 +68,9 @@ Called when a custom range is selected
 
 ***
 
-### onClearCustomRange()?
+### onClearCustomRange?
 
-> `optional` **onClearCustomRange**: () => `void`
+> `optional` **onClearCustomRange?**: () => `void`
 
 Called to clear custom range
 
@@ -82,7 +82,7 @@ Called to clear custom range
 
 ### customRangeLabel?
 
-> `optional` **customRangeLabel**: `string` \| `null`
+> `optional` **customRangeLabel?**: `string` \| `null`
 
 Initial label for custom range (from URL params)
 
@@ -90,7 +90,7 @@ Initial label for custom range (from URL params)
 
 ### showLive?
 
-> `optional` **showLive**: `boolean`
+> `optional` **showLive?**: `boolean`
 
 Show LIVE mode option
 
@@ -98,15 +98,15 @@ Show LIVE mode option
 
 ### isLive?
 
-> `optional` **isLive**: `boolean`
+> `optional` **isLive?**: `boolean`
 
 Is LIVE mode active
 
 ***
 
-### onLiveChange()?
+### onLiveChange?
 
-> `optional` **onLiveChange**: (`isLive`) => `void`
+> `optional` **onLiveChange?**: (`isLive`) => `void`
 
 Called when LIVE mode changes
 
@@ -124,7 +124,7 @@ Called when LIVE mode changes
 
 ### availablePresets?
 
-> `optional` **availablePresets**: readonly [`DateRangePreset`](../type-aliases/DateRangePreset.md)[]
+> `optional` **availablePresets?**: readonly [`DateRangePreset`](../type-aliases/DateRangePreset.md)[]
 
 Presets to show in the dropdown
 
@@ -132,7 +132,7 @@ Presets to show in the dropdown
 
 ### disabled?
 
-> `optional` **disabled**: `boolean`
+> `optional` **disabled?**: `boolean`
 
 Disabled state
 
@@ -140,7 +140,7 @@ Disabled state
 
 ### timezone?
 
-> `optional` **timezone**: `string`
+> `optional` **timezone?**: `string`
 
 Timezone display (e.g., "UTC-08:00")
 
@@ -148,7 +148,7 @@ Timezone display (e.g., "UTC-08:00")
 
 ### apiUrl?
 
-> `optional` **apiUrl**: `string`
+> `optional` **apiUrl?**: `string`
 
 API URL for AI parsing (defaults to window.location.origin)
 
@@ -156,7 +156,7 @@ API URL for AI parsing (defaults to window.location.origin)
 
 ### projectSlug?
 
-> `optional` **projectSlug**: `string`
+> `optional` **projectSlug?**: `string`
 
 Project slug for API authentication
 
@@ -164,7 +164,7 @@ Project slug for API authentication
 
 ### authHeaders?
 
-> `optional` **authHeaders**: `Record`\<`string`, `string`\>
+> `optional` **authHeaders?**: `Record`\<`string`, `string`\>
 
 Auth headers to send with the AI parsing request to /chat/completions
 (e.g. `{ "Gram-Session": token }`). The `/chat/completions` proxy
@@ -175,6 +175,6 @@ request is rejected with 401 and natural-language parsing silently fails.
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Additional class name for the trigger

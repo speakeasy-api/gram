@@ -72,7 +72,8 @@ import {
   useLayoutEffect,
   type ReactNode,
 } from "react";
-import { useQueryState } from "nuqs";
+import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
+import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
@@ -849,6 +850,23 @@ function isPromptPolicy(policy: RiskPolicy): boolean {
   return policy.policyType === "prompt_based";
 }
 
+/** The wizard flow kind for the current URL/editing state. When editing, the
+ *  policy dictates the kind; otherwise the `?create=` param does. */
+function policyKindForForm(
+  editingPolicy: RiskPolicy | null,
+  createParam: string | null,
+): PolicyKind {
+  if (editingPolicy) return isPromptPolicy(editingPolicy) ? "prompt" : "risk";
+  return createParam === "prompt" ? "prompt" : "risk";
+}
+
+/** Id of the first step for a wizard flow, used to seed the `?step=` param when
+ *  opening the flow. Derived from the step lists so the two never drift. */
+function firstStepId(kind: PolicyKind): string {
+  const steps = kind === "prompt" ? PROMPT_WIZARD_STEPS : POLICY_WIZARD_STEPS;
+  return steps[0]!.id;
+}
+
 function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
@@ -913,12 +931,7 @@ function PolicyCenterContent() {
 
   const { customRules } = useDetectionRulesStore();
 
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
-  const [createStep, setCreateStep] = useState<"type" | "details">("details");
-  // Active step in the standard-policy guided flow (0=Detect…3=Review).
-  const [wizardStep, setWizardStep] = useState(0);
-  const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
   const [formPromptInstruction, setFormPromptInstruction] = useState("");
@@ -973,16 +986,30 @@ function PolicyCenterContent() {
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
 
-  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
-  // command palette uses this since policies have no per-item route. Declared
-  // here (above the mutations) so save handlers can clear it on programmatic
-  // close — Radix's onOpenChange only fires for user-initiated closes.
-  const [policyParam, setPolicyParam] = useQueryState("policy");
+  const navigate = useNavigate();
+
+  // The whole wizard location lives in the URL so native browser Back/Forward
+  // page through the flow (AIS-238). `policy` opens an existing policy for edit
+  // (also the command-palette deep link, since policies have no per-item
+  // route); `create` opens the new-policy flow ("type" chooser, or a chosen
+  // kind); `step` is the active step id. Forward moves (open, Continue, stepper
+  // jump) push a history entry; closing clears the params via a replace.
+  const [nav, setNav] = useQueryStates({
+    policy: parseAsString,
+    create: parseAsStringLiteral(["type", "risk", "prompt"] as const),
+    step: parseAsString,
+  });
   const openedPolicyRef = useRef<string | null>(null);
-  const clearPolicyDeepLink = useCallback(() => {
+
+  // The sheet is open whenever we're editing a policy or in the create flow.
+  const sheetOpen = editingPolicy !== null || nav.create !== null;
+  const formPolicyKind = policyKindForForm(editingPolicy, nav.create);
+
+  const closeSheet = useCallback(() => {
+    setEditingPolicy(null);
     openedPolicyRef.current = null;
-    void setPolicyParam(null);
-  }, [setPolicyParam]);
+    void setNav({ policy: null, create: null, step: null });
+  }, [setNav]);
 
   // The create/edit view is a focused full-screen card (not a Dialog), so wire
   // Escape to close it. Skip when a layered sub-sheet (e.g. the category
@@ -991,12 +1018,11 @@ function PolicyCenterContent() {
     if (!sheetOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
-      setSheetOpen(false);
-      clearPolicyDeepLink();
+      closeSheet();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [sheetOpen, clearPolicyDeepLink]);
+  }, [sheetOpen, closeSheet]);
 
   // While the create/edit card is open it owns the whole viewport, so hide the
   // floating assistant dock for the duration (it would otherwise float on top).
@@ -1014,16 +1040,14 @@ function PolicyCenterContent() {
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
       invalidate();
-      setSheetOpen(false);
-      clearPolicyDeepLink();
+      closeSheet();
     },
   });
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: () => {
       invalidate();
-      setSheetOpen(false);
-      clearPolicyDeepLink();
+      closeSheet();
     },
   });
 
@@ -1031,19 +1055,10 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
-  const configurePolicyKind = (kind: PolicyKind) => {
-    setFormPolicyKind(kind);
-    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
-    setFormAction("flag");
-    setFormAutoName(true);
-  };
-
   const handleCreate = (kind?: PolicyKind) => {
     const nextKind = kind ?? "risk";
     setEditingPolicy(null);
-    setCreateStep(kind || !nlEnabled ? "details" : "type");
-    setWizardStep(0);
-    setFormPolicyKind(nextKind);
+    openedPolicyRef.current = null;
     setFormName("");
     setFormEnabled(true);
     setFormPromptInstruction("");
@@ -1063,91 +1078,132 @@ function PolicyCenterContent() {
     setFormFailOpen(true);
     setFormAudienceType("everyone");
     setSelectedAudiencePrincipalUrns(new Set<string>());
-    setSheetOpen(true);
+    // Open the type chooser when NL policies are enabled and no kind was
+    // forced; otherwise jump straight to the chosen kind's first step. Pushed
+    // so the browser Back button closes the freshly-opened flow.
+    if (!kind && nlEnabled) {
+      void setNav(
+        { policy: null, create: "type", step: null },
+        { history: "push" },
+      );
+    } else {
+      void setNav(
+        { policy: null, create: nextKind, step: firstStepId(nextKind) },
+        { history: "push" },
+      );
+    }
   };
 
   const handleChoosePolicyKind = (kind: PolicyKind) => {
-    configurePolicyKind(kind);
-    setCreateStep("details");
+    // Reset the kind-specific defaults, then advance from the chooser into the
+    // first step of the chosen flow (pushed so Back returns to the chooser).
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
+    setFormAction("flag");
+    setFormAutoName(true);
+    void setNav({ create: kind, step: firstStepId(kind) }, { history: "push" });
   };
 
   // Memoized so the deep-link effect below can depend on it without re-running
-  // every render. Body references only module-level helpers + stable setters,
-  // so the empty dependency array is correct.
-  const handleEdit = useCallback((policy: RiskPolicy) => {
-    const isPrompt = isPromptPolicy(policy);
-    const kind: PolicyKind = isPrompt ? "prompt" : "risk";
-    setEditingPolicy(policy);
-    setCreateStep("details");
-    setWizardStep(0);
-    setFormPolicyKind(kind);
-    setFormName(policy.name);
-    setFormEnabled(policy.enabled);
-    // Scope CEL applies to both kinds; load it before the kind branch.
-    const loadedInclude = policy.scopeInclude ?? "";
-    setScopeInclude(loadedInclude);
-    setScopeExempt(policy.scopeExempt ?? "");
-    setScopeMode(loadedInclude.trim() !== "" ? "cel" : "messageTypes");
-    if (isPrompt) {
-      setFormPromptInstruction(policy.prompt ?? "");
+  // every render. Body references only module-level helpers + stable setters
+  // (setNav is stable), so listing setNav is enough.
+  const handleEdit = useCallback(
+    (
+      policy: RiskPolicy,
+      // Deep-link hydration passes `history: "replace"` (the `?policy=` entry
+      // already exists, so pushing would add a duplicate Back stop) and the
+      // step already in the URL, so a reload keeps its place.
+      opts?: { history?: "push" | "replace"; step?: string | null },
+    ) => {
+      const isPrompt = isPromptPolicy(policy);
+      const kind: PolicyKind = isPrompt ? "prompt" : "risk";
+      const history = opts?.history ?? "push";
+      const step = opts?.step ?? firstStepId(kind);
+      // Mark the deep-link effect as handled for this id so it doesn't re-open
+      // the sheet when we set `?policy=` below.
+      openedPolicyRef.current = policy.id;
+      setEditingPolicy(policy);
+      setFormName(policy.name);
+      setFormEnabled(policy.enabled);
+      // Scope CEL applies to both kinds; load it before the kind branch.
+      const loadedInclude = policy.scopeInclude ?? "";
+      setScopeInclude(loadedInclude);
+      setScopeExempt(policy.scopeExempt ?? "");
+      setScopeMode(loadedInclude.trim() !== "" ? "cel" : "messageTypes");
+      if (isPrompt) {
+        setFormPromptInstruction(policy.prompt ?? "");
+        setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
+        setFormAction((policy.action as PolicyAction) ?? "flag");
+        setFormAutoName(policy.autoName ?? true);
+        setFormUserMessage(policy.userMessage ?? "");
+        setFormModel(policy.modelConfig?.model ?? "");
+        setFormTemperature(
+          policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+        );
+        setFormFailOpen(policy.modelConfig?.failOpen ?? true);
+        setFormAudienceType("everyone");
+        setSelectedAudiencePrincipalUrns(new Set<string>());
+        void setNav({ policy: policy.id, create: null, step }, { history });
+        return;
+      }
+      setFormPromptInstruction("");
+      const customRuleIds = policy.customRuleIds ?? [];
+      const categories = policyToCategories(
+        policy.sources,
+        policy.presidioEntities,
+      );
+      if (customRuleIds.length > 0) {
+        categories.add("custom");
+      }
+      setSelectedCategories(categories);
+      setFormPresidioThreshold(
+        policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
+      );
+      setDisabledRules(new Set(policy.disabledRules ?? []));
+      setSelectedCustomRuleIds(new Set<string>(customRuleIds));
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
       setFormAction((policy.action as PolicyAction) ?? "flag");
       setFormAutoName(policy.autoName ?? true);
       setFormUserMessage(policy.userMessage ?? "");
-      setFormModel(policy.modelConfig?.model ?? "");
-      setFormTemperature(
-        policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+      const audienceType = policy.audienceType ?? "everyone";
+      setFormAudienceType(audienceType);
+      setSelectedAudiencePrincipalUrns(
+        audienceType === "targeted"
+          ? new Set<string>(policy.audiencePrincipalUrns ?? [])
+          : new Set<string>(),
       );
-      setFormFailOpen(policy.modelConfig?.failOpen ?? true);
-      setFormAudienceType("everyone");
-      setSelectedAudiencePrincipalUrns(new Set<string>());
-      setSheetOpen(true);
-      return;
-    }
-    setFormPromptInstruction("");
-    const customRuleIds = policy.customRuleIds ?? [];
-    const categories = policyToCategories(
-      policy.sources,
-      policy.presidioEntities,
-    );
-    if (customRuleIds.length > 0) {
-      categories.add("custom");
-    }
-    setSelectedCategories(categories);
-    setFormPresidioThreshold(
-      policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
-    );
-    setDisabledRules(new Set(policy.disabledRules ?? []));
-    setSelectedCustomRuleIds(new Set<string>(customRuleIds));
-    setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
-    setFormAction((policy.action as PolicyAction) ?? "flag");
-    setFormAutoName(policy.autoName ?? true);
-    setFormUserMessage(policy.userMessage ?? "");
-    const audienceType = policy.audienceType ?? "everyone";
-    setFormAudienceType(audienceType);
-    setSelectedAudiencePrincipalUrns(
-      audienceType === "targeted"
-        ? new Set<string>(policy.audiencePrincipalUrns ?? [])
-        : new Set<string>(),
-    );
-    setSheetOpen(true);
-  }, []);
+      void setNav({ policy: policy.id, create: null, step }, { history });
+    },
+    [setNav],
+  );
 
   // Open the deep-linked policy once its data has loaded. Guarded by a ref so it
   // fires once per id (not on every policies re-fetch). The ref is marked as
   // handled even when the id doesn't resolve, so a stale/invalid id doesn't
   // re-trigger the lookup on every subsequent `data` change.
   useEffect(() => {
-    if (!policyParam || isLoading) return;
-    if (openedPolicyRef.current === policyParam) return;
+    if (!nav.policy || isLoading) return;
+    if (openedPolicyRef.current === nav.policy) return;
     // Read from the stable react-query `data` (not the per-render `policies`
     // array) so the effect doesn't re-run every render.
-    const policy = data?.policies?.find((p) => p.id === policyParam);
-    openedPolicyRef.current = policyParam;
+    const policy = data?.policies?.find((p) => p.id === nav.policy);
+    openedPolicyRef.current = nav.policy;
     if (policy) {
-      handleEdit(policy);
+      // Hydrating from the URL: rewrite the current entry rather than pushing a
+      // duplicate, and keep whatever step the URL already carries.
+      handleEdit(policy, { history: "replace", step: nav.step });
     }
-  }, [policyParam, isLoading, data, handleEdit]);
+  }, [nav.policy, nav.step, isLoading, data, handleEdit]);
+
+  // When the URL stops pointing at a policy — e.g. the user pressed the browser
+  // Back button out of an edit session — drop the loaded policy so the sheet
+  // closes. Open paths set `editingPolicy` and `?policy=` in the same render,
+  // so this can't race an open.
+  useEffect(() => {
+    if (nav.policy === null && editingPolicy !== null) {
+      setEditingPolicy(null);
+      openedPolicyRef.current = null;
+    }
+  }, [nav.policy, editingPolicy]);
 
   const handleSave = () => {
     // Fine-grained scope predicates (both kinds). The include applies only in
@@ -1597,16 +1653,29 @@ function PolicyCenterContent() {
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
 
-  const isChoosingPolicyKind =
-    !editingPolicy && nlEnabled && createStep === "type";
+  const isChoosingPolicyKind = !editingPolicy && nav.create === "type";
 
   // Footer behaviour for the guided flow. Both standard and prompt policies now
   // page through steps (Continue, then Create/Update); only the type chooser is
   // exempt.
-  const isWizard = !isChoosingPolicyKind;
+  const isWizard = sheetOpen && !isChoosingPolicyKind;
   const isRiskWizard = isWizard && formPolicyKind === "risk";
   const wizardSteps =
     formPolicyKind === "prompt" ? PROMPT_WIZARD_STEPS : POLICY_WIZARD_STEPS;
+  // The active step is derived from the `?step=` param; an absent/unknown value
+  // falls back to the first step. `setWizardStep` writes it back and pushes a
+  // history entry so browser Back returns to the previous step.
+  const wizardStep = Math.max(
+    0,
+    wizardSteps.findIndex((s) => s.id === nav.step),
+  );
+  const setWizardStep = useCallback(
+    (index: number) => {
+      const id = wizardSteps[index]?.id;
+      if (id) void setNav({ step: id }, { history: "push" });
+    },
+    [wizardSteps, setNav],
+  );
   const isLastWizardStep = wizardStep === wizardSteps.length - 1;
   const showWizardContinue = isWizard && !isLastWizardStep;
   const mutationPending = createMutation.isPending || updateMutation.isPending;
@@ -1658,12 +1727,11 @@ function PolicyCenterContent() {
     mutationPending;
   const showFooterBack =
     (isWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
+  // Pop the last pushed entry — a previous step, or the type chooser when at
+  // step 0 of the create flow. Identical to the browser Back button, which now
+  // drives the wizard too.
   const onFooterBack = () => {
-    if (isWizard && wizardStep > 0) {
-      setWizardStep(wizardStep - 1);
-    } else {
-      setCreateStep("type");
-    }
+    void navigate(-1);
   };
 
   let sheetTitle = "New Policy";
@@ -1770,8 +1838,7 @@ function PolicyCenterContent() {
           open={sheetOpen}
           onOpenChange={(open) => {
             if (!open) {
-              setSheetOpen(false);
-              clearPolicyDeepLink();
+              closeSheet();
             }
           }}
         >
@@ -1793,13 +1860,7 @@ function PolicyCenterContent() {
                       </Type>
                     </DialogPrimitive.Description>
                   </div>
-                  <Button
-                    variant="tertiary"
-                    onClick={() => {
-                      setSheetOpen(false);
-                      clearPolicyDeepLink();
-                    }}
-                  >
+                  <Button variant="tertiary" onClick={closeSheet}>
                     <Button.LeftIcon>
                       <X className="h-4 w-4" />
                     </Button.LeftIcon>

@@ -66,6 +66,8 @@ trackedFiles:
   docs/models/components/auditlog.md: {}
   docs/models/components/auditlogfacetoption.md: {}
   docs/models/components/authnchallengemode.md: {}
+  docs/models/components/authorizerequestbody.md: {}
+  docs/models/components/authorizeresponsebody.md: {}
   docs/models/components/authzchallenge.md: {}
   docs/models/components/authzchallengeoperation.md: {}
   docs/models/components/authzchallengeoutcome.md: {}
@@ -92,6 +94,7 @@ trackedFiles:
   docs/models/components/cloneclientfromoauthproxyproviderform.md: {}
   docs/models/components/cloneclientfromoauthproxyproviderformtokenendpointauthmethod.md: {}
   docs/models/components/cloneenvironmentrequestbody.md: {}
+  docs/models/components/codechallengemethod.md: {}
   docs/models/components/codexhookpayload.md: {}
   docs/models/components/codexhookpayloadhookeventname.md: {}
   docs/models/components/codexhookresult.md: {}
@@ -446,6 +449,8 @@ trackedFiles:
   docs/models/components/queryseries.md: {}
   docs/models/components/rbacstatus.md: {}
   docs/models/components/reason.md: {}
+  docs/models/components/redeemrequestbody.md: {}
+  docs/models/components/redeemresponsebody.md: {}
   docs/models/components/redeployrequestbody.md: {}
   docs/models/components/redeployresult.md: {}
   docs/models/components/registerrequestbody.md: {}
@@ -773,6 +778,8 @@ trackedFiles:
   docs/models/operations/clearmcpregistrycachesecurity.md: {}
   docs/models/operations/clearmcpregistrycachesecurityoption1.md: {}
   docs/models/operations/clearmcpregistrycachesecurityoption2.md: {}
+  docs/models/operations/cliauthauthorizerequest.md: {}
+  docs/models/operations/cliauthauthorizesecurity.md: {}
   docs/models/operations/cloneclientfromoauthproxyproviderrequest.md: {}
   docs/models/operations/cloneclientfromoauthproxyprovidersecurity.md: {}
   docs/models/operations/cloneclientfromoauthproxyprovidersecurityoption1.md: {}
@@ -1791,6 +1798,7 @@ trackedFiles:
   docs/sdks/categories/README.md: {}
   docs/sdks/chat/README.md: {}
   docs/sdks/chatsessions/README.md: {}
+  docs/sdks/cliauth/README.md: {}
   docs/sdks/collections/README.md: {}
   docs/sdks/customrules/README.md: {}
   docs/sdks/deployments/README.md: {}
@@ -1913,6 +1921,8 @@ trackedFiles:
   src/funcs/chatSessionsRevoke.ts: {}
   src/funcs/chatSetPinned.ts: {}
   src/funcs/chatSubmitFeedback.ts: {}
+  src/funcs/cliAuthAuthorize.ts: {}
+  src/funcs/cliAuthRedeem.ts: {}
   src/funcs/collectionsAttachServer.ts: {}
   src/funcs/collectionsCreate.ts: {}
   src/funcs/collectionsDelete.ts: {}
@@ -2225,6 +2235,8 @@ trackedFiles:
   src/models/components/attachusersessionissuerform.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
+  src/models/components/authorizerequestbody.ts: {}
+  src/models/components/authorizeresponsebody.ts: {}
   src/models/components/authzchallenge.ts: {}
   src/models/components/canonicaltoolattributes.ts: {}
   src/models/components/captureeventpayload.ts: {}
@@ -2547,6 +2559,8 @@ trackedFiles:
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
   src/models/components/rbacstatus.ts: {}
+  src/models/components/redeemrequestbody.ts: {}
+  src/models/components/redeemresponsebody.ts: {}
   src/models/components/redeployrequestbody.ts: {}
   src/models/components/redeployresult.ts: {}
   src/models/components/registerrequestbody.ts: {}
@@ -2762,6 +2776,7 @@ trackedFiles:
   src/models/operations/checkmcpendpointslugavailability.ts: {}
   src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
+  src/models/operations/cliauthauthorize.ts: {}
   src/models/operations/cloneclientfromoauthproxyprovider.ts: {}
   src/models/operations/cloneenvironment.ts: {}
   src/models/operations/clonetoolset.ts: {}
@@ -3131,6 +3146,8 @@ trackedFiles:
   src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
+  src/react-query/cliAuthAuthorize.ts: {}
+  src/react-query/cliAuthRedeem.ts: {}
   src/react-query/cloneClientFromOAuthProxyProvider.ts: {}
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
@@ -3593,6 +3610,7 @@ trackedFiles:
   src/sdk/categories.ts: {}
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
+  src/sdk/cliauth.ts: {}
   src/sdk/collections.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/deployments.ts: {}
@@ -3805,6 +3823,28 @@ examples:
         query:
           registry_id: "a241ee6b-bdcd-491a-9cd8-a9f2eb193240"
       responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  cliAuthAuthorize:
+    speakeasy-default-cli-auth-authorize:
+      requestBody:
+        application/json: {"code_challenge": "<value>", "code_challenge_method": "S256"}
+      responses:
+        "200":
+          application/json: {"code": "<value>", "expires_in": 195102}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cliAuthRedeem:
+    speakeasy-default-cli-auth-redeem:
+      requestBody:
+        application/json: {"code": "<value>", "code_verifier": "<value>"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "project_slug": "<value>", "user_email": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

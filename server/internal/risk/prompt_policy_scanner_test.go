@@ -100,7 +100,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "destructive delete"}}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -123,7 +123,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -148,7 +148,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", nil)
 	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -167,7 +167,7 @@ func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -186,7 +186,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: nil}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -203,7 +203,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, &feature.InMemory{}, testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, &feature.InMemory{}, testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -222,7 +222,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest}, modelConfig)
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, nil, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)

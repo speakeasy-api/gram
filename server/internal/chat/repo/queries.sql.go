@@ -28,6 +28,32 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
+const assistantExistsInProject = `-- name: AssistantExistsInProject :one
+SELECT EXISTS (
+  SELECT 1 FROM assistants
+  WHERE id = $1
+    AND project_id = $2
+    AND deleted IS FALSE
+) AS assistant_exists
+`
+
+type AssistantExistsInProjectParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Reports whether an undeleted assistant with this id exists in the given
+// project. Gates setup-thread linking so a client-supplied assistant id that
+// belongs to another project can never create a cross-project
+// assistant_threads row (the FK alone only proves the assistant exists
+// *somewhere*, not that it belongs to the caller's project).
+func (q *Queries) AssistantExistsInProject(ctx context.Context, arg AssistantExistsInProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, assistantExistsInProject, arg.AssistantID, arg.ProjectID)
+	var assistant_exists bool
+	err := row.Scan(&assistant_exists)
+	return assistant_exists, err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -90,29 +116,36 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = $8::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND ($9::text = '' OR at.source_kind = $9::text)
+          AND ($10::text = '' OR at.source_kind <> $10::text)
       )
     )
     AND (
-      $9::text = ''
-      OR ($9::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($9::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $11::text = ''
+      OR ($11::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($11::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $10::text = ''
-      OR ua.account_type = $10::text
+      $12::text = ''
+      OR ua.account_type = $12::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $10::text = 'team'
+        $12::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $11::int < 0
-      OR COALESCE(rc.cnt, 0) >= $11::int
+      $13::int < 0
+      OR COALESCE(rc.cnt, 0) >= $13::int
     )
     AND (
-      coalesce(cardinality($12::text[]), 0) = 0
+      coalesce(cardinality($14::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -121,7 +154,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($12::text[])
+      ) = ANY ($14::text[])
     )
 ),
 chat_activity AS (
@@ -139,18 +172,20 @@ WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
 `
 
 type CountChatsParams struct {
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
-	ProjectID      uuid.UUID
-	ExternalUserID interface{}
-	UserID         interface{}
-	Pinned         string
-	Search         interface{}
-	AssistantID    interface{}
-	HasRiskFilter  string
-	AccountType    string
-	MinRiskScore   int32
-	Sources        []string
+	FromTime          pgtype.Timestamptz
+	ToTime            pgtype.Timestamptz
+	ProjectID         uuid.UUID
+	ExternalUserID    interface{}
+	UserID            interface{}
+	Pinned            string
+	Search            interface{}
+	AssistantID       interface{}
+	SourceKind        string
+	ExcludeSourceKind string
+	HasRiskFilter     string
+	AccountType       string
+	MinRiskScore      int32
+	Sources           []string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -166,6 +201,8 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
+		arg.SourceKind,
+		arg.ExcludeSourceKind,
 		arg.HasRiskFilter,
 		arg.AccountType,
 		arg.MinRiskScore,
@@ -1602,29 +1639,36 @@ candidate_chats AS (
         WHERE at.chat_id = c.id
           AND at.assistant_id = $6::uuid
           AND at.deleted IS FALSE
+          -- Optional source-kind dimension so setup/onboarding and runtime
+          -- threads for the same assistant don't pollute each other's listing.
+          -- @source_kind keeps only threads of that kind (onboarding passes
+          -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
+          -- views pass 'setup'). Empty string on either disables that side.
+          AND ($7::text = '' OR at.source_kind = $7::text)
+          AND ($8::text = '' OR at.source_kind <> $8::text)
       )
     )
     AND (
-      $7::text = ''
-      OR ($7::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($7::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $9::text = ''
+      OR ($9::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($9::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $8::text = ''
-      OR ua.account_type = $8::text
+      $10::text = ''
+      OR ua.account_type = $10::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $8::text = 'team'
+        $10::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $9::int < 0
-      OR COALESCE(rc.cnt, 0) >= $9::int
+      $11::int < 0
+      OR COALESCE(rc.cnt, 0) >= $11::int
     )
     AND (
-      coalesce(cardinality($10::text[]), 0) = 0
+      coalesce(cardinality($12::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -1633,7 +1677,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($10::text[])
+      ) = ANY ($12::text[])
     )
 ),
 chat_stats AS (
@@ -1659,8 +1703,8 @@ filtered_chats AS (
     cc.account_type
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($11::timestamptz IS NULL OR cs.last_message_timestamp >= $11)
-    AND ($12::timestamptz IS NULL OR cs.last_message_timestamp <= $12)
+  WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
+    AND ($14::timestamptz IS NULL OR cs.last_message_timestamp <= $14)
 ),
 limited_chats AS (
   SELECT
@@ -1677,14 +1721,14 @@ limited_chats AS (
     fc.account_type
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $13 = 'last_message_timestamp' AND $14 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $13 = 'last_message_timestamp' AND $14 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $13 = 'num_messages' AND $14 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $13 = 'num_messages' AND $14 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $15 = 'num_messages' AND $16 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $15 = 'num_messages' AND $16 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $16
-  OFFSET $15
+  LIMIT $18
+  OFFSET $17
 )
 SELECT
   lc.id,
@@ -1702,22 +1746,24 @@ FROM limited_chats lc
 `
 
 type ListChatsParams struct {
-	ProjectID      uuid.UUID
-	ExternalUserID interface{}
-	UserID         interface{}
-	Pinned         string
-	Search         interface{}
-	AssistantID    interface{}
-	HasRiskFilter  string
-	AccountType    string
-	MinRiskScore   int32
-	Sources        []string
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
-	SortBy         interface{}
-	SortOrder      interface{}
-	PageOffset     int32
-	PageLimit      int32
+	ProjectID         uuid.UUID
+	ExternalUserID    interface{}
+	UserID            interface{}
+	Pinned            string
+	Search            interface{}
+	AssistantID       interface{}
+	SourceKind        string
+	ExcludeSourceKind string
+	HasRiskFilter     string
+	AccountType       string
+	MinRiskScore      int32
+	Sources           []string
+	FromTime          pgtype.Timestamptz
+	ToTime            pgtype.Timestamptz
+	SortBy            interface{}
+	SortOrder         interface{}
+	PageOffset        int32
+	PageLimit         int32
 }
 
 type ListChatsRow struct {
@@ -1746,6 +1792,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
+		arg.SourceKind,
+		arg.ExcludeSourceKind,
 		arg.HasRiskFilter,
 		arg.AccountType,
 		arg.MinRiskScore,
@@ -2698,6 +2746,58 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 		arg.Title,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertSetupAssistantThread = `-- name: UpsertSetupAssistantThread :one
+INSERT INTO assistant_threads (
+  assistant_id,
+  project_id,
+  correlation_id,
+  chat_id,
+  source_kind
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  'setup'
+)
+ON CONFLICT (project_id, assistant_id, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertSetupAssistantThreadParams struct {
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+}
+
+// Links a client-side setup/onboarding chat to its assistant so the chat is
+// listable (chat.list?assistant_id=) and URL-addressable like runtime threads.
+// Mirrors the runtime UpsertAssistantThread idempotency (ON CONFLICT on
+// project_id/assistant_id/correlation_id). Fixed source_kind='setup' marks the
+// row as a client-driven onboarding thread: it enqueues no runtime events, so
+// the active-thread accounting excludes 'setup' and it never consumes
+// max_concurrency or a warm-pool slot. Unlike the runtime upsert this does NOT
+// refresh last_event_at on conflict, but that is NOT a second safety net: a
+// setup row's last_event_at defaults to clock_timestamp() at insert, so it is
+// recent and falls inside the warm window like any live thread. The
+// source_kind <> 'setup' predicate in CountActiveAssistantThreads is therefore
+// the SOLE guard keeping setup threads out of concurrency/warm accounting — if
+// that filter regressed, setup threads would be counted.
+func (q *Queries) UpsertSetupAssistantThread(ctx context.Context, arg UpsertSetupAssistantThreadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertSetupAssistantThread,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
