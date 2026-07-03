@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 type SdkClient = ReturnType<typeof useSdkClient>;
 
-export const DEFAULT_ENDPOINT_FAILED_MESSAGE =
+const DEFAULT_ENDPOINT_FAILED_MESSAGE =
   "MCP server created, but the default endpoint failed. Add one from the server page.";
 
 // Create the default MCP endpoint for a freshly created server. Slugs are
