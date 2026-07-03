@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
@@ -411,6 +412,16 @@ export function CostsExplorer(): JSX.Element {
   });
 
   const rows = data?.table ?? [];
+
+  // The view's billing mode drives whether cost reads as real spend or an
+  // estimate: confidently "metered" only when every row in the view is metered.
+  const viewBillingMode = useMemo(() => {
+    const modes = new Set<string>();
+    for (const r of data?.table ?? []) {
+      for (const m of r.dimensionValues?.["billing_mode"] ?? []) modes.add(m);
+    }
+    return resolveScopeBillingMode([...modes]);
+  }, [data]);
 
   // Attribution breakdowns hide the "" group — it's spend where the attribute
   // is not applicable ("not included"), not an "(unset)" slice worth drilling.
@@ -873,6 +884,7 @@ export function CostsExplorer(): JSX.Element {
       onDrill={drillIntoDim}
       onOpenSession={setOpenChatId}
       loading={loadingSlice}
+      billingMode={viewBillingMode}
     />
   );
 
@@ -931,6 +943,7 @@ export function CostsExplorer(): JSX.Element {
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
         rows={visibleRows}
+        billingMode={viewBillingMode}
         onDrill={drillInto}
         tableOverride={
           sessionsMode ? (
@@ -940,6 +953,7 @@ export function CostsExplorer(): JSX.Element {
               isError={sessionsError}
               onOpen={setOpenChatId}
               hiddenColumns={hiddenSessionColumns}
+              billingMode={viewBillingMode}
             />
           ) : undefined
         }

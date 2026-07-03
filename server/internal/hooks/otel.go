@@ -73,18 +73,30 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// batch already attributed this session, reuse the cached result: the hot
 		// ingest path then does no Postgres work and only the cheap per-row
 		// ClickHouse stamping below runs each batch.
+		//
+		// Exception: re-attribute when this batch carries an identity field the
+		// cached attribution lacks. A collector can split a session's records so a
+		// later batch is the first to carry the work email or provider org id;
+		// short-circuiting there would freeze a session first seen without an email
+		// as personal and never persist the late-arriving email / external_org_id
+		// or teach the device bridge (DNO-360).
 		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil && cached.UserAccountID != "" {
+		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+			cached.UserAccountID != "" && !sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
 		}
 
+		// Merge this batch's identity over anything an earlier (incomplete) batch
+		// cached, so a session split across batches attributes on the union of its
+		// identity rather than only the fields this single batch happened to carry.
+		userEmail := conv.Default(session.UserEmail, cached.UserEmail)
 		userID := ""
-		if session.UserEmail != "" {
-			lookup := conv.NormalizeEmail(session.UserEmail)
+		if userEmail != "" {
+			lookup := conv.NormalizeEmail(userEmail)
 			id, ok := userIDByEmail[lookup]
 			if !ok {
-				id = s.resolveUserByEmail(ctx, session.UserEmail, orgID)
+				id = s.resolveUserByEmail(ctx, userEmail, orgID)
 				userIDByEmail[lookup] = id
 			}
 			userID = id
@@ -92,15 +104,16 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 		completeMetadata := SessionMetadata{
 			SessionID:           session.SessionID,
-			ServiceName:         session.ServiceName,
-			UserEmail:           session.UserEmail,
+			ServiceName:         conv.Default(session.ServiceName, cached.ServiceName),
+			UserEmail:           userEmail,
 			UserID:              userID,
 			Provider:            providerAnthropic,
-			ExternalOrgID:       session.ExternalOrgID,
-			ExternalAccountUUID: session.ExternalAccountUUID,
-			ExternalAccountID:   session.ExternalAccountID,
-			DeviceID:            session.DeviceID,
+			ExternalOrgID:       conv.Default(session.ExternalOrgID, cached.ExternalOrgID),
+			ExternalAccountUUID: conv.Default(session.ExternalAccountUUID, cached.ExternalAccountUUID),
+			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
+			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
 			AccountType:         "",
+			BillingMode:         "",
 			UserAccountID:       "",
 			GramOrgID:           orgID,
 			ProjectID:           projectID,
@@ -150,6 +163,25 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	}
 
 	return nil
+}
+
+// sessionEnrichesAttribution reports whether this OTEL batch carries an identity
+// field the cached attribution is missing. Claude normally emits every identity
+// attribute on a session's first batch, but an OpenTelemetry Collector can
+// re-batch records so a later batch is the first to carry e.g. the work email or
+// provider org id. When that happens the once-per-session fast path must yield so
+// re-running attribution can reclassify a session first seen as personal into
+// team, persist the late-arriving email / external_org_id, and teach the device
+// bridge. In the common case the batch only repeats identity already captured and
+// this returns false, preserving the fast path. Note this keys on raw field
+// presence, not email resolution: a batch that merely repeats an already-seen
+// email whose membership changed does not re-trigger (that heals on the next
+// session, by design).
+func sessionEnrichesAttribution(incoming claudeLogMetadata, cached SessionMetadata) bool {
+	return (incoming.UserEmail != "" && cached.UserEmail == "") ||
+		(incoming.ExternalOrgID != "" && cached.ExternalOrgID == "") ||
+		(incoming.ExternalAccountID != "" && cached.ExternalAccountID == "") ||
+		(incoming.DeviceID != "" && cached.DeviceID == "")
 }
 
 type claudeLogMetadata struct {

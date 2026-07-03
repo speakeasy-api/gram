@@ -89,6 +89,16 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:         "provider",
 		kind:            attributeDimScalar,
 	},
+	"billing_mode": {
+		// How the account is billed: 'metered' (pay-per-token; cost is real spend)
+		// | 'flat_rate' (subscription seat; cost is an estimate) | 'unknown' | ''.
+		// Lets the cost view separate real spend from a token×API-rate estimate.
+		// Materialized on telemetry_logs and a sort-key dimension on
+		// attribute_metrics_summaries, so the column name is identical on both paths.
+		aggregateColumn: "billing_mode",
+		rawExpr:         "billing_mode",
+		kind:            attributeDimScalar,
+	},
 	"query_source": {
 		aggregateColumn: "query_source",
 		rawExpr:         "toString(attributes.query_source)",

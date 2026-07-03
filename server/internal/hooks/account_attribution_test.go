@@ -291,6 +291,90 @@ func TestLogs_AttributesOncePerSession(t *testing.T) {
 	require.Equal(t, accountTypePersonal, second.AccountType.String)
 }
 
+// TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches covers a session
+// whose records a collector split across batches: the first batch carrying the
+// account UUID lacks the work email (so it classifies personal), and a later
+// batch is the first to carry the resolving email. The later batch must re-run
+// attribution — reclassifying to team, persisting the email/org, and teaching the
+// device bridge — rather than short-circuiting on the cached personal result.
+func TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "split-employee", "split@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const (
+		sessionID   = "split-session"
+		accountUUID = "acct-split"
+		extOrgID    = "split-ent-org"
+		deviceID    = "device-split"
+	)
+
+	// First batch: account UUID + device but NO work email -> classified personal.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.account_uuid", accountUUID),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	first, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, first.AccountType.String)
+	require.False(t, first.UserID.Valid)
+
+	// Second batch for the SAME session is the first to carry the work email (and
+	// the provider org). Attribution must re-run and reclassify to team.
+	err = ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now.Add(time.Minute))),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", workEmail),
+				strAttr("organization.id", extOrgID),
+				strAttr("user.account_uuid", accountUUID),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	enriched, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, enriched.AccountType.String)
+	require.Equal(t, userID, enriched.UserID.String)
+	require.Equal(t, workEmail, enriched.Email.String)
+	require.Equal(t, extOrgID, enriched.ExternalOrgID.String)
+
+	// The late-arriving team session also taught the device bridge.
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID, Provider: providerAnthropic, DeviceID: deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String)
+}
+
 // TestLogs_StampsAccountAttributionOnTelemetry confirms the account attribution
 // (provider, account_type, external_org_id) lands on the telemetry_logs rows so
 // org-level usage dashboards can split by personal vs team account.
@@ -354,7 +438,7 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	var chat chatRepo.Chat
+	var chat chatRepo.GetChatRow
 	require.Eventually(t, func() bool {
 		var err error
 		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatID)
@@ -478,13 +562,66 @@ func TestStampAccountAttribution_StampsAllNonEmptyFields(t *testing.T) {
 		Provider:      providerAnthropic,
 		ExternalOrgID: "ext-org-1",
 		AccountType:   accountTypePersonal,
+		BillingMode:   "flat_rate",
 		DeviceID:      "device-1",
 	})
 
 	require.Equal(t, providerAnthropic, attrs[attr.ProviderKey])
 	require.Equal(t, "ext-org-1", attrs[attr.ExternalOrgIDKey])
 	require.Equal(t, accountTypePersonal, attrs[attr.AccountTypeKey])
+	require.Equal(t, "flat_rate", attrs[attr.BillingModeKey])
 	require.Equal(t, "device-1", attrs[attr.DeviceIDKey])
+}
+
+// TestResolveBillingMode_AccountOverrideWins verifies the per-account override is
+// authoritative and short-circuits the org-level lookup.
+func TestResolveBillingMode_AccountOverrideWins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	meta := &SessionMetadata{
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		Provider:      providerAnthropic,
+		ExternalOrgID: "ent-org",
+	}
+	mode, err := ti.service.resolveBillingMode(ctx, meta, "metered")
+	require.NoError(t, err)
+	require.Equal(t, "metered", mode)
+}
+
+// TestResolveBillingMode_EmptyWhenNoDeclaration verifies that with no account
+// override and no org-level declaration, resolution returns empty (treated as
+// unknown upstream — never assume real cost). Exercises the ErrNoRows path of
+// GetProviderOrgBillingMode against a real DB.
+func TestResolveBillingMode_EmptyWhenNoDeclaration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	meta := &SessionMetadata{
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		Provider:      providerAnthropic,
+		ExternalOrgID: "ent-org",
+	}
+	mode, err := ti.service.resolveBillingMode(ctx, meta, "")
+	require.NoError(t, err)
+	require.Empty(t, mode)
+}
+
+// TestProviderBillingConfigProvider verifies the mapping from a session provider
+// tag to the ai_integration_configs provider identifier where org-level billing
+// modes are declared. Claude sessions tag 'anthropic' but the config lives under
+// 'anthropic_compliance'; other providers map to themselves.
+func TestProviderBillingConfigProvider(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "anthropic_compliance", providerBillingConfigProvider(providerAnthropic))
+	require.Equal(t, providerCursor, providerBillingConfigProvider(providerCursor))
+	require.Equal(t, providerOpenAI, providerBillingConfigProvider(providerOpenAI))
+	require.Empty(t, providerBillingConfigProvider(""))
 }
 
 // TestStampAccountAttribution_SkipsEmptyFields verifies an unclassified or
@@ -506,5 +643,6 @@ func TestStampAccountAttribution_SkipsEmptyFields(t *testing.T) {
 	require.Equal(t, providerOpenAI, partial[attr.ProviderKey])
 	require.NotContains(t, partial, attr.AccountTypeKey)
 	require.NotContains(t, partial, attr.ExternalOrgIDKey)
+	require.NotContains(t, partial, attr.BillingModeKey)
 	require.NotContains(t, partial, attr.DeviceIDKey)
 }

@@ -17,7 +17,7 @@ import {
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { RefreshCw, Share2 } from "lucide-react";
+import { History, RefreshCw, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -120,10 +120,26 @@ export default function RiskEvents(): JSX.Element {
     return m;
   }, [policies]);
 
+  // The policy currently selected in the filter, if any. When it's disabled the
+  // list still returns its historical findings (the backend drops the
+  // enabled-only filter for explicit policy selections), so we surface a notice
+  // that the user is viewing data for an inactive policy.
+  const selectedPolicy = useMemo(
+    () => policies.find((p) => p.id === policyFilter),
+    [policies, policyFilter],
+  );
+  const viewingInactivePolicy =
+    selectedPolicy != null && selectedPolicy.enabled === false;
+
   // Page-supplied option lists for the schema's select/text dimensions.
+  // Disabled policies stay selectable — they hold historical findings — but are
+  // labelled "(inactive)" so the distinction is clear in the dropdown.
   const filterOptions = useMemo(
     () => ({
-      policy_id: policies.map((p) => ({ label: p.name, value: p.id })),
+      policy_id: policies.map((p) => ({
+        label: p.enabled === false ? `${p.name} (inactive)` : p.name,
+        value: p.id,
+      })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
     }),
     [policies, ruleSuggestions],
@@ -232,11 +248,16 @@ export default function RiskEvents(): JSX.Element {
           </Page.Toolbar>
         }
         status={
-          resultsQuery.isFetching && results.length > 0 ? (
-            <div className="bg-primary/20 h-1 shrink-0">
-              <div className="bg-primary h-full animate-pulse" />
-            </div>
-          ) : null
+          <>
+            {viewingInactivePolicy ? (
+              <InactivePolicyNotice policyName={selectedPolicy?.name} />
+            ) : null}
+            {resultsQuery.isFetching && results.length > 0 ? (
+              <div className="bg-primary/20 h-1 shrink-0">
+                <div className="bg-primary h-full animate-pulse" />
+              </div>
+            ) : null}
+          </>
         }
         header={
           <div className="min-w-[1120px]">
@@ -279,6 +300,33 @@ export default function RiskEvents(): JSX.Element {
         />
       </LogWorkbench>
     </RevealAllProvider>
+  );
+}
+
+// Shown when the active policy filter points at a disabled ("turned off")
+// policy. Those policies no longer produce new findings, so the list is purely
+// historical — make that explicit rather than leaving users to assume the data
+// is current.
+function InactivePolicyNotice({
+  policyName,
+}: {
+  policyName: string | undefined;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-8 py-2 text-sm text-amber-700 dark:text-amber-400">
+      <History className="size-4 shrink-0" />
+      <span>
+        {policyName ? (
+          <>
+            <span className="font-medium">{policyName}</span> is no longer
+            active.
+          </>
+        ) : (
+          "This policy is no longer active."
+        )}{" "}
+        You're viewing historical findings from when it was enabled.
+      </span>
+    </div>
   );
 }
 

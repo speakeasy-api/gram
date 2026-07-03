@@ -14,11 +14,11 @@
       html,
       body {
         --font-diatype:
-          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
+          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
         --font-diatype-mono:
-          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
+          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+          monospace;
 
         --color-base-white: hsl(0 0% 100%);
         --color-base-black: hsl(0 0% 0%);
@@ -81,7 +81,7 @@
         }
       }
 
-      .consent-container {
+      .auth-consent-container {
         background: var(--bg-surface-primary-default);
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
@@ -324,18 +324,16 @@
   </head>
   <body>
     <main class="main">
-      <div class="consent-container">
+      <div class="auth-consent-container">
         <div class="header">
           {{if .FirstParty}}
           <h1>Connect {{.MCPSlug}}</h1>
-          <p>
-            Link the services this MCP server needs to access on your behalf.
-          </p>
+          <p>Link the services this MCP server needs to access on your behalf.</p>
           {{else}}
           <h1>Authorize {{.ClientName}}</h1>
           <p>
-            <strong>{{.ClientName}}</strong> is requesting access to the MCP
-            server <strong>{{.MCPSlug}}</strong>
+            <strong>{{.ClientName}}</strong> is requesting access to the MCP server
+            <strong>{{.MCPSlug}}</strong>
           </p>
           {{end}}
         </div>
@@ -373,19 +371,11 @@
           </div>
           {{end}}
         </div>
-        {{end}}
-
-        {{if .FirstParty}}
-        <p class="info">
-          When you've connected the services above, you can close this tab.
-        </p>
+        {{end}} {{if .FirstParty}}
+        <p class="info">When you've connected the services above, you can close this tab.</p>
         {{else}}
         <div class="actions">
-          <form
-            method="POST"
-            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
-            data-approve-form
-          >
+          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect" data-approve-form>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
@@ -403,12 +393,7 @@
           <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-            <button
-              type="submit"
-              name="action"
-              value="deny"
-              class="btn btn-secondary"
-            >
+            <button type="submit" name="action" value="deny" class="btn btn-secondary">
               Cancel
             </button>
           </form>

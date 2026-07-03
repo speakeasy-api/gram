@@ -73,25 +73,6 @@ export class Policies extends ClientSDK {
   }
 
   /**
-   * listRiskPolicies risk
-   *
-   * @remarks
-   * List all risk analysis policies for the current project.
-   */
-  async list(
-    request?: operations.ListRiskPoliciesRequest | undefined,
-    security?: operations.ListRiskPoliciesSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListRiskPoliciesResult> {
-    return unwrapAsync(riskPoliciesList(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * getRiskPolicyStatus risk
    *
    * @remarks
@@ -103,6 +84,25 @@ export class Policies extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RiskPolicyStatus> {
     return unwrapAsync(riskPoliciesStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskPolicies risk
+   *
+   * @remarks
+   * List all risk analysis policies for the current project.
+   */
+  async list(
+    request?: operations.ListRiskPoliciesRequest | undefined,
+    security?: operations.ListRiskPoliciesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListRiskPoliciesResult> {
+    return unwrapAsync(riskPoliciesList(
       this,
       request,
       security,

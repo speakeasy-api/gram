@@ -82,21 +82,21 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"CreateRiskPolicy", "POST", "/rpc/risk.policies.create"},
-			{"ListRiskPolicies", "GET", "/rpc/risk.policies.list"},
-			{"GetRiskPolicy", "GET", "/rpc/risk.policies.get"},
-			{"UpdateRiskPolicy", "PUT", "/rpc/risk.policies.update"},
-			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.policies.delete"},
-			{"ListRiskResults", "GET", "/rpc/risk.results.list"},
-			{"ListRiskResultsForAgent", "GET", "/rpc/risk.results.listForAgent"},
-			{"UnmaskRiskResult", "POST", "/rpc/risk.results.unmask"},
-			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
-			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
-			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
-			{"CompileExpr", "GET", "/rpc/risk.compileExpr"},
-			{"GetRiskUserBreakdown", "GET", "/rpc/risk.overview.userBreakdown"},
-			{"GetRiskRuleBreakdown", "GET", "/rpc/risk.overview.rules"},
-			{"GetRiskPolicyStatus", "GET", "/rpc/risk.policies.status"},
+			{"CreateRiskPolicy", "POST", "/rpc/risk.createPolicy"},
+			{"ListRiskPolicies", "GET", "/rpc/risk.listPolicies"},
+			{"GetRiskPolicy", "GET", "/rpc/risk.getPolicy"},
+			{"UpdateRiskPolicy", "PUT", "/rpc/risk.updatePolicy"},
+			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.deletePolicy"},
+			{"ListRiskResults", "GET", "/rpc/risk.listResults"},
+			{"ListRiskResultsForAgent", "GET", "/rpc/risk.listResultsForAgent"},
+			{"UnmaskRiskResult", "POST", "/rpc/risk.unmaskResult"},
+			{"ListRiskResultsByChat", "GET", "/rpc/risk.listResultsByChat"},
+			{"GetRiskOverview", "GET", "/rpc/risk.getOverview"},
+			{"ListRiskCategories", "GET", "/rpc/risk.listCategories"},
+			{"CompileExpr", "GET", "/rpc/risk.compileCELExpression"},
+			{"GetRiskUserBreakdown", "GET", "/rpc/risk.getUserBreakdown"},
+			{"GetRiskRuleBreakdown", "GET", "/rpc/risk.getRuleBreakdown"},
+			{"GetRiskPolicyStatus", "GET", "/rpc/risk.getPolicyStatus"},
 			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.createPolicyBypassRequest"},
 			{"GetRiskBlock", "GET", "/rpc/risk.getBlock"},
 			{"SubmitRiskBlockFeedback", "PUT", "/rpc/risk.submitBlockFeedback"},
@@ -104,18 +104,18 @@ func New(
 			{"ApproveRiskPolicyBypassRequest", "POST", "/rpc/risk.approvePolicyBypassRequest"},
 			{"DenyRiskPolicyBypassRequest", "POST", "/rpc/risk.denyPolicyBypassRequest"},
 			{"RevokeRiskPolicyBypassRequest", "POST", "/rpc/risk.revokePolicyBypassRequest"},
-			{"TriggerRiskAnalysis", "POST", "/rpc/risk.policies.trigger"},
-			{"CreateCustomDetectionRule", "POST", "/rpc/risk.customRules.create"},
-			{"ListCustomDetectionRules", "GET", "/rpc/risk.customRules.list"},
-			{"GetCustomDetectionRule", "GET", "/rpc/risk.customRules.get"},
-			{"UpdateCustomDetectionRule", "POST", "/rpc/risk.customRules.update"},
-			{"DeleteCustomDetectionRule", "POST", "/rpc/risk.customRules.delete"},
+			{"TriggerRiskAnalysis", "POST", "/rpc/risk.triggerPolicy"},
+			{"CreateCustomDetectionRule", "POST", "/rpc/risk.createCustomRule"},
+			{"ListCustomDetectionRules", "GET", "/rpc/risk.listCustomRules"},
+			{"GetCustomDetectionRule", "GET", "/rpc/risk.getCustomRule"},
+			{"UpdateCustomDetectionRule", "POST", "/rpc/risk.updateCustomRule"},
+			{"DeleteCustomDetectionRule", "POST", "/rpc/risk.deleteCustomRule"},
 			{"ListRiskExclusions", "GET", "/rpc/risk.listExclusions"},
 			{"CreateRiskExclusion", "POST", "/rpc/risk.createExclusions"},
 			{"UpdateRiskExclusion", "PUT", "/rpc/risk.updateExclusions"},
 			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
-			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.customRules.suggest"},
-			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
+			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.suggestCustomRules"},
+			{"TestDetectionRule", "POST", "/rpc/risk.testRule"},
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
@@ -250,7 +250,7 @@ func MountCreateRiskPolicyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policies.create", f)
+	mux.Handle("POST", "/rpc/risk.createPolicy", f)
 }
 
 // NewCreateRiskPolicyHandler creates a HTTP handler which loads the HTTP
@@ -303,7 +303,7 @@ func MountListRiskPoliciesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.policies.list", f)
+	mux.Handle("GET", "/rpc/risk.listPolicies", f)
 }
 
 // NewListRiskPoliciesHandler creates a HTTP handler which loads the HTTP
@@ -356,7 +356,7 @@ func MountGetRiskPolicyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.policies.get", f)
+	mux.Handle("GET", "/rpc/risk.getPolicy", f)
 }
 
 // NewGetRiskPolicyHandler creates a HTTP handler which loads the HTTP request
@@ -409,7 +409,7 @@ func MountUpdateRiskPolicyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("PUT", "/rpc/risk.policies.update", f)
+	mux.Handle("PUT", "/rpc/risk.updatePolicy", f)
 }
 
 // NewUpdateRiskPolicyHandler creates a HTTP handler which loads the HTTP
@@ -462,7 +462,7 @@ func MountDeleteRiskPolicyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/risk.policies.delete", f)
+	mux.Handle("DELETE", "/rpc/risk.deletePolicy", f)
 }
 
 // NewDeleteRiskPolicyHandler creates a HTTP handler which loads the HTTP
@@ -515,7 +515,7 @@ func MountListRiskResultsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.results.list", f)
+	mux.Handle("GET", "/rpc/risk.listResults", f)
 }
 
 // NewListRiskResultsHandler creates a HTTP handler which loads the HTTP
@@ -568,7 +568,7 @@ func MountListRiskResultsForAgentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.results.listForAgent", f)
+	mux.Handle("GET", "/rpc/risk.listResultsForAgent", f)
 }
 
 // NewListRiskResultsForAgentHandler creates a HTTP handler which loads the
@@ -621,7 +621,7 @@ func MountUnmaskRiskResultHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.results.unmask", f)
+	mux.Handle("POST", "/rpc/risk.unmaskResult", f)
 }
 
 // NewUnmaskRiskResultHandler creates a HTTP handler which loads the HTTP
@@ -674,7 +674,7 @@ func MountListRiskResultsByChatHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.results.byChat", f)
+	mux.Handle("GET", "/rpc/risk.listResultsByChat", f)
 }
 
 // NewListRiskResultsByChatHandler creates a HTTP handler which loads the HTTP
@@ -727,7 +727,7 @@ func MountGetRiskOverviewHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.overview.get", f)
+	mux.Handle("GET", "/rpc/risk.getOverview", f)
 }
 
 // NewGetRiskOverviewHandler creates a HTTP handler which loads the HTTP
@@ -780,7 +780,7 @@ func MountListRiskCategoriesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.categories", f)
+	mux.Handle("GET", "/rpc/risk.listCategories", f)
 }
 
 // NewListRiskCategoriesHandler creates a HTTP handler which loads the HTTP
@@ -833,7 +833,7 @@ func MountCompileExprHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.compileExpr", f)
+	mux.Handle("GET", "/rpc/risk.compileCELExpression", f)
 }
 
 // NewCompileExprHandler creates a HTTP handler which loads the HTTP request
@@ -886,7 +886,7 @@ func MountGetRiskUserBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.overview.userBreakdown", f)
+	mux.Handle("GET", "/rpc/risk.getUserBreakdown", f)
 }
 
 // NewGetRiskUserBreakdownHandler creates a HTTP handler which loads the HTTP
@@ -939,7 +939,7 @@ func MountGetRiskRuleBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.overview.rules", f)
+	mux.Handle("GET", "/rpc/risk.getRuleBreakdown", f)
 }
 
 // NewGetRiskRuleBreakdownHandler creates a HTTP handler which loads the HTTP
@@ -992,7 +992,7 @@ func MountGetRiskPolicyStatusHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.policies.status", f)
+	mux.Handle("GET", "/rpc/risk.getPolicyStatus", f)
 }
 
 // NewGetRiskPolicyStatusHandler creates a HTTP handler which loads the HTTP
@@ -1421,7 +1421,7 @@ func MountTriggerRiskAnalysisHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policies.trigger", f)
+	mux.Handle("POST", "/rpc/risk.triggerPolicy", f)
 }
 
 // NewTriggerRiskAnalysisHandler creates a HTTP handler which loads the HTTP
@@ -1474,7 +1474,7 @@ func MountCreateCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.customRules.create", f)
+	mux.Handle("POST", "/rpc/risk.createCustomRule", f)
 }
 
 // NewCreateCustomDetectionRuleHandler creates a HTTP handler which loads the
@@ -1528,7 +1528,7 @@ func MountListCustomDetectionRulesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.customRules.list", f)
+	mux.Handle("GET", "/rpc/risk.listCustomRules", f)
 }
 
 // NewListCustomDetectionRulesHandler creates a HTTP handler which loads the
@@ -1582,7 +1582,7 @@ func MountGetCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.customRules.get", f)
+	mux.Handle("GET", "/rpc/risk.getCustomRule", f)
 }
 
 // NewGetCustomDetectionRuleHandler creates a HTTP handler which loads the HTTP
@@ -1635,7 +1635,7 @@ func MountUpdateCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.customRules.update", f)
+	mux.Handle("POST", "/rpc/risk.updateCustomRule", f)
 }
 
 // NewUpdateCustomDetectionRuleHandler creates a HTTP handler which loads the
@@ -1689,7 +1689,7 @@ func MountDeleteCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.customRules.delete", f)
+	mux.Handle("POST", "/rpc/risk.deleteCustomRule", f)
 }
 
 // NewDeleteCustomDetectionRuleHandler creates a HTTP handler which loads the
@@ -1955,7 +1955,7 @@ func MountSuggestCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.customRules.suggest", f)
+	mux.Handle("POST", "/rpc/risk.suggestCustomRules", f)
 }
 
 // NewSuggestCustomDetectionRuleHandler creates a HTTP handler which loads the
@@ -2009,7 +2009,7 @@ func MountTestDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.rules.test", f)
+	mux.Handle("POST", "/rpc/risk.testRule", f)
 }
 
 // NewTestDetectionRuleHandler creates a HTTP handler which loads the HTTP

@@ -3526,6 +3526,57 @@ CREATE INDEX IF NOT EXISTS risk_policy_bypass_requests_project_status_updated_id
 ON risk_policy_bypass_requests (project_id, status, updated_at DESC)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS risk_policy_challenges (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  risk_policy_id uuid NOT NULL,
+
+  -- The user the warn policy fired for (the one who must acknowledge).
+  user_id TEXT NOT NULL,
+  -- Tool the challenge applies to; NULL for a non-tool (e.g. prompt) challenge.
+  tool_name TEXT,
+
+  status TEXT NOT NULL DEFAULT 'challenged',
+
+  -- Log-safe context for display/audit ONLY. The raw matched value
+  -- (secret/PII) is NEVER stored here — it lives only in the ephemeral
+  -- agent-facing warning message.
+  policy_name TEXT,
+  entity TEXT,
+  rule_id TEXT,
+
+  challenged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  acknowledged_at timestamptz,
+  -- When an acknowledgement stops suppressing re-challenge (the "remember" window).
+  expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_challenges_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_challenges_status_check CHECK (status IN ('challenged', 'acknowledged', 'declined')),
+  CONSTRAINT risk_policy_challenges_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_challenges_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_challenges_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE risk_policy_challenges IS 'Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_challenges_current_key
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_status_updated_idx
+ON risk_policy_challenges (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_active_ack_idx
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, expires_at)
+WHERE deleted IS FALSE AND status = 'acknowledged';
+
 CREATE TABLE IF NOT EXISTS tool_call_blocks (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -3626,3 +3677,135 @@ CREATE TABLE IF NOT EXISTS outbox_relays (
 CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
 ON outbox_relays (outbox_id)
 WHERE processed_at IS NULL AND dead_lettered IS FALSE;
+
+-- Sharable records for how to authenticate into an external service, such as
+-- any ambient infrastructure environment or customer-managed product. This is
+-- implemented using the Class Table Inheritance pattern with provider acting
+-- as the discriminator. Each row in this table has exactly one provider subtype
+-- row (e.g. in tables such as aws_iam_credentials, gcp_iam_credentials, etc.).
+-- The canonical `provider` values are defined in this supertype table, while
+-- subtype tables carry a pinned `external_credentials_provider` that
+-- composite-FKs back to (id, provider) to enforce 1:1 semantics across tables.
+-- Support addititional providers by updating the provider check in this table
+-- and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT external_credentials_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_credentials_provider_check CHECK (provider IN ('aws_iam', 'gcp_iam')),
+  CONSTRAINT external_credentials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_credentials_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_credentials_organization_id_idx
+ON external_credentials (organization_id)
+WHERE deleted IS FALSE;
+
+-- AWS credential: AssumeRole+ExternalId | AssumeRoleWithWebIdentity | key-policy grant (mode derived)
+CREATE TABLE IF NOT EXISTS aws_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'aws_iam',
+  assume_role_arn TEXT,
+  external_id TEXT,
+  oidc_audience TEXT,
+  oidc_subject TEXT,
+  sts_region TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT aws_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'aws_iam'),
+  CONSTRAINT aws_iam_credentials_auth_exclusive_check CHECK (num_nonnulls(external_id, oidc_audience) <= 1),
+  CONSTRAINT aws_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- GCP credential: ambient | impersonation | WIF (mode derived); keyless, no SA-JSON
+CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'gcp_iam',
+  impersonate_service_account TEXT,
+  wif_pool_id TEXT,
+  wif_provider_id TEXT,
+  wif_project_number TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT gcp_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'gcp_iam'),
+  CONSTRAINT gcp_iam_credentials_wif_complete_check CHECK (num_nonnulls(wif_pool_id, wif_provider_id, wif_project_number) IN (0, 3)),
+  CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- Sharable records for referencing an externally-managed key, such as KMS key
+-- for signing. This is implemented using the Class Table Inheritance pattern
+-- with `provider` acting as the discriminator. Each row in
+-- this table has exactly one key provider subtype row (e.g. in tables such as
+-- aws_kms_keys, gcp_kms_keys, etc.). The canonical `provider` values are
+-- defined in this supertype table, while subtype tables carry a pinned
+-- `external_keys_provider` that composite-FKs back to (id, provider) to enforce
+-- 1:1 semantics across tables. Support addititional key providers by updating
+-- the provider check in this table and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  external_credential_id uuid NOT NULL,
+  provider TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  name TEXT NOT NULL,
+  -- Reference to the access grant the customer configured on their KMS key: the
+  -- gram-owned cloud identity (GCP service-account email or AWS principal ARN)
+  -- they granted. Set only for the "ambient identity" model, where the customer
+  -- grants gram's own principal directly (AWS KMS key policy / GCP IAM binding)
+  -- instead of gram assuming a customer role; NULL for the assume-role models.
+  -- Kept for audit and drift detection: if gram rotates its own identity, this
+  -- can be compared against the current one to flag a stale grant and prompt a
+  -- re-grant before signing starts failing.
+  customer_grant_reference TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT external_keys_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_keys_provider_check CHECK (provider IN ('aws_kms', 'gcp_kms')),
+  CONSTRAINT external_keys_external_credential_id_fkey FOREIGN KEY (external_credential_id) REFERENCES external_credentials (id),
+  CONSTRAINT external_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_keys_organization_id_idx
+ON external_keys (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS external_keys_external_credential_id_idx
+ON external_keys (external_credential_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS aws_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'aws_kms',
+  key_arn TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT aws_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'aws_kms'),
+  CONSTRAINT aws_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gcp_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'gcp_kms',
+  resource_name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
+  CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);

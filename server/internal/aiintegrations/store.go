@@ -53,6 +53,7 @@ type Config struct {
 	Provider               string
 	ProjectID              uuid.UUID
 	ExternalOrganizationID *string
+	BillingMode            string
 	APIKey                 string
 	Enabled                bool
 	PollWatermarkAt        time.Time
@@ -125,7 +126,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, billingMode *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
@@ -164,6 +165,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
+			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -175,6 +177,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			ProjectID:              projectID,
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			Enabled:                enabled,
+			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -335,6 +338,7 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -360,6 +364,7 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -385,6 +390,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -410,6 +416,7 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        syncRow.PollWatermarkAt.Time,
@@ -454,6 +461,7 @@ func emptyConfig(orgID string, provider string) Config {
 		Provider:               provider,
 		ProjectID:              uuid.Nil,
 		ExternalOrganizationID: nil,
+		BillingMode:            "",
 		APIKey:                 "",
 		Enabled:                false,
 		PollWatermarkAt:        time.Time{},

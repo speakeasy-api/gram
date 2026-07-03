@@ -22,6 +22,9 @@ type UpsertConfigRequestBody struct {
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
 	// Provider organization identifier. Required for anthropic_compliance.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
+	// Free-form; omit to leave the existing value unchanged.
+	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
 	// Whether the integration should be active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -49,6 +52,10 @@ type GetConfigResponseBody struct {
 	// Provider organization identifier. Required for anthropic_compliance; omitted
 	// for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
+	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
+	// 'unknown'. Empty/omitted when not declared.
+	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
 	// Whether the provider integration is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -90,6 +97,10 @@ type UpsertConfigResponseBody struct {
 	// Provider organization identifier. Required for anthropic_compliance; omitted
 	// for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
+	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
+	// 'unknown'. Empty/omitted when not declared.
+	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
 	// Whether the provider integration is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -680,6 +691,7 @@ func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfi
 		Provider:               res.Provider,
 		ProjectID:              res.ProjectID,
 		ExternalOrganizationID: res.ExternalOrganizationID,
+		BillingMode:            res.BillingMode,
 		Enabled:                res.Enabled,
 		HasAPIKey:              res.HasAPIKey,
 		LastPolledAt:           res.LastPolledAt,
@@ -702,6 +714,7 @@ func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *Upser
 		Provider:               res.Provider,
 		ProjectID:              res.ProjectID,
 		ExternalOrganizationID: res.ExternalOrganizationID,
+		BillingMode:            res.BillingMode,
 		Enabled:                res.Enabled,
 		HasAPIKey:              res.HasAPIKey,
 		LastPolledAt:           res.LastPolledAt,
@@ -1157,6 +1170,7 @@ func NewUpsertConfigPayload(body *UpsertConfigRequestBody, apikeyToken *string, 
 		Provider:               *body.Provider,
 		APIKey:                 *body.APIKey,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 	}
 	v.ApikeyToken = apikeyToken

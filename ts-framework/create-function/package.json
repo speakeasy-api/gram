@@ -40,7 +40,7 @@
   "devDependencies": {
     "@gram-ai/functions": "workspace:^",
     "@modelcontextprotocol/sdk": "catalog:",
-    "@types/node": "22.x",
+    "@types/node": "~22.20.0",
     "typescript": "catalog:",
     "zod": "^4"
   }

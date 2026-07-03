@@ -19,6 +19,7 @@ export const Dimension = {
   HookSource: "hook_source",
   AccountType: "account_type",
   Provider: "provider",
+  BillingMode: "billing_mode",
   QuerySource: "query_source",
   SkillName: "skill_name",
   AgentName: "agent_name",

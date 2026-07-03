@@ -27,6 +27,10 @@ export type LastPollStatus = ClosedEnum<typeof LastPollStatus>;
  */
 export type AIIntegrationConfig = {
   /**
+   * How the provider org is billed: 'metered' (pay-per-token; dashboard cost is real spend), 'flat_rate' (subscription seats; cost is an estimate), or 'unknown'. Empty/omitted when not declared.
+   */
+  billingMode?: string | undefined;
+  /**
    * ISO 8601 timestamp when the config was created. Omitted when no config is set.
    */
   createdAt?: Date | undefined;
@@ -95,6 +99,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    billing_mode: z.optional(z.string()),
     created_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -122,6 +127,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "billing_mode": "billingMode",
       "created_at": "createdAt",
       "external_organization_id": "externalOrganizationId",
       "has_api_key": "hasApiKey",

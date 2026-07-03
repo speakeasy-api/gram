@@ -36,25 +36,6 @@ export class Triggers extends ClientSDK {
   }
 
   /**
-   * listTriggerDefinitions triggers
-   *
-   * @remarks
-   * List static trigger definitions available to a project.
-   */
-  async listDefinitions(
-    request?: operations.ListTriggerDefinitionsRequest | undefined,
-    security?: operations.ListTriggerDefinitionsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListTriggerDefinitionsResult> {
-    return unwrapAsync(triggersListDefinitions(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * deleteTriggerInstance triggers
    *
    * @remarks
@@ -104,6 +85,25 @@ export class Triggers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListTriggerInstancesResult> {
     return unwrapAsync(triggersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTriggerDefinitions triggers
+   *
+   * @remarks
+   * List static trigger definitions available to a project.
+   */
+  async listDefinitions(
+    request?: operations.ListTriggerDefinitionsRequest | undefined,
+    security?: operations.ListTriggerDefinitionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListTriggerDefinitionsResult> {
+    return unwrapAsync(triggersListDefinitions(
       this,
       request,
       security,

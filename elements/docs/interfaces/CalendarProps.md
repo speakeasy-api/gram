@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@
 
 ### selected?
 
-> `optional` **selected**: `object`
+> `optional` **selected?**: `object`
 
 Selected date range
 
@@ -24,9 +24,9 @@ Selected date range
 
 ***
 
-### onSelect()?
+### onSelect?
 
-> `optional` **onSelect**: (`range`) => `void`
+> `optional` **onSelect?**: (`range`) => `void`
 
 Called when a date or range is selected
 
@@ -50,7 +50,7 @@ Called when a date or range is selected
 
 ### mode?
 
-> `optional` **mode**: `"range"` \| `"single"`
+> `optional` **mode?**: `"range"` \| `"single"`
 
 Whether range selection is enabled
 
@@ -58,7 +58,7 @@ Whether range selection is enabled
 
 ### minDate?
 
-> `optional` **minDate**: `Date`
+> `optional` **minDate?**: `Date`
 
 Disable dates before this
 
@@ -66,7 +66,7 @@ Disable dates before this
 
 ### maxDate?
 
-> `optional` **maxDate**: `Date`
+> `optional` **maxDate?**: `Date`
 
 Disable dates after this
 
@@ -74,6 +74,6 @@ Disable dates after this
 
 ### className?
 
-> `optional` **className**: `string`
+> `optional` **className?**: `string`
 
 Additional className

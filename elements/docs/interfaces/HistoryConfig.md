@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -39,7 +39,7 @@ false
 
 ### threadListFilters?
 
-> `optional` **threadListFilters**: `Record`\<`string`, `string`\>
+> `optional` **threadListFilters?**: `Record`\<`string`, `string`\>
 
 Extra query parameters forwarded to the thread-list request, used to
 filter which conversations are shown. Opaque to Elements — the consumer
@@ -50,7 +50,7 @@ omitted, all of the caller's chats are listed.
 
 ### deferThreadIdMinting?
 
-> `optional` **deferThreadIdMinting**: `boolean`
+> `optional` **deferThreadIdMinting?**: `boolean`
 
 Let the backend own chat-id creation. When true, a brand-new thread does not
 get a client-generated id; instead the transport assigns the id (e.g. one
@@ -59,9 +59,9 @@ the server minted on the first send, reported via the transport context's
 
 ***
 
-### transformChatMessage()?
+### transformChatMessage?
 
-> `optional` **transformChatMessage**: (`message`) => [`GramChatMessage`](GramChatMessage.md) \| `null`
+> `optional` **transformChatMessage?**: (`message`) => [`GramChatMessage`](GramChatMessage.md) \| `null`
 
 Optional hook to transform or drop each persisted message before it is
 rendered from history. Return a (possibly rewritten) message to render it,
@@ -97,7 +97,7 @@ transformChatMessage: (msg) => {
 
 ### showThreadList?
 
-> `optional` **showThreadList**: `boolean`
+> `optional` **showThreadList?**: `boolean`
 
 Whether to show the thread list sidebar/panel.
 Only applicable for widget and sidecar variants.
@@ -113,7 +113,7 @@ true when history.enabled is true
 
 ### initialThreadId?
 
-> `optional` **initialThreadId**: `string`
+> `optional` **initialThreadId?**: `string`
 
 Initial thread ID to load when the component mounts.
 When provided, Elements will automatically load and switch to this thread.

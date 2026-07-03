@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -94,7 +95,7 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON("body", payload.RiskIDRequestBody, { explode: true });
 
-  const path = pathToFunc("/rpc/risk.results.unmask")();
+  const path = pathToFunc("/rpc/risk.unmaskResult")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -172,19 +173,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

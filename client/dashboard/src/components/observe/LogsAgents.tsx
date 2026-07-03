@@ -6,6 +6,7 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import type { ChatOverview } from "@gram/client/models/components";
 import {
+  AccountType,
   HasRisk,
   SortBy,
   SortOrder as ApiSortOrder,
@@ -54,6 +55,12 @@ function toApiHasRisk(value: string): HasRisk | undefined {
   return undefined;
 }
 
+function toApiAccountType(value: string): AccountType | undefined {
+  if (value === "team") return AccountType.Team;
+  if (value === "personal") return AccountType.Personal;
+  return undefined;
+}
+
 // Read the min-risk-score URL param. Empty, non-integer, or < 1 is treated as
 // "no threshold" — a minimum of 0 means "≥ 0", i.e. everything, so it's
 // indistinguishable from no filter (and the API rejects it).
@@ -92,6 +99,12 @@ const SESSION_FILTERS = defineFilters([
   },
   { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
   {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
+  {
     id: "min_risk_score",
     label: "Min risk score",
     kind: "number",
@@ -108,6 +121,10 @@ const HAS_RISK_OPTIONS: OptionsById = {
   has_risk: [
     { value: "true", label: "With Risk" },
     { value: "false", label: "No Risk" },
+  ],
+  account_type: [
+    { value: "team", label: "Team" },
+    { value: "personal", label: "Personal" },
   ],
 };
 
@@ -190,6 +207,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlAccountType = searchParams.get("account_type");
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
@@ -202,6 +220,10 @@ export function LogsAgentsContent(): JSX.Element {
   const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
   const hasRisk: string =
     urlHasRisk === "true" || urlHasRisk === "false" ? urlHasRisk : "";
+  const accountType: string =
+    urlAccountType === "team" || urlAccountType === "personal"
+      ? urlAccountType
+      : "";
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
@@ -309,6 +331,13 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setAccountType = useCallback(
+    (value: string) => {
+      updateSearchParams({ account_type: value || null });
+    },
+    [updateSearchParams],
+  );
+
   const setSources = useCallback(
     (values: string[]) => {
       updateSearchParams({
@@ -343,6 +372,7 @@ export function LogsAgentsContent(): JSX.Element {
       from: null,
       to: null,
       has_risk: null,
+      account_type: null,
       source: null,
       min_risk_score: null,
     });
@@ -377,6 +407,7 @@ export function LogsAgentsContent(): JSX.Element {
           hasRisk:
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
+          accountType: toApiAccountType(accountType),
           assistantId: assistantId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
@@ -491,6 +522,8 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        accountType={accountType}
+        setAccountType={setAccountType}
         sources={sources}
         setSources={setSources}
         filterOptions={filterOptions}
@@ -533,6 +566,8 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  accountType,
+  setAccountType,
   sources,
   setSources,
   filterOptions,
@@ -570,6 +605,8 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  accountType: string;
+  setAccountType: (value: string) => void;
   sources: string[];
   setSources: (values: string[]) => void;
   filterOptions: OptionsById;
@@ -670,6 +707,7 @@ function AgentSessionsPageContent({
                   customLabel: null,
                 },
                 has_risk: hasRisk || null,
+                account_type: accountType || null,
                 source: sources,
                 min_risk_score: minRiskScore ?? null,
               }}
@@ -692,6 +730,8 @@ function AgentSessionsPageContent({
                   }
                 } else if (id === "has_risk") {
                   setHasRisk((value as string | null) ?? "");
+                } else if (id === "account_type") {
+                  setAccountType((value as string | null) ?? "");
                 } else if (id === "source") {
                   setSources((value as string[]) ?? []);
                 } else if (id === "min_risk_score") {
@@ -703,6 +743,8 @@ function AgentSessionsPageContent({
                   setDateRangeParam("30d");
                 } else if (id === "has_risk") {
                   setHasRisk("");
+                } else if (id === "account_type") {
+                  setAccountType("");
                 } else if (id === "source") {
                   setSources([]);
                 } else if (id === "min_risk_score") {

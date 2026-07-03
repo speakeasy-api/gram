@@ -1147,6 +1147,16 @@ const Image: FC<ImageMessagePartProps> = (props) => {
 };
 
 const AssistantActionBar: FC = () => {
+  // Only the message text is copyable, so a message made up solely of tool
+  // calls (and/or reasoning) has nothing to copy — don't render the bar there.
+  // Otherwise a lone Copy button hangs beneath every tool-only turn.
+  const hasCopyableText = useAssistantState(({ message }) =>
+    message.parts.some(
+      (part) => part.type === "text" && part.text.trim().length > 0,
+    ),
+  );
+  if (!hasCopyableText) return null;
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
