@@ -1185,11 +1185,38 @@ async function clickhouseQuery(query) {
   }
   return text.split("\n").map((line) => JSON.parse(line));
 }
+// gram.hook.event stores provider-style names (PostToolUse, ...) because the
+// ClickHouse summary predicates match on that vocabulary. The checks below
+// reason in canonical event types, so translate rows back on read. "Stop" is
+// ambiguous across providers: cursor's stop carries usage totals while
+// claude/codex's marks the turn's end.
+const CANONICAL_EVENT_BY_PROVIDER_STYLE = {
+  SessionStart: "session.started",
+  ConfigChange: "session.updated",
+  PreToolUse: "tool.requested",
+  BeforeMCPExecution: "tool.requested",
+  PermissionRequest: "tool.requested",
+  PostToolUse: "tool.completed",
+  AfterMCPExecution: "tool.completed",
+  PostToolUseFailure: "tool.failed",
+  UserPromptSubmit: "prompt.submitted",
+  BeforeSubmitPrompt: "prompt.submitted",
+  AfterAgentResponse: "assistant.responded",
+  AfterAgentThought: "assistant.thought",
+  SessionEnd: "session.ended",
+  Notification: "notification.reported",
+};
+function canonicalHookEventOf(source, event) {
+  if (event === "Stop") {
+    return source === "cursor" ? "usage.reported" : "assistant.responded";
+  }
+  return CANONICAL_EVENT_BY_PROVIDER_STYLE[event] ?? event;
+}
 async function listHookEvidence(projectId, provider, sinceUnixNano) {
   const sources = SOURCE_ALIASES[provider]
     .map((s) => `'${sqlString(s)}'`)
     .join(",");
-  return await clickhouseQuery(`
+  const rows = await clickhouseQuery(`
     SELECT
       hook_source,
       toString(attributes.gram.hook.event) AS event,
@@ -1204,6 +1231,10 @@ async function listHookEvidence(projectId, provider, sinceUnixNano) {
     ORDER BY time_unix_nano DESC
     LIMIT 200
   `);
+  return rows.map((row) => ({
+    ...row,
+    event: canonicalHookEventOf(row.hook_source, row.event),
+  }));
 }
 async function listChatMessages(projectId, runId) {
   const sql = `
@@ -1286,7 +1317,7 @@ async function createShadowMCPPolicy(args) {
   await cleanupShadowMCPE2EPolicies(args.session.projectId);
   const name = `Gram hooks E2E shadow_mcp ${args.runId}`;
   const res = await fetchOrFail(
-    `${args.serverURL}/rpc/risk.policies.create`,
+    `${args.serverURL}/rpc/risk.createPolicy`,
     {
       method: "POST",
       headers: {
@@ -1331,7 +1362,7 @@ async function deleteRiskPolicy(args) {
   if (!args.policyId) {
     return;
   }
-  const url = new URL(`${args.serverURL}/rpc/risk.policies.delete`);
+  const url = new URL(`${args.serverURL}/rpc/risk.deletePolicy`);
   url.searchParams.set("id", args.policyId);
   const res = await fetchOrFail(
     url,
@@ -1389,6 +1420,29 @@ async function approveRiskPolicyBypassRequest(args) {
   if (!res.ok) {
     fail(
       `approve risk policy bypass request failed: ${res.status} ${await res.text()}`,
+    );
+  }
+  return await res.json();
+}
+async function revokeRiskPolicyBypassRequest(args) {
+  const res = await fetchOrFail(
+    `${args.serverURL}/rpc/risk.revokePolicyBypassRequest`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Gram-Session": args.session.sessionId,
+        "Gram-Project": args.projectSlug,
+      },
+      body: JSON.stringify({
+        id: args.requestId,
+      }),
+    },
+    "revoke risk policy bypass request",
+  );
+  if (!res.ok) {
+    fail(
+      `revoke risk policy bypass request failed: ${res.status} ${await res.text()}`,
     );
   }
   return await res.json();
@@ -1666,12 +1720,17 @@ function telemetryRowMatchesShadowMCPTool(row, expected) {
   ) {
     return false;
   }
-  const attrs = String(row.attrs ?? "");
+  // ClickHouse's JSON rendering escapes forward slashes, so undo that before
+  // matching path-shaped markers.
+  const attrs = String(row.attrs ?? "").replaceAll("\\/", "/");
   if (
     attrs.includes(`"source":"${expected.serverName}"`) ||
     attrs.includes(`"server_name":"${expected.serverName}"`) ||
     attrs.includes(`"providerIdentifier":"${expected.serverName}"`) ||
-    attrs.includes(`"mcp_server_name":"${expected.serverName}"`)
+    attrs.includes(`"mcp_server_name":"${expected.serverName}"`) ||
+    // Unified-ingest rows identify stdio MCP servers by launch command; the
+    // fixture's script path is unique to this harness.
+    attrs.includes("/shadow-mcp/server.mjs")
   ) {
     return true;
   }
@@ -2225,6 +2284,15 @@ async function runShadowMCPSuite(args) {
           },
         ),
       );
+      // Every provider's fixture is backed by the same MCP server command, so
+      // an approval granted for one provider would bypass the next provider's
+      // blocked scenario. Revoke it before moving on.
+      await revokeRiskPolicyBypassRequest({
+        serverURL: args.serverURL,
+        session: args.session,
+        projectSlug: args.projectSlug,
+        requestId: request.id,
+      });
     }
   } finally {
     try {
@@ -2417,7 +2485,9 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`hooks:e2e error: ${message}`);
-  process.exitCode = 1;
+  // Force-exit: a failure can propagate while the hosted shadow MCP listener
+  // or provider child processes are still holding the event loop open.
+  process.exit(1);
 }
 
 async function writeCommandArtifacts(artifactsDir, provider, scenario, res) {
