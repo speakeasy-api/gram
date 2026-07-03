@@ -62,7 +62,11 @@ func isSkippedResponseHeader(name string) bool {
 		"te",
 		"trailer",
 		"transfer-encoding",
-		"upgrade":
+		"upgrade",
+		// Internal gateway→gram-server tunnel diagnostics
+		// (wire.HeaderTunnelError). The retry policy consumes it from the
+		// upstream response object; external MCP clients must not see it.
+		"x-gram-tunnel-error":
 		return true
 	}
 	return false

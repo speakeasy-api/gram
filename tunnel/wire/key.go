@@ -28,12 +28,18 @@ const (
 )
 
 // Tunnel forward error statuses reported in HeaderTunnelError. Callers switch on
-// these to decide retry/failover: *NoLiveSession and *SubstreamFailed are
-// gateway-side (a route was picked but the agent session was gone/broken);
-// *NoRoute, *InvalidRoute, *RouteStoreUnavailable and *RouteLookupFailed are
-// gram-server-side (routing could not select a gateway owner at all).
+// these to decide retry/failover: *NoLiveSession, *TunnelBusy and
+// *SubstreamFailed are gateway-side (a route was picked but the agent session
+// was gone, at capacity, or broken); *NoRoute, *InvalidRoute,
+// *RouteStoreUnavailable and *RouteLookupFailed are gram-server-side (routing
+// could not select a gateway owner at all).
 const (
-	TunnelErrorNoLiveSession         = "no-live-session"
+	TunnelErrorNoLiveSession = "no-live-session"
+	// TunnelErrorTunnelBusy means live sessions exist but every one is at its
+	// substream cap. The gateway is healthy — callers must NOT unpublish its
+	// route; they may try another gateway. The request never entered a
+	// substream, so replay is safe for any method.
+	TunnelErrorTunnelBusy            = "tunnel-busy"
 	TunnelErrorSubstreamFailed       = "substream-failed"
 	TunnelErrorNoRoute               = "no-route"
 	TunnelErrorInvalidRoute          = "invalid-route"

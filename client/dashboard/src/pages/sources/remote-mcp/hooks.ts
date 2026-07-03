@@ -5,7 +5,7 @@ import {
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
-import { randomSlugSuffix } from "@/lib/slug";
+import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
 import type {
   McpServer,
   RemoteMcpServer,
@@ -31,9 +31,6 @@ import {
 } from "./autoConfigureAuth";
 
 type SdkClient = ReturnType<typeof useSdkClient>;
-
-const DEFAULT_ENDPOINT_FAILED_MESSAGE =
-  "MCP server created, but the default endpoint failed. Add one from the server page.";
 
 const USER_SESSION_ISSUER_FAILED_MESSAGE =
   "MCP server created, but its login issuer couldn't be set up. Configure authentication from the server's Authentication tab.";
@@ -83,36 +80,6 @@ async function linkUserSessionIssuer(
     });
     toast.warning(USER_SESSION_ISSUER_FAILED_MESSAGE);
     return mcpServer;
-  }
-}
-
-// Auto-provisions a default platform MCP endpoint for a freshly created
-// mcp_server backed by a remote source, so the user doesn't have to create one
-// by hand afterwards. Platform endpoint slugs (no custom domain) must be
-// prefixed with the org slug; a short random suffix keeps them unique.
-//
-// Best-effort: a failure here leaves the source intact and only surfaces a
-// warning. The endpoint is a convenience and can always be added later from
-// the server detail page, so it should never roll back the source.
-async function createDefaultMcpEndpoint(
-  client: SdkClient,
-  mcpServer: McpServer,
-  orgSlug: string | undefined,
-): Promise<void> {
-  if (!orgSlug) {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-    return;
-  }
-
-  try {
-    await client.mcpEndpoints.create({
-      createMcpEndpointForm: {
-        mcpServerId: mcpServer.id,
-        slug: `${orgSlug}-${randomSlugSuffix()}`,
-      },
-    });
-  } catch {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
   }
 }
 
@@ -304,10 +271,19 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
   return useMutation({
     mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
       // Soft-delete each linked mcp_server first; the server-side handler
-      // cascades to its mcp_endpoints. Sequential keeps error surfacing simple
-      // — if one fails partway through we want to know which.
-      for (const id of mcpServerIds) {
-        await client.mcpServers.delete({ id });
+      // cascades to its mcp_endpoints. The deletes are independent, so run
+      // them concurrently and surface any failure before touching the source.
+      const results = await Promise.allSettled(
+        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
+      );
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) {
+        throw failed.reason instanceof Error
+          ? failed.reason
+          : new Error(String(failed.reason));
       }
 
       await client.remoteMcp.deleteServer({ id: remoteMcpServerId });

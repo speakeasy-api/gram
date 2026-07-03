@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -48,34 +49,54 @@ func (m *tunnelManager) issueKey() (issuedTunnelKey, error) {
 	}, nil
 }
 
-func (m *tunnelManager) serverListView(ctx context.Context, servers []repo.TunneledMcpServer) []*types.TunneledMcpServer {
+func (m *tunnelManager) serverListView(ctx context.Context, logger *slog.Logger, servers []repo.TunneledMcpServer) []*types.TunneledMcpServer {
+	// One runtime lookup per server; fetch them concurrently so list latency
+	// doesn't grow linearly with the project's server count (N sequential
+	// Redis round trips otherwise).
+	connections := make([][]mv.TunneledMcpConnectionCache, len(servers))
+	var wg errgroup.Group
+	wg.SetLimit(8)
+	for i, server := range servers {
+		wg.Go(func() error {
+			connections[i] = m.connectionsForServer(ctx, logger, server.ID)
+			return nil
+		})
+	}
+	// Goroutines never return errors; connectionsForServer degrades to nil
+	// and logs internally.
+	_ = wg.Wait()
+
 	connectionsByServerID := make(map[string][]mv.TunneledMcpConnectionCache, len(servers))
-	for _, server := range servers {
-		connectionsByServerID[server.ID.String()] = m.connectionsForServer(ctx, server.ID)
+	for i, server := range servers {
+		connectionsByServerID[server.ID.String()] = connections[i]
 	}
 
 	return mv.BuildTunneledMcpServerListView(servers, connectionsByServerID)
 }
 
-func (m *tunnelManager) serverView(ctx context.Context, server repo.TunneledMcpServer) *types.TunneledMcpServer {
-	return mv.BuildTunneledMcpServerView(server, m.connectionsForServer(ctx, server.ID))
+func (m *tunnelManager) serverView(ctx context.Context, logger *slog.Logger, server repo.TunneledMcpServer) *types.TunneledMcpServer {
+	return mv.BuildTunneledMcpServerView(server, m.connectionsForServer(ctx, logger, server.ID))
 }
 
-func (m *tunnelManager) serverConnectionsView(ctx context.Context, serverID uuid.UUID) *types.TunneledMcpServerConnections {
-	return mv.BuildTunneledMcpServerConnectionsView(m.connectionsForServer(ctx, serverID))
+func (m *tunnelManager) serverConnectionsView(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) *types.TunneledMcpServerConnections {
+	return mv.BuildTunneledMcpServerConnectionsView(m.connectionsForServer(ctx, logger, serverID))
 }
 
 func (m *tunnelManager) serverViewWithoutRuntime(server repo.TunneledMcpServer) *types.TunneledMcpServer {
 	return mv.BuildTunneledMcpServerView(server, nil)
 }
 
-func (m *tunnelManager) connectionsForServer(ctx context.Context, serverID uuid.UUID) []mv.TunneledMcpConnectionCache {
+func (m *tunnelManager) connectionsForServer(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) []mv.TunneledMcpConnectionCache {
 	if m.runtime == nil {
 		return nil
 	}
 
 	connections, err := m.runtime.Connections(ctx, serverID.String())
 	if err != nil {
+		// Degrade to "no live connections" for the management view, but leave
+		// evidence: without this log a Redis outage looks identical to every
+		// agent being disconnected.
+		logger.ErrorContext(ctx, "load tunneled mcp connection cache", attr.SlogError(err), attr.SlogTunneledMCPServerID(serverID.String()))
 		return nil
 	}
 

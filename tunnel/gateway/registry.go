@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/http"
 	"sync"
 	"time"
 
@@ -24,8 +25,12 @@ type registry struct {
 }
 
 type sessEntry struct {
-	id               string
-	session          *yamux.Session
+	id      string
+	session *yamux.Session
+	// proxy is the session-scoped reverse proxy reused across forwards; its
+	// transport dials a fresh yamux substream per request, so sharing the
+	// instance changes no semantics and avoids a per-forward allocation.
+	proxy            http.Handler
 	connection       route.Connection
 	activeSubstreams int
 	consumerSessions map[string]time.Time
@@ -38,10 +43,11 @@ func newRegistry() *registry {
 	}
 }
 
-func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, connection route.Connection) func() {
+func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
 	entry := &sessEntry{
 		id:               sessionID,
 		session:          s,
+		proxy:            proxy,
 		connection:       connection,
 		activeSubstreams: 0,
 		consumerSessions: make(map[string]time.Time),
@@ -94,20 +100,34 @@ func (r *registry) connections(tunnelID string, heartbeatAt time.Time) []route.C
 	return result
 }
 
+// forwardFailure distinguishes why beginForward could not reserve a session:
+// the tunnel has no live sessions at all (stale route — safe to unpublish) vs
+// every live session is at its substream cap (healthy but busy — the route
+// must stay published).
+type forwardFailure int
+
+const (
+	forwardReserved forwardFailure = iota
+	forwardNoSession
+	forwardBusy
+)
+
 // beginForward reserves one live session and updates snapshot counters.
-func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time, maxStreamsPerSession int) (*sessEntry, bool) {
+func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time, maxStreamsPerSession int) (*sessEntry, forwardFailure) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	list := r.sessions[tunnelID]
 	if len(list) == 0 {
-		return nil, false
+		return nil, forwardNoSession
 	}
+	sawBusy := false
 	reserve := func(entry *sessEntry) (*sessEntry, bool) {
 		if entry.session.IsClosed() {
 			return nil, false
 		}
 		if maxStreamsPerSession > 0 && entry.activeSubstreams >= maxStreamsPerSession {
+			sawBusy = true
 			return nil, false
 		}
 		entry.activeSubstreams++
@@ -117,9 +137,13 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 			}
 			entry.consumerSessions[consumerSession] = now.Add(consumerSessionTTL)
 		}
-		entry.connection.ActiveSubstreams = entry.activeSubstreams
-		entry.connection.ActiveConsumerSessions = pruneConsumerSessions(entry, now)
 		return entry, true
+	}
+	failure := func() forwardFailure {
+		if sawBusy {
+			return forwardBusy
+		}
+		return forwardNoSession
 	}
 
 	if consumerSession != "" {
@@ -131,10 +155,10 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 		}
 		for _, sessionID := range wire.RendezvousOrder(consumerSession, candidates) {
 			if entry, ok := reserve(entryByID[sessionID]); ok {
-				return entry, true
+				return entry, forwardReserved
 			}
 		}
-		return nil, false
+		return nil, failure()
 	}
 
 	start := int(r.rr[tunnelID] % uint64(len(list)))
@@ -142,21 +166,22 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 	for i := range list {
 		entry := list[(start+i)%len(list)]
 		if reserved, ok := reserve(entry); ok {
-			return reserved, true
+			return reserved, forwardReserved
 		}
 	}
-	return nil, false
+	return nil, failure()
 }
 
-func (r *registry) finishForward(entry *sessEntry, now time.Time) {
+// finishForward releases the substream slot. Snapshot counters are derived
+// from the live fields inside connections(); mirroring them onto
+// entry.connection here would be dead stores.
+func (r *registry) finishForward(entry *sessEntry, _ time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if entry.activeSubstreams > 0 {
 		entry.activeSubstreams--
 	}
-	entry.connection.ActiveSubstreams = entry.activeSubstreams
-	entry.connection.ActiveConsumerSessions = pruneConsumerSessions(entry, now)
 }
 
 func pruneConsumerSessions(entry *sessEntry, now time.Time) int {

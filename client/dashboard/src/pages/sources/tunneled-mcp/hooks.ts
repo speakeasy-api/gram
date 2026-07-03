@@ -1,6 +1,6 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
-import { randomSlugSuffix } from "@/lib/slug";
+import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
 import type {
   McpServer,
   TunneledMcpServer,
@@ -17,34 +17,6 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
-
-type SdkClient = ReturnType<typeof useSdkClient>;
-
-const DEFAULT_ENDPOINT_FAILED_MESSAGE =
-  "MCP server created, but the default endpoint failed. Add one from the server page.";
-
-async function createDefaultMcpEndpoint(
-  client: SdkClient,
-  mcpServer: McpServer,
-  orgSlug: string | undefined,
-): Promise<void> {
-  if (!orgSlug) {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-    return;
-  }
-
-  try {
-    await client.mcpEndpoints.create({
-      createMcpEndpointForm: {
-        mcpServerId: mcpServer.id,
-        slug: `${orgSlug}-${randomSlugSuffix()}`,
-      },
-    });
-  } catch {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-  }
-}
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -212,8 +184,19 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ tunneledMcpServerId, mcpServerIds }) => {
-      for (const id of mcpServerIds) {
-        await client.mcpServers.delete({ id });
+      // Linked-server deletes are independent; run them concurrently and
+      // surface any failure before touching the source itself.
+      const results = await Promise.allSettled(
+        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
+      );
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) {
+        throw failed.reason instanceof Error
+          ? failed.reason
+          : new Error(String(failed.reason));
       }
 
       await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });

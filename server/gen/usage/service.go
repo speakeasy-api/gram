@@ -111,7 +111,8 @@ type SetBillingMetadataPayload struct {
 	SessionToken *string
 	// The contracted monthly tokens under management limit. Omit to clear.
 	MonthlyTokenLimit *int64
-	// The contracted tunneled MCP server source cap. Omit to use the plan default.
+	// The contracted tunneled MCP server source cap. Omit to leave the configured
+	// value unchanged; never-configured orgs use the plan default.
 	TunneledMcpServerLimit *int
 	// Email address to notify on TUM threshold events. Omit to clear.
 	AlertEmail *string

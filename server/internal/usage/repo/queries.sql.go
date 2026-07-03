@@ -94,7 +94,9 @@ ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
-  , tunneled_mcp_server_limit = EXCLUDED.tunneled_mcp_server_limit
+  -- Omitted (NULL) preserves the configured cap: callers that predate the
+  -- field (dashboard TUM form, older SDKs) must not silently clear it.
+  , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
 RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `

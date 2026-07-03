@@ -351,14 +351,7 @@ func responseAgentLabel(body string) string {
 
 func requireEventually(t *testing.T, d time.Duration, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("condition not met within deadline")
+	require.Eventually(t, cond, d, 20*time.Millisecond)
 }
 
 type snapshotStore struct {

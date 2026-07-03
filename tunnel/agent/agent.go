@@ -245,11 +245,6 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 			slog.String("tunnel_id", hello.TunnelID), slog.String("session_id", hello.SessionID))
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc(wire.ControlDrainPath, func(w http.ResponseWriter, _ *http.Request) {
-		a.logger.Info("tunnel drain received; will reconnect after in-flight work")
-		w.WriteHeader(http.StatusOK)
-		// Gateway closes the drained session; Run reconnects to a surviving pod.
-	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, wire.ControlPathPrefix) {
 			http.NotFound(w, r)

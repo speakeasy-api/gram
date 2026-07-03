@@ -142,7 +142,7 @@ var _ = Service("usage", func() {
 			Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit. Omit to clear.", func() {
 				Minimum(0)
 			})
-			Attribute("tunneled_mcp_server_limit", Int, "The contracted tunneled MCP server source cap. Omit to use the plan default.", func() {
+			Attribute("tunneled_mcp_server_limit", Int, "The contracted tunneled MCP server source cap. Omit to leave the configured value unchanged; never-configured orgs use the plan default.", func() {
 				Minimum(0)
 			})
 			Attribute("alert_email", String, "Email address to notify on TUM threshold events. Omit to clear.", func() {

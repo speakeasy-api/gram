@@ -49529,7 +49529,7 @@ components:
           minimum: 0
         tunneled_mcp_server_limit:
           type: integer
-          description: The contracted tunneled MCP server source cap. Omit to use the plan default.
+          description: The contracted tunneled MCP server source cap. Omit to leave the configured value unchanged; never-configured orgs use the plan default.
           format: int64
           minimum: 0
       required:

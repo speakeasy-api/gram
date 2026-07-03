@@ -118,6 +118,10 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 			outputContent = rpcResp.Result
 		}
 	}
+	// Failed calls record the marshaled JSON-RPC error as the output payload.
+	// This deliberately changes outputBytes semantics for errors (previously 0):
+	// the recorded size describes the stored error document, not wire bytes, so
+	// error rows carry inspectable content in the tool-I/O views.
 	if len(outputContent) == 0 && call.Error != nil {
 		if encodedError, err := json.Marshal(call.Error); err == nil {
 			outputContent = encodedError

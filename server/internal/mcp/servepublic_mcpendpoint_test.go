@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -137,6 +138,64 @@ func createRemoteMcpEndpoint(
 	})
 	require.NoError(t, err)
 	return mcpServer, remoteServer
+}
+
+// TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed: tunneled MCP
+// servers front customer-private networks and may never serve publicly. The
+// management API rejects public visibility at create/update; this test seeds
+// the forbidden state directly through the repo layer (the shape a manual SQL
+// edit or future write path would produce) and asserts the serve path fails
+// closed rather than proxying unauthenticated traffic into the tunnel.
+func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tunneledID, err := uuid.NewV7()
+	require.NoError(t, err)
+	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        tunneledID,
+		ProjectID: *authCtx.ProjectID,
+		Name:      "public-tunnel-attempt",
+		KeyHash:   uuid.NewString(),
+		KeyPrefix: "gram_tunnel_test",
+	})
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  id,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("test tunneled mcp server"),
+		Slug:                conv.ToPGText("test-tunneled-" + uuid.NewString()[:8]),
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{},
+		TunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{},
+		Visibility:          "public",
+	})
+	require.NoError(t, err)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    mcpServer.ID,
+		Slug:           endpointSlug,
+	})
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "public tunneled-backed endpoint must fail closed")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 // createUserSessionIssuer inserts a user_session_issuers row in the

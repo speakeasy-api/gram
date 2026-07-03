@@ -724,8 +724,16 @@ func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, bo
 	}
 
 	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
-	if err != nil || retry == nil {
-		return upstreamReq, upstreamResp, err
+	if err != nil {
+		// Callers bail on err before they register their Body.Close defer,
+		// so an open response returned alongside an error is leaked — it
+		// would pin the upstream connection until the phase timer fires.
+		// Close it here and return no response.
+		o11y.NoLogDefer(upstreamResp.Body.Close)
+		return upstreamReq, nil, err
+	}
+	if retry == nil {
+		return upstreamReq, upstreamResp, nil
 	}
 	o11y.NoLogDefer(upstreamResp.Body.Close)
 

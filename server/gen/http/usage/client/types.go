@@ -17,7 +17,8 @@ import (
 type SetBillingMetadataRequestBody struct {
 	// The contracted monthly tokens under management limit. Omit to clear.
 	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
-	// The contracted tunneled MCP server source cap. Omit to use the plan default.
+	// The contracted tunneled MCP server source cap. Omit to leave the configured
+	// value unchanged; never-configured orgs use the plan default.
 	TunneledMcpServerLimit *int `form:"tunneled_mcp_server_limit,omitempty" json:"tunneled_mcp_server_limit,omitempty" xml:"tunneled_mcp_server_limit,omitempty"`
 	// Email address to notify on TUM threshold events. Omit to clear.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`

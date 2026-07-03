@@ -403,7 +403,16 @@ func (s *Service) serveTunneledBackend(
 	upstreamAuth string,
 ) error {
 	ctx := r.Context()
-	logger = logger.With(attr.SlogResourceID(mcpServer.TunneledMcpServerID.UUID.String()))
+	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
+
+	// Fail closed: tunneled servers front customer-private networks and must
+	// never serve unauthenticated. CreateMCPServer/UpdateMCPServer already
+	// reject public visibility for tunneled backends; this guards the serve
+	// path against any other write reaching the row (manual SQL, future
+	// endpoints) so a flipped flag cannot expose the tunnel.
+	if mcpServer.Visibility == mcpservers.VisibilityPublic {
+		return oops.E(oops.CodeForbidden, nil, "tunneled MCP servers cannot be served publicly").LogError(ctx, logger)
+	}
 
 	var err error
 	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
@@ -411,7 +420,7 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, w, r, logger, endpoint, mcpServer, upstreamAuth)
+	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, upstreamAuth)
 	if err != nil {
 		return err
 	}

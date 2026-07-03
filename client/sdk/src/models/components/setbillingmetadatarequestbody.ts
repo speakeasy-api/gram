@@ -19,7 +19,7 @@ export type SetBillingMetadataRequestBody = {
    */
   monthlyTokenLimit?: number | undefined;
   /**
-   * The contracted tunneled MCP server source cap. Omit to use the plan default.
+   * The contracted tunneled MCP server source cap. Omit to leave the configured value unchanged; never-configured orgs use the plan default.
    */
   tunneledMcpServerLimit?: number | undefined;
 };

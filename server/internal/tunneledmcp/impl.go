@@ -185,7 +185,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list tunneled mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListTunneledMcpServersResult{TunneledMcpServers: s.tunnelManager.serverListView(ctx, servers)}, nil
+	return &gen.ListTunneledMcpServersResult{TunneledMcpServers: s.tunnelManager.serverListView(ctx, s.logger, servers)}, nil
 }
 
 func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) (*types.TunneledMcpServer, error) {
@@ -214,7 +214,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.tunnelManager.serverView(ctx, server), nil
+	return s.tunnelManager.serverView(ctx, s.logger, server), nil
 }
 
 func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
@@ -243,7 +243,7 @@ func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListSe
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.tunnelManager.serverConnectionsView(ctx, server.ID), nil
+	return s.tunnelManager.serverConnectionsView(ctx, s.logger, server.ID), nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.TunneledMcpServer, error) {
@@ -285,7 +285,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
 	}
 
-	beforeView := s.tunnelManager.serverView(ctx, existing)
+	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
 		ID:        serverID,
@@ -300,7 +300,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "update tunneled mcp server").LogError(ctx, logger)
 	}
 
-	afterView := s.tunnelManager.serverView(ctx, updated)
+	afterView := s.tunnelManager.serverView(ctx, s.logger, updated)
 	if err := s.audit.LogTunneledMcpServerUpdate(ctx, dbtx, audit.LogTunneledMcpServerUpdateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
 		ProjectID:                       *authCtx.ProjectID,
@@ -361,7 +361,7 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
 	}
 
-	beforeView := s.tunnelManager.serverView(ctx, existing)
+	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 	rotated, err := txRepo.RotateServerKey(ctx, repo.RotateServerKeyParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,

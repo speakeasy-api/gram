@@ -1,7 +1,6 @@
 package tunnelrouting
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -39,7 +38,7 @@ func TestClientAffinityKeyFromRequest(t *testing.T) {
 func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	routes := route.NewRouteTable()
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
@@ -62,7 +61,7 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	routes := route.NewRouteTable()
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
 
@@ -78,10 +77,94 @@ func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
 }
 
+// TestRetryerTunnelBusyFailsOverWithoutUnpublish: tunnel-busy means the
+// selected gateway is healthy but at capacity — its route must stay published
+// while the request fails over to another candidate, and replay is safe for
+// any method (the request never entered a substream).
+func TestRetryerTunnelBusyFailsOverWithoutUnpublish(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.NotNil(t, retry)
+	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
+
+	// Both routes stay published: busy is not stale.
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"127.0.0.1:1001", "127.0.0.1:1002"}, candidates)
+}
+
+func TestRetryerTunnelBusySingleCandidateDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
+}
+
+// TestRetryerSubstreamFailedDoesNotReplayPost guards against double-executing
+// non-idempotent MCP calls: substream-failed can fire after the request body
+// reached the backend (the substream died awaiting response headers), so the
+// gateway cannot know whether a tools/call already executed. POSTs must not
+// be replayed; only idempotent methods (GET/DELETE) may retry.
+func TestRetryerSubstreamFailedDoesNotReplayPost(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+
+	resp := tunnelErrorResponseForMethod("substream-failed", http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+
+	// The route stays published: the gateway is healthy, the substream broke.
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
+}
+
+// TestRetryerSubstreamFailedNilRequestDoesNotRetry: without the originating
+// request we cannot prove the method was idempotent, so fail safe.
+func TestRetryerSubstreamFailedNilRequestDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+
+	resp := tunnelErrorResponse("substream-failed")
+	resp.Request = nil
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+}
+
 func TestRetryerPlainBadGatewayDoesNotRetry(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	routes := route.NewRouteTable()
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
 
@@ -103,7 +186,7 @@ func TestRetryerPlainBadGatewayDoesNotRetry(t *testing.T) {
 func TestRetryerNoLiveSessionSingleCandidateDoesNotRetry(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	routes := route.NewRouteTable()
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
 
@@ -127,12 +210,21 @@ func httptestRequest() *http.Request {
 }
 
 func tunnelErrorResponse(value string) *http.Response {
+	return tunnelErrorResponseForMethod(value, http.MethodGet)
+}
+
+func tunnelErrorResponseForMethod(value, method string) *http.Response {
 	header := make(http.Header)
 	header.Set(ErrorHeader, value)
+	req, err := http.NewRequest(method, "http://gateway.internal/forward", nil)
+	if err != nil {
+		panic(err)
+	}
 	return &http.Response{
 		StatusCode: http.StatusBadGateway,
 		Header:     header,
 		Body:       http.NoBody,
+		Request:    req,
 	}
 }
 

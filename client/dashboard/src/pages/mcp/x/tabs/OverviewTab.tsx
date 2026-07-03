@@ -549,8 +549,8 @@ function SourceOverviewRow({ source }: { source: SourceOverview }) {
   } else if (remoteMcpServer) {
     description = remoteMcpServer.name?.trim() || "Remote MCP source";
     detail = (
-      <Type muted small as="div">
-        Custom remote server
+      <Type muted small mono as="div" className="break-all">
+        {remoteMcpServer.url}
       </Type>
     );
     sourceHref = routes.sources.source.href(

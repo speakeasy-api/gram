@@ -115,7 +115,21 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
 				}
 			}
+		case wire.TunnelErrorTunnelBusy:
+			// The gateway is healthy but at its substream cap: keep its route
+			// published and try another candidate. The request never entered
+			// a substream, so replay is safe for any method.
 		case wire.TunnelErrorSubstreamFailed:
+			// substream-failed can fire after the request body reached the
+			// backend (the substream died awaiting response headers), so the
+			// call may have executed. Replaying a POST would double-execute
+			// non-idempotent tools/call requests — only retry methods that
+			// are safe to re-issue. no-live-session (above) is always safe:
+			// the gateway never opened a substream, so the request cannot
+			// have reached the backend.
+			if resp.Request == nil || (resp.Request.Method != http.MethodGet && resp.Request.Method != http.MethodDelete) {
+				return nil, nil
+			}
 		default:
 			return nil, nil
 		}
