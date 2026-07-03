@@ -3577,6 +3577,19 @@ CREATE INDEX IF NOT EXISTS risk_policy_challenges_active_ack_idx
 ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, expires_at)
 WHERE deleted IS FALSE AND status = 'acknowledged';
 
+-- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
+-- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
+-- cannot use the partial indexes above; without these a parent delete (org,
+-- project, or risk policy) degrades to a sequential scan and holds locks longer.
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_organization_id_idx
+ON risk_policy_challenges (organization_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_id_idx
+ON risk_policy_challenges (project_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_risk_policy_id_idx
+ON risk_policy_challenges (risk_policy_id);
+
 CREATE TABLE IF NOT EXISTS tool_call_blocks (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
