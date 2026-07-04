@@ -46,6 +46,18 @@ func (f *fakePromptJudge) lastInput() risk_analysis.JudgeInput {
 	return f.last
 }
 
+func matchedJudgeVerdict(confidence float64, rationale string) *risk_analysis.JudgeVerdict {
+	return &risk_analysis.JudgeVerdict{
+		Matched:          true,
+		Confidence:       confidence,
+		Rationale:        rationale,
+		CostUSD:          0,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+	}
+}
+
 func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, messageTypes []string) {
 	t.Helper()
 	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, name, prompt, messageTypes, nil)
@@ -98,7 +110,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
-	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "destructive delete"}}
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(0.9, "destructive delete")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
@@ -121,7 +133,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server", []string{message.ToolRequest})
-	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
@@ -146,7 +158,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", nil)
-	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
@@ -165,7 +177,7 @@ func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
-	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testCELEngine(t))
 	require.NoError(t, err)
@@ -201,7 +213,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
-	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, judge, &feature.InMemory{}, testCELEngine(t))
 	require.NoError(t, err)

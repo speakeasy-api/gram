@@ -1130,6 +1130,7 @@ func newStartCommand() *cli.Command {
 				hookPIScanner,
 				featureFlags,
 				celEngine,
+				hookPromptJudge,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

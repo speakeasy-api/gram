@@ -25,8 +25,8 @@ const (
 // interface so it stays free of the LLM-client dependency chain (which would
 // otherwise pull authz in through testenv and create an import cycle).
 type PromptJudge interface {
-	// Evaluate returns a non-nil verdict when the message violates the policy
-	// prompt, or nil when it does not (including fail-open on judge error).
+	// Evaluate returns a verdict for a successful judge call. Nil means the
+	// message was not judged, such as fail-open on judge error.
 	Evaluate(ctx context.Context, in JudgeInput) *JudgeVerdict
 }
 
@@ -128,9 +128,14 @@ func NewJudgeMessageForToolCalls(calls []JudgeToolCall) JudgeMessage {
 
 // JudgeVerdict is the resolved outcome of a judge evaluation.
 type JudgeVerdict struct {
+	Matched    bool
 	Confidence float64
 	// Rationale is a short, secret-free explanation of the match.
-	Rationale string
+	Rationale        string
+	CostUSD          float64
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
 }
 
 // JudgeConfig is the per-policy judge model configuration parsed from a

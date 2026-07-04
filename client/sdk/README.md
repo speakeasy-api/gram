@@ -502,6 +502,13 @@ run();
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 
+### [Risk.Evals](docs/sdks/evals/README.md)
+
+* [deleteReview](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+* [evaluate](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+* [listReviews](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+* [saveReview](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
+
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
@@ -925,6 +932,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskEvalsDeleteReview`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+- [`riskEvalsEvaluate`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+- [`riskEvalsListReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+- [`riskEvalsSaveReview`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
@@ -1299,11 +1310,14 @@ To learn about this feature and how to get started, check
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDeleteEvalReviewMutation`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
@@ -1318,6 +1332,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskSaveEvalReviewMutation`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`useRiskSubmitBlockFeedbackMutation`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
