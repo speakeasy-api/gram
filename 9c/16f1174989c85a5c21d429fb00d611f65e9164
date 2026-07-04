@@ -1,0 +1,63 @@
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_e7e7708f448bc5::t_8c87cf1deb07a1 121-144
+  s_e7e7708f448bc5::t_510afc6b173d09 93-101,108
+server/internal/risk/eval_guardrail_test.go
+  s_e7e7708f448bc5::t_a41e115c23a177 4,15,19
+  s_e7e7708f448bc5::t_fb34ceae9056f2 173-185,187-195,197-199,203-208,210-215,217-218,221-222
+  s_e7e7708f448bc5::t_63d9147667e737 241-301
+  s_e7e7708f448bc5::t_738e0285bb1889 220
+  s_e7e7708f448bc5::t_d5827fde15363e 196,200-202,209,216,219
+  s_e7e7708f448bc5::t_633acefdbe3b2c 186
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_e7e7708f448bc5::t_be14a1aae62554 787,796-797,799-808
+  s_e7e7708f448bc5::t_f1f14777a0c86b 1247-1248,1270-1271,1306-1307
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_e7e7708f448bc5::t_4bc3400f90b59a 5,14,51-52,57,62-68,79-85,97,133
+server/internal/risk/impl.go
+  s_e7e7708f448bc5::t_4daa683d1d9457 2329-2330,2388-2404
+server/design/risk/design.go
+  s_e7e7708f448bc5::t_423477e12aea95 1188-1189
+  s_e7e7708f448bc5::t_2a01da06be9c4d 1173
+.changeset/prompt-eval-cel-scope.md
+  s_e7e7708f448bc5::t_4902c796ce5989 1-6
+.speakeasy/out.openapi.yaml
+  s_e7e7708f448bc5::t_0171414c4b4478 26815,39142-39147
+client/sdk/src/funcs/riskEvalsEvaluate.ts
+  s_e7e7708f448bc5::t_c5d1842216fdda 35
+client/sdk/src/models/components/evaluatepromptguardrailrequestbody.ts
+  s_e7e7708f448bc5::t_3e757281f7ef80 27-34,43-44,57-58,65-66
+client/sdk/src/react-query/riskEvaluatePromptGuardrail.ts
+  s_e7e7708f448bc5::t_039ccf130169f5 59,88
+client/sdk/src/sdk/evals.ts
+  s_e7e7708f448bc5::t_172a443e22c5fe 38
+server/gen/http/cli/gram/cli.go
+  s_e7e7708f448bc5::t_230a541472436f 11512,12379,12389
+server/gen/http/openapi3.json
+  s_e7e7708f448bc5::t_c03725a8087c03 1
+server/gen/http/openapi3.yaml
+  s_e7e7708f448bc5::t_3e47e1521facf8 27315,39562-39567
+server/gen/http/risk/client/cli.go
+  s_e7e7708f448bc5::t_1a35e5e74ae0d9 1880,1912-1915
+server/gen/http/risk/client/types.go
+  s_e7e7708f448bc5::t_979a724f29b129 303-309,9001-9004
+server/gen/http/risk/server/types.go
+  s_e7e7708f448bc5::t_14a65e9aeb3cf1 305-311,15699-15702
+server/gen/risk/service.go
+  s_e7e7708f448bc5::t_86b7aa32f69e18 119-124,361-367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9c16f1174989c85a5c21d429fb00d611f65e9164",
+  "prompts": {},
+  "sessions": {
+    "s_e7e7708f448bc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2e5b-8584-7590-b83b-f814655f801e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
