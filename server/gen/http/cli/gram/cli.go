@@ -116,7 +116,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -1785,6 +1785,31 @@ func ParseEndpoint(
 		riskTestDetectionRuleSessionTokenFlag     = riskTestDetectionRuleFlags.String("session-token", "", "")
 		riskTestDetectionRuleProjectSlugInputFlag = riskTestDetectionRuleFlags.String("project-slug-input", "", "")
 
+		riskEvaluatePromptGuardrailFlags                = flag.NewFlagSet("evaluate-prompt-guardrail", flag.ExitOnError)
+		riskEvaluatePromptGuardrailBodyFlag             = riskEvaluatePromptGuardrailFlags.String("body", "REQUIRED", "")
+		riskEvaluatePromptGuardrailApikeyTokenFlag      = riskEvaluatePromptGuardrailFlags.String("apikey-token", "", "")
+		riskEvaluatePromptGuardrailSessionTokenFlag     = riskEvaluatePromptGuardrailFlags.String("session-token", "", "")
+		riskEvaluatePromptGuardrailProjectSlugInputFlag = riskEvaluatePromptGuardrailFlags.String("project-slug-input", "", "")
+
+		riskSaveRiskEvalReviewFlags                = flag.NewFlagSet("save-risk-eval-review", flag.ExitOnError)
+		riskSaveRiskEvalReviewBodyFlag             = riskSaveRiskEvalReviewFlags.String("body", "REQUIRED", "")
+		riskSaveRiskEvalReviewApikeyTokenFlag      = riskSaveRiskEvalReviewFlags.String("apikey-token", "", "")
+		riskSaveRiskEvalReviewSessionTokenFlag     = riskSaveRiskEvalReviewFlags.String("session-token", "", "")
+		riskSaveRiskEvalReviewProjectSlugInputFlag = riskSaveRiskEvalReviewFlags.String("project-slug-input", "", "")
+
+		riskListRiskEvalReviewsFlags                = flag.NewFlagSet("list-risk-eval-reviews", flag.ExitOnError)
+		riskListRiskEvalReviewsPolicyIDFlag         = riskListRiskEvalReviewsFlags.String("policy-id", "REQUIRED", "")
+		riskListRiskEvalReviewsApikeyTokenFlag      = riskListRiskEvalReviewsFlags.String("apikey-token", "", "")
+		riskListRiskEvalReviewsSessionTokenFlag     = riskListRiskEvalReviewsFlags.String("session-token", "", "")
+		riskListRiskEvalReviewsProjectSlugInputFlag = riskListRiskEvalReviewsFlags.String("project-slug-input", "", "")
+
+		riskDeleteRiskEvalReviewFlags                = flag.NewFlagSet("delete-risk-eval-review", flag.ExitOnError)
+		riskDeleteRiskEvalReviewPolicyIDFlag         = riskDeleteRiskEvalReviewFlags.String("policy-id", "REQUIRED", "")
+		riskDeleteRiskEvalReviewChatIDFlag           = riskDeleteRiskEvalReviewFlags.String("chat-id", "REQUIRED", "")
+		riskDeleteRiskEvalReviewApikeyTokenFlag      = riskDeleteRiskEvalReviewFlags.String("apikey-token", "", "")
+		riskDeleteRiskEvalReviewSessionTokenFlag     = riskDeleteRiskEvalReviewFlags.String("session-token", "", "")
+		riskDeleteRiskEvalReviewProjectSlugInputFlag = riskDeleteRiskEvalReviewFlags.String("project-slug-input", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -2619,6 +2644,10 @@ func ParseEndpoint(
 	riskDeleteRiskExclusionFlags.Usage = riskDeleteRiskExclusionUsage
 	riskSuggestCustomDetectionRuleFlags.Usage = riskSuggestCustomDetectionRuleUsage
 	riskTestDetectionRuleFlags.Usage = riskTestDetectionRuleUsage
+	riskEvaluatePromptGuardrailFlags.Usage = riskEvaluatePromptGuardrailUsage
+	riskSaveRiskEvalReviewFlags.Usage = riskSaveRiskEvalReviewUsage
+	riskListRiskEvalReviewsFlags.Usage = riskListRiskEvalReviewsUsage
+	riskDeleteRiskEvalReviewFlags.Usage = riskDeleteRiskEvalReviewUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -3875,6 +3904,18 @@ func ParseEndpoint(
 
 			case "test-detection-rule":
 				epf = riskTestDetectionRuleFlags
+
+			case "evaluate-prompt-guardrail":
+				epf = riskEvaluatePromptGuardrailFlags
+
+			case "save-risk-eval-review":
+				epf = riskSaveRiskEvalReviewFlags
+
+			case "list-risk-eval-reviews":
+				epf = riskListRiskEvalReviewsFlags
+
+			case "delete-risk-eval-review":
+				epf = riskDeleteRiskEvalReviewFlags
 
 			}
 
@@ -5209,6 +5250,18 @@ func ParseEndpoint(
 			case "test-detection-rule":
 				endpoint = c.TestDetectionRule()
 				data, err = riskc.BuildTestDetectionRulePayload(*riskTestDetectionRuleBodyFlag, *riskTestDetectionRuleApikeyTokenFlag, *riskTestDetectionRuleSessionTokenFlag, *riskTestDetectionRuleProjectSlugInputFlag)
+			case "evaluate-prompt-guardrail":
+				endpoint = c.EvaluatePromptGuardrail()
+				data, err = riskc.BuildEvaluatePromptGuardrailPayload(*riskEvaluatePromptGuardrailBodyFlag, *riskEvaluatePromptGuardrailApikeyTokenFlag, *riskEvaluatePromptGuardrailSessionTokenFlag, *riskEvaluatePromptGuardrailProjectSlugInputFlag)
+			case "save-risk-eval-review":
+				endpoint = c.SaveRiskEvalReview()
+				data, err = riskc.BuildSaveRiskEvalReviewPayload(*riskSaveRiskEvalReviewBodyFlag, *riskSaveRiskEvalReviewApikeyTokenFlag, *riskSaveRiskEvalReviewSessionTokenFlag, *riskSaveRiskEvalReviewProjectSlugInputFlag)
+			case "list-risk-eval-reviews":
+				endpoint = c.ListRiskEvalReviews()
+				data, err = riskc.BuildListRiskEvalReviewsPayload(*riskListRiskEvalReviewsPolicyIDFlag, *riskListRiskEvalReviewsApikeyTokenFlag, *riskListRiskEvalReviewsSessionTokenFlag, *riskListRiskEvalReviewsProjectSlugInputFlag)
+			case "delete-risk-eval-review":
+				endpoint = c.DeleteRiskEvalReview()
+				data, err = riskc.BuildDeleteRiskEvalReviewPayload(*riskDeleteRiskEvalReviewPolicyIDFlag, *riskDeleteRiskEvalReviewChatIDFlag, *riskDeleteRiskEvalReviewApikeyTokenFlag, *riskDeleteRiskEvalReviewSessionTokenFlag, *riskDeleteRiskEvalReviewProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11849,6 +11902,10 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-risk-exclusion: Delete a risk exclusion. Previously suppressed findings are restored.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
+	fmt.Fprintln(os.Stderr, `    evaluate-prompt-guardrail: Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.`)
+	fmt.Fprintln(os.Stderr, `    save-risk-eval-review: Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-eval-reviews: List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.`)
+	fmt.Fprintln(os.Stderr, `    delete-risk-eval-review: Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s risk COMMAND --help\n", os.Args[0])
@@ -12699,6 +12756,104 @@ func riskTestDetectionRuleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskEvaluatePromptGuardrailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk evaluate-prompt-guardrail", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk evaluate-prompt-guardrail --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"prompt\": \"aa\",\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskSaveRiskEvalReviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk save-risk-eval-review", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk save-risk-eval-review --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"verdict\": \"false_positive\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskEvalReviewsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-eval-reviews", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-eval-reviews --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDeleteRiskEvalReviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk delete-risk-eval-review", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -chat-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-eval-review --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

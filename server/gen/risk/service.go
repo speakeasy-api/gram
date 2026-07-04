@@ -114,6 +114,26 @@ type Service interface {
 	// custom regex) that the analyzer runs in production so the playground match
 	// shape mirrors the chat-message path.
 	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
+	// Replay a prompt_based guardrail against a single chat session and return the
+	// LLM judge's per-message verdict. The guardrail (prompt + judge config +
+	// message-type scope + CEL scope) is passed inline so the policy-eval
+	// workbench can evaluate an unsaved draft before a policy exists. This path is
+	// read-only: it never writes risk_results, publishes to the outbox, or
+	// enforces. It exists purely to tune a guardrail against real transcripts.
+	// Judges only the chat's latest generation; message-type scoping and CEL scope
+	// predicates are both applied.
+	EvaluatePromptGuardrail(context.Context, *EvaluatePromptGuardrailPayload) (res *PromptGuardrailEvalResult, err error)
+	// Record (or replace) the current reviewer's ground-truth verdict for one chat
+	// session under a prompt-based policy. This is the durable regression set the
+	// eval workbench scores the live guardrail against. Upserts: a reviewer has at
+	// most one verdict per session per policy.
+	SaveRiskEvalReview(context.Context, *SaveRiskEvalReviewPayload) (res *types.RiskPolicyEvalReview, err error)
+	// List the active regression set for a prompt-based policy: every reviewer's
+	// current ground-truth verdicts.
+	ListRiskEvalReviews(context.Context, *ListRiskEvalReviewsPayload) (res *ListRiskEvalReviewsResult, err error)
+	// Remove the current reviewer's verdict for one session (the toggle-off path).
+	// A reviewer can only clear their own verdict.
+	DeleteRiskEvalReview(context.Context, *DeleteRiskEvalReviewPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -136,7 +156,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [38]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -279,6 +299,18 @@ type DeleteCustomDetectionRulePayload struct {
 	ID string
 }
 
+// DeleteRiskEvalReviewPayload is the payload type of the risk service
+// deleteRiskEvalReview method.
+type DeleteRiskEvalReviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy the verdict belongs to.
+	PolicyID string
+	// The chat session whose verdict to clear.
+	ChatID string
+}
+
 // DeleteRiskExclusionPayload is the payload type of the risk service
 // deleteRiskExclusion method.
 type DeleteRiskExclusionPayload struct {
@@ -307,6 +339,32 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
+}
+
+// EvaluatePromptGuardrailPayload is the payload type of the risk service
+// evaluatePromptGuardrail method.
+type EvaluatePromptGuardrailPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The chat session to replay the guardrail against.
+	ChatID string
+	// The guardrail prompt the LLM judge evaluates each in-scope message against.
+	Prompt string
+	// Optional per-policy LLM-judge model configuration. Omit for the default
+	// judge model.
+	ModelConfig *types.RiskPolicyModelConfig
+	// Message types to judge (user_message, assistant_message, tool_request,
+	// tool_response), matching a policy's message_types. When empty or omitted,
+	// judges all supported types.
+	MessageTypes []string
+	// CEL scope predicate: the replay judges a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the replay skips a message when this boolean
+	// expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 }
 
 // ExprCompileResult is the result type of the risk service compileExpr method.
@@ -419,6 +477,23 @@ type ListRiskCategoriesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// ListRiskEvalReviewsPayload is the payload type of the risk service
+// listRiskEvalReviews method.
+type ListRiskEvalReviewsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy whose review set to list.
+	PolicyID string
+}
+
+// ListRiskEvalReviewsResult is the result type of the risk service
+// listRiskEvalReviews method.
+type ListRiskEvalReviewsResult struct {
+	// The active review set for the policy.
+	Reviews []*types.RiskPolicyEvalReview
 }
 
 // ListRiskExclusionsPayload is the payload type of the risk service
@@ -578,6 +653,54 @@ type ListRiskResultsResult struct {
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+// PromptGuardrailEvalResult is the result type of the risk service
+// evaluatePromptGuardrail method.
+type PromptGuardrailEvalResult struct {
+	// The chat session that was replayed.
+	ChatID string
+	// True when the guardrail flagged at least one in-scope message.
+	Flagged bool
+	// Number of in-scope messages the judge evaluated.
+	JudgedCount int
+	// Total OpenRouter cost across in-scope judge calls, in USD.
+	TotalCostUsd float64
+	// Aggregate judge latency overhead across in-scope messages, computed as the
+	// sum of per-message judge latencies.
+	TotalLatencyMs int64
+	// Per-message verdicts for in-scope messages, ordered by seq.
+	Verdicts []*PromptGuardrailMessageVerdict
+}
+
+// The LLM judge's verdict for one in-scope message in the replayed session.
+type PromptGuardrailMessageVerdict struct {
+	// The chat message ID.
+	MessageID string
+	// Message sequence within the chat generation, ascending.
+	Seq int64
+	// The judged message type (user_message, assistant_message, tool_request,
+	// tool_response).
+	MessageType string
+	// Tool name for a single-call tool_request message; empty otherwise.
+	ToolName *string
+	// True when the guardrail flagged this message.
+	Matched bool
+	// Judge confidence in [0,1]; 0 when not matched.
+	Confidence float64
+	// One-sentence judge rationale; empty when not matched.
+	Rationale string
+	// Wall-clock latency for judging this message, in milliseconds.
+	LatencyMs int64
+	// OpenRouter cost for judging this message, in USD. Zero when cost was not
+	// returned.
+	CostUsd float64
+	// Prompt tokens billed for this judge call.
+	PromptTokens int
+	// Completion tokens billed for this judge call.
+	CompletionTokens int
+	// Total tokens billed for this judge call.
+	TotalTokens int
 }
 
 // RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
@@ -774,6 +897,20 @@ type RiskUserBreakdownResult struct {
 	Categories []*RiskOverviewCategory
 	// Rule_id breakdown for this user, ordered by finding count descending.
 	Rules []*RiskRuleBreakdownEntry
+}
+
+// SaveRiskEvalReviewPayload is the payload type of the risk service
+// saveRiskEvalReview method.
+type SaveRiskEvalReviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The prompt-based policy the verdict belongs to.
+	PolicyID string
+	// The chat session being judged.
+	ChatID string
+	// The reviewer's ground-truth verdict for this session.
+	Verdict string
 }
 
 // SubmitRiskBlockFeedbackPayload is the payload type of the risk service

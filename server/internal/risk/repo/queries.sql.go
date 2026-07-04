@@ -2113,6 +2113,55 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 	return items, nil
 }
 
+const listRiskPolicyEvalReviews = `-- name: ListRiskPolicyEvalReviews :many
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_eval_reviews
+WHERE project_id = $1
+  AND risk_policy_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+type ListRiskPolicyEvalReviewsParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// The active regression set for a policy: every reviewer's current verdicts.
+// Scoped to project_id.
+func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPolicyEvalReviewsParams) ([]RiskPolicyEvalReview, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyEvalReviews, arg.ProjectID, arg.RiskPolicyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyEvalReview
+	for rows.Next() {
+		var i RiskPolicyEvalReview
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatID,
+			&i.Verdict,
+			&i.ReviewedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
 SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
@@ -2942,6 +2991,28 @@ func (q *Queries) ReverseExclusionFlagsBatch(ctx context.Context, arg ReverseExc
 	return items, nil
 }
 
+const riskEvalChatBelongsToProject = `-- name: RiskEvalChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = $1
+    AND project_id = $2
+    AND deleted IS FALSE
+)
+`
+
+type RiskEvalChatBelongsToProjectParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RiskEvalChatBelongsToProject(ctx context.Context, arg RiskEvalChatBelongsToProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, riskEvalChatBelongsToProject, arg.ChatID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results
 SET excluded_at = clock_timestamp()
@@ -2962,6 +3033,52 @@ WHERE id = $1
 func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
 	return err
+}
+
+const softDeleteRiskPolicyEvalReview = `-- name: SoftDeleteRiskPolicyEvalReview :one
+UPDATE risk_policy_eval_reviews
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND risk_policy_id = $2
+  AND chat_id = $3
+  AND reviewed_by = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteRiskPolicyEvalReviewParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+	ChatID       uuid.UUID
+	ReviewedBy   string
+}
+
+// Removes the current reviewer's verdict for one session (the toggle-off path).
+// Scoped to project_id and reviewed_by so a reviewer only clears their own row.
+func (q *Queries) SoftDeleteRiskPolicyEvalReview(ctx context.Context, arg SoftDeleteRiskPolicyEvalReviewParams) (RiskPolicyEvalReview, error) {
+	row := q.db.QueryRow(ctx, softDeleteRiskPolicyEvalReview,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.ChatID,
+		arg.ReviewedBy,
+	)
+	var i RiskPolicyEvalReview
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ChatID,
+		&i.Verdict,
+		&i.ReviewedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one
@@ -3410,6 +3527,61 @@ func (q *Queries) UpsertRiskPolicyBypassRequest(ctx context.Context, arg UpsertR
 		&i.DecidedBy,
 		&i.GrantedPrincipalUrns,
 		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRiskPolicyEvalReview = `-- name: UpsertRiskPolicyEvalReview :one
+INSERT INTO risk_policy_eval_reviews (
+  project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+ON CONFLICT (project_id, risk_policy_id, chat_id, reviewed_by) WHERE deleted IS FALSE
+DO UPDATE SET
+  verdict = EXCLUDED.verdict,
+  risk_policy_version = EXCLUDED.risk_policy_version,
+  updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRiskPolicyEvalReviewParams struct {
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+}
+
+// Records (or replaces) the current reviewer's ground-truth verdict for one
+// chat session under a prompt-based policy. Scoped to project_id. Upserts on the
+// active-row unique key so a reviewer has at most one verdict per session.
+func (q *Queries) UpsertRiskPolicyEvalReview(ctx context.Context, arg UpsertRiskPolicyEvalReviewParams) (RiskPolicyEvalReview, error) {
+	row := q.db.QueryRow(ctx, upsertRiskPolicyEvalReview,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatID,
+		arg.Verdict,
+		arg.ReviewedBy,
+	)
+	var i RiskPolicyEvalReview
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ChatID,
+		&i.Verdict,
+		&i.ReviewedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

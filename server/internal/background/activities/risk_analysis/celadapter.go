@@ -90,14 +90,22 @@ type CompiledScope struct {
 func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledScope, error) {
 	var s CompiledScope
 	s.eng = eng
-	if expr := strings.TrimSpace(includeCEL); expr != "" {
+	includeCEL = strings.TrimSpace(includeCEL)
+	exemptCEL = strings.TrimSpace(exemptCEL)
+	if eng == nil {
+		if includeCEL != "" || exemptCEL != "" {
+			return CompiledScope{}, fmt.Errorf("cel engine unavailable")
+		}
+		return s, nil
+	}
+	if expr := includeCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
 			return CompiledScope{}, fmt.Errorf("compile scope_include %q: %w", expr, err)
 		}
 		s.include = prg
 	}
-	if expr := strings.TrimSpace(exemptCEL); expr != "" {
+	if expr := exemptCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
 			return CompiledScope{}, fmt.Errorf("compile scope_exempt %q: %w", expr, err)
@@ -109,6 +117,30 @@ func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledSco
 
 // Active reports whether the scope has any predicate to evaluate.
 func (s CompiledScope) Active() bool { return s.include != nil || s.exempt != nil }
+
+// InScope reports whether a message passes include and does not match exempt.
+func (s CompiledScope) InScope(view MessageView) (bool, error) {
+	msg := celMessage(view)
+	if s.include != nil {
+		in, err := s.eng.EvalScope(s.include, msg)
+		if err != nil {
+			return false, fmt.Errorf("eval scope_include: %w", err)
+		}
+		if !in {
+			return false, nil
+		}
+	}
+	if s.exempt != nil {
+		ex, err := s.eng.EvalScope(s.exempt, msg)
+		if err != nil {
+			return false, fmt.Errorf("eval scope_exempt: %w", err)
+		}
+		if ex {
+			return false, nil
+		}
+	}
+	return true, nil
+}
 
 // Includes reports whether a message is in scope.
 func (s CompiledScope) Includes(view MessageView) bool {

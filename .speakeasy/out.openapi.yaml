@@ -27725,6 +27725,445 @@ paths:
         - risk
       x-speakeasy-group: risk.policies
       x-speakeasy-name-override: update
+  /rpc/riskEvals.deleteReview:
+    delete:
+      description: Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.
+      operationId: deleteRiskEvalReview
+      parameters:
+        - allowEmptyValue: true
+          description: The policy the verdict belongs to.
+          in: query
+          name: policy_id
+          required: true
+          schema:
+            description: The policy the verdict belongs to.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The chat session whose verdict to clear.
+          in: query
+          name: chat_id
+          required: true
+          schema:
+            description: The chat session whose verdict to clear.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteRiskEvalReview risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.evals
+      x-speakeasy-name-override: deleteReview
+      x-speakeasy-react-hook:
+        name: RiskDeleteEvalReview
+        type: mutation
+  /rpc/riskEvals.evaluate:
+    post:
+      description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation; message-type scoping and CEL scope predicates are both applied.'
+      operationId: evaluatePromptGuardrail
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluatePromptGuardrailRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptGuardrailEvalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: evaluatePromptGuardrail risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.evals
+      x-speakeasy-name-override: evaluate
+      x-speakeasy-react-hook:
+        name: RiskEvaluatePromptGuardrail
+        type: query
+  /rpc/riskEvals.listReviews:
+    get:
+      description: 'List the active regression set for a prompt-based policy: every reviewer''s current ground-truth verdicts.'
+      operationId: listRiskEvalReviews
+      parameters:
+        - allowEmptyValue: true
+          description: The policy whose review set to list.
+          in: query
+          name: policy_id
+          required: true
+          schema:
+            description: The policy whose review set to list.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRiskEvalReviewsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskEvalReviews risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.evals
+      x-speakeasy-name-override: listReviews
+      x-speakeasy-react-hook:
+        name: RiskListEvalReviews
+        type: query
+  /rpc/riskEvals.saveReview:
+    post:
+      description: 'Record (or replace) the current reviewer''s ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.'
+      operationId: saveRiskEvalReview
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveRiskEvalReviewRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskPolicyEvalReview'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: saveRiskEvalReview risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.evals
+      x-speakeasy-name-override: saveReview
+      x-speakeasy-react-hook:
+        name: RiskSaveEvalReview
+        type: mutation
   /rpc/telemetry.captureEvent:
     post:
       description: Capture a telemetry event and forward it to PostHog
@@ -39747,6 +40186,34 @@ components:
         - timeout
         - fault
       x-speakeasy-name-override: ServiceError
+    EvaluatePromptGuardrailRequestBody:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session to replay the guardrail against.
+          format: uuid
+        message_types:
+          type: array
+          items:
+            type: string
+          description: Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
+        prompt:
+          type: string
+          description: The guardrail prompt the LLM judge evaluates each in-scope message against.
+          minLength: 1
+          maxLength: 10000
+        scope_exempt:
+          type: string
+          description: 'CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no inline exemption.'
+        scope_include:
+          type: string
+          description: 'CEL scope predicate: the replay judges a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
+      required:
+        - chat_id
+        - prompt
     EvolveForm:
       type: object
       properties:
@@ -42639,6 +43106,16 @@ components:
           description: List of collections
       required:
         - collections
+    ListRiskEvalReviewsResult:
+      type: object
+      properties:
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPolicyEvalReview'
+          description: The active review set for the policy.
+      required:
+        - reviews
     ListRiskExclusionsResult:
       type: object
       properties:
@@ -45096,6 +45573,101 @@ components:
         - distinct_providers
         - models
         - tools
+    PromptGuardrailEvalResult:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session that was replayed.
+          format: uuid
+        flagged:
+          type: boolean
+          description: True when the guardrail flagged at least one in-scope message.
+        judged_count:
+          type: integer
+          description: Number of in-scope messages the judge evaluated.
+          format: int64
+        total_cost_usd:
+          type: number
+          description: Total OpenRouter cost across in-scope judge calls, in USD.
+          format: double
+        total_latency_ms:
+          type: integer
+          description: Aggregate judge latency overhead across in-scope messages, computed as the sum of per-message judge latencies.
+          format: int64
+        verdicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptGuardrailMessageVerdict'
+          description: Per-message verdicts for in-scope messages, ordered by seq.
+      description: 'The result of replaying a prompt guardrail against one chat session. Read-only: no findings are persisted.'
+      required:
+        - chat_id
+        - flagged
+        - judged_count
+        - total_cost_usd
+        - total_latency_ms
+        - verdicts
+    PromptGuardrailMessageVerdict:
+      type: object
+      properties:
+        completion_tokens:
+          type: integer
+          description: Completion tokens billed for this judge call.
+          format: int64
+        confidence:
+          type: number
+          description: Judge confidence in [0,1]; 0 when not matched.
+          format: double
+        cost_usd:
+          type: number
+          description: OpenRouter cost for judging this message, in USD. Zero when cost was not returned.
+          format: double
+        latency_ms:
+          type: integer
+          description: Wall-clock latency for judging this message, in milliseconds.
+          format: int64
+        matched:
+          type: boolean
+          description: True when the guardrail flagged this message.
+        message_id:
+          type: string
+          description: The chat message ID.
+          format: uuid
+        message_type:
+          type: string
+          description: The judged message type (user_message, assistant_message, tool_request, tool_response).
+        prompt_tokens:
+          type: integer
+          description: Prompt tokens billed for this judge call.
+          format: int64
+        rationale:
+          type: string
+          description: One-sentence judge rationale; empty when not matched.
+        seq:
+          type: integer
+          description: Message sequence within the chat generation, ascending.
+          format: int64
+        tool_name:
+          type: string
+          description: Tool name for a single-call tool_request message; empty otherwise.
+        total_tokens:
+          type: integer
+          description: Total tokens billed for this judge call.
+          format: int64
+      description: The LLM judge's verdict for one in-scope message in the replayed session.
+      required:
+        - message_id
+        - seq
+        - message_type
+        - matched
+        - confidence
+        - rationale
+        - latency_ms
+        - cost_usd
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
     PromptTemplate:
       type: object
       properties:
@@ -46692,6 +47264,52 @@ components:
         - granted_principal_urns
         - created_at
         - updated_at
+    RiskPolicyEvalReview:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session being judged.
+          format: uuid
+        created_at:
+          type: string
+          description: When the verdict was first recorded.
+          format: date-time
+        id:
+          type: string
+          description: The review ID.
+          format: uuid
+        policy_id:
+          type: string
+          description: The prompt-based policy the verdict belongs to.
+          format: uuid
+        policy_version:
+          type: integer
+          description: The policy version in effect when the verdict was recorded (provenance).
+          format: int64
+        reviewed_by:
+          type: string
+          description: User id of the reviewer who recorded the verdict.
+        updated_at:
+          type: string
+          description: When the verdict was last updated.
+          format: date-time
+        verdict:
+          type: string
+          description: The reviewer's ground-truth verdict.
+          enum:
+            - correct
+            - false_positive
+            - missed
+      required:
+        - id
+        - policy_id
+        - policy_version
+        - chat_id
+        - verdict
+        - reviewed_by
+        - created_at
+        - updated_at
     RiskPolicyModelConfig:
       type: object
       properties:
@@ -47186,6 +47804,28 @@ components:
         - total_output_tokens
         - total_tokens
         - total_chats
+    SaveRiskEvalReviewRequestBody:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session being judged.
+          format: uuid
+        policy_id:
+          type: string
+          description: The prompt-based policy the verdict belongs to.
+          format: uuid
+        verdict:
+          type: string
+          description: The reviewer's ground-truth verdict for this session.
+          enum:
+            - correct
+            - false_positive
+            - missed
+      required:
+        - policy_id
+        - chat_id
+        - verdict
     ScopeDefinition:
       type: object
       properties:

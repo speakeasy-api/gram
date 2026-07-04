@@ -39,7 +39,15 @@ type recordingPromptJudge struct {
 
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
 	j.inputs = append(j.inputs, in)
-	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
+	return &risk_analysis.JudgeVerdict{
+		Matched:          true,
+		Confidence:       0.9,
+		Rationale:        "matched tool call",
+		CostUSD:          0,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+	}
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
