@@ -1,0 +1,21 @@
+server/database/schema.sql
+  s_8860283851235f::t_19b5a1a508c8e0 3450-3498
+server/migrations/20260703112505_risk-policy-eval-reviews.sql
+  s_8860283851235f::t_e953a1bbf7e01e 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "5550a64f9dbdd6f649ab35e04f743feab5e52d2e",
+  "prompts": {},
+  "sessions": {
+    "s_8860283851235f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
