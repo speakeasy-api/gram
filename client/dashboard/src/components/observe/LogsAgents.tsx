@@ -396,7 +396,7 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
-  const { data, isLoading, error, refetch, isLogsDisabled } =
+  const { data, isLoading, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
       useListChats(
         {
@@ -545,6 +545,8 @@ export function LogsAgentsContent(): JSX.Element {
         error={error}
         isLogsDisabled={isLogsDisabled}
         onLogsEnabled={() => void refetch()}
+        onRefresh={() => void refetch()}
+        isRefreshing={isFetching}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
@@ -589,6 +591,8 @@ function AgentSessionsPageContent({
   error,
   isLogsDisabled,
   onLogsEnabled,
+  onRefresh,
+  isRefreshing,
   hasMore,
   offset,
   setOffset,
@@ -628,6 +632,8 @@ function AgentSessionsPageContent({
   error: Error | null;
   isLogsDisabled: boolean;
   onLogsEnabled: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
   hasMore: boolean;
   offset: number;
   setOffset: (offset: number) => void;
@@ -762,6 +768,10 @@ function AgentSessionsPageContent({
               ]}
               direction={sortOrder}
               onDirectionChange={setSortOrder}
+            />
+            <Page.Toolbar.Refresh
+              onRefresh={onRefresh}
+              isRefreshing={isRefreshing}
             />
           </Page.Toolbar>
           <OwnSessionsNotice />

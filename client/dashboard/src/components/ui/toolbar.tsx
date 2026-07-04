@@ -3,6 +3,7 @@ import React, { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  RefreshCw,
   SearchIcon,
   SlidersHorizontal,
   X,
@@ -42,12 +43,13 @@ import {
  *     <Page.Toolbar.Filters schema={…} values={…} … />
  *     <Page.Toolbar.SortBy value={sort} options={…} onChange={setSort} />
  *     <Page.Toolbar.ViewAs value={view} onChange={setView} />
+ *     <Page.Toolbar.Refresh onRefresh={refetch} isRefreshing={isFetching} />
  *   </Page.Toolbar>
  *
  * Every control is the same height ({@link CONTROL_HEIGHT}) so the row reads
- * flush. The toolbar groups its children: ViewAs and Count anchor the right
- * edge; everything else stays left in source order. Child order otherwise
- * doesn't matter.
+ * flush. The toolbar groups its children: Search and Filters stay left; Sort,
+ * ViewAs, Count, Refresh, and Actions anchor the right edge, in source order.
+ * Child order otherwise doesn't matter.
  */
 
 // Shared height for every control in the toolbar (40px).
@@ -389,6 +391,49 @@ function ToolbarActions({ children }: { children: ReactNode }): JSX.Element {
   return <>{children}</>;
 }
 
+// Minimum time the refresh button stays in its spinning state, so a
+// fast/cached refetch still reads as having done something.
+const MIN_REFRESH_MS = 2000;
+
+/** Refresh button (right-aligned). Spins/disables while refreshing. */
+interface ToolbarRefreshProps {
+  onRefresh: () => void;
+  isRefreshing?: boolean;
+  className?: string;
+}
+
+function ToolbarRefresh({
+  onRefresh,
+  isRefreshing = false,
+  className,
+}: ToolbarRefreshProps): JSX.Element {
+  const [minDurationActive, setMinDurationActive] = useState(false);
+
+  useEffect(() => {
+    if (!minDurationActive) return;
+    const timer = setTimeout(() => setMinDurationActive(false), MIN_REFRESH_MS);
+    return () => clearTimeout(timer);
+  }, [minDurationActive]);
+
+  const showRefreshing = isRefreshing || minDurationActive;
+
+  return (
+    <Button
+      variant="outline"
+      onClick={() => {
+        setMinDurationActive(true);
+        onRefresh();
+      }}
+      disabled={showRefreshing}
+      aria-label="Refresh"
+      className={cn(CONTROL_HEIGHT, "gap-2", className)}
+    >
+      <RefreshCw className={cn("size-4", showRefreshing && "animate-spin")} />
+      Refresh
+    </Button>
+  );
+}
+
 export const Toolbar = Object.assign(ToolbarRoot, {
   Search: ToolbarSearch,
   Filters: ToolbarFilters,
@@ -396,4 +441,5 @@ export const Toolbar = Object.assign(ToolbarRoot, {
   ViewAs: ToolbarViewAs,
   Count: ToolbarCount,
   Actions: ToolbarActions,
+  Refresh: ToolbarRefresh,
 });
