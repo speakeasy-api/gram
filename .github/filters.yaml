@@ -46,6 +46,7 @@ sdk:
 sdk-gen:
   - ".speakeasy/workflow.yaml"
   - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
+  - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"

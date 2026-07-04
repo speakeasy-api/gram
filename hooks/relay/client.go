@@ -1,27 +1,24 @@
 package relay
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	sdk "github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/apierrors"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"github.com/speakeasy-api/gram/hooks/sdk/retry"
 )
 
-const (
-	ingestPath     = "/rpc/hooks.ingest"
-	apiKeyHeader   = "Gram-Key"
-	projectHeader  = "Gram-Project"
-	defaultMaxTry  = 4
-	defaultBackoff = time.Second
-	perAttemptTime = 10 * time.Second
-)
+const perAttemptTime = 10 * time.Second
 
 // decision is the server's verdict for a hook event.
 type decision struct {
@@ -42,86 +39,96 @@ type ingestResult struct {
 	authRejected bool
 }
 
-// client posts canonical hook events to the Gram ingest endpoint with bounded
-// retries and a reused idempotency token so redelivered requests are stored
-// exactly once.
+// client posts canonical hook events through the generated ingest SDK with
+// bounded retries and a reused idempotency token so redelivered requests are
+// stored exactly once.
 type client struct {
-	http       *http.Client
-	maxAttempt int
-	backoff    time.Duration
+	sdk *sdk.SpeakeasyHooks
 }
 
-func newClient() *client {
+func newClient(serverURL string) *client {
 	return &client{
-		http:       &http.Client{Timeout: perAttemptTime},
-		maxAttempt: defaultMaxTry,
-		backoff:    defaultBackoff,
+		sdk: sdk.New(
+			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
+			sdk.WithClient(&http.Client{Timeout: perAttemptTime}),
+			// Retries cover connection errors and 429/5xx; the SDK rewinds the
+			// request body per attempt, so the Idempotency-Key header minted in
+			// send is reused across redeliveries. The elapsed cap keeps the
+			// worst case well under the 60s gating-hook timeout.
+			sdk.WithRetryConfig(retry.Config{
+				Strategy: "backoff",
+				Backoff: &retry.BackoffStrategy{
+					InitialInterval: 1_000,
+					MaxInterval:     4_000,
+					Exponent:        1.5,
+					MaxElapsedTime:  30_000,
+				},
+				RetryConnectionErrors: true,
+			}),
+		),
 	}
 }
 
-// send posts the payload to /rpc/hooks.ingest authenticated with c. It retries
-// transient failures (connection resets, 5xx) reusing one idempotency token.
-func (cl *client) send(ctx context.Context, serverURL string, c creds, payload ingestPayload) ingestResult {
-	token := newIdempotencyToken()
-	payload.IdempotencyKey = token
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}
+// send posts the payload to the ingest endpoint authenticated with c.
+func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
+	sec := &operations.IngestHookEventSecurity{
+		ApikeyHeaderGramKey:          new(c.APIKey),
+		ProjectSlugHeaderGramProject: nil,
 	}
-
-	url := strings.TrimRight(serverURL, "/") + ingestPath
-	var lastStatus int
-	for attempt := 1; attempt <= cl.maxAttempt; attempt++ {
-		status, respBody, reqErr := cl.attempt(ctx, url, token, c, body)
-		if reqErr == nil {
-			if status < 500 {
-				return interpret(status, respBody)
-			}
-			lastStatus = status
-		}
-		if attempt < cl.maxAttempt {
-			select {
-			case <-ctx.Done():
-				return ingestResult{statusCode: lastStatus, decision: decision{}, authRejected: false}
-			case <-time.After(cl.backoff * time.Duration(attempt)):
-			}
-		}
-	}
-	// Exhausted retries: a persistent 5xx is still a definitive status the
-	// caller can act on; a transport error leaves statusCode 0.
-	if lastStatus != 0 {
-		return interpret(lastStatus, nil)
-	}
-	return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}
-}
-
-func (cl *client) attempt(ctx context.Context, url, token string, c creds, body []byte) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", token)
-	req.Header.Set(apiKeyHeader, c.APIKey)
 	if c.Project != "" {
-		req.Header.Set(projectHeader, c.Project)
+		sec.ProjectSlugHeaderGramProject = new(c.Project)
 	}
 
-	resp, err := cl.http.Do(req)
+	res, err := cl.sdk.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
+		GramKey:        nil,
+		GramProject:    nil,
+		IdempotencyKey: new(newIdempotencyToken()),
+		Body:           body,
+	}, sec)
 	if err != nil {
-		return 0, nil, err
+		return interpretError(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	return resp.StatusCode, respBody, nil
+
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+	if res.IngestHookResult != nil {
+		out.decision = decision{
+			Decision: string(res.IngestHookResult.Decision),
+			Reason:   strDeref(res.IngestHookResult.Reason),
+			Message:  strDeref(res.IngestHookResult.Message),
+		}
+	}
+	return out
 }
 
-func interpret(status int, body []byte) ingestResult {
-	res := ingestResult{statusCode: status, decision: decision{}, authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden}
-	if len(body) > 0 {
-		_ = json.Unmarshal(body, &res.decision)
+// interpretError maps an SDK error onto the relay's result semantics: a typed
+// or generic API error carries a definitive status the ratchet can act on; a
+// transport failure that never produced a response leaves statusCode 0.
+func interpretError(err error) ingestResult {
+	var svcErr *apierrors.ServiceError
+	if errors.As(err, &svcErr) && svcErr.RawResponse != nil {
+		status := svcErr.RawResponse.StatusCode
+		return ingestResult{
+			statusCode:   status,
+			decision:     decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
+			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
+		}
 	}
-	return res
+	var apiErr *apierrors.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode > 0 {
+		return ingestResult{
+			statusCode:   apiErr.StatusCode,
+			decision:     decision{Decision: "", Reason: "", Message: ""},
+			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
+		}
+	}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+}
+
+func strDeref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func newIdempotencyToken() string {

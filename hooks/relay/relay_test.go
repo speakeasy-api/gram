@@ -15,23 +15,25 @@ import (
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
 // fakeServer captures ingest requests and returns a scripted decision.
 type fakeServer struct {
 	*httptest.Server
 	mu       sync.Mutex
-	requests []ingestPayload
+	requests []components.IngestRequestBody
 	headers  []http.Header
-	respond  func(ingestPayload) (int, decision)
+	respond  func(components.IngestRequestBody) (int, decision)
 }
 
-func newFakeServer(t *testing.T, respond func(ingestPayload) (int, decision)) *fakeServer {
+func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
 	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		var p ingestPayload
+		var p components.IngestRequestBody
 		_ = json.Unmarshal(body, &p)
 		fs.mu.Lock()
 		fs.requests = append(fs.requests, p)
@@ -56,7 +58,7 @@ func (fs *fakeServer) count() int {
 	return len(fs.requests)
 }
 
-func (fs *fakeServer) last() ingestPayload {
+func (fs *fakeServer) last() components.IngestRequestBody {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	return fs.requests[len(fs.requests)-1]
@@ -81,7 +83,7 @@ func authedConfig(t *testing.T, serverURL string) Config {
 func TestEnvelopeClaudePreToolUse(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "claude/pre_tool_use.json")
 	runner := agenthooks.New()
-	var got ingestPayload
+	var got components.IngestRequestBody
 	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
 		got = buildEnvelope(e, "test-host")
 		return agenthooks.NoDecision(), nil
@@ -90,50 +92,56 @@ func TestEnvelopeClaudePreToolUse(t *testing.T) {
 
 	require.Equal(t, schemaVersion, got.SchemaVersion)
 	require.Equal(t, "claude", got.Source.Adapter)
-	require.Equal(t, "PreToolUse", got.Source.RawEventName)
-	require.Equal(t, "tool.requested", got.Event.Type)
+	require.NotNil(t, got.Source.RawEventName)
+	require.Equal(t, "PreToolUse", *got.Source.RawEventName)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
 	require.NotNil(t, got.Session)
-	require.Equal(t, "sess-claude-1", got.Session.ID)
+	require.NotNil(t, got.Session.ID)
+	require.Equal(t, "sess-claude-1", *got.Session.ID)
 	require.NotNil(t, got.Data)
 	require.NotNil(t, got.Data.ToolCall)
-	require.Equal(t, "Bash", got.Data.ToolCall.Name)
-	require.Equal(t, "toolu_01ABC", got.Data.ToolCall.ID)
+	require.NotNil(t, got.Data.ToolCall.Name)
+	require.Equal(t, "Bash", *got.Data.ToolCall.Name)
+	require.NotNil(t, got.Data.ToolCall.ID)
+	require.Equal(t, "toolu_01ABC", *got.Data.ToolCall.ID)
 	require.NotEmpty(t, got.Raw)
 }
 
 func TestEnvelopeClaudeMCPToolResolvesServer(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "claude/pre_tool_use_mcp.json")
 	runner := agenthooks.New(agenthooks.WithoutMCPResolution())
-	var got ingestPayload
+	var got components.IngestRequestBody
 	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
 		got = buildEnvelope(e, "test-host")
 		return agenthooks.NoDecision(), nil
 	})
 	agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload)
 
-	require.Equal(t, "tool.requested", got.Event.Type)
-	require.NotNil(t, got.Data.MCP)
-	require.Equal(t, "github", got.Data.MCP.ServerName)
-	require.Equal(t, "github", got.Data.MCP.ServerIdentity)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.NotNil(t, got.Data.Mcp)
+	require.NotNil(t, got.Data.Mcp.ServerName)
+	require.Equal(t, "github", *got.Data.Mcp.ServerName)
+	require.NotNil(t, got.Data.Mcp.ServerIdentity)
+	require.Equal(t, "github", *got.Data.Mcp.ServerIdentity)
 }
 
 func TestEnvelopeClaudeSkillReclassifies(t *testing.T) {
 	payload := []byte(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"my-skill"},"tool_use_id":"t1"}`)
 	runner := agenthooks.New()
-	var got ingestPayload
+	var got components.IngestRequestBody
 	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
 		got = buildEnvelope(e, "h")
 		return agenthooks.NoDecision(), nil
 	})
 	agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload)
 
-	require.Equal(t, "skill.activated", got.Event.Type)
+	require.Equal(t, components.TypeSkillActivated, got.Event.Type)
 	require.NotNil(t, got.Data.Skill)
 	require.Equal(t, "my-skill", got.Data.Skill.Name)
 }
 
 func TestIngestAllowSendsAuthenticatedRequest(t *testing.T) {
-	fs := newFakeServer(t, func(ingestPayload) (int, decision) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
@@ -145,11 +153,14 @@ func TestIngestAllowSendsAuthenticatedRequest(t *testing.T) {
 	require.Equal(t, "test-hooks-key", fs.headers[0].Get("Gram-Key"))
 	require.Equal(t, "default", fs.headers[0].Get("Gram-Project"))
 	require.NotEmpty(t, fs.headers[0].Get("Idempotency-Key"))
-	require.Equal(t, "tool.requested", fs.last().Event.Type)
+	require.Equal(t, components.TypeToolRequested, fs.last().Event.Type)
+	// The verbatim provider payload must cross the wire as a JSON object, not
+	// a base64 rendering of the raw bytes.
+	require.IsType(t, map[string]any{}, fs.last().Raw)
 }
 
 func TestIngestDenyBlocksToolCall(t *testing.T) {
-	fs := newFakeServer(t, func(ingestPayload) (int, decision) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked by policy X"}
 	})
 	cfg := authedConfig(t, fs.URL)
@@ -161,7 +172,7 @@ func TestIngestDenyBlocksToolCall(t *testing.T) {
 }
 
 func TestIngestDenyBlocksPrompt(t *testing.T) {
-	fs := newFakeServer(t, func(ingestPayload) (int, decision) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "prompt blocked"}
 	})
 	cfg := authedConfig(t, fs.URL)
@@ -173,7 +184,7 @@ func TestIngestDenyBlocksPrompt(t *testing.T) {
 }
 
 func TestTelemetryEventIsFireAndForget(t *testing.T) {
-	fs := newFakeServer(t, func(ingestPayload) (int, decision) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
@@ -181,13 +192,13 @@ func TestTelemetryEventIsFireAndForget(t *testing.T) {
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, 1, fs.count())
-	require.Equal(t, "tool.completed", fs.last().Event.Type)
+	require.Equal(t, components.TypeToolCompleted, fs.last().Event.Type)
 	require.NotNil(t, fs.last().Data.ToolCall)
 	require.NotEmpty(t, fs.last().Data.ToolCall.Output)
 }
 
 func TestNonBlockingSwallowsDeny(t *testing.T) {
-	fs := newFakeServer(t, func(ingestPayload) (int, decision) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "would block"}
 	})
 	cfg := authedConfig(t, fs.URL)
@@ -244,14 +255,16 @@ func TestCursorModelResponseRelaysMessage(t *testing.T) {
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, 1, fs.count())
 	last := fs.last()
-	require.Equal(t, "assistant.responded", last.Event.Type)
+	require.Equal(t, components.TypeAssistantResponded, last.Event.Type)
 	require.NotNil(t, last.Data)
 	require.NotNil(t, last.Data.Message)
-	require.Equal(t, "final answer", last.Data.Message.Text)
-	require.Equal(t, "assistant", last.Data.Message.Role)
+	require.NotNil(t, last.Data.Message.Text)
+	require.Equal(t, "final answer", *last.Data.Message.Text)
+	require.NotNil(t, last.Data.Message.Role)
+	require.Equal(t, "assistant", *last.Data.Message.Role)
 	require.NotNil(t, last.Data.Usage)
-	require.Equal(t, 10, *last.Data.Usage.InputTokens)
-	require.Equal(t, 5, *last.Data.Usage.OutputTokens)
+	require.Equal(t, int64(10), *last.Data.Usage.InputTokens)
+	require.Equal(t, int64(5), *last.Data.Usage.OutputTokens)
 }
 
 // TestLoginCommandCarriesConfig pins the nudge → login contract: the sign-in
