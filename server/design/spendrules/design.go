@@ -40,7 +40,7 @@ var _ = Service("spendRules", func() {
 			Attribute("description", String, "Optional description of what the rule covers.", func() {
 				Default("")
 			})
-			Attribute("target_expr", String, "CEL boolean expression over actor directory attributes selecting who the rule applies to.")
+			Attribute("target_expr", String, "CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD for one window.", func() {
 				Minimum(0)
 			})
@@ -145,7 +145,7 @@ var _ = Service("spendRules", func() {
 			})
 			Attribute("name", String, "The rule name. Omit to preserve the current name.")
 			Attribute("description", String, "Description of what the rule covers. Omit to preserve the current description.")
-			Attribute("target_expr", String, "CEL boolean expression over actor directory attributes. Omit to preserve the current expression.")
+			Attribute("target_expr", String, "CEL boolean expression over member attributes. Omit to preserve the current expression.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD for one window. Omit to preserve the current limit.", func() {
 				Minimum(0)
 			})
@@ -214,7 +214,7 @@ var _ = Service("spendRules", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("target_expr", String, "CEL boolean expression over actor directory attributes to preview.")
+			Attribute("target_expr", String, "CEL boolean expression over member attributes to preview.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD used to compute usage percentages.", func() {
 				Minimum(0)
 			})
@@ -315,11 +315,12 @@ var SpendRule = Type("SpendRule", func() {
 	Attribute("id", String, "The spend rule ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule configuration that produced an event.")
+	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.")
 	Attribute("organization_id", String, "The organization ID.")
 	Attribute("name", String, "The rule name.")
+	Attribute("slug", String, "URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.")
 	Attribute("description", String, "Description of what the rule covers. Empty when unset.")
-	Attribute("target_expr", String, "CEL boolean expression over actor directory attributes selecting who the rule applies to.")
+	Attribute("target_expr", String, "CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.")
 	Attribute("limit_usd", Float64, "Per-person budget in USD for one window.")
 	Attribute("window_kind", String, "UTC calendar window the budget covers.", func() {
 		SpendRuleWindowKindEnum()
@@ -340,7 +341,7 @@ var SpendRule = Type("SpendRule", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "urn", "organization_id", "name", "description", "target_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "evaluated_from", "created_at", "updated_at")
+	Required("id", "urn", "organization_id", "name", "slug", "description", "target_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "evaluated_from", "created_at", "updated_at")
 })
 
 var SpendRuleEvent = Type("SpendRuleEvent", func() {
@@ -385,7 +386,7 @@ var SpendRuleActorUsage = Type("SpendRuleActorUsage", func() {
 })
 
 var PreviewSpendRuleResult = Type("PreviewSpendRuleResult", func() {
-	Attribute("matched_count", Int, "Total number of directory users the target expression matches.")
+	Attribute("matched_count", Int, "Total number of organization members the target expression matches.")
 	Attribute("window_start", String, "Inclusive start of the current window used for spend.", func() {
 		Format(FormatDateTime)
 	})
@@ -401,7 +402,7 @@ var SpendRuleUsage = Type("SpendRuleUsage", func() {
 	Attribute("rule_id", String, "The spend rule ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("matched_users", Int, "Number of directory users the rule currently matches.")
+	Attribute("matched_users", Int, "Number of organization members the rule currently matches.")
 	Attribute("users_warned", Int, "Matched users at or past the warning threshold but under the limit.")
 	Attribute("users_breached", Int, "Matched users at or past the limit.")
 	Attribute("spend_usd", Float64, "Total spend in USD across matched users within the current window.")

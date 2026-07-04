@@ -12,17 +12,20 @@ package types
 type SpendRule struct {
 	// The spend rule ID.
 	ID string
-	// Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string
 	// The organization ID.
 	OrganizationID string
 	// The rule name.
 	Name string
+	// URL-safe identifier derived from the name at creation time. Unique per
+	// organization and immutable; the rule URN embeds it.
+	Slug string
 	// Description of what the rule covers. Empty when unset.
 	Description string
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string
 	// Per-person budget in USD for one window.
 	LimitUsd float64

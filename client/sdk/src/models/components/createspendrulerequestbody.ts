@@ -55,7 +55,7 @@ export type CreateSpendRuleRequestBody = {
    */
   name: string;
   /**
-   * CEL boolean expression over actor directory attributes selecting who the rule applies to.
+   * CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
    */
   targetExpr: string;
   /**

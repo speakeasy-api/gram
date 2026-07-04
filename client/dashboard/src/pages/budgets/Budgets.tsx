@@ -623,7 +623,7 @@ function EventRuleCell({
   versionByRuleId: Map<string, number>;
 }): JSX.Element {
   const ref = parseRuleUrn(event.ruleUrn);
-  const currentVersion = ref ? versionByRuleId.get(ref.id) : undefined;
+  const currentVersion = versionByRuleId.get(event.ruleId);
   const marker = versionMarker(ref, currentVersion);
 
   return (
@@ -639,7 +639,7 @@ function EventRuleCell({
 }
 
 function versionMarker(
-  ref: { id: string; version: number } | null,
+  ref: { slug: string; version: number } | null,
   currentVersion: number | undefined,
 ): string | null {
   if (ref === null) return null;

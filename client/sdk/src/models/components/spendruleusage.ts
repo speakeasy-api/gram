@@ -29,7 +29,7 @@ export type SpendRuleUsage = {
    */
   budgetUsd: number;
   /**
-   * Number of directory users the rule currently matches.
+   * Number of organization members the rule currently matches.
    */
   matchedUsers: number;
   /**

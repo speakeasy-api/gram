@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -43,10 +42,10 @@ func (l *Logger) LogSpendRuleCreate(ctx context.Context, dbtx repo.DBTX, event L
 
 		Action: string(action),
 
-		SubjectID:          event.SpendRuleURN.ID.String(),
+		SubjectID:          event.SpendRuleURN.Slug,
 		SubjectType:        string(subjectTypeSpendRule),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SpendRuleName),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SpendRuleURN.Slug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
@@ -94,10 +93,10 @@ func (l *Logger) LogSpendRuleUpdate(ctx context.Context, dbtx repo.DBTX, event L
 
 		Action: string(action),
 
-		SubjectID:          event.SpendRuleURN.ID.String(),
+		SubjectID:          event.SpendRuleURN.Slug,
 		SubjectType:        string(subjectTypeSpendRule),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SpendRuleName),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SpendRuleURN.Slug),
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
@@ -131,10 +130,10 @@ func (l *Logger) LogSpendRuleDelete(ctx context.Context, dbtx repo.DBTX, event L
 
 		Action: string(action),
 
-		SubjectID:          event.SpendRuleURN.ID.String(),
+		SubjectID:          event.SpendRuleURN.Slug,
 		SubjectType:        string(subjectTypeSpendRule),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SpendRuleName),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SpendRuleURN.Slug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,

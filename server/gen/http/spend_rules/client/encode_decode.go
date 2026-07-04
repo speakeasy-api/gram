@@ -1953,6 +1953,7 @@ func unmarshalSpendRuleResponseBodyToTypesSpendRule(v *SpendRuleResponseBody) *t
 		Urn:            *v.Urn,
 		OrganizationID: *v.OrganizationID,
 		Name:           *v.Name,
+		Slug:           *v.Slug,
 		Description:    *v.Description,
 		TargetExpr:     *v.TargetExpr,
 		LimitUsd:       *v.LimitUsd,

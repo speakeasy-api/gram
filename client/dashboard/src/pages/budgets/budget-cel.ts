@@ -5,7 +5,7 @@
 // (server/internal/spendrules/celenv) is authoritative and re-validates every
 // expression at create/update time.
 
-/** A directory-synced attribute an actor rule can be written against. */
+/** A member attribute an actor rule can be written against. */
 export interface ActorAttribute {
   name: string;
   type: "string" | "list";
@@ -15,11 +15,12 @@ export interface ActorAttribute {
 }
 
 /**
- * The actor attributes available to spend-control rules. These map to the
- * WorkOS directory-sync attributes Gram already ingests (department_name,
- * job_title, employee_type, division_name, cost_center_name) plus identity
- * dimensions (email, groups). Keep in sync with the server CEL environment in
- * server/internal/spendrules/celenv.
+ * The actor attributes available to spend-control rules. Rules target
+ * organization members: identity (email), org roles (roles), and — when the
+ * org syncs a directory — the WorkOS directory attributes Gram already
+ * ingests (department_name, job_title, employee_type, division_name,
+ * cost_center_name) plus group memberships (groups). Keep in sync with the
+ * server CEL environment in server/internal/spendrules/celenv.
  */
 export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
   {
@@ -55,7 +56,7 @@ export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
   {
     name: "email",
     type: "string",
-    description: "Actor email address.",
+    description: "Member email address.",
     samples: ["ada@acme.com", "grace@acme.com"],
   },
   {
@@ -63,6 +64,12 @@ export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
     type: "list",
     description: "IdP / directory group memberships.",
     samples: ["eng-frontier", "ml-team", "interns", "leadership"],
+  },
+  {
+    name: "roles",
+    type: "list",
+    description: "Organization role slugs the member holds.",
+    samples: ["admin", "member"],
   },
 ];
 

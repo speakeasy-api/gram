@@ -24,6 +24,7 @@ func sampleActor() celenv.Actor {
 		DivisionName:   "R&D",
 		CostCenterName: "CC-1001",
 		Groups:         []string{"eng-frontier", "leadership"},
+		Roles:          []string{"admin"},
 	}
 }
 
@@ -48,6 +49,8 @@ func TestCompileAndEvalExpressions(t *testing.T) {
 		{expr: `employee_type == "intern"`, want: false},
 		{expr: `division_name == "R&D" && cost_center_name == "CC-1001"`, want: true},
 		{expr: `department_name == "Design" || "eng-frontier" in groups`, want: true},
+		{expr: `"admin" in roles`, want: true},
+		{expr: `"member" in roles`, want: false},
 	}
 
 	for _, tc := range cases {
@@ -75,6 +78,12 @@ func TestEvalWithEmptyAttributes(t *testing.T) {
 	got, err = eng.Eval(prg, celenv.Actor{})
 	require.NoError(t, err)
 	require.False(t, got, "nil groups behave as an empty list")
+
+	prg, err = eng.Compile(`"admin" in roles`)
+	require.NoError(t, err)
+	got, err = eng.Eval(prg, celenv.Actor{})
+	require.NoError(t, err)
+	require.False(t, got, "nil roles behave as an empty list")
 }
 
 func TestCompileRejectsUnknownVariables(t *testing.T) {

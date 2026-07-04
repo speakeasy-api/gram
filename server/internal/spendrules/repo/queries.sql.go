@@ -16,6 +16,7 @@ const createSpendRule = `-- name: CreateSpendRule :one
 INSERT INTO spend_rules (
     organization_id
   , name
+  , slug
   , description
   , target_expr
   , limit_usd
@@ -34,13 +35,15 @@ VALUES (
   , $7
   , $8
   , $9
+  , $10
 )
-RETURNING id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSpendRuleParams struct {
 	OrganizationID string
 	Name           string
+	Slug           string
 	Description    string
 	TargetExpr     string
 	LimitUsd       float64
@@ -54,6 +57,7 @@ func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams
 	row := q.db.QueryRow(ctx, createSpendRule,
 		arg.OrganizationID,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.TargetExpr,
 		arg.LimitUsd,
@@ -67,6 +71,7 @@ func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams
 		&i.ID,
 		&i.OrganizationID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.TargetExpr,
 		&i.LimitUsd,
@@ -91,7 +96,7 @@ SET deleted_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSpendRuleParams struct {
@@ -106,6 +111,7 @@ func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams
 		&i.ID,
 		&i.OrganizationID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.TargetExpr,
 		&i.LimitUsd,
@@ -124,7 +130,7 @@ func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams
 }
 
 const getSpendRule = `-- name: GetSpendRule :one
-SELECT id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
@@ -143,6 +149,7 @@ func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (Spe
 		&i.ID,
 		&i.OrganizationID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.TargetExpr,
 		&i.LimitUsd,
@@ -161,7 +168,7 @@ func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (Spe
 }
 
 const getSpendRuleForUpdate = `-- name: GetSpendRuleForUpdate :one
-SELECT id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
@@ -181,6 +188,7 @@ func (q *Queries) GetSpendRuleForUpdate(ctx context.Context, arg GetSpendRuleFor
 		&i.ID,
 		&i.OrganizationID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.TargetExpr,
 		&i.LimitUsd,
@@ -311,73 +319,8 @@ func (q *Queries) InsertSpendRuleVersion(ctx context.Context, arg InsertSpendRul
 	return err
 }
 
-const listDirectoryActors = `-- name: ListDirectoryActors :many
-SELECT
-    du.id
-  , du.user_id
-  , du.email
-  , du.attributes
-  , COALESCE(u.display_name, '')::text AS display_name
-  , COALESCE(
-      ARRAY_AGG(dg.name ORDER BY dg.name) FILTER (WHERE dg.name IS NOT NULL),
-      '{}'::text[]
-    )::text[] AS group_names
-FROM directory_users du
-LEFT JOIN users u
-  ON u.id = du.user_id
-LEFT JOIN directory_user_group_memberships m
-  ON m.directory_user_id = du.id
-  AND m.deleted IS FALSE
-LEFT JOIN directory_groups dg
-  ON dg.id = m.directory_group_id
-  AND dg.deleted IS FALSE
-  AND dg.workos_deleted IS FALSE
-WHERE du.organization_id = $1
-  AND du.deleted IS FALSE
-  AND du.workos_deleted IS FALSE
-  AND du.email IS NOT NULL
-  AND du.email <> ''
-GROUP BY du.id, du.user_id, du.email, du.attributes, u.display_name
-`
-
-type ListDirectoryActorsRow struct {
-	ID          uuid.UUID
-	UserID      pgtype.Text
-	Email       pgtype.Text
-	Attributes  []byte
-	DisplayName string
-	GroupNames  []string
-}
-
-func (q *Queries) ListDirectoryActors(ctx context.Context, organizationID string) ([]ListDirectoryActorsRow, error) {
-	rows, err := q.db.Query(ctx, listDirectoryActors, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListDirectoryActorsRow
-	for rows.Next() {
-		var i ListDirectoryActorsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Email,
-			&i.Attributes,
-			&i.DisplayName,
-			&i.GroupNames,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listEnabledSpendRules = `-- name: ListEnabledSpendRules :many
-SELECT id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE organization_id = $1
   AND enabled IS TRUE
@@ -398,6 +341,7 @@ func (q *Queries) ListEnabledSpendRules(ctx context.Context, organizationID stri
 			&i.ID,
 			&i.OrganizationID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.TargetExpr,
 			&i.LimitUsd,
@@ -411,6 +355,103 @@ func (q *Queries) ListEnabledSpendRules(ctx context.Context, organizationID stri
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrgActors = `-- name: ListOrgActors :many
+SELECT
+    u.id AS user_id
+  , u.email
+  , u.display_name
+  , COALESCE(du.attributes, '{}'::jsonb) AS attributes
+  , COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names
+  , COALESCE(ra_slugs.role_slugs, '{}'::text[])::text[] AS role_slugs
+FROM organization_user_relationships our
+INNER JOIN users u
+  ON u.id = our.user_id
+  AND u.deleted_at IS NULL
+LEFT JOIN LATERAL (
+  -- The member's directory profile, preferring an explicit user link over an
+  -- email match so a stale email row cannot shadow the linked profile.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  ORDER BY (d.user_id = u.id) DESC, d.created_at
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT COALESCE(orr.workos_slug, gr.workos_slug))
+    FILTER (WHERE COALESCE(orr.workos_slug, gr.workos_slug) IS NOT NULL) AS role_slugs
+  FROM organization_role_assignments ra
+  LEFT JOIN organization_roles orr
+    ON ra.role_urn = 'role:organization:' || orr.id::text
+    AND orr.organization_id = ra.organization_id
+    AND orr.deleted IS FALSE
+    AND orr.workos_deleted IS FALSE
+  LEFT JOIN global_roles gr
+    ON ra.role_urn = 'role:global:' || gr.id::text
+    AND gr.deleted IS FALSE
+    AND gr.workos_deleted IS FALSE
+  WHERE ra.organization_id = our.organization_id
+    AND (ra.user_id = u.id OR (u.workos_id IS NOT NULL AND ra.workos_user_id = u.workos_id))
+    AND ra.deleted_at IS NULL
+) ra_slugs ON TRUE
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.email <> ''
+`
+
+type ListOrgActorsRow struct {
+	UserID      string
+	Email       string
+	DisplayName string
+	Attributes  []byte
+	GroupNames  []string
+	RoleSlugs   []string
+}
+
+// One row per organization member: identity from users, enriched with the
+// member's directory profile (attributes + group names) when one is synced,
+// and their organization role slugs (e.g. 'admin', 'member'). Members without
+// a directory profile or role assignments still appear with empty
+// attributes/groups/roles so email- and role-based rules can target them.
+func (q *Queries) ListOrgActors(ctx context.Context, organizationID string) ([]ListOrgActorsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgActors, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrgActorsRow
+	for rows.Next() {
+		var i ListOrgActorsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.DisplayName,
+			&i.Attributes,
+			&i.GroupNames,
+			&i.RoleSlugs,
 		); err != nil {
 			return nil, err
 		}
@@ -528,7 +569,7 @@ func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEven
 }
 
 const listSpendRules = `-- name: ListSpendRules :many
-SELECT id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -548,6 +589,7 @@ func (q *Queries) ListSpendRules(ctx context.Context, organizationID string) ([]
 			&i.ID,
 			&i.OrganizationID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.TargetExpr,
 			&i.LimitUsd,
@@ -572,6 +614,28 @@ func (q *Queries) ListSpendRules(ctx context.Context, organizationID string) ([]
 	return items, nil
 }
 
+const spendRuleSlugExists = `-- name: SpendRuleSlugExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM spend_rules
+  WHERE organization_id = $1
+    AND slug = $2
+    AND deleted IS FALSE
+) AS taken
+`
+
+type SpendRuleSlugExistsParams struct {
+	OrganizationID string
+	Slug           string
+}
+
+func (q *Queries) SpendRuleSlugExists(ctx context.Context, arg SpendRuleSlugExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, spendRuleSlugExists, arg.OrganizationID, arg.Slug)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
+}
+
 const updateSpendRule = `-- name: UpdateSpendRule :one
 UPDATE spend_rules
 SET name = $1
@@ -588,7 +652,7 @@ SET name = $1
 WHERE id = $11
   AND organization_id = $12
   AND deleted IS FALSE
-RETURNING id, organization_id, name, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSpendRuleParams struct {
@@ -626,6 +690,7 @@ func (q *Queries) UpdateSpendRule(ctx context.Context, arg UpdateSpendRuleParams
 		&i.ID,
 		&i.OrganizationID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.TargetExpr,
 		&i.LimitUsd,

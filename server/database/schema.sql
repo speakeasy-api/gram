@@ -3824,18 +3824,24 @@ CREATE TABLE IF NOT EXISTS gcp_kms_keys (
 );
 
 -- Org-scoped spend control rules. Each rule targets a set of actors via a CEL
--- expression over directory attributes and grants every matched actor a
--- per-person USD budget for a UTC calendar window. A periodic evaluator
--- compares each actor's spend against the limit and emits warning/breach
--- events; rules with action = 'block' also open a circuit that denies the
--- actor's Claude hook traffic until the window resets.
+-- expression over org members' attributes (directory-synced attributes, group
+-- memberships, and org roles) and grants every matched actor a per-person USD
+-- budget for a UTC calendar window. A periodic evaluator compares each
+-- actor's spend against the limit and emits warning/breach events; rules with
+-- action = 'block' also open a circuit that denies the actor's Claude hook
+-- traffic until the window resets.
 CREATE TABLE IF NOT EXISTS spend_rules (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
   name TEXT NOT NULL,
+  -- URL-safe identifier derived from the name at creation time. Unique per
+  -- organization and immutable thereafter: the rule URN
+  -- ('spend_rule:<slug>:<version>') embeds it, so renames must not change it
+  -- or historical events would detach from their rule.
+  slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  -- CEL boolean expression over actor directory attributes (see
+  -- CEL boolean expression over actor attributes (see
   -- internal/spendrules/celenv). A rule applies to an actor when this
   -- evaluates true.
   target_expr TEXT NOT NULL,
@@ -3861,6 +3867,7 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rules_slug_check CHECK (slug ~ '^[a-z0-9_-]{1,128}$'),
   CONSTRAINT spend_rules_limit_usd_check CHECK (limit_usd > 0),
   CONSTRAINT spend_rules_window_kind_check CHECK (window_kind IN ('daily', 'weekly', 'monthly')),
   CONSTRAINT spend_rules_warn_at_pct_check CHECK (warn_at_pct BETWEEN 1 AND 100),
@@ -3870,6 +3877,12 @@ CREATE TABLE IF NOT EXISTS spend_rules (
 
 CREATE INDEX IF NOT EXISTS spend_rules_organization_id_idx
 ON spend_rules (organization_id)
+WHERE deleted IS FALSE;
+
+-- Slugs identify rules inside URNs, so two live rules in one org can never
+-- share one. Partial so a deleted rule frees its slug for reuse.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_key
+ON spend_rules (organization_id, slug)
 WHERE deleted IS FALSE;
 
 -- Immutable snapshot of a spend rule's config at each version. Written on
@@ -3907,7 +3920,7 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   spend_rule_id uuid NOT NULL,
-  -- Versioned rule URN, e.g. 'spend_rule:<uuid>:v3'.
+  -- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:3'.
   rule_urn TEXT NOT NULL,
   event_type TEXT NOT NULL,
 

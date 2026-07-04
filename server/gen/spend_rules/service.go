@@ -74,8 +74,8 @@ type CreateSpendRulePayload struct {
 	Name string
 	// Optional description of what the rule covers.
 	Description string
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string
 	// Per-person budget in USD for one window.
 	LimitUsd float64
@@ -163,7 +163,7 @@ type PreviewSpendRulePayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// CEL boolean expression over actor directory attributes to preview.
+	// CEL boolean expression over member attributes to preview.
 	TargetExpr string
 	// Per-person budget in USD used to compute usage percentages.
 	LimitUsd float64
@@ -177,7 +177,7 @@ type PreviewSpendRulePayload struct {
 // PreviewSpendRuleResult is the result type of the spendRules service
 // previewSpendRule method.
 type PreviewSpendRuleResult struct {
-	// Total number of directory users the target expression matches.
+	// Total number of organization members the target expression matches.
 	MatchedCount int
 	// Inclusive start of the current window used for spend.
 	WindowStart string
@@ -235,7 +235,7 @@ type SpendRuleEvent struct {
 type SpendRuleUsage struct {
 	// The spend rule ID.
 	RuleID string
-	// Number of directory users the rule currently matches.
+	// Number of organization members the rule currently matches.
 	MatchedUsers int
 	// Matched users at or past the warning threshold but under the limit.
 	UsersWarned int
@@ -288,8 +288,8 @@ type UpdateSpendRulePayload struct {
 	// Description of what the rule covers. Omit to preserve the current
 	// description.
 	Description *string
-	// CEL boolean expression over actor directory attributes. Omit to preserve the
-	// current expression.
+	// CEL boolean expression over member attributes. Omit to preserve the current
+	// expression.
 	TargetExpr *string
 	// Per-person budget in USD for one window. Omit to preserve the current limit.
 	LimitUsd *float64

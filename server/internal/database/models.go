@@ -1569,6 +1569,7 @@ type SpendRule struct {
 	ID             uuid.UUID
 	OrganizationID string
 	Name           string
+	Slug           string
 	Description    string
 	TargetExpr     string
 	LimitUsd       float64

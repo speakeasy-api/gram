@@ -189,7 +189,7 @@ func (a *EvaluateOrg) evaluateRule(
 		spendByEmail[conv.NormalizeEmail(row.Email)] += row.TotalCost
 	}
 
-	ruleURN := urn.NewSpendRule(rule.ID, rule.Version)
+	ruleURN := urn.NewSpendRule(rule.Slug, rule.Version)
 	usages := spendrules.BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
 
 	for _, usage := range usages {

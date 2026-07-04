@@ -33,10 +33,12 @@ const (
 	EventTypeBreach  = "breach"
 )
 
-// Actor is one directory-synced person: identity fields for reporting plus
-// the CEL attribute view a target expression evaluates against.
+// Actor is one organization member: identity fields for reporting plus the
+// CEL attribute view a target expression evaluates against — directory
+// attributes and groups when a directory profile is synced, and the member's
+// organization role slugs.
 type Actor struct {
-	UserID      string // empty when the directory user is not linked to a Gram user
+	UserID      string
 	Email       string
 	DisplayName string // empty when unknown
 	Attrs       celenv.Actor
@@ -50,15 +52,15 @@ type ActorUsage struct {
 	UsedPct  float64
 }
 
-// actorFromRow converts a directory row into an Actor, decoding the
-// allowlisted attributes out of the raw WorkOS custom-attributes payload.
-// Non-string attribute values are ignored, matching the telemetry snapshot
-// behaviour.
-func actorFromRow(row repo.ListDirectoryActorsRow) Actor {
+// actorFromRow converts an org-member row into an Actor, decoding the
+// allowlisted directory attributes out of the raw WorkOS custom-attributes
+// payload. Non-string attribute values are ignored, matching the telemetry
+// snapshot behaviour.
+func actorFromRow(row repo.ListOrgActorsRow) Actor {
 	var payload map[string]any
 	if len(row.Attributes) > 0 {
 		// Unmarshal errors leave the payload empty: a malformed attribute
-		// blob should not exclude the actor from email-based targeting.
+		// blob should not exclude the actor from email/role-based targeting.
 		_ = json.Unmarshal(row.Attributes, &payload)
 	}
 	str := func(key string) string {
@@ -69,37 +71,29 @@ func actorFromRow(row repo.ListDirectoryActorsRow) Actor {
 		return v
 	}
 
-	email := ""
-	if row.Email.Valid {
-		email = row.Email.String
-	}
-	userID := ""
-	if row.UserID.Valid {
-		userID = row.UserID.String
-	}
-
 	return Actor{
-		UserID:      userID,
-		Email:       email,
+		UserID:      row.UserID,
+		Email:       row.Email,
 		DisplayName: row.DisplayName,
 		Attrs: celenv.Actor{
-			Email:          email,
+			Email:          row.Email,
 			DepartmentName: str("department_name"),
 			JobTitle:       str("job_title"),
 			EmployeeType:   str("employee_type"),
 			DivisionName:   str("division_name"),
 			CostCenterName: str("cost_center_name"),
 			Groups:         row.GroupNames,
+			Roles:          row.RoleSlugs,
 		},
 	}
 }
 
-// LoadActors reads the organization's current directory users (those with an
-// email) as Actors.
+// LoadActors reads the organization's members as Actors, enriched with their
+// directory attributes and role slugs where available.
 func LoadActors(ctx context.Context, queries *repo.Queries, organizationID string) ([]Actor, error) {
-	rows, err := queries.ListDirectoryActors(ctx, organizationID)
+	rows, err := queries.ListOrgActors(ctx, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("list directory actors: %w", err)
+		return nil, fmt.Errorf("list org actors: %w", err)
 	}
 	actors := make([]Actor, 0, len(rows))
 	for _, row := range rows {

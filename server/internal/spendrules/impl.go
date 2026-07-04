@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -131,9 +133,15 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 
 	queries := repo.New(dbtx)
 
+	slug, err := ruleSlug(ctx, queries, authCtx.ActiveOrganizationID, payload.Name)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "derive spend rule slug").LogError(ctx, s.logger)
+	}
+
 	row, err := queries.CreateSpendRule(ctx, repo.CreateSpendRuleParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Name:           payload.Name,
+		Slug:           slug,
 		Description:    payload.Description,
 		TargetExpr:     payload.TargetExpr,
 		LimitUsd:       payload.LimitUsd,
@@ -142,6 +150,11 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		Action:         payload.Action,
 		Enabled:        payload.Enabled,
 	})
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		// Lost a race with a concurrent create picking the same slug.
+		return nil, oops.E(oops.CodeConflict, err, "a rule with a conflicting name was just created, try again")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create spend rule").LogError(ctx, s.logger)
 	}
@@ -164,7 +177,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		SpendRuleURN:     urn.NewSpendRule(row.ID, row.Version),
+		SpendRuleURN:     urn.NewSpendRule(row.Slug, row.Version),
 		SpendRuleName:    row.Name,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log spend rule create").LogError(ctx, s.logger)
@@ -349,7 +362,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:        authCtx.Email,
 		ActorSlug:               nil,
-		SpendRuleURN:            urn.NewSpendRule(row.ID, row.Version),
+		SpendRuleURN:            urn.NewSpendRule(row.Slug, row.Version),
 		SpendRuleName:           row.Name,
 		SpendRuleSnapshotBefore: buildSpendRuleView(existing),
 		SpendRuleSnapshotAfter:  buildSpendRuleView(row),
@@ -403,7 +416,7 @@ func (s *Service) DeleteSpendRule(ctx context.Context, payload *gen.DeleteSpendR
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		SpendRuleURN:     urn.NewSpendRule(row.ID, row.Version),
+		SpendRuleURN:     urn.NewSpendRule(row.Slug, row.Version),
 		SpendRuleName:    row.Name,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log spend rule delete").LogError(ctx, s.logger)
@@ -449,7 +462,7 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 
 	actors, err := LoadActors(ctx, repo.New(s.db), authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load directory actors").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load org actors").LogError(ctx, s.logger)
 	}
 
 	matched, err := MatchActors(s.celEng, payload.TargetExpr, actors)
@@ -597,7 +610,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 
 	actors, err := LoadActors(ctx, repo.New(s.db), authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load directory actors").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load org actors").LogError(ctx, s.logger)
 	}
 
 	now := time.Now().UTC()
@@ -728,12 +741,44 @@ func (s *Service) signalEvaluation(ctx context.Context, organizationID string) {
 	}
 }
 
+// ruleSlug derives the URN slug for a new rule from its name, appending a
+// random suffix when the plain slug is already taken in the organization.
+// Slugs are immutable after creation: the versioned rule URN embeds them, so
+// a rename must not detach historical events from the rule.
+func ruleSlug(ctx context.Context, queries *repo.Queries, organizationID, name string) (string, error) {
+	slug := conv.URLToSlug(name)
+	if len(slug) > 60 {
+		slug = strings.TrimRight(slug[:60], "-")
+	}
+	if slug == "" {
+		slug = "rule"
+	}
+
+	taken, err := queries.SpendRuleSlugExists(ctx, repo.SpendRuleSlugExistsParams{
+		OrganizationID: organizationID,
+		Slug:           slug,
+	})
+	if err != nil {
+		return "", fmt.Errorf("check spend rule slug: %w", err)
+	}
+	if !taken {
+		return slug, nil
+	}
+
+	suffix, err := conv.GenerateRandomSlug(5)
+	if err != nil {
+		return "", fmt.Errorf("generate spend rule slug suffix: %w", err)
+	}
+	return slug + "-" + suffix, nil
+}
+
 func buildSpendRuleView(row repo.SpendRule) *types.SpendRule {
 	return &types.SpendRule{
 		ID:             row.ID.String(),
-		Urn:            urn.NewSpendRule(row.ID, row.Version).String(),
+		Urn:            urn.NewSpendRule(row.Slug, row.Version).String(),
 		OrganizationID: row.OrganizationID,
 		Name:           row.Name,
+		Slug:           row.Slug,
 		Description:    row.Description,
 		TargetExpr:     row.TargetExpr,
 		LimitUsd:       row.LimitUsd,

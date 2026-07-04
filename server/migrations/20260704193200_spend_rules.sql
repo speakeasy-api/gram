@@ -3,6 +3,7 @@ CREATE TABLE "spend_rules" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
   "name" text NOT NULL,
+  "slug" text NOT NULL,
   "description" text NOT NULL DEFAULT '',
   "target_expr" text NOT NULL,
   "limit_usd" double precision NOT NULL,
@@ -20,11 +21,14 @@ CREATE TABLE "spend_rules" (
   CONSTRAINT "spend_rules_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "spend_rules_action_check" CHECK (action = ANY (ARRAY['flag'::text, 'block'::text])),
   CONSTRAINT "spend_rules_limit_usd_check" CHECK (limit_usd > (0)::double precision),
+  CONSTRAINT "spend_rules_slug_check" CHECK (slug ~ '^[a-z0-9_-]{1,128}$'::text),
   CONSTRAINT "spend_rules_warn_at_pct_check" CHECK ((warn_at_pct >= 1) AND (warn_at_pct <= 100)),
   CONSTRAINT "spend_rules_window_kind_check" CHECK (window_kind = ANY (ARRAY['daily'::text, 'weekly'::text, 'monthly'::text]))
 );
 -- Create index "spend_rules_organization_id_idx" to table: "spend_rules"
 CREATE INDEX "spend_rules_organization_id_idx" ON "spend_rules" ("organization_id") WHERE (deleted IS FALSE);
+-- Create index "spend_rules_organization_id_slug_key" to table: "spend_rules"
+CREATE UNIQUE INDEX "spend_rules_organization_id_slug_key" ON "spend_rules" ("organization_id", "slug") WHERE (deleted IS FALSE);
 -- Create "spend_rule_events" table
 CREATE TABLE "spend_rule_events" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

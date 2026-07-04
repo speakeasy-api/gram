@@ -7,23 +7,25 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
-// SpendRule is a versioned URN for a spend control rule. The version segment
-// pins the exact rule configuration that produced an event so historical
-// events remain interpretable after the rule is edited.
+// SpendRule is a versioned URN for a spend control rule, e.g.
+// "spend_rule:eng-monthly-cap:3". The slug names the rule (unique per
+// organization, immutable after creation) and the version segment pins the
+// exact rule configuration that produced an event so historical events remain
+// interpretable after the rule is edited.
 type SpendRule struct {
-	ID      uuid.UUID
+	Slug    string
 	Version int64
 
 	checked bool
 	err     error
 }
 
-func NewSpendRule(id uuid.UUID, version int64) SpendRule {
+func NewSpendRule(slug string, version int64) SpendRule {
 	s := SpendRule{
-		ID:      id,
+		Slug:    slug,
 		Version: version,
 		checked: false,
 		err:     nil,
@@ -41,7 +43,7 @@ func ParseSpendRule(value string) (SpendRule, error) {
 
 	parts := strings.SplitN(value, delimiter, 3)
 	if len(parts) != 3 || parts[1] == "" || parts[2] == "" || strings.Contains(parts[2], delimiter) {
-		return SpendRule{}, fmt.Errorf("%w: expected three segments (spend_rule:<uuid>:v<version>)", ErrInvalid)
+		return SpendRule{}, fmt.Errorf("%w: expected three segments (spend_rule:<slug>:<version>)", ErrInvalid)
 	}
 
 	if parts[0] != "spend_rule" {
@@ -49,30 +51,29 @@ func ParseSpendRule(value string) (SpendRule, error) {
 		return SpendRule{}, fmt.Errorf("%w: expected spend_rule urn (got: %q)", ErrInvalid, truncated)
 	}
 
-	id, err := uuid.Parse(parts[1])
+	if len(parts[2]) > maxSegmentLength {
+		return SpendRule{}, fmt.Errorf("%w: version segment is too long", ErrInvalid)
+	}
+
+	version, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil {
-		return SpendRule{}, fmt.Errorf("%w: invalid spend_rule uuid", ErrInvalid)
-	}
-
-	rawVersion, ok := strings.CutPrefix(parts[2], "v")
-	if !ok || rawVersion == "" || len(parts[2]) > maxSegmentLength {
-		return SpendRule{}, fmt.Errorf("%w: expected version segment (v<version>)", ErrInvalid)
-	}
-
-	version, err := strconv.ParseInt(rawVersion, 10, 64)
-	if err != nil || version < 1 {
 		return SpendRule{}, fmt.Errorf("%w: invalid spend_rule version", ErrInvalid)
 	}
 
-	return NewSpendRule(id, version), nil
+	parsed := NewSpendRule(parts[1], version)
+	if err := parsed.validate(); err != nil {
+		return SpendRule{}, err
+	}
+
+	return parsed, nil
 }
 
 func (u SpendRule) IsZero() bool {
-	return u.ID == uuid.Nil && u.Version == 0
+	return u.Slug == "" && u.Version == 0
 }
 
 func (u SpendRule) String() string {
-	return "spend_rule" + delimiter + u.ID.String() + delimiter + "v" + strconv.FormatInt(u.Version, 10)
+	return "spend_rule" + delimiter + u.Slug + delimiter + strconv.FormatInt(u.Version, 10)
 }
 
 func (u SpendRule) MarshalJSON() ([]byte, error) {
@@ -163,8 +164,13 @@ func (u *SpendRule) validate() error {
 
 	u.checked = true
 
-	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
+	if u.Slug == "" {
+		u.err = fmt.Errorf("%w: empty slug", ErrInvalid)
+		return u.err
+	}
+
+	if !constants.SlugPatternRE.MatchString(u.Slug) {
+		u.err = fmt.Errorf("%w: disallowed characters in slug: %q", ErrInvalid, u.Slug[:min(maxSegmentLength, len(u.Slug))])
 		return u.err
 	}
 

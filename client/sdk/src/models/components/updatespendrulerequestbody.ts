@@ -61,7 +61,7 @@ export type UpdateSpendRuleRequestBody = {
    */
   name?: string | undefined;
   /**
-   * CEL boolean expression over actor directory attributes. Omit to preserve the current expression.
+   * CEL boolean expression over member attributes. Omit to preserve the current expression.
    */
   targetExpr?: string | undefined;
   /**

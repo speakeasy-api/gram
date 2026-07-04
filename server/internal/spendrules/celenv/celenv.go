@@ -1,14 +1,18 @@
 // Package celenv defines the single CEL environment for spend rule target
-// expressions. Every expression is a boolean predicate over one actor's
-// directory-synced attributes; an actor is in a rule's audience when the
-// predicate evaluates true.
+// expressions. Every expression is a boolean predicate over one actor — an
+// organization member enriched with whatever we know about them; an actor is
+// in a rule's audience when the predicate evaluates true.
 //
-// Variables mirror the telemetry directory-attribute allowlist (see
-// server/internal/telemetry/user_info_resolver.go): email, department_name,
-// job_title, employee_type, division_name, cost_center_name (strings), and
-// groups (list of directory group names). Standard CEL string functions
-// (contains, startsWith, endsWith, matches) and list membership (`in`) are
-// available via the strings extension and the core language.
+// Variables cover three sources: identity (email), directory-synced
+// attributes mirroring the telemetry allowlist (see
+// server/internal/telemetry/user_info_resolver.go): department_name,
+// job_title, employee_type, division_name, cost_center_name (strings) and
+// groups (list of directory group names), and org membership (roles — the
+// member's organization role slugs, e.g. "admin", "member"). Directory
+// attributes are empty strings/lists for members without a synced directory
+// profile. Standard CEL string functions (contains, startsWith, endsWith,
+// matches) and list membership (`in`) are available via the strings extension
+// and the core language.
 package celenv
 
 import (
@@ -19,9 +23,9 @@ import (
 	"github.com/google/cel-go/ext"
 )
 
-// Actor is the directory-derived view of one person a target expression
-// evaluates against. Unset attributes are empty strings so expressions can
-// compare without null handling.
+// Actor is the attribute view of one organization member a target expression
+// evaluates against. Unset attributes are empty strings/lists so expressions
+// can compare without null handling.
 type Actor struct {
 	Email          string
 	DepartmentName string
@@ -30,6 +34,7 @@ type Actor struct {
 	DivisionName   string
 	CostCenterName string
 	Groups         []string
+	Roles          []string
 }
 
 type Engine struct {
@@ -49,6 +54,7 @@ func New() (*Engine, error) {
 		cel.Variable("division_name", cel.StringType),
 		cel.Variable("cost_center_name", cel.StringType),
 		cel.Variable("groups", cel.ListType(cel.StringType)),
+		cel.Variable("roles", cel.ListType(cel.StringType)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build spend rule cel env: %w", err)
@@ -79,6 +85,8 @@ func (e *Engine) Compile(expr string) (cel.Program, error) {
 func (e *Engine) Eval(prg cel.Program, actor Actor) (bool, error) {
 	groups := make([]string, 0, len(actor.Groups))
 	groups = append(groups, actor.Groups...)
+	roles := make([]string, 0, len(actor.Roles))
+	roles = append(roles, actor.Roles...)
 
 	out, _, err := prg.Eval(map[string]any{
 		"email":            actor.Email,
@@ -88,6 +96,7 @@ func (e *Engine) Eval(prg cel.Program, actor Actor) (bool, error) {
 		"division_name":    actor.DivisionName,
 		"cost_center_name": actor.CostCenterName,
 		"groups":           groups,
+		"roles":            roles,
 	})
 	if err != nil {
 		return false, fmt.Errorf("eval target expression: %w", err)

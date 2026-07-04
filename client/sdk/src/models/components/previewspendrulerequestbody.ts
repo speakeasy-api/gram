@@ -31,7 +31,7 @@ export type PreviewSpendRuleRequestBody = {
    */
   limitUsd: number;
   /**
-   * CEL boolean expression over actor directory attributes to preview.
+   * CEL boolean expression over member attributes to preview.
    */
   targetExpr: string;
   /**

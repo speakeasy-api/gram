@@ -175,11 +175,9 @@ function makeConditionFromParts(
   const attr = actorAttribute(attributeName);
   const operators = operatorsForAttribute(attr);
   if (attr.name !== attributeName || !operators.includes(operator)) return null;
-  return {
-    attribute: attr.name,
-    operator,
-    value: attr.samples.includes(value) ? value : (attr.samples[0] ?? value),
-  };
+  // Keep the stored value verbatim — real rules carry values the sample
+  // lists can't enumerate.
+  return { attribute: attr.name, operator, value };
 }
 
 function operatorFromMethod(method: string): ConditionOperator {
@@ -256,7 +254,7 @@ export function RuleSheet({
   );
 }
 
-/** Debounced server-side preview: matched directory actors plus their
+/** Debounced server-side preview: matched members plus their
  *  current-window spend against the proposed per-person limit. */
 function useRulePreview(
   draft: Pick<RuleDraft, "targetExpr" | "limitUsd" | "windowKind">,
@@ -368,9 +366,9 @@ function RuleForm({
         <div className="space-y-2">
           <Label className="text-sm font-medium">Applies to</Label>
           <p className="text-muted-foreground text-xs">
-            Pick one directory-synced attribute to define who this budget
-            covers. Need to combine attributes? Create a second rule — the
-            strictest matching rule wins.
+            Pick one member attribute to define who this budget covers. Need to
+            combine attributes? Create a second rule — the strictest matching
+            rule wins.
           </p>
           <TargetConditionField
             value={draft.targetExpr}
@@ -550,7 +548,7 @@ function MatchedActors({
     return (
       <p className="text-muted-foreground text-xs">
         {loading
-          ? "Matching directory users…"
+          ? "Matching members…"
           : "Matched people will appear here once the expression is valid."}
       </p>
     );
@@ -564,7 +562,7 @@ function MatchedActors({
       </div>
       {preview.actors.length === 0 ? (
         <p className="text-muted-foreground px-3 py-3 text-xs">
-          No directory-synced people match this expression.
+          No members match this expression.
         </p>
       ) : (
         <ul className="divide-border max-h-40 divide-y overflow-y-auto">

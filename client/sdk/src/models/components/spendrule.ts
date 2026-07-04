@@ -72,7 +72,11 @@ export type SpendRule = {
    */
   organizationId: string;
   /**
-   * CEL boolean expression over actor directory attributes selecting who the rule applies to.
+   * URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
+   */
+  slug: string;
+  /**
+   * CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
    */
   targetExpr: string;
   /**
@@ -80,7 +84,7 @@ export type SpendRule = {
    */
   updatedAt: Date;
   /**
-   * Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule configuration that produced an event.
+   * Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.
    */
   urn: string;
   /**
@@ -126,6 +130,7 @@ export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z
       limit_usd: z.number(),
       name: z.string(),
       organization_id: z.string(),
+      slug: z.string(),
       target_expr: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),

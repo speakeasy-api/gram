@@ -199,8 +199,8 @@ function RuleDetail({
           {actors.length === 0 ? (
             <p className="text-muted-foreground text-xs">
               {actorsLoading
-                ? "Matching directory users…"
-                : "No directory-synced people match this rule right now."}
+                ? "Matching members…"
+                : "No members match this rule right now."}
             </p>
           ) : (
             <ul className="divide-border rounded-lg border divide-y">

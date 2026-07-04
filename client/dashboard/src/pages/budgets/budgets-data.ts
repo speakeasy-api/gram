@@ -101,15 +101,16 @@ export function toDraft(rule: SpendRule): RuleDraft {
 /*  URNs                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Events record the versioned URN (`spend_rule:<uuid>:v<n>`) they fired
- *  under, which pins the exact config that produced them — the live rule may
- *  have moved on to a newer version since. */
+/** Events record the versioned URN (`spend_rule:<slug>:<version>`) they
+ *  fired under, which pins the exact config that produced them — the live
+ *  rule may have moved on to a newer version since. The slug is unique per
+ *  org and immutable after creation. */
 export function parseRuleUrn(
   urn: string,
-): { id: string; version: number } | null {
-  const match = /^spend_rule:(.+):v(\d+)$/.exec(urn);
+): { slug: string; version: number } | null {
+  const match = /^spend_rule:([a-z0-9_-]+):(\d+)$/.exec(urn);
   if (!match) return null;
-  return { id: match[1]!, version: Number(match[2]!) };
+  return { slug: match[1]!, version: Number(match[2]!) };
 }
 
 /* -------------------------------------------------------------------------- */

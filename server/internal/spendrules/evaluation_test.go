@@ -23,19 +23,17 @@ func testActors() []spendrules.Actor {
 				DivisionName:   "R&D",
 				CostCenterName: "CC-1001",
 				Groups:         []string{"eng-frontier", "leadership"},
+				Roles:          []string{"admin"},
 			},
 		},
 		{
-			UserID: "",
+			// A member without a synced directory profile: only identity and
+			// role attributes are populated.
+			UserID: "user_sam",
 			Email:  "Sam@Acme.com",
 			Attrs: celenv.Actor{
-				Email:          "Sam@Acme.com",
-				DepartmentName: "Engineering",
-				JobTitle:       "Software Engineer",
-				EmployeeType:   "intern",
-				DivisionName:   "R&D",
-				CostCenterName: "CC-1001",
-				Groups:         []string{"interns"},
+				Email: "Sam@Acme.com",
+				Roles: []string{"member"},
 			},
 		},
 		{
@@ -49,6 +47,7 @@ func testActors() []spendrules.Actor {
 				DivisionName:   "Go-To-Market",
 				CostCenterName: "CC-3100",
 				Groups:         []string{"leadership"},
+				Roles:          []string{"member"},
 			},
 		},
 	}
@@ -66,9 +65,8 @@ func TestMatchActorsByDepartment(t *testing.T) {
 
 	matched, err := spendrules.MatchActors(newEngine(t), `department_name == "Engineering"`, testActors())
 	require.NoError(t, err)
-	require.Len(t, matched, 2)
+	require.Len(t, matched, 1, "members without a synced directory profile have no department")
 	require.Equal(t, "ada@acme.com", matched[0].Email)
-	require.Equal(t, "Sam@Acme.com", matched[1].Email)
 }
 
 func TestMatchActorsByGroupMembership(t *testing.T) {
@@ -77,6 +75,21 @@ func TestMatchActorsByGroupMembership(t *testing.T) {
 	matched, err := spendrules.MatchActors(newEngine(t), `"leadership" in groups`, testActors())
 	require.NoError(t, err)
 	require.Len(t, matched, 2)
+}
+
+func TestMatchActorsByRole(t *testing.T) {
+	t.Parallel()
+
+	matched, err := spendrules.MatchActors(newEngine(t), `"member" in roles`, testActors())
+	require.NoError(t, err)
+	require.Len(t, matched, 2)
+	require.Equal(t, "Sam@Acme.com", matched[0].Email)
+	require.Equal(t, "bea@acme.com", matched[1].Email)
+
+	admins, err := spendrules.MatchActors(newEngine(t), `"admin" in roles`, testActors())
+	require.NoError(t, err)
+	require.Len(t, admins, 1)
+	require.Equal(t, "ada@acme.com", admins[0].Email)
 }
 
 func TestMatchActorsByEmailSuffix(t *testing.T) {

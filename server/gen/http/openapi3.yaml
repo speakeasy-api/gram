@@ -39240,7 +39240,7 @@ components:
                     description: The rule name.
                 target_expr:
                     type: string
-                    description: CEL boolean expression over actor directory attributes selecting who the rule applies to.
+                    description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
                 warn_at_pct:
                     type: integer
                     description: Percentage of the limit at which a warning event is emitted.
@@ -45253,7 +45253,7 @@ components:
                     minimum: 0
                 target_expr:
                     type: string
-                    description: CEL boolean expression over actor directory attributes to preview.
+                    description: CEL boolean expression over member attributes to preview.
                 window_kind:
                     type: string
                     description: UTC calendar window to compute spend over.
@@ -45275,7 +45275,7 @@ components:
                     description: Matched actors with their current-window spend, ordered by spend descending. Capped at 50 entries.
                 matched_count:
                     type: integer
-                    description: Total number of directory users the target expression matches.
+                    description: Total number of organization members the target expression matches.
                     format: int64
                 window_end:
                     type: string
@@ -49004,16 +49004,19 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID.
+                slug:
+                    type: string
+                    description: URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
                 target_expr:
                     type: string
-                    description: CEL boolean expression over actor directory attributes selecting who the rule applies to.
+                    description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
                 updated_at:
                     type: string
                     description: When the rule was last updated.
                     format: date-time
                 urn:
                     type: string
-                    description: Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule configuration that produced an event.
+                    description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.
                 version:
                     type: integer
                     description: Rule version, incremented on material config changes.
@@ -49034,6 +49037,7 @@ components:
                 - urn
                 - organization_id
                 - name
+                - slug
                 - description
                 - target_expr
                 - limit_usd
@@ -49147,7 +49151,7 @@ components:
                     format: double
                 matched_users:
                     type: integer
-                    description: Number of directory users the rule currently matches.
+                    description: Number of organization members the rule currently matches.
                     format: int64
                 rule_id:
                     type: string
@@ -51812,7 +51816,7 @@ components:
                     description: The rule name. Omit to preserve the current name.
                 target_expr:
                     type: string
-                    description: CEL boolean expression over actor directory attributes. Omit to preserve the current expression.
+                    description: CEL boolean expression over member attributes. Omit to preserve the current expression.
                 warn_at_pct:
                     type: integer
                     description: Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.

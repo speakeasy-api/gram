@@ -20,8 +20,8 @@ type CreateSpendRuleRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional description of what the rule covers.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
 	// Per-person budget in USD for one window.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
@@ -45,8 +45,8 @@ type UpdateSpendRuleRequestBody struct {
 	// Description of what the rule covers. Omit to preserve the current
 	// description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// CEL boolean expression over actor directory attributes. Omit to preserve the
-	// current expression.
+	// CEL boolean expression over member attributes. Omit to preserve the current
+	// expression.
 	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
 	// Per-person budget in USD for one window. Omit to preserve the current limit.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
@@ -64,7 +64,7 @@ type UpdateSpendRuleRequestBody struct {
 // PreviewSpendRuleRequestBody is the type of the "spendRules" service
 // "previewSpendRule" endpoint HTTP request body.
 type PreviewSpendRuleRequestBody struct {
-	// CEL boolean expression over actor directory attributes to preview.
+	// CEL boolean expression over member attributes to preview.
 	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
 	// Per-person budget in USD used to compute usage percentages.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
@@ -80,17 +80,20 @@ type PreviewSpendRuleRequestBody struct {
 type CreateSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The rule name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe identifier derived from the name at creation time. Unique per
+	// organization and immutable; the rule URN embeds it.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
@@ -125,17 +128,20 @@ type ListSpendRulesResponseBody struct {
 type GetSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The rule name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe identifier derived from the name at creation time. Unique per
+	// organization and immutable; the rule URN embeds it.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
@@ -163,17 +169,20 @@ type GetSpendRuleResponseBody struct {
 type UpdateSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The rule name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe identifier derived from the name at creation time. Unique per
+	// organization and immutable; the rule URN embeds it.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
@@ -199,7 +208,7 @@ type UpdateSpendRuleResponseBody struct {
 // PreviewSpendRuleResponseBody is the type of the "spendRules" service
 // "previewSpendRule" endpoint HTTP response body.
 type PreviewSpendRuleResponseBody struct {
-	// Total number of directory users the target expression matches.
+	// Total number of organization members the target expression matches.
 	MatchedCount int `form:"matched_count" json:"matched_count" xml:"matched_count"`
 	// Inclusive start of the current window used for spend.
 	WindowStart string `form:"window_start" json:"window_start" xml:"window_start"`
@@ -1738,17 +1747,20 @@ type GetSpendRulesOverviewGatewayErrorResponseBody struct {
 type SpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The rule name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe identifier derived from the name at creation time. Unique per
+	// organization and immutable; the rule URN embeds it.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
-	// CEL boolean expression over actor directory attributes selecting who the
-	// rule applies to.
+	// CEL boolean expression over member attributes (email, directory attributes,
+	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
@@ -1822,7 +1834,7 @@ type SpendRuleEventResponseBody struct {
 type SpendRuleUsageResponseBody struct {
 	// The spend rule ID.
 	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
-	// Number of directory users the rule currently matches.
+	// Number of organization members the rule currently matches.
 	MatchedUsers int `form:"matched_users" json:"matched_users" xml:"matched_users"`
 	// Matched users at or past the warning threshold but under the limit.
 	UsersWarned int `form:"users_warned" json:"users_warned" xml:"users_warned"`
@@ -1846,6 +1858,7 @@ func NewCreateSpendRuleResponseBody(res *types.SpendRule) *CreateSpendRuleRespon
 		Urn:            res.Urn,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
 		LimitUsd:       res.LimitUsd,
@@ -1888,6 +1901,7 @@ func NewGetSpendRuleResponseBody(res *types.SpendRule) *GetSpendRuleResponseBody
 		Urn:            res.Urn,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
 		LimitUsd:       res.LimitUsd,
@@ -1911,6 +1925,7 @@ func NewUpdateSpendRuleResponseBody(res *types.SpendRule) *UpdateSpendRuleRespon
 		Urn:            res.Urn,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
 		LimitUsd:       res.LimitUsd,

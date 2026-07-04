@@ -1,6 +1,7 @@
 package spendrules_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -51,14 +52,30 @@ func TestCreateSpendRule_Success(t *testing.T) {
 	require.True(t, result.Enabled)
 	require.Equal(t, int64(1), result.Version)
 
-	ruleID := uuid.MustParse(result.ID)
-	require.Equal(t, urn.NewSpendRule(ruleID, 1).String(), result.Urn)
+	require.Equal(t, "engineering-cap", result.Slug, "slug derives from the name")
+	require.Equal(t, urn.NewSpendRule("engineering-cap", 1).String(), result.Urn)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleCreate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
 	require.Len(t, ti.signaler.calls, 1)
+}
+
+func TestCreateSpendRule_DuplicateNameGetsSuffixedSlug(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestSpendRulesService(t)
+	ctx = withOrgAdmin(t, ctx, ti.conn)
+
+	first, err := ti.service.CreateSpendRule(ctx, createTestRulePayload())
+	require.NoError(t, err)
+	require.Equal(t, "engineering-cap", first.Slug)
+
+	second, err := ti.service.CreateSpendRule(ctx, createTestRulePayload())
+	require.NoError(t, err)
+	require.NotEqual(t, first.Slug, second.Slug)
+	require.True(t, strings.HasPrefix(second.Slug, "engineering-cap-"), "collision slug %q keeps the name prefix", second.Slug)
+	require.Equal(t, urn.NewSpendRule(second.Slug, 1).String(), second.Urn)
 }
 
 func TestCreateSpendRule_RejectsInvalidExpression(t *testing.T) {
@@ -182,8 +199,8 @@ func TestUpdateSpendRule_MaterialBumpsVersionAndResetsEvaluation(t *testing.T) {
 	require.False(t, updatedEvaluatedFrom.Before(createdEvaluatedFrom))
 	require.NotEqual(t, created.Urn, updated.Urn)
 
-	ruleID := uuid.MustParse(created.ID)
-	require.Equal(t, urn.NewSpendRule(ruleID, 2).String(), updated.Urn)
+	require.Equal(t, created.Slug, updated.Slug, "material edits keep the slug")
+	require.Equal(t, urn.NewSpendRule(created.Slug, 2).String(), updated.Urn)
 }
 
 func TestUpdateSpendRule_RejectsInvalidExpression(t *testing.T) {
@@ -239,7 +256,7 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 	require.True(t, ok)
 
 	ruleID := uuid.MustParse(created.ID)
-	ruleURN := urn.NewSpendRule(ruleID, 1).String()
+	ruleURN := urn.NewSpendRule(created.Slug, 1).String()
 	windowStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	windowEnd := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 
@@ -268,7 +285,7 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 
 	// A new rule version is a fresh evaluation: the same actor/window records
 	// a new event under the bumped URN.
-	params.RuleUrn = urn.NewSpendRule(ruleID, 2).String()
+	params.RuleUrn = urn.NewSpendRule(created.Slug, 2).String()
 	inserted, err = spendrepo.New(ti.conn).InsertSpendRuleEvent(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), inserted)
@@ -288,7 +305,7 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 	require.Empty(t, warnings.Events)
 }
 
-func TestPreviewSpendRuleWithNoDirectoryUsers(t *testing.T) {
+func TestPreviewSpendRuleWithNoMatchingMembers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)

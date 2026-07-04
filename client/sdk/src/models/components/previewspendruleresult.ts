@@ -18,7 +18,7 @@ export type PreviewSpendRuleResult = {
    */
   actors: Array<SpendRuleActorUsage>;
   /**
-   * Total number of directory users the target expression matches.
+   * Total number of organization members the target expression matches.
    */
   matchedCount: number;
   /**
