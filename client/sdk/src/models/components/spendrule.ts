@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  SpendRuleTargetCondition,
+  SpendRuleTargetCondition$inboundSchema,
+} from "./spendruletargetcondition.js";
 
 /**
  * Rule action: flag (record events only) or block (deny agent traffic on breach).
@@ -72,9 +76,14 @@ export type SpendRule = {
    */
   organizationId: string;
   /**
+   * CEL boolean expression over actor usage that identifies a budget breach for matched members.
+   */
+  ruleExpr: string;
+  /**
    * URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
    */
   slug: string;
+  target: SpendRuleTargetCondition;
   /**
    * CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
    */
@@ -130,7 +139,9 @@ export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z
       limit_usd: z.number(),
       name: z.string(),
       organization_id: z.string(),
+      rule_expr: z.string(),
       slug: z.string(),
+      target: SpendRuleTargetCondition$inboundSchema,
       target_expr: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -147,6 +158,7 @@ export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z
         "evaluated_from": "evaluatedFrom",
         "limit_usd": "limitUsd",
         "organization_id": "organizationId",
+        "rule_expr": "ruleExpr",
         "target_expr": "targetExpr",
         "updated_at": "updatedAt",
         "warn_at_pct": "warnAtPct",

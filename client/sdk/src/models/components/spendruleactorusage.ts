@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SpendRuleActorUsage = {
   /**
+   * Whether the rule expression currently matches this actor usage.
+   */
+  breached: boolean;
+  /**
    * Actor display name, when known.
    */
   displayName?: string | undefined;
@@ -41,6 +45,7 @@ export const SpendRuleActorUsage$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    breached: z.boolean(),
     display_name: z.optional(z.string()),
     email: z.string(),
     limit_usd: z.number(),

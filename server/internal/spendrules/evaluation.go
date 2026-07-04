@@ -27,6 +27,8 @@ const (
 	ActionBlock = "block"
 )
 
+const DefaultRuleExpr = "spend_usd >= limit_usd"
+
 // Event types recorded by the evaluator.
 const (
 	EventTypeWarning = "warning"
@@ -50,6 +52,7 @@ type ActorUsage struct {
 	SpendUSD float64
 	LimitUSD float64
 	UsedPct  float64
+	Breached bool
 }
 
 // actorFromRow converts an org-member row into an Actor, decoding the
@@ -84,6 +87,10 @@ func actorFromRow(row repo.ListOrgActorsRow) Actor {
 			CostCenterName: str("cost_center_name"),
 			Groups:         row.GroupNames,
 			Roles:          row.RoleSlugs,
+			SpendUSD:       0,
+			LimitUSD:       0,
+			UsedPct:        0,
+			WarnAtPct:      0,
 		},
 	}
 }
@@ -139,21 +146,46 @@ func BuildActorUsages(matched []Actor, spendByEmail map[string]float64, limitUSD
 			SpendUSD: spend,
 			LimitUSD: limitUSD,
 			UsedPct:  usedPct,
+			Breached: false,
 		})
 	}
 	sort.Slice(usages, func(i, j int) bool { return usages[i].SpendUSD > usages[j].SpendUSD })
 	return usages
 }
 
+// EvalRuleUsages compiles the rule expression and marks each matched actor
+// whose actor+usage view satisfies the rule. The expression is the budget
+// breach predicate (for example: `spend_usd >= limit_usd`), while target_expr
+// remains the audience predicate.
+func EvalRuleUsages(eng *celenv.Engine, ruleExpr string, warnAtPct int32, usages []ActorUsage) ([]ActorUsage, error) {
+	prg, err := eng.Compile(ruleExpr)
+	if err != nil {
+		return nil, fmt.Errorf("compile rule expression: %w", err)
+	}
+	for i := range usages {
+		attrs := usages[i].Actor.Attrs
+		attrs.SpendUSD = usages[i].SpendUSD
+		attrs.LimitUSD = usages[i].LimitUSD
+		attrs.UsedPct = usages[i].UsedPct
+		attrs.WarnAtPct = float64(warnAtPct)
+		ok, err := eng.Eval(prg, attrs)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate rule expression for %s: %w", usages[i].Actor.Email, err)
+		}
+		usages[i].Breached = ok
+	}
+	return usages, nil
+}
+
 // RuleStatus derives the rule's display status from its action and the worst
-// matched actor: any actor at/past the limit makes the rule flagging (action
-// flag) or blocking (action block); any actor at/past the warning threshold
-// makes it approaching; otherwise healthy.
+// matched actor: any actor whose rule expression matched makes the rule
+// flagging (action flag) or blocking (action block); any actor at/past the
+// warning threshold makes it approaching; otherwise healthy.
 func RuleStatus(action string, warnAtPct int32, usages []ActorUsage) string {
 	breached := false
 	warned := false
 	for _, u := range usages {
-		if u.SpendUSD >= u.LimitUSD {
+		if u.Breached {
 			breached = true
 			break
 		}

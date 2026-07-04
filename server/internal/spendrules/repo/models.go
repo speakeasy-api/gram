@@ -17,6 +17,7 @@ type SpendRule struct {
 	Description    string
 	TargetExpr     string
 	LimitUsd       float64
+	RuleExpr       string
 	WindowKind     string
 	WarnAtPct      int32
 	Action         string

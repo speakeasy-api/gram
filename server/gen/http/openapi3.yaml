@@ -28057,7 +28057,7 @@ paths:
                 type: mutation
     /rpc/spendrules.updateRule:
         put:
-            description: Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
+            description: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
             operationId: updateSpendRule
             parameters:
                 - allowEmptyValue: true
@@ -39238,9 +39238,8 @@ components:
                 name:
                     type: string
                     description: The rule name.
-                target_expr:
-                    type: string
-                    description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
                 warn_at_pct:
                     type: integer
                     description: Percentage of the limit at which a warning event is emitted.
@@ -39257,7 +39256,7 @@ components:
                         - monthly
             required:
                 - name
-                - target_expr
+                - target
                 - limit_usd
                 - window_kind
         CreateToolsetForm:
@@ -45251,9 +45250,15 @@ components:
                     description: Per-person budget in USD used to compute usage percentages.
                     format: double
                     minimum: 0
-                target_expr:
-                    type: string
-                    description: CEL boolean expression over member attributes to preview.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    default: 80
+                    format: int64
+                    minimum: 1
+                    maximum: 100
                 window_kind:
                     type: string
                     description: UTC calendar window to compute spend over.
@@ -45262,7 +45267,7 @@ components:
                         - weekly
                         - monthly
             required:
-                - target_expr
+                - target
                 - limit_usd
                 - window_kind
         PreviewSpendRuleResult:
@@ -49004,9 +49009,14 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID.
+                rule_expr:
+                    type: string
+                    description: CEL boolean expression over actor usage that identifies a budget breach for matched members.
                 slug:
                     type: string
                     description: URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
                 target_expr:
                     type: string
                     description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
@@ -49039,7 +49049,9 @@ components:
                 - name
                 - slug
                 - description
+                - target
                 - target_expr
+                - rule_expr
                 - limit_usd
                 - window_kind
                 - warn_at_pct
@@ -49052,6 +49064,9 @@ components:
         SpendRuleActorUsage:
             type: object
             properties:
+                breached:
+                    type: boolean
+                    description: Whether the rule expression currently matches this actor usage.
                 display_name:
                     type: string
                     description: Actor display name, when known.
@@ -49078,6 +49093,7 @@ components:
                 - spend_usd
                 - limit_usd
                 - used_pct
+                - breached
         SpendRuleEvent:
             type: object
             properties:
@@ -49142,6 +49158,22 @@ components:
                 - window_start
                 - window_end
                 - created_at
+        SpendRuleTargetCondition:
+            type: object
+            properties:
+                attribute:
+                    type: string
+                    description: Member attribute name.
+                operator:
+                    type: string
+                    description: 'Comparison operator: equals, not_equals, starts_with, ends_with, contains, matches, or includes.'
+                value:
+                    type: string
+                    description: Comparison value.
+            required:
+                - attribute
+                - operator
+                - value
         SpendRuleUsage:
             type: object
             properties:
@@ -51814,9 +51846,8 @@ components:
                 name:
                     type: string
                     description: The rule name. Omit to preserve the current name.
-                target_expr:
-                    type: string
-                    description: CEL boolean expression over member attributes. Omit to preserve the current expression.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
                 warn_at_pct:
                     type: integer
                     description: Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.

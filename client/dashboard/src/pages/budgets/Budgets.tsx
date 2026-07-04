@@ -325,7 +325,7 @@ function RulesTab({
       return (
         r.name.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
-        r.targetExpr.toLowerCase().includes(q)
+        targetSummary(r.target).toLowerCase().includes(q)
       );
     });
   }, [rules, query, actionFilter]);
@@ -409,7 +409,7 @@ function buildRuleColumns({
         <span className={cn("block min-w-0", dim(rule))}>
           <span className="block truncate font-medium">{rule.name}</span>
           <span className="text-muted-foreground block truncate text-xs">
-            {targetSummary(rule.targetExpr)}
+            {targetSummary(rule.target)}
           </span>
         </span>
       ),

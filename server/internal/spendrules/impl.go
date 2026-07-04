@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,8 +123,19 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 	if payload.LimitUsd <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
 	}
-	if _, err := s.celEng.Compile(payload.TargetExpr); err != nil {
+	if payload.Target == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target is required")
+	}
+	targetExpr, err := targetConditionExpr(payload.Target.Attribute, payload.Target.Operator, payload.Target.Value)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid target")
+	}
+	if _, err := s.celEng.Compile(targetExpr); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid target expression: %s", err.Error())
+	}
+	ruleExpr := DefaultRuleExpr
+	if _, err := s.celEng.Compile(ruleExpr); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule expression: %s", err.Error())
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -143,7 +156,8 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		Name:           payload.Name,
 		Slug:           slug,
 		Description:    payload.Description,
-		TargetExpr:     payload.TargetExpr,
+		TargetExpr:     targetExpr,
+		RuleExpr:       ruleExpr,
 		LimitUsd:       payload.LimitUsd,
 		WindowKind:     payload.WindowKind,
 		WarnAtPct:      int32(payload.WarnAtPct), //nolint:gosec // design constrains warn_at_pct to 1..100
@@ -164,6 +178,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		SpendRuleID:    row.ID,
 		Version:        row.Version,
 		TargetExpr:     row.TargetExpr,
+		RuleExpr:       row.RuleExpr,
 		LimitUsd:       row.LimitUsd,
 		WindowKind:     row.WindowKind,
 		WarnAtPct:      row.WarnAtPct,
@@ -286,7 +301,15 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	if payload.Description != nil {
 		description = *payload.Description
 	}
-	targetExpr := conv.PtrValOr(payload.TargetExpr, existing.TargetExpr)
+	targetExpr := existing.TargetExpr
+	if payload.Target != nil {
+		var err error
+		targetExpr, err = targetConditionExpr(payload.Target.Attribute, payload.Target.Operator, payload.Target.Value)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid target")
+		}
+	}
+	ruleExpr := existing.RuleExpr
 	limitUSD := conv.PtrValOr(payload.LimitUsd, existing.LimitUsd)
 	if limitUSD <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
@@ -307,11 +330,17 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid target expression: %s", err.Error())
 		}
 	}
+	if ruleExpr != existing.RuleExpr {
+		if _, err := s.celEng.Compile(ruleExpr); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid rule expression: %s", err.Error())
+		}
+	}
 
 	// Material changes alter what the rule measures or does, so the version
 	// bumps and evaluation restarts from now. Name/description/enabled edits
 	// keep the current version and accrued state.
 	material := targetExpr != existing.TargetExpr ||
+		ruleExpr != existing.RuleExpr ||
 		limitUSD != existing.LimitUsd ||
 		windowKind != existing.WindowKind ||
 		warnAtPct != existing.WarnAtPct ||
@@ -330,6 +359,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		Name:           name,
 		Description:    description,
 		TargetExpr:     targetExpr,
+		RuleExpr:       ruleExpr,
 		LimitUsd:       limitUSD,
 		WindowKind:     windowKind,
 		WarnAtPct:      warnAtPct,
@@ -348,6 +378,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 			SpendRuleID:    row.ID,
 			Version:        row.Version,
 			TargetExpr:     row.TargetExpr,
+			RuleExpr:       row.RuleExpr,
 			LimitUsd:       row.LimitUsd,
 			WindowKind:     row.WindowKind,
 			WarnAtPct:      row.WarnAtPct,
@@ -444,6 +475,13 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 	if payload.LimitUsd <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
 	}
+	if payload.Target == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target is required")
+	}
+	ruleExpr := DefaultRuleExpr
+	if _, err := s.celEng.Compile(ruleExpr); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule expression: %s", err.Error())
+	}
 
 	now := time.Now().UTC()
 	windowStart, windowEnd, err := WindowBounds(payload.WindowKind, now)
@@ -465,7 +503,12 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 		return nil, oops.E(oops.CodeUnexpected, err, "load org actors").LogError(ctx, s.logger)
 	}
 
-	matched, err := MatchActors(s.celEng, payload.TargetExpr, actors)
+	targetExpr, err := targetConditionExpr(payload.Target.Attribute, payload.Target.Operator, payload.Target.Value)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid target")
+	}
+
+	matched, err := MatchActors(s.celEng, targetExpr, actors)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid target expression: %s", err.Error())
 	}
@@ -479,6 +522,10 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 	}
 
 	usages := BuildActorUsages(matched, spendByEmail, payload.LimitUsd)
+	usages, err = EvalRuleUsages(s.celEng, ruleExpr, int32(payload.WarnAtPct), usages) //nolint:gosec // design constrains warn_at_pct to 1..100
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule expression: %s", err.Error())
+	}
 	capped := usages
 	if len(capped) > previewActorCap {
 		capped = capped[:previewActorCap]
@@ -493,6 +540,7 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 			SpendUsd:    u.SpendUSD,
 			LimitUsd:    u.LimitUSD,
 			UsedPct:     u.UsedPct,
+			Breached:    u.Breached,
 		})
 	}
 
@@ -639,6 +687,11 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 		}
 
 		usages := BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
+		usages, err = EvalRuleUsages(s.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "evaluate spend rule expression", attr.SlogError(err), attr.SlogOrganizationID(rule.OrganizationID))
+			continue
+		}
 
 		ruleSpend := 0.0
 		usersWarned := 0
@@ -648,7 +701,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 			ruleSpend += u.SpendUSD
 			email := conv.NormalizeEmail(u.Actor.Email)
 			matchedEmails[email] = struct{}{}
-			if u.SpendUSD >= u.LimitUSD {
+			if u.Breached {
 				usersBreached++
 				breachedEmails[email] = struct{}{}
 			} else if u.UsedPct >= float64(rule.WarnAtPct) {
@@ -772,6 +825,121 @@ func ruleSlug(ctx context.Context, queries *repo.Queries, organizationID, name s
 	return slug + "-" + suffix, nil
 }
 
+var (
+	targetComparisonExpr = regexp.MustCompile(`^([A-Za-z_]\w*)\s*(==|!=)\s*("(?:\\.|[^"])*")$`)
+	targetCallExpr       = regexp.MustCompile(`^([A-Za-z_]\w*)\.(startsWith|endsWith|contains|matches)\(("(?:\\.|[^"])*")\)$`)
+	targetInExpr         = regexp.MustCompile(`^("(?:\\.|[^"])*")\s+in\s+([A-Za-z_]\w*)$`)
+)
+
+var targetAttributeTypes = map[string]string{
+	"email":            "string",
+	"department_name":  "string",
+	"job_title":        "string",
+	"employee_type":    "string",
+	"division_name":    "string",
+	"cost_center_name": "string",
+	"groups":           "list",
+	"roles":            "list",
+}
+
+func targetConditionExpr(attribute, operator, value string) (string, error) {
+	attrType, ok := targetAttributeTypes[attribute]
+	if !ok {
+		return "", fmt.Errorf("unknown target attribute %q", attribute)
+	}
+	quoted := strconv.Quote(value)
+	switch operator {
+	case "equals":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + " == " + quoted, nil
+	case "not_equals":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + " != " + quoted, nil
+	case "starts_with":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + ".startsWith(" + quoted + ")", nil
+	case "ends_with":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + ".endsWith(" + quoted + ")", nil
+	case "contains":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + ".contains(" + quoted + ")", nil
+	case "matches":
+		if attrType != "string" {
+			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return attribute + ".matches(" + quoted + ")", nil
+	case "includes":
+		if attrType != "list" {
+			return "", fmt.Errorf("operator %q requires a list attribute", operator)
+		}
+		return quoted + " in " + attribute, nil
+	default:
+		return "", fmt.Errorf("unknown target operator %q", operator)
+	}
+}
+
+func targetConditionFromExpr(expr string) *types.SpendRuleTargetCondition {
+	if match := targetComparisonExpr.FindStringSubmatch(expr); match != nil {
+		value, err := strconv.Unquote(match[3])
+		if err != nil {
+			value = ""
+		}
+		operator := "equals"
+		if match[2] == "!=" {
+			operator = "not_equals"
+		}
+		return &types.SpendRuleTargetCondition{
+			Attribute: match[1],
+			Operator:  operator,
+			Value:     value,
+		}
+	}
+	if match := targetCallExpr.FindStringSubmatch(expr); match != nil {
+		value, err := strconv.Unquote(match[3])
+		if err != nil {
+			value = ""
+		}
+		operator := map[string]string{
+			"startsWith": "starts_with",
+			"endsWith":   "ends_with",
+			"contains":   "contains",
+			"matches":    "matches",
+		}[match[2]]
+		return &types.SpendRuleTargetCondition{
+			Attribute: match[1],
+			Operator:  operator,
+			Value:     value,
+		}
+	}
+	if match := targetInExpr.FindStringSubmatch(expr); match != nil {
+		value, err := strconv.Unquote(match[1])
+		if err != nil {
+			value = ""
+		}
+		return &types.SpendRuleTargetCondition{
+			Attribute: match[2],
+			Operator:  "includes",
+			Value:     value,
+		}
+	}
+	return &types.SpendRuleTargetCondition{
+		Attribute: "email",
+		Operator:  "contains",
+		Value:     "",
+	}
+}
+
 func buildSpendRuleView(row repo.SpendRule) *types.SpendRule {
 	return &types.SpendRule{
 		ID:             row.ID.String(),
@@ -780,7 +948,9 @@ func buildSpendRuleView(row repo.SpendRule) *types.SpendRule {
 		Name:           row.Name,
 		Slug:           row.Slug,
 		Description:    row.Description,
+		Target:         targetConditionFromExpr(row.TargetExpr),
 		TargetExpr:     row.TargetExpr,
+		RuleExpr:       row.RuleExpr,
 		LimitUsd:       row.LimitUsd,
 		WindowKind:     row.WindowKind,
 		WarnAtPct:      int(row.WarnAtPct),

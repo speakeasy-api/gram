@@ -78,8 +78,9 @@ function useRuleActorBreakdown(rule: SpendRule): {
       {
         request: {
           previewSpendRuleRequestBody: {
-            targetExpr: rule.targetExpr,
+            target: rule.target,
             limitUsd: rule.limitUsd,
+            warnAtPct: rule.warnAtPct,
             windowKind: rule.windowKind,
             evaluatedFrom: rule.evaluatedFrom,
           },
@@ -88,8 +89,9 @@ function useRuleActorBreakdown(rule: SpendRule): {
       { onSuccess: (data) => setPreview(data) },
     );
   }, [
-    rule.targetExpr,
+    rule.target,
     rule.limitUsd,
+    rule.warnAtPct,
     rule.windowKind,
     rule.evaluatedFrom,
     mutate,
@@ -132,7 +134,7 @@ function RuleDetail({
           {rule.description || "No description."}
         </SheetDescription>
         <p className="text-muted-foreground text-xs">
-          Applies to: {targetSummary(rule.targetExpr)}
+          Applies to: {targetSummary(rule.target)}
         </p>
         <p
           className="text-muted-foreground font-mono text-xs"
@@ -268,7 +270,7 @@ function RuleDetail({
 
 /** One matched person: spend against their per-person budget. */
 function ActorRow({ actor }: { actor: SpendRuleActorUsage }): JSX.Element {
-  const over = actor.spendUsd >= actor.limitUsd;
+  const over = actor.breached;
   const pct = Math.min(150, Math.round(actor.usedPct));
   return (
     <li className="space-y-1.5 px-3 py-2">

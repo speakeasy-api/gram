@@ -24,9 +24,14 @@ type SpendRule struct {
 	Slug string
 	// Description of what the rule covers. Empty when unset.
 	Description string
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetCondition
 	// CEL boolean expression over member attributes (email, directory attributes,
 	// groups, roles) selecting who the rule applies to.
 	TargetExpr string
+	// CEL boolean expression over actor usage that identifies a budget breach for
+	// matched members.
+	RuleExpr string
 	// Per-person budget in USD for one window.
 	LimitUsd float64
 	// UTC calendar window the budget covers.

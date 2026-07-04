@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  SpendRuleTargetCondition,
+  SpendRuleTargetCondition$Outbound,
+  SpendRuleTargetCondition$outboundSchema,
+} from "./spendruletargetcondition.js";
 
 /**
  * Rule action: flag or block. Omit to preserve the current action.
@@ -60,10 +65,7 @@ export type UpdateSpendRuleRequestBody = {
    * The rule name. Omit to preserve the current name.
    */
   name?: string | undefined;
-  /**
-   * CEL boolean expression over member attributes. Omit to preserve the current expression.
-   */
-  targetExpr?: string | undefined;
+  target?: SpendRuleTargetCondition | undefined;
   /**
    * Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.
    */
@@ -92,7 +94,7 @@ export type UpdateSpendRuleRequestBody$Outbound = {
   id: string;
   limit_usd?: number | undefined;
   name?: string | undefined;
-  target_expr?: string | undefined;
+  target?: SpendRuleTargetCondition$Outbound | undefined;
   warn_at_pct?: number | undefined;
   window_kind?: string | undefined;
 };
@@ -109,14 +111,13 @@ export const UpdateSpendRuleRequestBody$outboundSchema: z.ZodMiniType<
     id: z.string(),
     limitUsd: z.optional(z.number()),
     name: z.optional(z.string()),
-    targetExpr: z.optional(z.string()),
+    target: z.optional(SpendRuleTargetCondition$outboundSchema),
     warnAtPct: z.optional(z.int()),
     windowKind: z.optional(UpdateSpendRuleRequestBodyWindowKind$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       limitUsd: "limit_usd",
-      targetExpr: "target_expr",
       warnAtPct: "warn_at_pct",
       windowKind: "window_kind",
     });

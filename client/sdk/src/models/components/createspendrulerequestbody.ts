@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  SpendRuleTargetCondition,
+  SpendRuleTargetCondition$Outbound,
+  SpendRuleTargetCondition$outboundSchema,
+} from "./spendruletargetcondition.js";
 
 /**
  * Rule action: flag or block.
@@ -54,10 +59,7 @@ export type CreateSpendRuleRequestBody = {
    * The rule name.
    */
   name: string;
-  /**
-   * CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
-   */
-  targetExpr: string;
+  target: SpendRuleTargetCondition;
   /**
    * Percentage of the limit at which a warning event is emitted.
    */
@@ -84,7 +86,7 @@ export type CreateSpendRuleRequestBody$Outbound = {
   enabled: boolean;
   limit_usd: number;
   name: string;
-  target_expr: string;
+  target: SpendRuleTargetCondition$Outbound;
   warn_at_pct: number;
   window_kind: string;
 };
@@ -100,14 +102,13 @@ export const CreateSpendRuleRequestBody$outboundSchema: z.ZodMiniType<
     enabled: z._default(z.boolean(), true),
     limitUsd: z.number(),
     name: z.string(),
-    targetExpr: z.string(),
+    target: SpendRuleTargetCondition$outboundSchema,
     warnAtPct: z._default(z.int(), 80),
     windowKind: WindowKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       limitUsd: "limit_usd",
-      targetExpr: "target_expr",
       warnAtPct: "warn_at_pct",
       windowKind: "window_kind",
     });

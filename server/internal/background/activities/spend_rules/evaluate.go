@@ -191,9 +191,13 @@ func (a *EvaluateOrg) evaluateRule(
 
 	ruleURN := urn.NewSpendRule(rule.Slug, rule.Version)
 	usages := spendrules.BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
+	usages, err = spendrules.EvalRuleUsages(a.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
+	if err != nil {
+		return fmt.Errorf("evaluate rule expression for rule %s: %w", rule.ID, err)
+	}
 
 	for _, usage := range usages {
-		breached := usage.SpendUSD >= usage.LimitUSD
+		breached := usage.Breached
 		warned := !breached && usage.UsedPct >= float64(rule.WarnAtPct)
 
 		if !breached && !warned {

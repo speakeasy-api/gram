@@ -24,6 +24,10 @@ func testActors() []spendrules.Actor {
 				CostCenterName: "CC-1001",
 				Groups:         []string{"eng-frontier", "leadership"},
 				Roles:          []string{"admin"},
+				SpendUSD:       0,
+				LimitUSD:       0,
+				UsedPct:        0,
+				WarnAtPct:      0,
 			},
 		},
 		{
@@ -32,8 +36,18 @@ func testActors() []spendrules.Actor {
 			UserID: "user_sam",
 			Email:  "Sam@Acme.com",
 			Attrs: celenv.Actor{
-				Email: "Sam@Acme.com",
-				Roles: []string{"member"},
+				Email:          "Sam@Acme.com",
+				DepartmentName: "",
+				JobTitle:       "",
+				EmployeeType:   "",
+				DivisionName:   "",
+				CostCenterName: "",
+				Groups:         nil,
+				Roles:          []string{"member"},
+				SpendUSD:       0,
+				LimitUSD:       0,
+				UsedPct:        0,
+				WarnAtPct:      0,
 			},
 		},
 		{
@@ -48,6 +62,10 @@ func testActors() []spendrules.Actor {
 				CostCenterName: "CC-3100",
 				Groups:         []string{"leadership"},
 				Roles:          []string{"member"},
+				SpendUSD:       0,
+				LimitUSD:       0,
+				UsedPct:        0,
+				WarnAtPct:      0,
 			},
 		},
 	}
@@ -130,6 +148,33 @@ func TestBuildActorUsagesOrdersBySpendAndNormalizesEmail(t *testing.T) {
 	require.InDelta(t, 0.0, usages[2].SpendUSD, 0.001)
 }
 
+func TestEvalRuleUsagesMarksBreachesFromCEL(t *testing.T) {
+	t.Parallel()
+
+	usages := spendrules.BuildActorUsages(testActors(), map[string]float64{
+		"ada@acme.com": 120,
+		"sam@acme.com": 95,
+		"bea@acme.com": 50,
+	}, 100)
+
+	evaluated, err := spendrules.EvalRuleUsages(
+		newEngine(t),
+		`(spend_usd >= limit_usd) || (employee_type == "intern" && used_pct >= 90.0)`,
+		80,
+		usages,
+	)
+	require.NoError(t, err)
+	require.Len(t, evaluated, 3)
+
+	byEmail := map[string]spendrules.ActorUsage{}
+	for _, usage := range evaluated {
+		byEmail[usage.Actor.Email] = usage
+	}
+	require.True(t, byEmail["ada@acme.com"].Breached)
+	require.False(t, byEmail["Sam@Acme.com"].Breached)
+	require.False(t, byEmail["bea@acme.com"].Breached)
+}
+
 func TestRuleStatusDerivation(t *testing.T) {
 	t.Parallel()
 
@@ -143,6 +188,7 @@ func TestRuleStatusDerivation(t *testing.T) {
 			SpendUSD: spend,
 			LimitUSD: limit,
 			UsedPct:  pct,
+			Breached: spend >= limit,
 		}
 	}
 

@@ -1884,6 +1884,32 @@ func EncodeGetSpendRulesOverviewError(encoder func(context.Context, http.Respons
 	}
 }
 
+// unmarshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition
+// builds a value of type *types.SpendRuleTargetCondition from a value of type
+// *SpendRuleTargetConditionRequestBody.
+func unmarshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(v *SpendRuleTargetConditionRequestBody) *types.SpendRuleTargetCondition {
+	res := &types.SpendRuleTargetCondition{
+		Attribute: *v.Attribute,
+		Operator:  *v.Operator,
+		Value:     *v.Value,
+	}
+
+	return res
+}
+
+// marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody
+// builds a value of type *SpendRuleTargetConditionResponseBody from a value of
+// type *types.SpendRuleTargetCondition.
+func marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody(v *types.SpendRuleTargetCondition) *SpendRuleTargetConditionResponseBody {
+	res := &SpendRuleTargetConditionResponseBody{
+		Attribute: v.Attribute,
+		Operator:  v.Operator,
+		Value:     v.Value,
+	}
+
+	return res
+}
+
 // marshalTypesSpendRuleToSpendRuleResponseBody builds a value of type
 // *SpendRuleResponseBody from a value of type *types.SpendRule.
 func marshalTypesSpendRuleToSpendRuleResponseBody(v *types.SpendRule) *SpendRuleResponseBody {
@@ -1895,6 +1921,7 @@ func marshalTypesSpendRuleToSpendRuleResponseBody(v *types.SpendRule) *SpendRule
 		Slug:           v.Slug,
 		Description:    v.Description,
 		TargetExpr:     v.TargetExpr,
+		RuleExpr:       v.RuleExpr,
 		LimitUsd:       v.LimitUsd,
 		WindowKind:     v.WindowKind,
 		WarnAtPct:      v.WarnAtPct,
@@ -1904,6 +1931,9 @@ func marshalTypesSpendRuleToSpendRuleResponseBody(v *types.SpendRule) *SpendRule
 		EvaluatedFrom:  v.EvaluatedFrom,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
+	}
+	if v.Target != nil {
+		res.Target = marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody(v.Target)
 	}
 
 	return res
@@ -1920,6 +1950,7 @@ func marshalSpendrulesSpendRuleActorUsageToSpendRuleActorUsageResponseBody(v *sp
 		SpendUsd:    v.SpendUsd,
 		LimitUsd:    v.LimitUsd,
 		UsedPct:     v.UsedPct,
+		Breached:    v.Breached,
 	}
 
 	return res

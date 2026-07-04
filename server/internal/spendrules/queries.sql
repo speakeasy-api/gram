@@ -5,6 +5,7 @@ INSERT INTO spend_rules (
   , slug
   , description
   , target_expr
+  , rule_expr
   , limit_usd
   , window_kind
   , warn_at_pct
@@ -17,6 +18,7 @@ VALUES (
   , @slug
   , @description
   , @target_expr
+  , @rule_expr
   , @limit_usd
   , @window_kind
   , @warn_at_pct
@@ -75,6 +77,7 @@ UPDATE spend_rules
 SET name = @name
   , description = @description
   , target_expr = @target_expr
+  , rule_expr = @rule_expr
   , limit_usd = @limit_usd
   , window_kind = @window_kind
   , warn_at_pct = @warn_at_pct
@@ -103,6 +106,7 @@ INSERT INTO spend_rule_versions (
   , spend_rule_id
   , version
   , target_expr
+  , rule_expr
   , limit_usd
   , window_kind
   , warn_at_pct
@@ -113,6 +117,7 @@ VALUES (
   , @spend_rule_id
   , @version
   , @target_expr
+  , @rule_expr
   , @limit_usd
   , @window_kind
   , @warn_at_pct

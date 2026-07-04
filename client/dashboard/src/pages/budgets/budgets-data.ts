@@ -28,6 +28,26 @@ export type RuleAction = "flag" | "block";
 /** Lifecycle state derived from the worst matched actor, computed server-side. */
 export type RuleStatus = "healthy" | "approaching" | "flagging" | "blocking";
 export type SpendEventType = "warning" | "breach";
+export type RuleTargetOperator =
+  | "equals"
+  | "not_equals"
+  | "starts_with"
+  | "ends_with"
+  | "contains"
+  | "matches"
+  | "includes";
+
+export interface RuleTargetCondition {
+  attribute: string;
+  operator: RuleTargetOperator;
+  value: string;
+}
+
+interface RuleTargetLike {
+  attribute: string;
+  operator: string;
+  value: string;
+}
 
 export const WINDOW_LABELS: Record<BudgetWindow, string> = {
   daily: "Daily",
@@ -59,8 +79,8 @@ export const SPEND_EVENT_TYPE_LABELS: Record<SpendEventType, string> = {
 export interface RuleDraft {
   name: string;
   description: string;
-  /** CEL comparison over actor directory attributes — who the rule covers. */
-  targetExpr: string;
+  /** Structured actor directory attribute condition — who the rule covers. */
+  target: RuleTargetCondition;
   /** Per-person budget in USD for one window. */
   limitUsd: number;
   /** Fixed UTC calendar window: resets at midnight / Monday / the 1st. */
@@ -75,7 +95,11 @@ export function defaultRuleDraft(): RuleDraft {
   return {
     name: "",
     description: "",
-    targetExpr: 'department_name == "Engineering"',
+    target: {
+      attribute: "department_name",
+      operator: "equals",
+      value: "Engineering",
+    },
     limitUsd: 1000,
     windowKind: "monthly",
     warnAtPct: 80,
@@ -88,7 +112,7 @@ export function toDraft(rule: SpendRule): RuleDraft {
   return {
     name: rule.name,
     description: rule.description,
-    targetExpr: rule.targetExpr,
+    target: normalizeTargetCondition(rule.target),
     limitUsd: rule.limitUsd,
     windowKind: rule.windowKind,
     warnAtPct: rule.warnAtPct,
@@ -202,39 +226,8 @@ export function formatUsd(amount: number): string {
   }).format(amount);
 }
 
-export function targetSummary(expr: string): string {
-  const parts = expr
-    .split(/\s+&&\s+/)
-    .map((part) => summarizeTargetPart(part.trim()))
-    .filter((summary) => summary !== null);
-  if (parts.length === 0) return "Custom attribute conditions";
-  return parts.join(" and ");
-}
-
-function summarizeTargetPart(part: string): string | null {
-  const comparison = /^([A-Za-z_]\w*)\s*(==|!=)\s*"((?:\\.|[^"])*)"$/.exec(
-    part,
-  );
-  if (comparison) {
-    const label = targetAttributeLabel(comparison[1]!);
-    const op = comparison[2] === "==" ? "is" : "is not";
-    return `${label} ${op} ${unescapeSummaryValue(comparison[3]!)}`;
-  }
-
-  const listMembership = /^"((?:\\.|[^"])*)"\s+in\s+([A-Za-z_]\w*)$/.exec(part);
-  if (listMembership) {
-    return `${targetAttributeLabel(listMembership[2]!)} includes ${unescapeSummaryValue(listMembership[1]!)}`;
-  }
-
-  const call =
-    /^([A-Za-z_]\w*)\.(startsWith|endsWith|contains|matches)\("((?:\\.|[^"])*)"\)$/.exec(
-      part,
-    );
-  if (call) {
-    return `${targetAttributeLabel(call[1]!)} ${methodSummary(call[2]!)} ${unescapeSummaryValue(call[3]!)}`;
-  }
-
-  return null;
+export function targetSummary(target: RuleTargetLike): string {
+  return `${targetAttributeLabel(target.attribute)} ${operatorSummary(target.operator)} ${target.value}`;
 }
 
 function targetAttributeLabel(name: string): string {
@@ -245,19 +238,45 @@ function targetAttributeLabel(name: string): string {
     .join(" ");
 }
 
-function methodSummary(method: string): string {
-  switch (method) {
-    case "startsWith":
+function normalizeTargetCondition(target: RuleTargetLike): RuleTargetCondition {
+  return {
+    attribute: target.attribute,
+    operator: isRuleTargetOperator(target.operator)
+      ? target.operator
+      : "contains",
+    value: target.value,
+  };
+}
+
+function isRuleTargetOperator(
+  operator: string,
+): operator is RuleTargetOperator {
+  return (
+    operator === "equals" ||
+    operator === "not_equals" ||
+    operator === "starts_with" ||
+    operator === "ends_with" ||
+    operator === "contains" ||
+    operator === "matches" ||
+    operator === "includes"
+  );
+}
+
+function operatorSummary(operator: string): string {
+  switch (operator) {
+    case "equals":
+      return "is";
+    case "not_equals":
+      return "is not";
+    case "starts_with":
       return "starts with";
-    case "endsWith":
+    case "ends_with":
       return "ends with";
     case "matches":
       return "matches";
+    case "includes":
+      return "includes";
     default:
       return "contains";
   }
-}
-
-function unescapeSummaryValue(value: string): string {
-  return value.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }

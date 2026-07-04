@@ -22,11 +22,7 @@ import { Type } from "@/components/ui/type";
 import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/index.js";
 import { Check, Loader2, Trash2, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
-import {
-  ACTOR_ATTRIBUTES,
-  validateBudgetCel,
-  type ActorAttribute,
-} from "./budget-cel";
+import { ACTOR_ATTRIBUTES, type ActorAttribute } from "./budget-cel";
 import {
   WINDOW_LABELS,
   defaultRuleDraft,
@@ -36,6 +32,8 @@ import {
   type PreviewSpendRuleResult,
   type RuleAction,
   type RuleDraft,
+  type RuleTargetCondition,
+  type RuleTargetOperator,
   type SpendRule,
 } from "./budgets-data";
 
@@ -64,22 +62,7 @@ const WINDOW_RESET_HINTS: Record<BudgetWindow, string> = {
   monthly: "Fixed window — resets on the 1st of each month (UTC).",
 };
 
-type ConditionOperator =
-  | "equals"
-  | "not_equals"
-  | "starts_with"
-  | "ends_with"
-  | "contains"
-  | "matches"
-  | "includes";
-
-interface TargetCondition {
-  attribute: string;
-  operator: ConditionOperator;
-  value: string;
-}
-
-const STRING_OPERATORS: ConditionOperator[] = [
+const STRING_OPERATORS: RuleTargetOperator[] = [
   "equals",
   "not_equals",
   "starts_with",
@@ -87,8 +70,8 @@ const STRING_OPERATORS: ConditionOperator[] = [
   "contains",
   "matches",
 ];
-const LIST_OPERATORS: ConditionOperator[] = ["includes"];
-const OPERATOR_LABELS: Record<ConditionOperator, string> = {
+const LIST_OPERATORS: RuleTargetOperator[] = ["includes"];
+const OPERATOR_LABELS: Record<RuleTargetOperator, string> = {
   equals: "is",
   not_equals: "is not",
   starts_with: "starts with",
@@ -98,22 +81,13 @@ const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   includes: "includes",
 };
 
-function makeDefaultCondition(): TargetCondition {
-  const attr = ACTOR_ATTRIBUTES[0]!;
-  return {
-    attribute: attr.name,
-    operator: operatorsForAttribute(attr)[0]!,
-    value: attr.samples[0] ?? "",
-  };
-}
-
 function actorAttribute(name: string): ActorAttribute {
   return (
     ACTOR_ATTRIBUTES.find((attr) => attr.name === name) ?? ACTOR_ATTRIBUTES[0]!
   );
 }
 
-function operatorsForAttribute(attr: ActorAttribute): ConditionOperator[] {
+function operatorsForAttribute(attr: ActorAttribute): RuleTargetOperator[] {
   return attr.type === "list" ? LIST_OPERATORS : STRING_OPERATORS;
 }
 
@@ -122,103 +96,6 @@ function attributeLabel(name: string): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-/** Parse a stored expression into a single builder condition (v1: rules carry
- *  exactly one condition; legacy AND expressions collapse to their first). */
-function parseSingleCondition(expr: string): TargetCondition {
-  const first = expr.split(/\s+&&\s+/)[0]?.trim() ?? "";
-  return parseTargetCondition(first) ?? makeDefaultCondition();
-}
-
-function parseTargetCondition(part: string): TargetCondition | null {
-  const comparison = /^([A-Za-z_]\w*)\s*(==|!=)\s*"((?:\\.|[^"])*)"$/.exec(
-    part,
-  );
-  if (comparison) {
-    return makeConditionFromParts(
-      comparison[1]!,
-      comparison[2] === "==" ? "equals" : "not_equals",
-      unescapeCelString(comparison[3]!),
-    );
-  }
-
-  const call =
-    /^([A-Za-z_]\w*)\.(startsWith|endsWith|contains|matches)\("((?:\\.|[^"])*)"\)$/.exec(
-      part,
-    );
-  if (call) {
-    return makeConditionFromParts(
-      call[1]!,
-      operatorFromMethod(call[2]!),
-      unescapeCelString(call[3]!),
-    );
-  }
-
-  const listMembership = /^"((?:\\.|[^"])*)"\s+in\s+([A-Za-z_]\w*)$/.exec(part);
-  if (listMembership) {
-    return makeConditionFromParts(
-      listMembership[2]!,
-      "includes",
-      unescapeCelString(listMembership[1]!),
-    );
-  }
-
-  return null;
-}
-
-function makeConditionFromParts(
-  attributeName: string,
-  operator: ConditionOperator,
-  value: string,
-): TargetCondition | null {
-  const attr = actorAttribute(attributeName);
-  const operators = operatorsForAttribute(attr);
-  if (attr.name !== attributeName || !operators.includes(operator)) return null;
-  // Keep the stored value verbatim — real rules carry values the sample
-  // lists can't enumerate.
-  return { attribute: attr.name, operator, value };
-}
-
-function operatorFromMethod(method: string): ConditionOperator {
-  switch (method) {
-    case "startsWith":
-      return "starts_with";
-    case "endsWith":
-      return "ends_with";
-    case "matches":
-      return "matches";
-    default:
-      return "contains";
-  }
-}
-
-function targetConditionToExpr(condition: TargetCondition): string {
-  const value = `"${escapeCelString(condition.value)}"`;
-  switch (condition.operator) {
-    case "equals":
-      return `${condition.attribute} == ${value}`;
-    case "not_equals":
-      return `${condition.attribute} != ${value}`;
-    case "starts_with":
-      return `${condition.attribute}.startsWith(${value})`;
-    case "ends_with":
-      return `${condition.attribute}.endsWith(${value})`;
-    case "contains":
-      return `${condition.attribute}.contains(${value})`;
-    case "matches":
-      return `${condition.attribute}.matches(${value})`;
-    case "includes":
-      return `${value} in ${condition.attribute}`;
-  }
-}
-
-function escapeCelString(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-function unescapeCelString(value: string): string {
-  return value.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }
 
 /** Create or edit a spend-control rule. */
@@ -257,23 +134,23 @@ export function RuleSheet({
 /** Debounced server-side preview: matched members plus their
  *  current-window spend against the proposed per-person limit. */
 function useRulePreview(
-  draft: Pick<RuleDraft, "targetExpr" | "limitUsd" | "windowKind">,
+  draft: Pick<RuleDraft, "target" | "limitUsd" | "warnAtPct" | "windowKind">,
   evaluatedFrom: Date | undefined,
-  valid: boolean,
 ): { preview: PreviewSpendRuleResult | null; loading: boolean } {
   const previewMutation = useSpendRulesPreviewRuleMutation();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
   const { mutate } = previewMutation;
 
   useEffect(() => {
-    if (!valid || draft.limitUsd <= 0) return;
+    if (draft.limitUsd <= 0 || draft.target.value.trim() === "") return;
     const timer = setTimeout(() => {
       mutate(
         {
           request: {
             previewSpendRuleRequestBody: {
-              targetExpr: draft.targetExpr,
+              target: draft.target,
               limitUsd: draft.limitUsd,
+              warnAtPct: draft.warnAtPct,
               windowKind: draft.windowKind,
               evaluatedFrom,
             },
@@ -286,11 +163,11 @@ function useRulePreview(
     }, 350);
     return () => clearTimeout(timer);
   }, [
-    draft.targetExpr,
+    draft.target,
     draft.limitUsd,
+    draft.warnAtPct,
     draft.windowKind,
     evaluatedFrom,
-    valid,
     mutate,
   ]);
 
@@ -314,24 +191,22 @@ function RuleForm({
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const targetError = validateBudgetCel(draft.targetExpr);
   // Pass the rule's evaluated_from through when editing so the preview shows
   // the same numbers the evaluator sees. Material edits reset it server-side.
   const { preview, loading: previewLoading } = useRulePreview(
     draft,
     rule?.evaluatedFrom,
-    !targetError,
   );
 
   const canSubmit =
     draft.name.trim() !== "" &&
-    !targetError &&
+    draft.target.value.trim() !== "" &&
     draft.limitUsd > 0 &&
     !submitting;
 
   const overLimitCount = useMemo(() => {
     if (!preview) return 0;
-    return preview.actors.filter((a) => a.spendUsd >= a.limitUsd).length;
+    return preview.actors.filter((a) => a.breached).length;
   }, [preview]);
 
   return (
@@ -371,11 +246,11 @@ function RuleForm({
             rule wins.
           </p>
           <TargetConditionField
-            value={draft.targetExpr}
-            onChange={(targetExpr) => patch({ targetExpr })}
+            value={draft.target}
+            onChange={(target) => patch({ target })}
           />
           <MatchedActors
-            preview={targetError ? null : preview}
+            preview={draft.target.value.trim() === "" ? null : preview}
             loading={previewLoading}
           />
         </div>
@@ -488,9 +363,9 @@ function RuleForm({
               <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
             )}
           </div>
-          {targetError || !preview ? (
+          {!preview ? (
             <p className="text-muted-foreground text-xs">
-              Enter a valid target expression to preview usage.
+              Choose a target condition to preview usage.
             </p>
           ) : (
             <>
@@ -549,7 +424,7 @@ function MatchedActors({
       <p className="text-muted-foreground text-xs">
         {loading
           ? "Matching members…"
-          : "Matched people will appear here once the expression is valid."}
+          : "Matched people will appear here once the condition is valid."}
       </p>
     );
   }
@@ -562,7 +437,7 @@ function MatchedActors({
       </div>
       {preview.actors.length === 0 ? (
         <p className="text-muted-foreground px-3 py-3 text-xs">
-          No members match this expression.
+          No members match this condition.
         </p>
       ) : (
         <ul className="divide-border max-h-40 divide-y overflow-y-auto">
@@ -593,21 +468,19 @@ function MatchedActors({
 }
 
 /** Single attribute/operator/value picker backing the rule's target
- *  expression. v1 deliberately allows exactly one condition per rule. */
+ *  condition. v1 deliberately allows exactly one condition per rule. */
 function TargetConditionField({
   value,
   onChange,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  value: RuleTargetCondition;
+  onChange: (value: RuleTargetCondition) => void;
 }): JSX.Element {
-  const [condition, setCondition] = useState<TargetCondition>(() =>
-    parseSingleCondition(value),
-  );
+  const [condition, setCondition] = useState<RuleTargetCondition>(value);
 
-  const update = (next: TargetCondition) => {
+  const update = (next: RuleTargetCondition) => {
     setCondition(next);
-    onChange(targetConditionToExpr(next));
+    onChange(next);
   };
 
   const attribute = actorAttribute(condition.attribute);
@@ -641,7 +514,7 @@ function TargetConditionField({
         <Select
           value={condition.operator}
           onValueChange={(operator) =>
-            update({ ...condition, operator: operator as ConditionOperator })
+            update({ ...condition, operator: operator as RuleTargetOperator })
           }
         >
           <SelectTrigger className="w-full">

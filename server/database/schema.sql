@@ -3847,14 +3847,18 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   target_expr TEXT NOT NULL,
   -- Per-person budget in USD for one window.
   limit_usd DOUBLE PRECISION NOT NULL,
+  -- CEL boolean expression over the actor plus current-window usage. The
+  -- expression identifies budget breaches inside the target audience.
+  rule_expr TEXT NOT NULL DEFAULT 'spend_usd >= limit_usd',
   -- UTC calendar window the budget covers. 'window' is a reserved keyword.
   window_kind TEXT NOT NULL,
   -- Percentage of the limit at which a warning event is emitted.
   warn_at_pct INT NOT NULL DEFAULT 80,
   action TEXT NOT NULL DEFAULT 'flag',
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  -- Bumped on material config changes (target_expr, limit_usd, window_kind,
-  -- warn_at_pct, action). Historical configs live in spend_rule_versions.
+  -- Bumped on material config changes (target_expr, rule_expr, limit_usd,
+  -- window_kind, warn_at_pct, action). Historical configs live in
+  -- spend_rule_versions.
   version BIGINT NOT NULL DEFAULT 1,
   -- Spend accrued before this instant is ignored by the evaluator. Reset to
   -- now() on material changes so a new rule version starts evaluating from a
@@ -3896,6 +3900,7 @@ CREATE TABLE IF NOT EXISTS spend_rule_versions (
   version BIGINT NOT NULL,
 
   target_expr TEXT NOT NULL,
+  rule_expr TEXT NOT NULL,
   limit_usd DOUBLE PRECISION NOT NULL,
   window_kind TEXT NOT NULL,
   warn_at_pct INT NOT NULL,

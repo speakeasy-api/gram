@@ -40,7 +40,7 @@ var _ = Service("spendRules", func() {
 			Attribute("description", String, "Optional description of what the rule covers.", func() {
 				Default("")
 			})
-			Attribute("target_expr", String, "CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.")
+			Attribute("target", SpendRuleTargetCondition, "Structured member-attribute condition selecting who the rule applies to.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD for one window.", func() {
 				Minimum(0)
 			})
@@ -59,7 +59,7 @@ var _ = Service("spendRules", func() {
 			Attribute("enabled", Boolean, "Whether the rule is active.", func() {
 				Default(true)
 			})
-			Required("name", "target_expr", "limit_usd", "window_kind")
+			Required("name", "target", "limit_usd", "window_kind")
 		})
 
 		Result(SpendRule)
@@ -134,7 +134,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("updateSpendRule", func() {
-		Description("Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.")
+		Description("Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -145,7 +145,7 @@ var _ = Service("spendRules", func() {
 			})
 			Attribute("name", String, "The rule name. Omit to preserve the current name.")
 			Attribute("description", String, "Description of what the rule covers. Omit to preserve the current description.")
-			Attribute("target_expr", String, "CEL boolean expression over member attributes. Omit to preserve the current expression.")
+			Attribute("target", SpendRuleTargetCondition, "Structured member-attribute condition. Omit to preserve the current target.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD for one window. Omit to preserve the current limit.", func() {
 				Minimum(0)
 			})
@@ -214,9 +214,14 @@ var _ = Service("spendRules", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("target_expr", String, "CEL boolean expression over member attributes to preview.")
+			Attribute("target", SpendRuleTargetCondition, "Structured member-attribute condition to preview.")
 			Attribute("limit_usd", Float64, "Per-person budget in USD used to compute usage percentages.", func() {
 				Minimum(0)
+			})
+			Attribute("warn_at_pct", Int, "Percentage of the limit at which a warning event is emitted.", func() {
+				Minimum(1)
+				Maximum(100)
+				Default(80)
 			})
 			Attribute("window_kind", String, "UTC calendar window to compute spend over.", func() {
 				SpendRuleWindowKindEnum()
@@ -224,7 +229,7 @@ var _ = Service("spendRules", func() {
 			Attribute("evaluated_from", String, "Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to mirror the evaluator; omit for new rules.", func() {
 				Format(FormatDateTime)
 			})
-			Required("target_expr", "limit_usd", "window_kind")
+			Required("target", "limit_usd", "window_kind")
 		})
 
 		Result(PreviewSpendRuleResult)
@@ -309,6 +314,16 @@ var _ = Service("spendRules", func() {
 	})
 })
 
+var SpendRuleTargetCondition = Type("SpendRuleTargetCondition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("attribute", String, "Member attribute name.")
+	Attribute("operator", String, "Comparison operator: equals, not_equals, starts_with, ends_with, contains, matches, or includes.")
+	Attribute("value", String, "Comparison value.")
+
+	Required("attribute", "operator", "value")
+})
+
 var SpendRule = Type("SpendRule", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -320,7 +335,9 @@ var SpendRule = Type("SpendRule", func() {
 	Attribute("name", String, "The rule name.")
 	Attribute("slug", String, "URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.")
 	Attribute("description", String, "Description of what the rule covers. Empty when unset.")
+	Attribute("target", SpendRuleTargetCondition, "Structured member-attribute condition selecting who the rule applies to.")
 	Attribute("target_expr", String, "CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.")
+	Attribute("rule_expr", String, "CEL boolean expression over actor usage that identifies a budget breach for matched members.")
 	Attribute("limit_usd", Float64, "Per-person budget in USD for one window.")
 	Attribute("window_kind", String, "UTC calendar window the budget covers.", func() {
 		SpendRuleWindowKindEnum()
@@ -341,7 +358,7 @@ var SpendRule = Type("SpendRule", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "urn", "organization_id", "name", "slug", "description", "target_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "evaluated_from", "created_at", "updated_at")
+	Required("id", "urn", "organization_id", "name", "slug", "description", "target", "target_expr", "rule_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "evaluated_from", "created_at", "updated_at")
 })
 
 var SpendRuleEvent = Type("SpendRuleEvent", func() {
@@ -381,8 +398,9 @@ var SpendRuleActorUsage = Type("SpendRuleActorUsage", func() {
 	Attribute("spend_usd", Float64, "Actor spend in USD within the current window.")
 	Attribute("limit_usd", Float64, "Per-person budget in USD.")
 	Attribute("used_pct", Float64, "Spend as a percentage of the limit (may exceed 100).")
+	Attribute("breached", Boolean, "Whether the rule expression currently matches this actor usage.")
 
-	Required("email", "spend_usd", "limit_usd", "used_pct")
+	Required("email", "spend_usd", "limit_usd", "used_pct", "breached")
 })
 
 var PreviewSpendRuleResult = Type("PreviewSpendRuleResult", func() {

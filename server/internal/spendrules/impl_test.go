@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/spend_rules"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -23,12 +24,16 @@ func createTestRulePayload() *gen.CreateSpendRulePayload {
 	return &gen.CreateSpendRulePayload{
 		Name:        "Engineering cap",
 		Description: "Per-person budget for engineering",
-		TargetExpr:  `department_name == "Engineering"`,
-		LimitUsd:    500,
-		WindowKind:  "monthly",
-		WarnAtPct:   80,
-		Action:      "flag",
-		Enabled:     true,
+		Target: &types.SpendRuleTargetCondition{
+			Attribute: "department_name",
+			Operator:  "equals",
+			Value:     "Engineering",
+		},
+		LimitUsd:   500,
+		WindowKind: "monthly",
+		WarnAtPct:  80,
+		Action:     "flag",
+		Enabled:    true,
 	}
 }
 
@@ -44,7 +49,9 @@ func TestCreateSpendRule_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "Engineering cap", result.Name)
+	require.Equal(t, createTestRulePayload().Target, result.Target)
 	require.Equal(t, `department_name == "Engineering"`, result.TargetExpr)
+	require.Equal(t, spendrules.DefaultRuleExpr, result.RuleExpr)
 	require.InDelta(t, 500.0, result.LimitUsd, 0.001)
 	require.Equal(t, "monthly", result.WindowKind)
 	require.Equal(t, 80, result.WarnAtPct)
@@ -84,10 +91,25 @@ func TestCreateSpendRule_RejectsInvalidExpression(t *testing.T) {
 	ctx = withOrgAdmin(t, ctx, ti.conn)
 
 	payload := createTestRulePayload()
-	payload.TargetExpr = `favorite_color == "blue"`
+	payload.Target = &types.SpendRuleTargetCondition{
+		Attribute: "favorite_color",
+		Operator:  "equals",
+		Value:     "blue",
+	}
 	_, err := ti.service.CreateSpendRule(ctx, payload)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	payload = createTestRulePayload()
+	payload.Target = &types.SpendRuleTargetCondition{
+		Attribute: "groups",
+		Operator:  "contains",
+		Value:     "engineering",
+	}
+	_, err = ti.service.CreateSpendRule(ctx, payload)
+	require.Error(t, err)
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
@@ -187,12 +209,16 @@ func TestUpdateSpendRule_MaterialBumpsVersionAndResetsEvaluation(t *testing.T) {
 	require.NoError(t, err)
 
 	updated, err := ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
-		ID:       created.ID,
-		LimitUsd: new(750.0),
+		ID: created.ID,
+		Target: &types.SpendRuleTargetCondition{
+			Attribute: "groups",
+			Operator:  "includes",
+			Value:     "eng-frontier",
+		},
 	})
 	require.NoError(t, err)
-	require.InDelta(t, 750.0, updated.LimitUsd, 0.001)
-	require.Equal(t, int64(2), updated.Version, "limit changes are material")
+	require.Equal(t, `"eng-frontier" in groups`, updated.TargetExpr)
+	require.Equal(t, int64(2), updated.Version, "target changes are material")
 
 	updatedEvaluatedFrom, err := time.Parse(time.RFC3339, updated.EvaluatedFrom)
 	require.NoError(t, err)
@@ -212,8 +238,22 @@ func TestUpdateSpendRule_RejectsInvalidExpression(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
-		ID:         created.ID,
-		TargetExpr: new(`favorite_color == "blue"`),
+		ID: created.ID,
+		Target: &types.SpendRuleTargetCondition{
+			Attribute: "favorite_color",
+			Operator:  "equals",
+			Value:     "blue",
+		},
+	})
+	require.Error(t, err)
+
+	_, err = ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
+		ID: created.ID,
+		Target: &types.SpendRuleTargetCondition{
+			Attribute: "email",
+			Operator:  "includes",
+			Value:     "blue",
+		},
 	})
 	require.Error(t, err)
 }
@@ -311,8 +351,9 @@ func TestPreviewSpendRuleWithNoMatchingMembers(t *testing.T) {
 	ctx = withOrgAdmin(t, ctx, ti.conn)
 
 	result, err := ti.service.PreviewSpendRule(ctx, &gen.PreviewSpendRulePayload{
-		TargetExpr: `department_name == "Engineering"`,
+		Target:     createTestRulePayload().Target,
 		LimitUsd:   500,
+		WarnAtPct:  80,
 		WindowKind: "monthly",
 	})
 	require.NoError(t, err)

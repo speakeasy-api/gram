@@ -51,7 +51,7 @@ export type SpendRulesUpdateRuleMutationError =
  * updateSpendRule spendRules
  *
  * @remarks
- * Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
+ * Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
  */
 export function useSpendRulesUpdateRuleMutation(
   options?: MutationHookOptions<

@@ -1573,6 +1573,7 @@ type SpendRule struct {
 	Description    string
 	TargetExpr     string
 	LimitUsd       float64
+	RuleExpr       string
 	WindowKind     string
 	WarnAtPct      int32
 	Action         string
@@ -1607,6 +1608,7 @@ type SpendRuleVersion struct {
 	SpendRuleID    uuid.UUID
 	Version        int64
 	TargetExpr     string
+	RuleExpr       string
 	LimitUsd       float64
 	WindowKind     string
 	WarnAtPct      int32

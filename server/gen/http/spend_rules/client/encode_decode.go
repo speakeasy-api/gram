@@ -1945,6 +1945,45 @@ func DecodeGetSpendRulesOverviewResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionRequestBody
+// builds a value of type *SpendRuleTargetConditionRequestBody from a value of
+// type *types.SpendRuleTargetCondition.
+func marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionRequestBody(v *types.SpendRuleTargetCondition) *SpendRuleTargetConditionRequestBody {
+	res := &SpendRuleTargetConditionRequestBody{
+		Attribute: v.Attribute,
+		Operator:  v.Operator,
+		Value:     v.Value,
+	}
+
+	return res
+}
+
+// marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition
+// builds a value of type *types.SpendRuleTargetCondition from a value of type
+// *SpendRuleTargetConditionRequestBody.
+func marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(v *SpendRuleTargetConditionRequestBody) *types.SpendRuleTargetCondition {
+	res := &types.SpendRuleTargetCondition{
+		Attribute: v.Attribute,
+		Operator:  v.Operator,
+		Value:     v.Value,
+	}
+
+	return res
+}
+
+// unmarshalSpendRuleTargetConditionResponseBodyToTypesSpendRuleTargetCondition
+// builds a value of type *types.SpendRuleTargetCondition from a value of type
+// *SpendRuleTargetConditionResponseBody.
+func unmarshalSpendRuleTargetConditionResponseBodyToTypesSpendRuleTargetCondition(v *SpendRuleTargetConditionResponseBody) *types.SpendRuleTargetCondition {
+	res := &types.SpendRuleTargetCondition{
+		Attribute: *v.Attribute,
+		Operator:  *v.Operator,
+		Value:     *v.Value,
+	}
+
+	return res
+}
+
 // unmarshalSpendRuleResponseBodyToTypesSpendRule builds a value of type
 // *types.SpendRule from a value of type *SpendRuleResponseBody.
 func unmarshalSpendRuleResponseBodyToTypesSpendRule(v *SpendRuleResponseBody) *types.SpendRule {
@@ -1956,6 +1995,7 @@ func unmarshalSpendRuleResponseBodyToTypesSpendRule(v *SpendRuleResponseBody) *t
 		Slug:           *v.Slug,
 		Description:    *v.Description,
 		TargetExpr:     *v.TargetExpr,
+		RuleExpr:       *v.RuleExpr,
 		LimitUsd:       *v.LimitUsd,
 		WindowKind:     *v.WindowKind,
 		WarnAtPct:      *v.WarnAtPct,
@@ -1966,6 +2006,7 @@ func unmarshalSpendRuleResponseBodyToTypesSpendRule(v *SpendRuleResponseBody) *t
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
+	res.Target = unmarshalSpendRuleTargetConditionResponseBodyToTypesSpendRuleTargetCondition(v.Target)
 
 	return res
 }
@@ -1981,6 +2022,7 @@ func unmarshalSpendRuleActorUsageResponseBodyToSpendrulesSpendRuleActorUsage(v *
 		SpendUsd:    *v.SpendUsd,
 		LimitUsd:    *v.LimitUsd,
 		UsedPct:     *v.UsedPct,
+		Breached:    *v.Breached,
 	}
 
 	return res

@@ -24,7 +24,10 @@ func BuildCreateSpendRulePayload(spendRulesCreateSpendRuleBody string, spendRule
 	{
 		err = json.Unmarshal([]byte(spendRulesCreateSpendRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target_expr\": \"abc123\",\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
+		}
+		if body.Target == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
 		}
 		if body.LimitUsd < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit_usd", body.LimitUsd, 0, true))
@@ -66,7 +69,6 @@ func BuildCreateSpendRulePayload(spendRulesCreateSpendRuleBody string, spendRule
 	v := &spendrules.CreateSpendRulePayload{
 		Name:        body.Name,
 		Description: body.Description,
-		TargetExpr:  body.TargetExpr,
 		LimitUsd:    body.LimitUsd,
 		WindowKind:  body.WindowKind,
 		WarnAtPct:   body.WarnAtPct,
@@ -78,6 +80,9 @@ func BuildCreateSpendRulePayload(spendRulesCreateSpendRuleBody string, spendRule
 		if v.Description == zero {
 			v.Description = ""
 		}
+	}
+	if body.Target != nil {
+		v.Target = marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
 	}
 	{
 		var zero int
@@ -180,7 +185,7 @@ func BuildUpdateSpendRulePayload(spendRulesUpdateSpendRuleBody string, spendRule
 	{
 		err = json.Unmarshal([]byte(spendRulesUpdateSpendRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target_expr\": \"abc123\",\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.LimitUsd != nil {
@@ -234,12 +239,14 @@ func BuildUpdateSpendRulePayload(spendRulesUpdateSpendRuleBody string, spendRule
 		ID:          body.ID,
 		Name:        body.Name,
 		Description: body.Description,
-		TargetExpr:  body.TargetExpr,
 		LimitUsd:    body.LimitUsd,
 		WindowKind:  body.WindowKind,
 		WarnAtPct:   body.WarnAtPct,
 		Action:      body.Action,
 		Enabled:     body.Enabled,
+	}
+	if body.Target != nil {
+		v.Target = marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -295,10 +302,19 @@ func BuildPreviewSpendRulePayload(spendRulesPreviewSpendRuleBody string, spendRu
 	{
 		err = json.Unmarshal([]byte(spendRulesPreviewSpendRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"evaluated_from\": \"1970-01-01T00:00:01Z\",\n      \"limit_usd\": 1,\n      \"target_expr\": \"abc123\",\n      \"window_kind\": \"weekly\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"evaluated_from\": \"1970-01-01T00:00:01Z\",\n      \"limit_usd\": 1,\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
+		}
+		if body.Target == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
 		}
 		if body.LimitUsd < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit_usd", body.LimitUsd, 0, true))
+		}
+		if body.WarnAtPct < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.warn_at_pct", body.WarnAtPct, 1, true))
+		}
+		if body.WarnAtPct > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.warn_at_pct", body.WarnAtPct, 100, false))
 		}
 		if !(body.WindowKind == "daily" || body.WindowKind == "weekly" || body.WindowKind == "monthly") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window_kind", body.WindowKind, []any{"daily", "weekly", "monthly"}))
@@ -329,10 +345,19 @@ func BuildPreviewSpendRulePayload(spendRulesPreviewSpendRuleBody string, spendRu
 		}
 	}
 	v := &spendrules.PreviewSpendRulePayload{
-		TargetExpr:    body.TargetExpr,
 		LimitUsd:      body.LimitUsd,
+		WarnAtPct:     body.WarnAtPct,
 		WindowKind:    body.WindowKind,
 		EvaluatedFrom: body.EvaluatedFrom,
+	}
+	if body.Target != nil {
+		v.Target = marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
+	}
+	{
+		var zero int
+		if v.WarnAtPct == zero {
+			v.WarnAtPct = 80
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

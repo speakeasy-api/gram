@@ -12476,7 +12476,7 @@ func spendRulesUsage() {
 	fmt.Fprintln(os.Stderr, `    create-spend-rule: Create a new spend control rule for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    list-spend-rules: List all spend control rules for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    get-spend-rule: Get a spend control rule by ID.`)
-	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.`)
+	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.`)
 	fmt.Fprintln(os.Stderr, `    delete-spend-rule: Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.`)
 	fmt.Fprintln(os.Stderr, `    preview-spend-rule: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.`)
 	fmt.Fprintln(os.Stderr, `    list-spend-rule-events: List warning and breach events emitted by spend rule evaluation, most recent first.`)
@@ -12506,7 +12506,7 @@ func spendRulesCreateSpendRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules create-spend-rule --body '{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target_expr\": \"abc123\",\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules create-spend-rule --body '{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func spendRulesListSpendRulesUsage() {
@@ -12566,7 +12566,7 @@ func spendRulesUpdateSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.`)
+	fmt.Fprintln(os.Stderr, `Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -12576,7 +12576,7 @@ func spendRulesUpdateSpendRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules update-spend-rule --body '{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target_expr\": \"abc123\",\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules update-spend-rule --body '{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func spendRulesDeleteSpendRuleUsage() {
@@ -12624,7 +12624,7 @@ func spendRulesPreviewSpendRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules preview-spend-rule --body '{\n      \"evaluated_from\": \"1970-01-01T00:00:01Z\",\n      \"limit_usd\": 1,\n      \"target_expr\": \"abc123\",\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules preview-spend-rule --body '{\n      \"evaluated_from\": \"1970-01-01T00:00:01Z\",\n      \"limit_usd\": 1,\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func spendRulesListSpendRuleEventsUsage() {

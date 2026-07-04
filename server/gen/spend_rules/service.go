@@ -23,7 +23,7 @@ type Service interface {
 	ListSpendRules(context.Context, *ListSpendRulesPayload) (res *ListSpendRulesResult, err error)
 	// Get a spend control rule by ID.
 	GetSpendRule(context.Context, *GetSpendRulePayload) (res *types.SpendRule, err error)
-	// Update a spend control rule. Material changes (target_expr, limit_usd,
+	// Update a spend control rule. Material changes (target, limit_usd,
 	// window_kind, warn_at_pct, action) bump the rule version and reset its
 	// evaluation state.
 	UpdateSpendRule(context.Context, *UpdateSpendRulePayload) (res *types.SpendRule, err error)
@@ -74,9 +74,8 @@ type CreateSpendRulePayload struct {
 	Name string
 	// Optional description of what the rule covers.
 	Description string
-	// CEL boolean expression over member attributes (email, directory attributes,
-	// groups, roles) selecting who the rule applies to.
-	TargetExpr string
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *types.SpendRuleTargetCondition
 	// Per-person budget in USD for one window.
 	LimitUsd float64
 	// UTC calendar window the budget covers.
@@ -163,10 +162,12 @@ type PreviewSpendRulePayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// CEL boolean expression over member attributes to preview.
-	TargetExpr string
+	// Structured member-attribute condition to preview.
+	Target *types.SpendRuleTargetCondition
 	// Per-person budget in USD used to compute usage percentages.
 	LimitUsd float64
+	// Percentage of the limit at which a warning event is emitted.
+	WarnAtPct int
 	// UTC calendar window to compute spend over.
 	WindowKind string
 	// Ignore spend accrued before this instant. Pass an existing rule's
@@ -201,6 +202,8 @@ type SpendRuleActorUsage struct {
 	LimitUsd float64
 	// Spend as a percentage of the limit (may exceed 100).
 	UsedPct float64
+	// Whether the rule expression currently matches this actor usage.
+	Breached bool
 }
 
 type SpendRuleEvent struct {
@@ -288,9 +291,8 @@ type UpdateSpendRulePayload struct {
 	// Description of what the rule covers. Omit to preserve the current
 	// description.
 	Description *string
-	// CEL boolean expression over member attributes. Omit to preserve the current
-	// expression.
-	TargetExpr *string
+	// Structured member-attribute condition. Omit to preserve the current target.
+	Target *types.SpendRuleTargetCondition
 	// Per-person budget in USD for one window. Omit to preserve the current limit.
 	LimitUsd *float64
 	// UTC calendar window the budget covers. Omit to preserve the current window.

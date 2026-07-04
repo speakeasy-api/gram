@@ -25,6 +25,10 @@ func sampleActor() celenv.Actor {
 		CostCenterName: "CC-1001",
 		Groups:         []string{"eng-frontier", "leadership"},
 		Roles:          []string{"admin"},
+		SpendUSD:       120,
+		LimitUSD:       100,
+		UsedPct:        120,
+		WarnAtPct:      80,
 	}
 }
 
@@ -51,6 +55,8 @@ func TestCompileAndEvalExpressions(t *testing.T) {
 		{expr: `department_name == "Design" || "eng-frontier" in groups`, want: true},
 		{expr: `"admin" in roles`, want: true},
 		{expr: `"member" in roles`, want: false},
+		{expr: `spend_usd >= limit_usd`, want: true},
+		{expr: `used_pct >= warn_at_pct`, want: true},
 	}
 
 	for _, tc := range cases {

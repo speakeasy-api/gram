@@ -20,9 +20,8 @@ type CreateSpendRuleRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional description of what the rule covers.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// CEL boolean expression over member attributes (email, directory attributes,
-	// groups, roles) selecting who the rule applies to.
-	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetConditionRequestBody `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 	// Per-person budget in USD for one window.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
 	// UTC calendar window the budget covers.
@@ -45,9 +44,8 @@ type UpdateSpendRuleRequestBody struct {
 	// Description of what the rule covers. Omit to preserve the current
 	// description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// CEL boolean expression over member attributes. Omit to preserve the current
-	// expression.
-	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
+	// Structured member-attribute condition. Omit to preserve the current target.
+	Target *SpendRuleTargetConditionRequestBody `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 	// Per-person budget in USD for one window. Omit to preserve the current limit.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
 	// UTC calendar window the budget covers. Omit to preserve the current window.
@@ -64,10 +62,12 @@ type UpdateSpendRuleRequestBody struct {
 // PreviewSpendRuleRequestBody is the type of the "spendRules" service
 // "previewSpendRule" endpoint HTTP request body.
 type PreviewSpendRuleRequestBody struct {
-	// CEL boolean expression over member attributes to preview.
-	TargetExpr *string `form:"target_expr,omitempty" json:"target_expr,omitempty" xml:"target_expr,omitempty"`
+	// Structured member-attribute condition to preview.
+	Target *SpendRuleTargetConditionRequestBody `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 	// Per-person budget in USD used to compute usage percentages.
 	LimitUsd *float64 `form:"limit_usd,omitempty" json:"limit_usd,omitempty" xml:"limit_usd,omitempty"`
+	// Percentage of the limit at which a warning event is emitted.
+	WarnAtPct *int `form:"warn_at_pct,omitempty" json:"warn_at_pct,omitempty" xml:"warn_at_pct,omitempty"`
 	// UTC calendar window to compute spend over.
 	WindowKind *string `form:"window_kind,omitempty" json:"window_kind,omitempty" xml:"window_kind,omitempty"`
 	// Ignore spend accrued before this instant. Pass an existing rule's
@@ -92,9 +92,14 @@ type CreateSpendRuleResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetConditionResponseBody `form:"target" json:"target" xml:"target"`
 	// CEL boolean expression over member attributes (email, directory attributes,
 	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
+	// CEL boolean expression over actor usage that identifies a budget breach for
+	// matched members.
+	RuleExpr string `form:"rule_expr" json:"rule_expr" xml:"rule_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
 	// UTC calendar window the budget covers.
@@ -140,9 +145,14 @@ type GetSpendRuleResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetConditionResponseBody `form:"target" json:"target" xml:"target"`
 	// CEL boolean expression over member attributes (email, directory attributes,
 	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
+	// CEL boolean expression over actor usage that identifies a budget breach for
+	// matched members.
+	RuleExpr string `form:"rule_expr" json:"rule_expr" xml:"rule_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
 	// UTC calendar window the budget covers.
@@ -181,9 +191,14 @@ type UpdateSpendRuleResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetConditionResponseBody `form:"target" json:"target" xml:"target"`
 	// CEL boolean expression over member attributes (email, directory attributes,
 	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
+	// CEL boolean expression over actor usage that identifies a budget breach for
+	// matched members.
+	RuleExpr string `form:"rule_expr" json:"rule_expr" xml:"rule_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
 	// UTC calendar window the budget covers.
@@ -1743,6 +1758,18 @@ type GetSpendRulesOverviewGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SpendRuleTargetConditionResponseBody is used to define fields on response
+// body types.
+type SpendRuleTargetConditionResponseBody struct {
+	// Member attribute name.
+	Attribute string `form:"attribute" json:"attribute" xml:"attribute"`
+	// Comparison operator: equals, not_equals, starts_with, ends_with, contains,
+	// matches, or includes.
+	Operator string `form:"operator" json:"operator" xml:"operator"`
+	// Comparison value.
+	Value string `form:"value" json:"value" xml:"value"`
+}
+
 // SpendRuleResponseBody is used to define fields on response body types.
 type SpendRuleResponseBody struct {
 	// The spend rule ID.
@@ -1759,9 +1786,14 @@ type SpendRuleResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of what the rule covers. Empty when unset.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Structured member-attribute condition selecting who the rule applies to.
+	Target *SpendRuleTargetConditionResponseBody `form:"target" json:"target" xml:"target"`
 	// CEL boolean expression over member attributes (email, directory attributes,
 	// groups, roles) selecting who the rule applies to.
 	TargetExpr string `form:"target_expr" json:"target_expr" xml:"target_expr"`
+	// CEL boolean expression over actor usage that identifies a budget breach for
+	// matched members.
+	RuleExpr string `form:"rule_expr" json:"rule_expr" xml:"rule_expr"`
 	// Per-person budget in USD for one window.
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
 	// UTC calendar window the budget covers.
@@ -1798,6 +1830,8 @@ type SpendRuleActorUsageResponseBody struct {
 	LimitUsd float64 `form:"limit_usd" json:"limit_usd" xml:"limit_usd"`
 	// Spend as a percentage of the limit (may exceed 100).
 	UsedPct float64 `form:"used_pct" json:"used_pct" xml:"used_pct"`
+	// Whether the rule expression currently matches this actor usage.
+	Breached bool `form:"breached" json:"breached" xml:"breached"`
 }
 
 // SpendRuleEventResponseBody is used to define fields on response body types.
@@ -1850,6 +1884,18 @@ type SpendRuleUsageResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
+// SpendRuleTargetConditionRequestBody is used to define fields on request body
+// types.
+type SpendRuleTargetConditionRequestBody struct {
+	// Member attribute name.
+	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
+	// Comparison operator: equals, not_equals, starts_with, ends_with, contains,
+	// matches, or includes.
+	Operator *string `form:"operator,omitempty" json:"operator,omitempty" xml:"operator,omitempty"`
+	// Comparison value.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+}
+
 // NewCreateSpendRuleResponseBody builds the HTTP response body from the result
 // of the "createSpendRule" endpoint of the "spendRules" service.
 func NewCreateSpendRuleResponseBody(res *types.SpendRule) *CreateSpendRuleResponseBody {
@@ -1861,6 +1907,7 @@ func NewCreateSpendRuleResponseBody(res *types.SpendRule) *CreateSpendRuleRespon
 		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
+		RuleExpr:       res.RuleExpr,
 		LimitUsd:       res.LimitUsd,
 		WindowKind:     res.WindowKind,
 		WarnAtPct:      res.WarnAtPct,
@@ -1870,6 +1917,9 @@ func NewCreateSpendRuleResponseBody(res *types.SpendRule) *CreateSpendRuleRespon
 		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.Target != nil {
+		body.Target = marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody(res.Target)
 	}
 	return body
 }
@@ -1904,6 +1954,7 @@ func NewGetSpendRuleResponseBody(res *types.SpendRule) *GetSpendRuleResponseBody
 		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
+		RuleExpr:       res.RuleExpr,
 		LimitUsd:       res.LimitUsd,
 		WindowKind:     res.WindowKind,
 		WarnAtPct:      res.WarnAtPct,
@@ -1913,6 +1964,9 @@ func NewGetSpendRuleResponseBody(res *types.SpendRule) *GetSpendRuleResponseBody
 		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.Target != nil {
+		body.Target = marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody(res.Target)
 	}
 	return body
 }
@@ -1928,6 +1982,7 @@ func NewUpdateSpendRuleResponseBody(res *types.SpendRule) *UpdateSpendRuleRespon
 		Slug:           res.Slug,
 		Description:    res.Description,
 		TargetExpr:     res.TargetExpr,
+		RuleExpr:       res.RuleExpr,
 		LimitUsd:       res.LimitUsd,
 		WindowKind:     res.WindowKind,
 		WarnAtPct:      res.WarnAtPct,
@@ -1937,6 +1992,9 @@ func NewUpdateSpendRuleResponseBody(res *types.SpendRule) *UpdateSpendRuleRespon
 		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.Target != nil {
+		body.Target = marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionResponseBody(res.Target)
 	}
 	return body
 }
@@ -3173,7 +3231,6 @@ func NewGetSpendRulesOverviewGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 func NewCreateSpendRulePayload(body *CreateSpendRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.CreateSpendRulePayload {
 	v := &spendrules.CreateSpendRulePayload{
 		Name:       *body.Name,
-		TargetExpr: *body.TargetExpr,
 		LimitUsd:   *body.LimitUsd,
 		WindowKind: *body.WindowKind,
 	}
@@ -3192,6 +3249,7 @@ func NewCreateSpendRulePayload(body *CreateSpendRuleRequestBody, apikeyToken *st
 	if body.Description == nil {
 		v.Description = ""
 	}
+	v.Target = unmarshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
 	if body.WarnAtPct == nil {
 		v.WarnAtPct = 80
 	}
@@ -3238,12 +3296,14 @@ func NewUpdateSpendRulePayload(body *UpdateSpendRuleRequestBody, apikeyToken *st
 		ID:          *body.ID,
 		Name:        body.Name,
 		Description: body.Description,
-		TargetExpr:  body.TargetExpr,
 		LimitUsd:    body.LimitUsd,
 		WindowKind:  body.WindowKind,
 		WarnAtPct:   body.WarnAtPct,
 		Action:      body.Action,
 		Enabled:     body.Enabled,
+	}
+	if body.Target != nil {
+		v.Target = unmarshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3268,10 +3328,16 @@ func NewDeleteSpendRulePayload(id string, apikeyToken *string, sessionToken *str
 // endpoint payload.
 func NewPreviewSpendRulePayload(body *PreviewSpendRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.PreviewSpendRulePayload {
 	v := &spendrules.PreviewSpendRulePayload{
-		TargetExpr:    *body.TargetExpr,
 		LimitUsd:      *body.LimitUsd,
 		WindowKind:    *body.WindowKind,
 		EvaluatedFrom: body.EvaluatedFrom,
+	}
+	if body.WarnAtPct != nil {
+		v.WarnAtPct = *body.WarnAtPct
+	}
+	v.Target = unmarshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)
+	if body.WarnAtPct == nil {
+		v.WarnAtPct = 80
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3312,14 +3378,19 @@ func ValidateCreateSpendRuleRequestBody(body *CreateSpendRuleRequestBody) (err e
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.TargetExpr == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("target_expr", "body"))
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
 	}
 	if body.LimitUsd == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("limit_usd", "body"))
 	}
 	if body.WindowKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("window_kind", "body"))
+	}
+	if body.Target != nil {
+		if err2 := ValidateSpendRuleTargetConditionRequestBody(body.Target); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.LimitUsd != nil {
 		if *body.LimitUsd < 0 {
@@ -3358,6 +3429,11 @@ func ValidateUpdateSpendRuleRequestBody(body *UpdateSpendRuleRequestBody) (err e
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.Target != nil {
+		if err2 := ValidateSpendRuleTargetConditionRequestBody(body.Target); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.LimitUsd != nil {
 		if *body.LimitUsd < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit_usd", *body.LimitUsd, 0, true))
@@ -3389,8 +3465,8 @@ func ValidateUpdateSpendRuleRequestBody(body *UpdateSpendRuleRequestBody) (err e
 // ValidatePreviewSpendRuleRequestBody runs the validations defined on
 // PreviewSpendRuleRequestBody
 func ValidatePreviewSpendRuleRequestBody(body *PreviewSpendRuleRequestBody) (err error) {
-	if body.TargetExpr == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("target_expr", "body"))
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
 	}
 	if body.LimitUsd == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("limit_usd", "body"))
@@ -3398,9 +3474,24 @@ func ValidatePreviewSpendRuleRequestBody(body *PreviewSpendRuleRequestBody) (err
 	if body.WindowKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("window_kind", "body"))
 	}
+	if body.Target != nil {
+		if err2 := ValidateSpendRuleTargetConditionRequestBody(body.Target); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.LimitUsd != nil {
 		if *body.LimitUsd < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit_usd", *body.LimitUsd, 0, true))
+		}
+	}
+	if body.WarnAtPct != nil {
+		if *body.WarnAtPct < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.warn_at_pct", *body.WarnAtPct, 1, true))
+		}
+	}
+	if body.WarnAtPct != nil {
+		if *body.WarnAtPct > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.warn_at_pct", *body.WarnAtPct, 100, false))
 		}
 	}
 	if body.WindowKind != nil {
@@ -3410,6 +3501,21 @@ func ValidatePreviewSpendRuleRequestBody(body *PreviewSpendRuleRequestBody) (err
 	}
 	if body.EvaluatedFrom != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSpendRuleTargetConditionRequestBody runs the validations defined on
+// SpendRuleTargetConditionRequestBody
+func ValidateSpendRuleTargetConditionRequestBody(body *SpendRuleTargetConditionRequestBody) (err error) {
+	if body.Attribute == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attribute", "body"))
+	}
+	if body.Operator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operator", "body"))
+	}
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
 	return
 }

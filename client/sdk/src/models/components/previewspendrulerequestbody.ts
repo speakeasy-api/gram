@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  SpendRuleTargetCondition,
+  SpendRuleTargetCondition$Outbound,
+  SpendRuleTargetCondition$outboundSchema,
+} from "./spendruletargetcondition.js";
 
 /**
  * UTC calendar window to compute spend over.
@@ -30,10 +35,11 @@ export type PreviewSpendRuleRequestBody = {
    * Per-person budget in USD used to compute usage percentages.
    */
   limitUsd: number;
+  target: SpendRuleTargetCondition;
   /**
-   * CEL boolean expression over member attributes to preview.
+   * Percentage of the limit at which a warning event is emitted.
    */
-  targetExpr: string;
+  warnAtPct?: number | undefined;
   /**
    * UTC calendar window to compute spend over.
    */
@@ -50,7 +56,8 @@ export const PreviewSpendRuleRequestBodyWindowKind$outboundSchema:
 export type PreviewSpendRuleRequestBody$Outbound = {
   evaluated_from?: string | undefined;
   limit_usd: number;
-  target_expr: string;
+  target: SpendRuleTargetCondition$Outbound;
+  warn_at_pct: number;
   window_kind: string;
 };
 
@@ -64,14 +71,15 @@ export const PreviewSpendRuleRequestBody$outboundSchema: z.ZodMiniType<
       z.pipe(z.date(), z.transform(v => v.toISOString())),
     ),
     limitUsd: z.number(),
-    targetExpr: z.string(),
+    target: SpendRuleTargetCondition$outboundSchema,
+    warnAtPct: z._default(z.int(), 80),
     windowKind: PreviewSpendRuleRequestBodyWindowKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       evaluatedFrom: "evaluated_from",
       limitUsd: "limit_usd",
-      targetExpr: "target_expr",
+      warnAtPct: "warn_at_pct",
       windowKind: "window_kind",
     });
   }),

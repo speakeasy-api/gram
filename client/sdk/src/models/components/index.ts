@@ -446,6 +446,7 @@ export * from "./spendrule.js";
 export * from "./spendruleactorusage.js";
 export * from "./spendruleevent.js";
 export * from "./spendrulesoverviewresult.js";
+export * from "./spendruletargetcondition.js";
 export * from "./spendruleusage.js";
 export * from "./submitfeedbackrequestbody.js";
 export * from "./submitriskblockfeedbackrequestbody.js";
