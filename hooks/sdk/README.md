@@ -11,48 +11,39 @@ Developer-friendly & type-safe Go SDK specifically catered to leverage _sdk_ API
 > This SDK is not yet ready for production use. To complete setup please follow the steps outlined in your [workspace](https://app.speakeasy.com/org/speakeasy-self/speakeasy-self). Delete this section before > publishing to a package manager.
 
 <!-- Start Summary [summary] -->
-
 ## Summary
 
 Gram API Description: Gram is the tools platform for AI agents
-
 <!-- End Summary [summary] -->
 
 <!-- Start Table of Contents [toc] -->
-
 ## Table of Contents
-
 <!-- $toc-max-depth=2 -->
-
-- [sdk](#sdk)
-  - [SDK Installation](#sdk-installation)
-  - [SDK Example Usage](#sdk-example-usage)
-  - [Authentication](#authentication)
-  - [Available Resources and Operations](#available-resources-and-operations)
-  - [Retries](#retries)
-  - [Error Handling](#error-handling)
-  - [Server Selection](#server-selection)
-  - [Custom HTTP Client](#custom-http-client)
-- [Development](#development)
-  - [Maturity](#maturity)
-  - [Contributions](#contributions)
+* [sdk](#sdk)
+  * [SDK Installation](#sdk-installation)
+  * [SDK Example Usage](#sdk-example-usage)
+  * [Authentication](#authentication)
+  * [Available Resources and Operations](#available-resources-and-operations)
+  * [Retries](#retries)
+  * [Error Handling](#error-handling)
+  * [Server Selection](#server-selection)
+  * [Custom HTTP Client](#custom-http-client)
+* [Development](#development)
+  * [Maturity](#maturity)
+  * [Contributions](#contributions)
 
 <!-- End Table of Contents [toc] -->
 
 <!-- Start SDK Installation [installation] -->
-
 ## SDK Installation
 
 To add the SDK as a dependency to your project:
-
 ```bash
 go get github.com/speakeasy-api/gram/hooks/sdk
 ```
-
 <!-- End SDK Installation [installation] -->
 
 <!-- Start SDK Example Usage [usage] -->
-
 ## SDK Example Usage
 
 ### Example
@@ -93,11 +84,9 @@ func main() {
 }
 
 ```
-
 <!-- End SDK Example Usage [usage] -->
 
 <!-- Start Authentication [security] -->
-
 ## Authentication
 
 ### Per-Client Security Schemes
@@ -111,10 +100,10 @@ This SDK supports the following security schemes globally:
 
 You can set the security parameters through the `WithSecurity` option when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
 
+
 ### Per-Operation Security Schemes
 
 Some operations in this SDK require the security scheme to be specified at the request level. For example:
-
 ```go
 package main
 
@@ -151,11 +140,9 @@ func main() {
 }
 
 ```
-
 <!-- End Authentication [security] -->
 
 <!-- Start Available Resources and Operations [operations] -->
-
 ## Available Resources and Operations
 
 <details open>
@@ -163,19 +150,17 @@ func main() {
 
 ### [Hooks](docs/sdks/hooks/README.md)
 
-- [Ingest](docs/sdks/hooks/README.md#ingest) - ingest hooks
+* [Ingest](docs/sdks/hooks/README.md#ingest) - ingest hooks
 
 </details>
 <!-- End Available Resources and Operations [operations] -->
 
 <!-- Start Retries [retries] -->
-
 ## Retries
 
 Some of the endpoints in this SDK support retries. If you use the SDK without any configuration, it will fall back to the default retry strategy provided by the API. However, the default retry strategy can be overridden on a per-operation basis, or across the entire SDK.
 
 To change the default retry strategy for a single API call, simply provide a `retry.Config` object to the call by using the `WithRetries` option:
-
 ```go
 package main
 
@@ -226,7 +211,6 @@ func main() {
 ```
 
 If you'd like to override the default retry strategy for all operations that support retries, you can use the `WithRetryConfig` option at SDK initialization:
-
 ```go
 package main
 
@@ -276,16 +260,14 @@ func main() {
 }
 
 ```
-
 <!-- End Retries [retries] -->
 
 <!-- Start Error Handling [errors] -->
-
 ## Error Handling
 
 Handling errors in this SDK should largely match your expectations. All operations return a response object or an error, they will never return both.
 
-By Default, an API error will return `apierrors.APIError`. When custom error responses are specified for an operation, the SDK may also return their associated error. You can refer to respective _Errors_ tables in SDK docs for more details on possible error types for each operation.
+By Default, an API error will return `apierrors.APIError`. When custom error responses are specified for an operation, the SDK may also return their associated error. You can refer to respective *Errors* tables in SDK docs for more details on possible error types for each operation.
 
 For example, the `Ingest` function may return the following errors:
 
@@ -349,17 +331,14 @@ func main() {
 }
 
 ```
-
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->
-
 ## Server Selection
 
 ### Override Server URL Per-Client
 
 The default server can be overridden globally using the `WithServerURL(serverURL string)` option when initializing the SDK client instance. For example:
-
 ```go
 package main
 
@@ -398,11 +377,9 @@ func main() {
 }
 
 ```
-
 <!-- End Server Selection [server] -->
 
 <!-- Start Custom HTTP Client [http-client] -->
-
 ## Custom HTTP Client
 
 The Go SDK makes API calls that wrap an internal HTTP client. The requirements for the HTTP client are very simple. It must match this interface:
@@ -430,7 +407,6 @@ var (
 ```
 
 This can be a convenient way to configure timeouts, cookies, proxies, custom headers, and other low-level configuration.
-
 <!-- End Custom HTTP Client [http-client] -->
 
 <!-- Placeholder for Future Speakeasy SDK Sections -->
