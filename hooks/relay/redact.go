@@ -1,0 +1,88 @@
+package relay
+
+import (
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+// Credential material can ride along in MCP server transport: basic-auth
+// userinfo and secret-named query parameters in a URL, or secret flags/tokens
+// in a stdio launch command. Both become telemetry and Shadow MCP block
+// evidence, so they are redacted before leaving the machine. Host, path, and
+// non-secret arguments survive so the evidence stays matchable server-side.
+
+var secretParamRE = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential|auth)`)
+
+// redactURL strips basic-auth userinfo and fragments and masks secret-named
+// query values while preserving the host, path, and benign parameters.
+func redactURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	u.User = nil
+	u.Fragment = ""
+	if u.RawQuery != "" {
+		q := u.Query()
+		for k := range q {
+			if secretParamRE.MatchString(k) {
+				q.Set(k, "***")
+			}
+		}
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
+var (
+	secretAssignRE = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
+	secretFlagRE   = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
+	tokenPrefixRE  = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
+)
+
+// redactCommand masks secret flag values and inline tokens in a stdio MCP
+// launch command. Tokenization splits on spaces and cannot see through shell
+// quoting; the patterns cover the common unquoted shapes, matching the bash
+// senders' behavior so a repointed server keeps a stable redacted identity.
+func redactCommand(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	raw = strings.ReplaceAll(raw, `"`, "")
+	raw = strings.ReplaceAll(raw, "'", "")
+	fields := strings.Fields(raw)
+	out := make([]string, 0, len(fields))
+	maskNext := false
+	for _, f := range fields {
+		if maskNext {
+			out = append(out, "***")
+			maskNext = false
+			continue
+		}
+		switch {
+		case secretAssignRE.MatchString(f):
+			if i := strings.IndexByte(f, '='); i >= 0 {
+				out = append(out, f[:i+1]+"***")
+			} else {
+				out = append(out, "***")
+			}
+		case secretFlagRE.MatchString(f):
+			out = append(out, f)
+			maskNext = true
+		case strings.EqualFold(f, "bearer"):
+			out = append(out, f)
+			maskNext = true
+		case tokenPrefixRE.MatchString(f):
+			out = append(out, "***")
+		default:
+			out = append(out, f)
+		}
+	}
+	return strings.Join(out, " ")
+}
