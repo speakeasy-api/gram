@@ -18,6 +18,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -104,6 +106,11 @@ type Service struct {
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng *celenv.Engine
+	// promptJudge replays an inline guardrail against a chat session for the
+	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
+	// the realtime scanner uses. Optional: when nil the eval endpoint returns
+	// un-matched verdicts (judge unavailable).
+	promptJudge ra.PromptJudge
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -138,6 +145,7 @@ func NewObserver(
 		piScanner:        nil,
 		flags:            nil,
 		celEng:           nil,
+		promptJudge:      nil,
 	}
 }
 
@@ -159,6 +167,7 @@ func NewService(
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	promptJudge ra.PromptJudge,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -181,6 +190,7 @@ func NewService(
 		piScanner:        piScanner,
 		flags:            flags,
 		celEng:           celEng,
+		promptJudge:      promptJudge,
 	}
 }
 
@@ -2334,6 +2344,270 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 			Supported: false,
 			Reason:    new("This rule has no text-only detector. Playground requires gitleaks/presidio/prompt-injection/custom rule families."),
 		}, nil
+	}
+}
+
+// EvaluatePromptGuardrail replays an inline prompt guardrail against one chat
+// session's latest generation and returns the judge's per-message verdicts. It
+// is the read-only backend for the policy-eval workbench: no risk_results are
+// written, nothing is published to the outbox, and nothing is enforced. The
+// guardrail is passed inline (prompt + model_config + message_types + CEL
+// scope) so a draft can be tuned before any policy exists.
+func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.EvaluatePromptGuardrailPayload) (*gen.PromptGuardrailEvalResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	modelConfig, err := marshalModelConfig(payload.ModelConfig)
+	if err != nil {
+		return nil, err
+	}
+	cfg := ra.ParseJudgeConfig(modelConfig)
+
+	// Confirm the chat belongs to the caller's project before loading its
+	// transcript. GetChat filters soft-deleted chats, so a missing or deleted
+	// chat surfaces as not-found.
+	chatRepo := chatrepo.New(s.db)
+	chatRow, err := chatRepo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
+	case chatRow.ProjectID != projectID:
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, s.logger)
+	}
+
+	messages := make([]ra.EvalMessage, len(rows))
+	for i, row := range rows {
+		messages[i] = ra.EvalMessage{
+			ID:        row.ID,
+			Role:      row.Role,
+			Content:   row.Content,
+			ToolCalls: row.ToolCalls,
+		}
+	}
+
+	verdicts, err := ra.EvalPromptGuardrail(
+		ctx,
+		s.logger,
+		s.promptJudge,
+		s.celEng,
+		authCtx.ActiveOrganizationID,
+		projectID.String(),
+		prompt,
+		cfg,
+		messages,
+		payload.MessageTypes,
+		conv.PtrValOr(payload.ScopeInclude, ""),
+		conv.PtrValOr(payload.ScopeExempt, ""),
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
+	}
+
+	out := make([]*gen.PromptGuardrailMessageVerdict, 0, len(verdicts))
+	flagged := false
+	totalCostUSD := 0.0
+	var totalLatencyMs int64
+	for _, v := range verdicts {
+		row := rows[v.Index]
+		if v.Matched {
+			flagged = true
+		}
+		totalCostUSD += v.CostUSD
+		totalLatencyMs += v.LatencyMs
+		out = append(out, &gen.PromptGuardrailMessageVerdict{
+			MessageID:        row.ID.String(),
+			Seq:              row.Seq,
+			MessageType:      v.Type,
+			ToolName:         conv.PtrEmpty(v.ToolName),
+			Matched:          v.Matched,
+			Confidence:       v.Confidence,
+			Rationale:        v.Rationale,
+			LatencyMs:        v.LatencyMs,
+			CostUsd:          v.CostUSD,
+			PromptTokens:     v.PromptTokens,
+			CompletionTokens: v.CompletionTokens,
+			TotalTokens:      v.TotalTokens,
+		})
+	}
+
+	return &gen.PromptGuardrailEvalResult{
+		ChatID:         chatID.String(),
+		Flagged:        flagged,
+		JudgedCount:    len(out),
+		TotalCostUsd:   totalCostUSD,
+		TotalLatencyMs: totalLatencyMs,
+		Verdicts:       out,
+	}, nil
+}
+
+// SaveRiskEvalReview records (or replaces) the current reviewer's ground-truth
+// verdict for one chat session under a prompt-based policy — a row in the
+// policy's durable regression set. Isolation: this touches only
+// risk_policy_eval_reviews, never live findings.
+func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskEvalReviewPayload) (*types.RiskPolicyEvalReview, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	chatBelongs, err := s.repo.RiskEvalChatBelongsToProject(ctx, repo.RiskEvalChatBelongsToProjectParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "validate eval review chat").LogError(ctx, s.logger)
+	}
+	if !chatBelongs {
+		return nil, oops.E(oops.CodeNotFound, nil, "chat not found")
+	}
+
+	row, err := s.repo.UpsertRiskPolicyEvalReview(ctx, repo.UpsertRiskPolicyEvalReviewParams{
+		ProjectID:         projectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policy.Version,
+		ChatID:            chatID,
+		Verdict:           payload.Verdict,
+		ReviewedBy:        authCtx.UserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "save eval review").LogError(ctx, s.logger)
+	}
+	return evalReviewToType(row), nil
+}
+
+// ListRiskEvalReviews returns the active regression set for a policy: every
+// reviewer's current verdicts.
+func (s *Service) ListRiskEvalReviews(ctx context.Context, payload *gen.ListRiskEvalReviewsPayload) (*gen.ListRiskEvalReviewsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+
+	rows, err := s.repo.ListRiskPolicyEvalReviews(ctx, repo.ListRiskPolicyEvalReviewsParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policyID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list eval reviews").LogError(ctx, s.logger)
+	}
+
+	reviews := make([]*types.RiskPolicyEvalReview, 0, len(rows))
+	for _, row := range rows {
+		reviews = append(reviews, evalReviewToType(row))
+	}
+	return &gen.ListRiskEvalReviewsResult{Reviews: reviews}, nil
+}
+
+// DeleteRiskEvalReview clears the current reviewer's verdict for one session (the
+// toggle-off path). A reviewer can only clear their own verdict; clearing a
+// verdict that does not exist is a no-op.
+func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteRiskEvalReviewPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+
+	_, err = s.repo.SoftDeleteRiskPolicyEvalReview(ctx, repo.SoftDeleteRiskPolicyEvalReviewParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policyID,
+		ChatID:       chatID,
+		ReviewedBy:   authCtx.UserID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "delete eval review").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// requirePromptPolicy loads a policy scoped to the project and verifies it is
+// prompt_based (the only kind evals apply to). Returns not-found when missing.
+func (s *Service) requirePromptPolicy(ctx context.Context, policyID, projectID uuid.UUID) (repo.RiskPolicy, error) {
+	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return repo.RiskPolicy{}, oops.E(oops.CodeNotFound, err, "policy not found")
+	case err != nil:
+		return repo.RiskPolicy{}, oops.E(oops.CodeUnexpected, err, "load policy").LogError(ctx, s.logger)
+	case policy.PolicyType != ra.PolicyTypePromptBased:
+		return repo.RiskPolicy{}, oops.E(oops.CodeInvalid, nil, "evals apply only to prompt_based policies")
+	}
+	return policy, nil
+}
+
+func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview {
+	return &types.RiskPolicyEvalReview{
+		ID:            row.ID.String(),
+		PolicyID:      row.RiskPolicyID.String(),
+		PolicyVersion: row.RiskPolicyVersion,
+		ChatID:        row.ChatID.String(),
+		Verdict:       row.Verdict,
+		ReviewedBy:    row.ReviewedBy,
+		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
