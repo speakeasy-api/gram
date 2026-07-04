@@ -2,6 +2,8 @@ server/database/schema.sql
   s_8860283851235f::t_19b5a1a508c8e0 3450-3498
 server/migrations/20260703112505_risk-policy-eval-reviews.sql
   s_8860283851235f::t_e953a1bbf7e01e 1-25
+server/migrations/atlas.sum
+  s_a91391a812c908::t_b5e10fcf980778 1,244-245
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -14,6 +16,14 @@ server/migrations/20260703112505_risk-policy-eval-reviews.sql
         "tool": "claude",
         "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
         "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_a91391a812c908": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2b83-2044-7ea2-9004-601b23879900",
+        "model": "gpt-5.5"
       },
       "human_author": "Vishal Gowda <vishal@speakeasy.com>"
     }
