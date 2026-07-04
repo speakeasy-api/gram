@@ -11,6 +11,7 @@
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
     "/client/sdk/**",
+    "/hooks/sdk/**",
     "/elements/docs/**",
     "/elements/examples/tanstack-start/src/routeTree.gen.ts",
     "/infra/gen/**",

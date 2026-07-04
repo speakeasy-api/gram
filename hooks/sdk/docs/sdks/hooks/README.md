@@ -6,7 +6,7 @@ Receives hook events from coding assistants for tool usage observability.
 
 ### Available Operations
 
-- [Ingest](#ingest) - ingest hooks
+* [Ingest](#ingest) - ingest hooks
 
 ## Ingest
 
@@ -15,7 +15,6 @@ Feature-first unified endpoint for hook events from supported coding assistants.
 ### Example Usage
 
 <!-- UsageSnippet language="go" operationID="ingestHookEvent" method="post" path="/rpc/hooks.ingest" -->
-
 ```go
 package main
 
@@ -54,21 +53,21 @@ func main() {
 
 ### Parameters
 
-| Parameter  | Type                                                                                     | Required           | Description                                       |
-| ---------- | ---------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- |
-| `ctx`      | [context.Context](https://pkg.go.dev/context#Context)                                    | :heavy_check_mark: | The context to use for the request.               |
-| `request`  | [operations.IngestHookEventRequest](../../models/operations/ingesthookeventrequest.md)   | :heavy_check_mark: | The request object to use for the request.        |
-| `security` | [operations.IngestHookEventSecurity](../../models/operations/ingesthookeventsecurity.md) | :heavy_check_mark: | The security requirements to use for the request. |
-| `opts`     | [][operations.Option](../../models/operations/option.md)                                 | :heavy_minus_sign: | The options for this request.                     |
+| Parameter                                                                                | Type                                                                                     | Required                                                                                 | Description                                                                              |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ctx`                                                                                    | [context.Context](https://pkg.go.dev/context#Context)                                    | :heavy_check_mark:                                                                       | The context to use for the request.                                                      |
+| `request`                                                                                | [operations.IngestHookEventRequest](../../models/operations/ingesthookeventrequest.md)   | :heavy_check_mark:                                                                       | The request object to use for the request.                                               |
+| `security`                                                                               | [operations.IngestHookEventSecurity](../../models/operations/ingesthookeventsecurity.md) | :heavy_check_mark:                                                                       | The security requirements to use for the request.                                        |
+| `opts`                                                                                   | [][operations.Option](../../models/operations/option.md)                                 | :heavy_minus_sign:                                                                       | The options for this request.                                                            |
 
 ### Response
 
-**[\*operations.IngestHookEventResponse](../../models/operations/ingesthookeventresponse.md), error**
+**[*operations.IngestHookEventResponse](../../models/operations/ingesthookeventresponse.md), error**
 
 ### Errors
 
-| Error Type             | Status Code                       | Content Type     |
-| ---------------------- | --------------------------------- | ---------------- |
-| apierrors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
-| apierrors.ServiceError | 500, 502                          | application/json |
-| apierrors.APIError     | 4XX, 5XX                          | \*/\*            |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| apierrors.ServiceError            | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| apierrors.ServiceError            | 500, 502                          | application/json                  |
+| apierrors.APIError                | 4XX, 5XX                          | \*/\*                             |

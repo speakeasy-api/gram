@@ -1,5 +1,4 @@
 <!-- Start SDK Example Usage [usage] -->
-
 ```go
 package main
 
@@ -36,5 +35,4 @@ func main() {
 }
 
 ```
-
 <!-- End SDK Example Usage [usage] -->

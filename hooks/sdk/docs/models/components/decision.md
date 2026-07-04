@@ -15,9 +15,10 @@ value := components.DecisionAllow
 custom := components.Decision("custom_value")
 ```
 
+
 ## Values
 
-| Name            | Value |
-| --------------- | ----- |
-| `DecisionAllow` | allow |
-| `DecisionDeny`  | deny  |
+| Name            | Value           |
+| --------------- | --------------- |
+| `DecisionAllow` | allow           |
+| `DecisionDeny`  | deny            |
