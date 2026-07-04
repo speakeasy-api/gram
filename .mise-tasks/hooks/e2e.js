@@ -6,8 +6,8 @@
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
-//USAGE flag "--keep-artifacts" help="Keep the temp workspace and downloaded plugin artifacts."
-//USAGE flag "--skip-download" help="Use provider plugin dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
+//USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
+//USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -71,7 +71,7 @@ function parseArgs(argv) {
     timeoutSeconds: Number(args["timeout-seconds"] ?? 180),
     pollSeconds: Number(args["poll-seconds"] ?? 90),
     keepArtifacts: Boolean(args["keep-artifacts"]),
-    skipDownload: Boolean(args["skip-download"]),
+    skipBuild: Boolean(args["skip-build"] ?? args["skip-download"]),
   };
 }
 function fail(message) {
@@ -297,48 +297,51 @@ async function enableSessionCapture(organizationId) {
 function sqlString(value) {
   return value.replaceAll("'", "''");
 }
-async function downloadProviderPlugin(args) {
-  const pluginDir = path.join(args.artifactsDir, "plugins", args.provider);
-  await fs.mkdir(pluginDir, { recursive: true });
-  if (process.env[`GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`]) {
+// buildHookBinary compiles the speakeasy-hooks binary once per run. Every
+// provider plugin drives this one binary; there is no server-side plugin
+// download anymore. The binary must live outside the workspace tree on a
+// plain temp path: Cursor refuses to execute hook binaries from some
+// locations.
+let hookBinaryPath = null;
+async function buildHookBinary(artifactsDir) {
+  if (hookBinaryPath) {
+    return hookBinaryPath;
+  }
+  const binary = path.join(artifactsDir, "bin", "speakeasy-hooks");
+  await fs.mkdir(path.dirname(binary), { recursive: true });
+  await runChecked("go", [
+    "build",
+    "-o",
+    binary,
+    "./hooks/cmd/speakeasy-hooks",
+  ]);
+  hookBinaryPath = binary;
+  return binary;
+}
+async function buildProviderPlugin(args) {
+  // Codex has no plugin layout for hooks: the config installs directly into
+  // the isolated Codex home (hooks.json next to config.toml).
+  const pluginDir =
+    args.provider === "codex"
+      ? args.codexEnv.CODEX_HOME
+      : path.join(args.artifactsDir, "plugins", args.provider);
+  if (
+    args.provider !== "codex" &&
+    process.env[`GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`]
+  ) {
     return process.env[
       `GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`
     ];
   }
-  const url = new URL(
-    `${args.serverURL}/rpc/plugins.downloadObservabilityPlugin`,
-  );
-  url.searchParams.set("platform", args.provider);
-  const res = await fetchOrFail(
-    url,
-    {
-      headers: {
-        Accept: "application/zip",
-        "Gram-Session": args.session.sessionId,
-        "Gram-Project": args.projectSlug,
-      },
-    },
-    `download ${args.provider} observability plugin`,
-  );
-  if (!res.ok) {
-    fail(
-      `downloadObservabilityPlugin(${args.provider}) failed: ${res.status} ${await res.text()}`,
-    );
-  }
-  const zipPath = path.join(
-    args.artifactsDir,
-    `${args.provider}-observability.zip`,
-  );
-  await fs.writeFile(zipPath, Buffer.from(await res.arrayBuffer()));
-  await runChecked("unzip", ["-q", "-o", zipPath, "-d", pluginDir]);
-  if (args.provider === "codex") {
-    if (!args.codexEnv) {
-      fail(
-        "internal error: codex plugin install requires isolated Codex environment",
-      );
-    }
-    await installCodexPlugin(pluginDir, args.codexEnv);
-  }
+  const binary = await buildHookBinary(args.artifactsDir);
+  await runChecked(binary, [
+    "install",
+    `--provider=${args.provider}`,
+    `--dir=${pluginDir}`,
+    `--server-url=${args.serverURL}`,
+    `--project=${args.projectSlug}`,
+    `--binary=${binary}`,
+  ]);
   return pluginDir;
 }
 async function runChecked(command, args, opts = {}) {
@@ -347,66 +350,6 @@ async function runChecked(command, args, opts = {}) {
     fail(`${res.command} failed:\n${res.stderr || res.stdout}`);
   }
   return res;
-}
-async function installCodexPlugin(pluginDir, env) {
-  const installScript = path.join(pluginDir, "install.sh");
-  try {
-    await fs.access(installScript);
-  } catch {
-    fail(`Codex plugin did not include ${installScript}`);
-  }
-  await runChecked("bash", [installScript], {
-    cwd: pluginDir,
-    env,
-    timeoutMs: 60_000,
-  });
-  await normalizeCodexConfig(env.HOME);
-  const { marketplace, plugin } = await readCodexPluginIdentity(pluginDir);
-  await runChecked(
-    "codex",
-    ["plugin", "add", `${plugin}@${marketplace}`, "--json"],
-    {
-      cwd: pluginDir,
-      env,
-      timeoutMs: 60_000,
-    },
-  );
-  await mirrorCodexPluginCommandPath(pluginDir, env, marketplace, plugin);
-  await normalizeCodexConfig(env.HOME);
-}
-async function readCodexPluginIdentity(pluginDir) {
-  const marketplacePath = path.join(
-    pluginDir,
-    ".agents",
-    "plugins",
-    "marketplace.json",
-  );
-  const marketplaceManifest = JSON.parse(
-    await fs.readFile(marketplacePath, "utf8"),
-  );
-  const marketplace = marketplaceManifest.name;
-  const plugin = marketplaceManifest.plugins?.[0]?.name;
-  if (!marketplace || !plugin) {
-    fail(`invalid Codex marketplace manifest at ${marketplacePath}`);
-  }
-  return { marketplace, plugin };
-}
-async function mirrorCodexPluginCommandPath(
-  pluginDir,
-  env,
-  marketplace,
-  plugin,
-) {
-  const target = path.join(
-    env.CODEX_HOME,
-    ".tmp",
-    "marketplaces",
-    marketplace,
-    plugin,
-  );
-  await fs.rm(target, { recursive: true, force: true });
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.cp(pluginDir, target, { recursive: true });
 }
 async function prepareCodexEnv(rootDir) {
   const home = path.join(rootDir, "codex-home");
@@ -462,92 +405,6 @@ async function writeIsolatedCodexConfig(home) {
       "",
     ].join("\n"),
   );
-}
-async function normalizeCodexConfig(home) {
-  const configPath = path.join(home, ".codex", "config.toml");
-  let content = "";
-  try {
-    content = await fs.readFile(configPath, "utf8");
-  } catch (err) {
-    if (
-      !(
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "ENOENT"
-      )
-    ) {
-      throw err;
-    }
-  }
-  const lines = content.split(/\r?\n/);
-  const out = [];
-  let inFeatures = false;
-  let sawFeatures = false;
-  let sawHooks = false;
-  let sawPluginHooks = false;
-  let sawHooksState = false;
-  const flushFeatures = () => {
-    if (!inFeatures) {
-      return;
-    }
-    if (!sawHooks) {
-      out.push("hooks = true");
-    }
-    if (!sawPluginHooks) {
-      out.push("plugin_hooks = true");
-    }
-  };
-  for (const line of lines) {
-    if (/^\s*features\.(hooks|plugin_hooks)\s*=/.test(line)) {
-      continue;
-    }
-    const header = line.match(/^\s*\[([^\]]+)\]\s*$/);
-    if (header) {
-      flushFeatures();
-      const table = header[1].trim();
-      inFeatures = table === "features";
-      if (inFeatures) {
-        sawFeatures = true;
-        sawHooks = false;
-        sawPluginHooks = false;
-      }
-      if (table === "hooks.state") {
-        if (sawHooksState) {
-          continue;
-        }
-        sawHooksState = true;
-        out.push("[hooks.state]");
-        continue;
-      }
-      out.push(line);
-      continue;
-    }
-    if (inFeatures && /^\s*hooks\s*=/.test(line)) {
-      if (!sawHooks) {
-        out.push("hooks = true");
-        sawHooks = true;
-      }
-      continue;
-    }
-    if (inFeatures && /^\s*plugin_hooks\s*=/.test(line)) {
-      if (!sawPluginHooks) {
-        out.push("plugin_hooks = true");
-        sawPluginHooks = true;
-      }
-      continue;
-    }
-    out.push(line);
-  }
-  flushFeatures();
-  if (!sawFeatures) {
-    if (out.length > 0 && out[out.length - 1] !== "") {
-      out.push("");
-    }
-    out.push("[features]", "hooks = true", "plugin_hooks = true");
-  }
-  await fs.mkdir(path.dirname(configPath), { recursive: true });
-  await fs.writeFile(configPath, out.join("\n").replace(/\n{3,}/g, "\n\n"));
 }
 async function prepareShadowMCPFixture(rootDir, runId) {
   const fixtureDir = path.join(rootDir, "shadow-mcp");
@@ -2454,24 +2311,23 @@ async function main() {
     for (const provider of args.providers) {
       const envDir =
         process.env[`GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`];
-      if (args.skipDownload && !envDir) {
+      // Codex hooks install into the fresh isolated Codex home, so there is
+      // no prebuilt plugin dir to substitute.
+      if (args.skipBuild && !envDir && provider !== "codex") {
         fail(
-          `--skip-download requires GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`,
+          `--skip-build requires GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`,
         );
       }
-      const pluginDir = args.skipDownload
-        ? envDir
-        : await downloadProviderPlugin({
-            serverURL,
-            session,
-            projectSlug: args.project,
-            provider,
-            artifactsDir,
-            codexEnv,
-          });
-      if (args.skipDownload && provider === "codex") {
-        await installCodexPlugin(pluginDir, codexEnv);
-      }
+      const pluginDir =
+        args.skipBuild && provider !== "codex"
+          ? envDir
+          : await buildProviderPlugin({
+              serverURL,
+              projectSlug: args.project,
+              provider,
+              artifactsDir,
+              codexEnv,
+            });
       pluginDirs.set(provider, pluginDir);
       log.info(`${provider}: using plugin ${pluginDir}`);
     }

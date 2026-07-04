@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/goreleaser/goreleaser/v2.12.5/www/docs/static/schema-pro.json
+
+version: 2
+
+project_name: speakeasy-hooks
+
+builds:
+  - main: ./hooks/cmd/speakeasy-hooks
+    binary: speakeasy-hooks
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X main.version={{.Version}}"
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format: zip
+checksum:
+  name_template: "checksums.txt"
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    artifacts: checksum
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  disable: true
+
+release:
+  mode: keep-existing
+
+monorepo:
+  tag_prefix: "hooks@"
+
+brews:
+  - name: speakeasy-hooks
+    repository:
+      owner: speakeasy-api
+      name: homebrew-tap
+    homepage: https://app.getgram.ai
+    description: Speakeasy observability hooks for coding agents
+    license: Apache-2.0
+    test: |
+      system "#{bin}/speakeasy-hooks --version"
+
+  - name: speakeasy-hooks@{{ .Major }}.{{ .Minor }}.{{ .Patch }}
+    repository:
+      owner: speakeasy-api
+      name: homebrew-tap
+    homepage: https://app.getgram.ai
+    description: Speakeasy observability hooks for coding agents
+    license: Apache-2.0
+    test: |
+      system "#{bin}/speakeasy-hooks --version"
