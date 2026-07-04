@@ -82,7 +82,8 @@ import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDet
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
-import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
+import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -514,7 +515,21 @@ const ROUTE_STRUCTURE = {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    component: PolicyCenter,
+    // Layout route: renders the policy list (index) or a policy detail subpage.
+    component: PolicyCenterRoot,
+    indexComponent: PolicyCenter,
+    subPages: {
+      new: {
+        title: "New policy",
+        url: "new",
+        component: PolicyNew,
+      },
+      detail: {
+        title: "Policy",
+        url: ":policyId",
+        component: PolicyDetail,
+      },
+    },
   },
   riskEvents: {
     title: "Risk Events",
