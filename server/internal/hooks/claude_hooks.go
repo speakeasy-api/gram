@@ -829,6 +829,43 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// gets tool calls denied even mid-turn, for native and MCP tools alike.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		auditReason := spendBlockReason("tool call", block)
+		userReason := auditReason
+		if payload.SessionID != nil {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+		}
+		if blockID, err := uuid.NewV7(); err == nil {
+			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userID := ev.Context.User.ID
+			userEmail := ev.Context.User.Email
+			asyncCtx := context.WithoutCancel(ctx)
+			// Resolve the owning user inside the goroutine so any DB lookup
+			// stays off the deny hot path.
+			go func() {
+				if userID == "" {
+					userID = s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID)
+				}
+				s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+					Provider:       "claude",
+					OrganizationID: ev.Context.OrganizationID,
+					ProjectID:      ev.Context.ProjectID,
+					Reason:         auditReason,
+					ToolName:       ev.ToolName,
+					UserID:         userID,
+					RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				})
+			}()
+		}
+		return constructBlockResponse(payload.HookEventName, userReason), nil
+	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)

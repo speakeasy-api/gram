@@ -49,6 +49,7 @@ var (
 	AccessRequestV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_request_event_v1", "Emitted when changes to access requests are made")
 	ShadowMCPAccessRuleV1  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_access_rule_event_v1", "Deprecated: use audit_log.access_rule_event_v1.")
 	ShadowMCPApprovalV1    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_approval_event_v1", "Deprecated: use audit_log.access_request_event_v1.")
+	SpendRuleV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
 	TemplateV1             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
 	TriggerInstanceV1      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.trigger_instance_event_v1", "Emitted when changes to assistant triggers are made")

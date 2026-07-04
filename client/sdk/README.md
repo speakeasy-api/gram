@@ -535,6 +535,23 @@ run();
 
 * [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
 
+### [SpendRules.Events](docs/sdks/events/README.md)
+
+* [list](docs/sdks/events/README.md#list) - listSpendRuleEvents spendRules
+
+### [SpendRules.Overview](docs/sdks/gramoverview/README.md)
+
+* [get](docs/sdks/gramoverview/README.md#get) - getSpendRulesOverview spendRules
+
+### [SpendRules.Rules](docs/sdks/gramrules/README.md)
+
+* [create](docs/sdks/gramrules/README.md#create) - createSpendRule spendRules
+* [delete](docs/sdks/gramrules/README.md#delete) - deleteSpendRule spendRules
+* [get](docs/sdks/gramrules/README.md#get) - getSpendRule spendRules
+* [list](docs/sdks/gramrules/README.md#list) - listSpendRules spendRules
+* [preview](docs/sdks/gramrules/README.md#preview) - previewSpendRule spendRules
+* [update](docs/sdks/gramrules/README.md#update) - updateSpendRule spendRules
+
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
@@ -927,6 +944,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 - [`riskResultsUnmask`](docs/sdks/results/README.md#unmask) - unmaskRiskResult risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
+- [`spendRulesEventsList`](docs/sdks/events/README.md#list) - listSpendRuleEvents spendRules
+- [`spendRulesOverviewGet`](docs/sdks/gramoverview/README.md#get) - getSpendRulesOverview spendRules
+- [`spendRulesRulesCreate`](docs/sdks/gramrules/README.md#create) - createSpendRule spendRules
+- [`spendRulesRulesDelete`](docs/sdks/gramrules/README.md#delete) - deleteSpendRule spendRules
+- [`spendRulesRulesGet`](docs/sdks/gramrules/README.md#get) - getSpendRule spendRules
+- [`spendRulesRulesList`](docs/sdks/gramrules/README.md#list) - listSpendRules spendRules
+- [`spendRulesRulesPreview`](docs/sdks/gramrules/README.md#preview) - previewSpendRule spendRules
+- [`spendRulesRulesUpdate`](docs/sdks/gramrules/README.md#update) - updateSpendRule spendRules
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
@@ -1318,6 +1343,14 @@ To learn about this feature and how to get started, check
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+- [`useSpendRulesCreateRuleMutation`](docs/sdks/gramrules/README.md#create) - createSpendRule spendRules
+- [`useSpendRulesDeleteRuleMutation`](docs/sdks/gramrules/README.md#delete) - deleteSpendRule spendRules
+- [`useSpendRulesGetRule`](docs/sdks/gramrules/README.md#get) - getSpendRule spendRules
+- [`useSpendRulesListEvents`](docs/sdks/events/README.md#list) - listSpendRuleEvents spendRules
+- [`useSpendRulesListRules`](docs/sdks/gramrules/README.md#list) - listSpendRules spendRules
+- [`useSpendRulesOverview`](docs/sdks/gramoverview/README.md#get) - getSpendRulesOverview spendRules
+- [`useSpendRulesPreviewRuleMutation`](docs/sdks/gramrules/README.md#preview) - previewSpendRule spendRules
+- [`useSpendRulesUpdateRuleMutation`](docs/sdks/gramrules/README.md#update) - updateSpendRule spendRules
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry

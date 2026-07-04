@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
+import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import type { JSX } from "react";
+import type { LucideIcon } from "lucide-react";
+import type { JSX, ReactNode } from "react";
 import {
   RULE_ACTION_LABELS,
   RULE_STATUS_LABELS,
@@ -8,7 +10,6 @@ import {
   formatUsd,
   type RuleAction,
   type RuleStatus,
-  type RuleUsage,
   type SpendEventType,
 } from "./budgets-data";
 
@@ -22,21 +23,55 @@ const WARNING_ORANGE_FILL =
 const WARNING_ORANGE_TEXT =
   "text-[var(--color-feedback-orange-700)] dark:text-[var(--color-feedback-orange-500)]";
 
+/** Dashed empty-surface card for a tab with no data yet — same visual as the
+ *  Risk Policies tab empty state. */
+export function TabEmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        {title}
+      </Type>
+      <Type
+        small
+        muted
+        className={cn("max-w-md text-center", action && "mb-4")}
+      >
+        {description}
+      </Type>
+      {action}
+    </div>
+  );
+}
+
 /** Colored spend-vs-limit bar. Green below the rule's warn threshold, orange
  *  approaching, red over the limit. */
 export function UsageBar({
-  usage,
+  spendUsd,
   limitUsd,
   warnAtPct = 80,
 }: {
-  usage: RuleUsage;
+  spendUsd: number;
   limitUsd: number;
   /** Percent of budget where the bar turns orange. */
   warnAtPct?: number;
 }): JSX.Element {
-  const pct = Math.min(100, usage.utilization * 100);
-  const over = usage.currentSpendUsd > limitUsd;
-  const near = !over && usage.utilization >= warnAtPct / 100;
+  const utilization = limitUsd > 0 ? spendUsd / limitUsd : 0;
+  const pct = Math.min(100, utilization * 100);
+  const over = spendUsd >= limitUsd && limitUsd > 0;
+  const near = !over && utilization >= warnAtPct / 100;
   const barColor = over
     ? "bg-destructive"
     : near
@@ -48,7 +83,7 @@ export function UsageBar({
       {/* One statement, not a fraction: the bar already shows the ratio. */}
       <div className="text-xs whitespace-nowrap">
         <span className={cn(over && "text-destructive font-medium")}>
-          {formatUsd(usage.currentSpendUsd)}
+          {formatUsd(spendUsd)}
         </span>
         <span className="text-muted-foreground"> of {formatUsd(limitUsd)}</span>
       </div>

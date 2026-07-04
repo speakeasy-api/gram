@@ -25,6 +25,7 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
+	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -110,6 +111,8 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	listSpendRuleOrgs               *spend_rules.ListOrgs
+	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 }
 
 func NewActivities(
@@ -154,6 +157,13 @@ func NewActivities(
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
 ) *Activities {
+	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
+	// connection get a nil repo and the activity fails loudly if scheduled.
+	var spendRulesCH *telemetryrepo.Queries
+	if chConn != nil {
+		spendRulesCH = telemetryrepo.New(chConn)
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -208,6 +218,8 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter),
 	}
 }
 
@@ -490,4 +502,19 @@ func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.Pub
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
+	orgs, err := a.listSpendRuleOrgs.Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list spend rule orgs: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules.EvaluateOrgArgs) error {
+	if err := a.evaluateOrgSpendRules.Do(ctx, args); err != nil {
+		return fmt.Errorf("evaluate org spend rules: %w", err)
+	}
+	return nil
 }

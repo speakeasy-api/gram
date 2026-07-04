@@ -46,6 +46,7 @@ const (
 	subjectTypeRemoteSession            subjectType = "remote_session"
 	subjectTypeRemoteSessionClient      subjectType = "remote_session_client"
 	subjectTypeRemoteSessionIssuer      subjectType = "remote_session_issuer"
+	subjectTypeSpendRule                subjectType = "spend_rule"
 )
 
 type Action string

@@ -8,8 +8,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
-import { Pencil, Users } from "lucide-react";
-import { useMemo, type JSX } from "react";
+import {
+  useSpendRulesListEvents,
+  useSpendRulesPreviewRuleMutation,
+} from "@gram/client/react-query/index.js";
+import { Loader2, Pencil, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import {
   EventTypeBadge,
   RuleActionBadge,
@@ -18,28 +22,30 @@ import {
 } from "./budget-shared";
 import {
   WINDOW_LABELS,
-  estimateRuleUsage,
   formatUsd,
   parseRuleUrn,
-  ruleActorBreakdown,
-  ruleStatus,
-  ruleUrn,
+  ruleStatusOf,
+  sortEventsByRecency,
   targetSummary,
   timeUntilWindowReset,
-  useBudgetStore,
-  type ActorSpendRow,
-  type SpendControlEvent,
+  type PreviewSpendRuleResult,
   type SpendRule,
+  type SpendRuleActorUsage,
+  type SpendRuleUsage,
 } from "./budgets-data";
 
 /** Read-only drill-down for one rule: live budget state, which people are
- *  driving the spend, and the rule's lifecycle events this window. */
+ *  driving the spend, and the rule's lifecycle events. */
 export function RuleDetailSheet({
   rule,
+  usage,
   onClose,
   onEdit,
 }: {
   rule: SpendRule | null;
+  /** Server-computed current-window usage from the overview endpoint.
+   *  Undefined for disabled rules (the evaluator skips them). */
+  usage: SpendRuleUsage | undefined;
   onClose: () => void;
   onEdit: (rule: SpendRule) => void;
 }): JSX.Element {
@@ -51,27 +57,68 @@ export function RuleDetailSheet({
       }}
     >
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-xl">
-        {rule && <RuleDetail rule={rule} onEdit={onEdit} />}
+        {rule && <RuleDetail rule={rule} usage={usage} onEdit={onEdit} />}
       </SheetContent>
     </Sheet>
   );
 }
 
+/** Per-actor current-window spend for one rule, fetched once per open via the
+ *  preview endpoint with the rule's stored config. */
+function useRuleActorBreakdown(rule: SpendRule): {
+  preview: PreviewSpendRuleResult | null;
+  loading: boolean;
+} {
+  const previewMutation = useSpendRulesPreviewRuleMutation();
+  const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
+  const { mutate } = previewMutation;
+
+  useEffect(() => {
+    mutate(
+      {
+        request: {
+          previewSpendRuleRequestBody: {
+            targetExpr: rule.targetExpr,
+            limitUsd: rule.limitUsd,
+            windowKind: rule.windowKind,
+            evaluatedFrom: rule.evaluatedFrom,
+          },
+        },
+      },
+      { onSuccess: (data) => setPreview(data) },
+    );
+  }, [
+    rule.targetExpr,
+    rule.limitUsd,
+    rule.windowKind,
+    rule.evaluatedFrom,
+    mutate,
+  ]);
+
+  return { preview, loading: previewMutation.isPending };
+}
+
 function RuleDetail({
   rule,
+  usage,
   onEdit,
 }: {
   rule: SpendRule;
+  usage: SpendRuleUsage | undefined;
   onEdit: (rule: SpendRule) => void;
 }): JSX.Element {
-  const { events: allEvents } = useBudgetStore();
-  const usage = useMemo(() => estimateRuleUsage(rule), [rule]);
-  const breakdown = useMemo(() => ruleActorBreakdown(rule), [rule]);
+  const status = ruleStatusOf(rule, usage);
+  const { preview, loading: actorsLoading } = useRuleActorBreakdown(rule);
+  const { data: eventsData } = useSpendRulesListEvents({
+    ruleId: rule.id,
+    limit: 50,
+  });
   const events = useMemo(
-    () => ruleEvents(allEvents, rule.id),
-    [allEvents, rule.id],
+    () => sortEventsByRecency(eventsData?.events ?? []),
+    [eventsData],
   );
-  const status = ruleStatus(rule, usage);
+
+  const actors = preview?.actors ?? [];
 
   return (
     <>
@@ -91,15 +138,16 @@ function RuleDetail({
           className="text-muted-foreground font-mono text-xs"
           title="Versioned rule identity. Events cite the URN they fired under; material edits bump the version and restart evaluation."
         >
-          {ruleUrn(rule)}
+          {rule.urn}
         </p>
       </SheetHeader>
 
       <div className="flex-1 space-y-6 px-6 py-4">
         {status === "blocking" && (
           <p className="border-destructive/50 bg-destructive/5 text-destructive rounded-md border px-3 py-2 text-xs">
-            Circuit open — requests from matched people are being rejected until
-            the window resets in {timeUntilWindowReset(rule.window)}.
+            Circuit open — requests from people over their budget are being
+            rejected until the window resets in{" "}
+            {timeUntilWindowReset(rule.windowKind)}.
           </p>
         )}
 
@@ -110,15 +158,31 @@ function RuleDetail({
               Budget
             </Type>
             <span className="text-muted-foreground text-xs">
-              {WINDOW_LABELS[rule.window]} window · resets in{" "}
-              {timeUntilWindowReset(rule.window)} · warns at {rule.warnAtPct}%
+              {WINDOW_LABELS[rule.windowKind]} window · resets in{" "}
+              {timeUntilWindowReset(rule.windowKind)} · warns at{" "}
+              {rule.warnAtPct}%
             </span>
           </div>
-          <UsageBar
-            usage={usage}
-            limitUsd={rule.limitUsd}
-            warnAtPct={rule.warnAtPct}
-          />
+          {usage ? (
+            <>
+              <UsageBar
+                spendUsd={usage.spendUsd}
+                limitUsd={usage.budgetUsd}
+                warnAtPct={rule.warnAtPct}
+              />
+              <p className="text-muted-foreground text-xs">
+                {formatUsd(rule.limitUsd)} per person · {usage.matchedUsers}{" "}
+                matched {usage.matchedUsers === 1 ? "person" : "people"}
+              </p>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              {formatUsd(rule.limitUsd)} per person.{" "}
+              {rule.enabled
+                ? "Live usage appears after the next evaluation cycle."
+                : "This rule is disabled, so it is not being evaluated."}
+            </p>
+          )}
         </section>
 
         {/* Who is driving the spend */}
@@ -126,28 +190,28 @@ function RuleDetail({
           <div className="flex items-center gap-2">
             <Users className="size-3.5" />
             <Type variant="small" className="font-medium">
-              People ({breakdown.length})
+              People {preview ? `(${preview.matchedCount})` : ""}
             </Type>
+            {actorsLoading && (
+              <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+            )}
           </div>
-          <ContributionSummary rows={breakdown} />
-          {breakdown.length === 0 ? (
+          {actors.length === 0 ? (
             <p className="text-muted-foreground text-xs">
-              No one in the mock directory matches this rule right now.
+              {actorsLoading
+                ? "Matching directory users…"
+                : "No directory-synced people match this rule right now."}
             </p>
           ) : (
             <ul className="divide-border rounded-lg border divide-y">
-              {breakdown.map((row) => (
-                <ActorRow
-                  key={row.actor.id}
-                  row={row}
-                  topShare={breakdown[0]!.share}
-                />
+              {actors.map((actor) => (
+                <ActorRow key={actor.email} actor={actor} />
               ))}
             </ul>
           )}
         </section>
 
-        {/* Lifecycle events this window */}
+        {/* Lifecycle events */}
         <section className="space-y-2">
           <Type variant="small" className="font-medium">
             Events
@@ -161,12 +225,12 @@ function RuleDetail({
               {events.map((event) => {
                 const version = parseRuleUrn(event.ruleUrn)?.version;
                 const fromOldVersion =
-                  version !== undefined && version !== rule.version;
+                  version !== undefined && version !== Number(rule.version);
                 return (
                   <li key={event.id} className="space-y-1 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-2">
-                        <EventTypeBadge type={event.type} />
+                        <EventTypeBadge type={event.eventType} />
                         {fromOldVersion && (
                           <span
                             className="text-muted-foreground shrink-0 font-mono text-xs"
@@ -177,11 +241,12 @@ function RuleDetail({
                         )}
                       </span>
                       <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                        {new Date(event.occurredAt).toLocaleString()}
+                        {event.createdAt.toLocaleString()}
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      {event.summary}
+                      {event.displayName || event.email} ·{" "}
+                      {formatUsd(event.spendUsd)} of {formatUsd(event.limitUsd)}
                     </p>
                   </li>
                 );
@@ -201,75 +266,38 @@ function RuleDetail({
   );
 }
 
-/** All events for a rule, across every version — the URN carries the rule id,
- *  so history survives renames and config changes. */
-function ruleEvents(
-  events: SpendControlEvent[],
-  ruleId: string,
-): SpendControlEvent[] {
-  return events
-    .filter((event) => parseRuleUrn(event.ruleUrn)?.id === ruleId)
-    .sort(
-      (a, b) =>
-        new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-    );
-}
-
-/** One line answering "why is this budget where it is". */
-function ContributionSummary({
-  rows,
-}: {
-  rows: ActorSpendRow[];
-}): JSX.Element | null {
-  if (rows.length < 2) return null;
-  if (rows.length <= 3) {
-    const top = rows[0]!;
-    return (
-      <p className="text-muted-foreground text-xs">
-        {top.actor.name} drives {Math.round(top.share * 100)}% of this window's
-        spend.
-      </p>
-    );
-  }
-  const topThreeShare = rows
-    .slice(0, 3)
-    .reduce((sum, row) => sum + row.share, 0);
-  return (
-    <p className="text-muted-foreground text-xs">
-      The top 3 of {rows.length} people account for{" "}
-      {Math.round(topThreeShare * 100)}% of this window's spend.
-    </p>
-  );
-}
-
-function ActorRow({
-  row,
-  topShare,
-}: {
-  row: ActorSpendRow;
-  topShare: number;
-}): JSX.Element {
-  const relative = topShare > 0 ? row.share / topShare : 0;
+/** One matched person: spend against their per-person budget. */
+function ActorRow({ actor }: { actor: SpendRuleActorUsage }): JSX.Element {
+  const over = actor.spendUsd >= actor.limitUsd;
+  const pct = Math.min(150, Math.round(actor.usedPct));
   return (
     <li className="space-y-1.5 px-3 py-2">
       <div className="flex items-center justify-between gap-3 text-xs">
         <div className="min-w-0">
-          <div className="truncate font-medium">{row.actor.name}</div>
-          <div className="text-muted-foreground truncate">
-            {row.actor.department_name} · {row.actor.job_title}
+          <div className="truncate font-medium">
+            {actor.displayName || actor.email}
           </div>
+          {actor.displayName && (
+            <div className="text-muted-foreground truncate">{actor.email}</div>
+          )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="font-mono">{formatUsd(row.spendUsd)}</div>
-          <div className="text-muted-foreground">
-            {Math.round(row.share * 100)}% of spend
+          <div className="font-mono">
+            {formatUsd(actor.spendUsd)} of {formatUsd(actor.limitUsd)}
           </div>
+          <div className="text-muted-foreground">{pct}% of budget</div>
         </div>
       </div>
       <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
         <div
-          className="bg-primary/50 h-full rounded-full"
-          style={{ width: `${Math.max(4, relative * 100)}%` }}
+          className={
+            over
+              ? "bg-destructive h-full rounded-full"
+              : "bg-primary/50 h-full rounded-full"
+          }
+          style={{
+            width: `${Math.max(4, Math.min(100, actor.usedPct))}%`,
+          }}
         />
       </div>
     </li>

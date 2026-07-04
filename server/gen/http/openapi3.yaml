@@ -27298,6 +27298,869 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: update
+    /rpc/spendrules.createRule:
+        post:
+            description: Create a new spend control rule for the current organization.
+            operationId: createSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: SpendRulesCreateRule
+                type: mutation
+    /rpc/spendrules.deleteRule:
+        delete:
+            description: Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.
+            operationId: deleteSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: The rule ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The rule ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: SpendRulesDeleteRule
+                type: mutation
+    /rpc/spendrules.getOverview:
+        get:
+            description: 'Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.'
+            operationId: getSpendRulesOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRulesOverviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSpendRulesOverview spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.overview
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: SpendRulesOverview
+    /rpc/spendrules.getRule:
+        get:
+            description: Get a spend control rule by ID.
+            operationId: getSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: The rule ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The rule ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: SpendRulesGetRule
+    /rpc/spendrules.listEvents:
+        get:
+            description: List warning and breach events emitted by spend rule evaluation, most recent first.
+            operationId: listSpendRuleEvents
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional rule ID to filter by.
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: Optional rule ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional event type to filter by.
+                  in: query
+                  name: event_type
+                  schema:
+                    description: Optional event type to filter by.
+                    enum:
+                        - warning
+                        - breach
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of events.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of events.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of events to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of events to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSpendRuleEventsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSpendRuleEvents spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.events
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesListEvents
+    /rpc/spendrules.listRules:
+        get:
+            description: List all spend control rules for the current organization.
+            operationId: listSpendRules
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSpendRulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSpendRules spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesListRules
+    /rpc/spendrules.previewRule:
+        post:
+            description: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.
+            operationId: previewSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PreviewSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PreviewSpendRuleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: previewSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: preview
+            x-speakeasy-react-hook:
+                name: SpendRulesPreviewRule
+                type: mutation
+    /rpc/spendrules.updateRule:
+        put:
+            description: Update a spend control rule. Material changes (target_expr, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
+            operationId: updateSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: SpendRulesUpdateRule
+                type: mutation
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -38349,6 +39212,54 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSpendRuleRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag or block.'
+                    default: flag
+                    enum:
+                        - flag
+                        - block
+                description:
+                    type: string
+                    description: Optional description of what the rule covers.
+                    default: ""
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active.
+                    default: true
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window.
+                    format: double
+                    minimum: 0
+                name:
+                    type: string
+                    description: The rule name.
+                target_expr:
+                    type: string
+                    description: CEL boolean expression over actor directory attributes selecting who the rule applies to.
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    default: 80
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - name
+                - target_expr
+                - limit_usd
+                - window_kind
         CreateToolsetForm:
             type: object
             properties:
@@ -42372,6 +43283,29 @@ components:
                     description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
             required:
                 - sources
+        ListSpendRuleEventsResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleEvent'
+                    description: The list of spend rule events, most recent first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of events.
+            required:
+                - events
+        ListSpendRulesResult:
+            type: object
+            properties:
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRule'
+                    description: The list of spend rules.
+            required:
+                - rules
         ListToolFiltersResult:
             type: object
             properties:
@@ -44305,6 +45239,57 @@ components:
                 - policy
                 - sort_order
                 - created_at
+        PreviewSpendRuleRequestBody:
+            type: object
+            properties:
+                evaluated_from:
+                    type: string
+                    description: Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to mirror the evaluator; omit for new rules.
+                    format: date-time
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD used to compute usage percentages.
+                    format: double
+                    minimum: 0
+                target_expr:
+                    type: string
+                    description: CEL boolean expression over actor directory attributes to preview.
+                window_kind:
+                    type: string
+                    description: UTC calendar window to compute spend over.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - target_expr
+                - limit_usd
+                - window_kind
+        PreviewSpendRuleResult:
+            type: object
+            properties:
+                actors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleActorUsage'
+                    description: Matched actors with their current-window spend, ordered by spend descending. Capped at 50 entries.
+                matched_count:
+                    type: integer
+                    description: Total number of directory users the target expression matches.
+                    format: int64
+                window_end:
+                    type: string
+                    description: Exclusive end of the current window used for spend.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Inclusive start of the current window used for spend.
+                    format: date-time
+            required:
+                - matched_count
+                - window_start
+                - window_end
+                - actors
         Project:
             type: object
             properties:
@@ -47982,6 +48967,270 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendRule:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag (record events only) or block (deny agent traffic on breach).'
+                    enum:
+                        - flag
+                        - block
+                created_at:
+                    type: string
+                    description: When the rule was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of what the rule covers. Empty when unset.
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active.
+                evaluated_from:
+                    type: string
+                    description: Spend accrued before this instant is ignored by the evaluator.
+                    format: date-time
+                id:
+                    type: string
+                    description: The spend rule ID.
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window.
+                    format: double
+                name:
+                    type: string
+                    description: The rule name.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                target_expr:
+                    type: string
+                    description: CEL boolean expression over actor directory attributes selecting who the rule applies to.
+                updated_at:
+                    type: string
+                    description: When the rule was last updated.
+                    format: date-time
+                urn:
+                    type: string
+                    description: Versioned rule URN, e.g. spend_rule:<uuid>:v3. Pins the exact rule configuration that produced an event.
+                version:
+                    type: integer
+                    description: Rule version, incremented on material config changes.
+                    format: int64
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    format: int64
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - id
+                - urn
+                - organization_id
+                - name
+                - description
+                - target_expr
+                - limit_usd
+                - window_kind
+                - warn_at_pct
+                - action
+                - enabled
+                - version
+                - evaluated_from
+                - created_at
+                - updated_at
+        SpendRuleActorUsage:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Actor display name, when known.
+                email:
+                    type: string
+                    description: Actor email.
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD.
+                    format: double
+                spend_usd:
+                    type: number
+                    description: Actor spend in USD within the current window.
+                    format: double
+                used_pct:
+                    type: number
+                    description: Spend as a percentage of the limit (may exceed 100).
+                    format: double
+                user_id:
+                    type: string
+                    description: Gram user ID of the actor, when linked.
+            required:
+                - email
+                - spend_usd
+                - limit_usd
+                - used_pct
+        SpendRuleEvent:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the event was recorded.
+                    format: date-time
+                display_name:
+                    type: string
+                    description: Actor display name, when known.
+                email:
+                    type: string
+                    description: Actor email.
+                event_type:
+                    type: string
+                    description: Event type.
+                    enum:
+                        - warning
+                        - breach
+                id:
+                    type: string
+                    description: The event ID.
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD the rule granted at the pinned version.
+                    format: double
+                rule_id:
+                    type: string
+                    description: The spend rule ID that produced the event.
+                    format: uuid
+                rule_name:
+                    type: string
+                    description: Current name of the rule, for display.
+                rule_urn:
+                    type: string
+                    description: Versioned rule URN pinning the config that produced the event.
+                spend_usd:
+                    type: number
+                    description: Actor spend in USD at evaluation time.
+                    format: double
+                user_id:
+                    type: string
+                    description: Gram user ID of the actor, when linked.
+                window_end:
+                    type: string
+                    description: Exclusive end of the budget window; the budget resets at this instant.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Inclusive start of the budget window.
+                    format: date-time
+            required:
+                - id
+                - rule_id
+                - rule_urn
+                - rule_name
+                - event_type
+                - email
+                - spend_usd
+                - limit_usd
+                - window_start
+                - window_end
+                - created_at
+        SpendRuleUsage:
+            type: object
+            properties:
+                budget_usd:
+                    type: number
+                    description: Total budgeted spend in USD (per-person limit times matched users).
+                    format: double
+                matched_users:
+                    type: integer
+                    description: Number of directory users the rule currently matches.
+                    format: int64
+                rule_id:
+                    type: string
+                    description: The spend rule ID.
+                    format: uuid
+                spend_usd:
+                    type: number
+                    description: Total spend in USD across matched users within the current window.
+                    format: double
+                status:
+                    type: string
+                    description: Derived rule status from the worst matched actor.
+                    enum:
+                        - healthy
+                        - approaching
+                        - flagging
+                        - blocking
+                users_breached:
+                    type: integer
+                    description: Matched users at or past the limit.
+                    format: int64
+                users_warned:
+                    type: integer
+                    description: Matched users at or past the warning threshold but under the limit.
+                    format: int64
+                worst_used_pct:
+                    type: number
+                    description: Highest per-actor usage percentage across matched users (may exceed 100).
+                    format: double
+            required:
+                - rule_id
+                - matched_users
+                - users_warned
+                - users_breached
+                - spend_usd
+                - budget_usd
+                - worst_used_pct
+                - status
+        SpendRulesOverviewResult:
+            type: object
+            properties:
+                projected_overrun_usd:
+                    type: number
+                    description: Projected end-of-window spend beyond budget in USD, extrapolated linearly from spend so far across enabled rules.
+                    format: double
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleUsage'
+                    description: Current-window usage per enabled rule.
+                rules_total:
+                    type: integer
+                    description: Total enabled rules.
+                    format: int64
+                rules_unhealthy:
+                    type: integer
+                    description: Enabled rules whose status is not healthy.
+                    format: int64
+                total_budget_usd:
+                    type: number
+                    description: Total budgeted spend in USD across enabled rules (per-person limits times matched users).
+                    format: double
+                total_spend_usd:
+                    type: number
+                    description: Spend in USD across all users matched by enabled rules, in each rule's current window.
+                    format: double
+                users_breached:
+                    type: integer
+                    description: Distinct users at or past the limit of at least one enabled rule.
+                    format: int64
+                users_total:
+                    type: integer
+                    description: Distinct users matched by at least one enabled rule.
+                    format: int64
+            required:
+                - total_spend_usd
+                - total_budget_usd
+                - users_breached
+                - users_total
+                - rules_unhealthy
+                - rules_total
+                - projected_overrun_usd
+                - rules
         SubmitFeedbackRequestBody:
             type: object
             properties:
@@ -50534,6 +51783,51 @@ components:
                 - match_value
                 - display_name
                 - access_scope
+        UpdateSpendRuleRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag or block. Omit to preserve the current action.'
+                    enum:
+                        - flag
+                        - block
+                description:
+                    type: string
+                    description: Description of what the rule covers. Omit to preserve the current description.
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active. Omit to preserve the current state.
+                id:
+                    type: string
+                    description: The rule ID.
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window. Omit to preserve the current limit.
+                    format: double
+                    minimum: 0
+                name:
+                    type: string
+                    description: The rule name. Omit to preserve the current name.
+                target_expr:
+                    type: string
+                    description: CEL boolean expression over actor directory attributes. Omit to preserve the current expression.
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers. Omit to preserve the current window.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - id
         UpdateToolsetForm:
             type: object
             properties:
@@ -51502,6 +52796,8 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: risk
       description: Manage risk analysis policies and view scan results.
+    - name: spendRules
+      description: Manage spend control rules, view budget events, and preview actor targeting.
     - name: telemetry
       description: Fetch telemetry data for tools in Gram.
     - name: templates

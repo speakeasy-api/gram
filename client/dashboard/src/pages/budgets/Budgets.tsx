@@ -1,8 +1,9 @@
 import { MetricCard } from "@/components/chart/MetricCard";
-import { EmptyState, Page } from "@/components/page-layout";
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
   PageTabsTrigger,
@@ -14,8 +15,17 @@ import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import {
+  useSpendRulesCreateRuleMutation,
+  useSpendRulesDeleteRuleMutation,
+  useSpendRulesListEvents,
+  useSpendRulesListRules,
+  useSpendRulesOverview,
+  useSpendRulesUpdateRuleMutation,
+} from "@gram/client/react-query/index.js";
 import { Table, type Column } from "@speakeasy-api/moonshine";
-import { Plus, Wallet } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Inbox, Plus, Wallet } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
@@ -25,24 +35,23 @@ import {
   EventTypeBadge,
   RuleActionBadge,
   RuleStatusBadge,
+  TabEmptyState,
   UsageBar,
 } from "./budget-shared";
 import {
-  DIRECTORY_USER_COUNT,
   WINDOW_LABELS,
-  coveredSpendSummary,
-  estimateRuleUsage,
   formatUsd,
+  invalidateSpendControlQueries,
   parseRuleUrn,
-  ruleStatus,
+  ruleStatusOf,
   targetSummary,
-  useBudgetStore,
+  usageByRuleId,
   type RuleAction,
   type RuleDraft,
-  type RuleStatus,
-  type RuleUsage,
-  type SpendControlEvent,
   type SpendRule,
+  type SpendRuleEvent,
+  type SpendRulesOverviewResult,
+  type SpendRuleUsage,
 } from "./budgets-data";
 
 type ActionFilter = "all" | RuleAction;
@@ -51,7 +60,7 @@ type BudgetTab = "rules" | "events";
 export default function Budgets(): JSX.Element {
   const telemetry = useTelemetry();
   const routes = useRoutes();
-  // Prototype: gate behind a PostHog flag so it can be dogfooded per org/user.
+  // Gated behind a PostHog flag so it can be dogfooded per org/user.
   const enabled = telemetry.isFeatureEnabled("gram-budgets-page") ?? false;
 
   if (!enabled) {
@@ -73,47 +82,72 @@ export default function Budgets(): JSX.Element {
 }
 
 function BudgetsContent(): JSX.Element {
-  const { rules, addRule, updateRule, removeRule } = useBudgetStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<BudgetTab>("rules");
   const [createOpen, setCreateOpen] = useState(false);
   const [viewing, setViewing] = useState<SpendRule | null>(null);
   const [editing, setEditing] = useState<SpendRule | null>(null);
 
-  const usageByRule = useMemo(() => {
-    const map = new Map<string, RuleUsage>();
-    for (const rule of rules) {
-      map.set(rule.id, estimateRuleUsage(rule));
-    }
-    return map;
-  }, [rules]);
+  const { data: rulesData, isLoading: rulesLoading } = useSpendRulesListRules();
+  const { data: overview } = useSpendRulesOverview();
+  const rules = useMemo(() => rulesData?.rules ?? [], [rulesData]);
+  const usageMap = useMemo(() => usageByRuleId(overview?.rules), [overview]);
 
-  const statusByRule = useMemo(() => {
-    const map = new Map<string, RuleStatus | null>();
-    for (const rule of rules) {
-      const usage = usageByRule.get(rule.id);
-      map.set(rule.id, usage ? ruleStatus(rule, usage) : null);
-    }
-    return map;
-  }, [rules, usageByRule]);
+  const invalidate = () => invalidateSpendControlQueries(queryClient);
+
+  const createMutation = useSpendRulesCreateRuleMutation({
+    onSuccess: () => {
+      invalidate();
+      setCreateOpen(false);
+      toast.success("Rule created");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const updateMutation = useSpendRulesUpdateRuleMutation({
+    onSuccess: () => {
+      invalidate();
+      setEditing(null);
+      toast.success("Rule updated");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useSpendRulesDeleteRuleMutation({
+    onSuccess: () => {
+      invalidate();
+      setEditing(null);
+      toast.success("Rule deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const handleCreate = (draft: RuleDraft) => {
-    addRule(draft);
-    setCreateOpen(false);
-    toast.success("Rule created");
+    createMutation.mutate({
+      request: { createSpendRuleRequestBody: draft },
+    });
   };
 
   const handleUpdate = (draft: RuleDraft) => {
     if (!editing) return;
-    updateRule(editing.id, draft);
-    setEditing(null);
-    toast.success("Rule updated");
+    updateMutation.mutate({
+      request: {
+        updateSpendRuleRequestBody: { id: editing.id, ...draft },
+      },
+    });
   };
 
   const handleDelete = () => {
     if (!editing) return;
-    removeRule(editing.id);
-    setEditing(null);
-    toast.success("Rule deleted");
+    deleteMutation.mutate({ request: { id: editing.id } });
+  };
+
+  const handleToggle = (rule: SpendRule, on: boolean) => {
+    updateMutation.mutate({
+      request: {
+        updateSpendRuleRequestBody: { id: rule.id, enabled: on },
+      },
+    });
   };
 
   return (
@@ -121,9 +155,9 @@ function BudgetsContent(): JSX.Element {
       <Page.Section>
         <Page.Section.Title stage="preview">Spend Control</Page.Section.Title>
         <Page.Section.Description>
-          Give teams fixed-window AI budgets. Flag overspend for review, or
-          block requests until the window resets. The strictest matching rule
-          wins.
+          Give each matched person a fixed-window AI budget. Flag overspend for
+          review, or block requests until the window resets. The strictest
+          matching rule wins.
         </Page.Section.Description>
         <Page.Section.CTA>
           <Button onClick={() => setCreateOpen(true)}>
@@ -133,12 +167,8 @@ function BudgetsContent(): JSX.Element {
         </Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            {rules.length > 0 && (
-              <StatusSummaryCards
-                rules={rules}
-                usageByRule={usageByRule}
-                statusByRule={statusByRule}
-              />
+            {rules.length > 0 && overview && (
+              <StatusSummaryCards overview={overview} />
             )}
 
             <Tabs
@@ -154,15 +184,15 @@ function BudgetsContent(): JSX.Element {
               <TabsContent value="rules" className="mt-6">
                 <RulesTab
                   rules={rules}
-                  usageByRule={usageByRule}
-                  statusByRule={statusByRule}
+                  loading={rulesLoading}
+                  usageMap={usageMap}
                   onNew={() => setCreateOpen(true)}
                   onView={setViewing}
-                  onToggle={(rule, on) => updateRule(rule.id, { enabled: on })}
+                  onToggle={handleToggle}
                 />
               </TabsContent>
               <TabsContent value="events" className="mt-6">
-                <EventsTab />
+                <EventsTab rules={rules} />
               </TabsContent>
             </Tabs>
           </div>
@@ -171,6 +201,7 @@ function BudgetsContent(): JSX.Element {
 
       <RuleDetailSheet
         rule={viewing}
+        usage={viewing ? usageMap.get(viewing.id) : undefined}
         onClose={() => setViewing(null)}
         onEdit={(rule) => {
           setViewing(null);
@@ -181,6 +212,7 @@ function BudgetsContent(): JSX.Element {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={handleCreate}
+        submitting={createMutation.isPending}
       />
       <RuleSheet
         open={editing !== null}
@@ -190,6 +222,7 @@ function BudgetsContent(): JSX.Element {
         rule={editing ?? undefined}
         onSubmit={handleUpdate}
         onDelete={handleDelete}
+        submitting={updateMutation.isPending || deleteMutation.isPending}
       />
     </>
   );
@@ -208,103 +241,56 @@ function compactUsd(amount: number): string {
 /** At-a-glance rollup an admin scans before reading any table. Every card is
  *  a ratio of the same shape: how much of what we govern is in trouble. */
 function StatusSummaryCards({
-  rules,
-  usageByRule,
-  statusByRule,
+  overview,
 }: {
-  rules: SpendRule[];
-  usageByRule: Map<string, RuleUsage>;
-  statusByRule: Map<string, RuleStatus | null>;
+  overview: SpendRulesOverviewResult;
 }): JSX.Element {
-  const spend = coveredSpendSummary(rules);
   const spendPct =
-    spend.budgetUsd > 0
-      ? Math.round((spend.currentUsd / spend.budgetUsd) * 100)
+    overview.totalBudgetUsd > 0
+      ? Math.round((overview.totalSpendUsd / overview.totalBudgetUsd) * 100)
       : 0;
-
-  // People under a breached budget, split by what happens to their requests.
-  // Someone who is both blocked and flagged counts as blocked.
-  const blockedPeople = new Set<string>();
-  const flaggedPeople = new Set<string>();
-  for (const rule of rules) {
-    const status = statusByRule.get(rule.id);
-    if (status !== "blocking" && status !== "flagging") continue;
-    const bucket = status === "blocking" ? blockedPeople : flaggedPeople;
-    for (const actor of usageByRule.get(rule.id)?.matched ?? []) {
-      bucket.add(actor.id);
-    }
-  }
-  for (const id of blockedPeople) flaggedPeople.delete(id);
-  const breachedPeopleCount = blockedPeople.size + flaggedPeople.size;
-
-  const statusCounts = { approaching: 0, flagging: 0, blocking: 0 };
-  for (const rule of rules) {
-    const status = statusByRule.get(rule.id);
-    if (status && status !== "healthy") statusCounts[status]++;
-  }
-  const unhealthyCount =
-    statusCounts.approaching + statusCounts.flagging + statusCounts.blocking;
-  const unhealthyBreakdown = (["blocking", "flagging", "approaching"] as const)
-    .filter((status) => statusCounts[status] > 0)
-    .map((status) => `${statusCounts[status]} ${status}`)
-    .join(" · ");
-
-  // Projected end-of-window overspend, and the rule contributing the most to
-  // it. Only flag rules can overrun: a block rule's circuit opens at the
-  // limit, so spend past it never happens.
-  let overrunUsd = 0;
-  let topOverrun: { rule: SpendRule; amountUsd: number } | null = null;
-  for (const rule of rules) {
-    if (!rule.enabled || rule.action !== "flag") continue;
-    const usage = usageByRule.get(rule.id);
-    if (!usage || usage.matched === null) continue;
-    const amountUsd = Math.max(0, usage.projectedSpendUsd - rule.limitUsd);
-    if (amountUsd <= 0) continue;
-    overrunUsd += amountUsd;
-    if (!topOverrun || amountUsd > topOverrun.amountUsd) {
-      topOverrun = { rule, amountUsd };
-    }
-  }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard
         title="Spend vs budget"
-        value={spend.currentUsd}
-        displayValue={`${compactUsd(spend.currentUsd)} / ${compactUsd(spend.budgetUsd)}`}
+        value={overview.totalSpendUsd}
+        displayValue={`${compactUsd(overview.totalSpendUsd)} / ${compactUsd(overview.totalBudgetUsd)}`}
         format="number"
-        subtext={`${spendPct}% of budgeted spend used · covers ${spend.peopleCount} of ${DIRECTORY_USER_COUNT} people`}
+        subtext={`${spendPct}% of budgeted spend used across enabled rules`}
       />
       <MetricCard
         title="Users over budget"
-        value={breachedPeopleCount}
-        displayValue={`${breachedPeopleCount} / ${DIRECTORY_USER_COUNT}`}
+        value={overview.usersBreached}
+        displayValue={`${overview.usersBreached} / ${overview.usersTotal}`}
         format="number"
         subtext={
-          breachedPeopleCount === 0
+          overview.usersBreached === 0
             ? "no budgets breached"
-            : `${blockedPeople.size} blocked · ${flaggedPeople.size} flagged`
+            : "people at or past a per-person limit"
         }
       />
       <MetricCard
         title="Rules needing attention"
-        value={unhealthyCount}
-        displayValue={`${unhealthyCount} / ${rules.length}`}
+        value={overview.rulesUnhealthy}
+        displayValue={`${overview.rulesUnhealthy} / ${overview.rulesTotal}`}
         format="number"
         subtext={
-          unhealthyCount === 0 ? "all rules healthy" : unhealthyBreakdown
+          overview.rulesUnhealthy === 0
+            ? "all rules healthy"
+            : "rules approaching, flagging, or blocking"
         }
       />
       <MetricCard
         title="Projected overrun"
-        value={overrunUsd}
-        displayValue={formatUsd(overrunUsd)}
+        value={overview.projectedOverrunUsd}
+        displayValue={formatUsd(overview.projectedOverrunUsd)}
         format="number"
-        tooltip="Estimated end-of-window spend past the limit, across flag rules. Block rules can't overrun — their circuit opens at the limit."
+        tooltip="Estimated end-of-window spend past budget, extrapolated from spend so far across enabled rules."
         subtext={
-          topOverrun
-            ? `${topOverrun.rule.name} drives ${formatUsd(topOverrun.amountUsd)}`
-            : "every budget on pace for its window"
+          overview.projectedOverrunUsd === 0
+            ? "every budget on pace for its window"
+            : "spend past budget at the current pace"
         }
       />
     </div>
@@ -313,15 +299,15 @@ function StatusSummaryCards({
 
 function RulesTab({
   rules,
-  usageByRule,
-  statusByRule,
+  loading,
+  usageMap,
   onNew,
   onView,
   onToggle,
 }: {
   rules: SpendRule[];
-  usageByRule: Map<string, RuleUsage>;
-  statusByRule: Map<string, RuleStatus | null>;
+  loading: boolean;
+  usageMap: Map<string, SpendRuleUsage>;
   onNew: () => void;
   onView: (rule: SpendRule) => void;
   onToggle: (rule: SpendRule, on: boolean) => void;
@@ -345,17 +331,21 @@ function RulesTab({
   }, [rules, query, actionFilter]);
 
   const columns = useMemo<Column<SpendRule>[]>(
-    () => buildRuleColumns({ usageByRule, statusByRule, onToggle }),
-    [usageByRule, statusByRule, onToggle],
+    () => buildRuleColumns({ usageMap, onToggle }),
+    [usageMap, onToggle],
   );
+
+  if (loading) {
+    return <SkeletonTable />;
+  }
 
   if (rules.length === 0) {
     return (
-      <EmptyState
-        heading="No spend rules yet"
-        description="Create a rule to cap AI spend for a group of people."
-        graphic={<Wallet className="text-muted-foreground size-16" />}
-        nonEmptyProjectCTA={
+      <TabEmptyState
+        icon={Wallet}
+        title="No spend rules"
+        description="Spend rules give each matched person a fixed-window AI budget — flag overspend for review, or block requests until the window resets. Create your first rule to get started."
+        action={
           <Button onClick={onNew}>
             <Plus className="mr-2 h-4 w-4" />
             New rule
@@ -402,12 +392,10 @@ function RulesTab({
 }
 
 function buildRuleColumns({
-  usageByRule,
-  statusByRule,
+  usageMap,
   onToggle,
 }: {
-  usageByRule: Map<string, RuleUsage>;
-  statusByRule: Map<string, RuleStatus | null>;
+  usageMap: Map<string, SpendRuleUsage>;
   onToggle: (rule: SpendRule, on: boolean) => void;
 }): Column<SpendRule>[] {
   const dim = (rule: SpendRule) => (rule.enabled ? "" : "opacity-50");
@@ -432,7 +420,7 @@ function buildRuleColumns({
       width: "0.6fr",
       render: (rule) => (
         <span className={cn("text-muted-foreground text-sm", dim(rule))}>
-          {WINDOW_LABELS[rule.window]}
+          {WINDOW_LABELS[rule.windowKind]}
         </span>
       ),
     },
@@ -440,26 +428,14 @@ function buildRuleColumns({
       key: "budget",
       header: "Budget",
       width: "220px",
-      render: (rule) => {
-        const usage = usageByRule.get(rule.id);
-        if (!usage) return null;
-        return (
-          <span className={cn("block", dim(rule))}>
-            <UsageBar
-              usage={usage}
-              limitUsd={rule.limitUsd}
-              warnAtPct={rule.warnAtPct}
-            />
-          </span>
-        );
-      },
+      render: (rule) => <RuleBudgetCell rule={rule} usageMap={usageMap} />,
     },
     {
       key: "status",
       header: "Status",
       width: "0.8fr",
       render: (rule) => (
-        <RuleStatusBadge status={statusByRule.get(rule.id) ?? null} />
+        <RuleStatusBadge status={ruleStatusOf(rule, usageMap.get(rule.id))} />
       ),
     },
     {
@@ -489,44 +465,62 @@ function buildRuleColumns({
   ];
 }
 
-type EventFilter = "all" | "warning" | "breach";
-
-function eventMatchesFilter(
-  event: SpendControlEvent,
-  filter: EventFilter,
-): boolean {
-  switch (filter) {
-    case "all":
-      return true;
-    case "warning":
-      return event.type === "warning";
-    case "breach":
-      return event.type === "breach";
+/** Aggregate current-window spend across matched people vs the total budget
+ *  (per-person limit × matched people). Disabled rules have no live usage —
+ *  show the per-person limit instead. */
+function RuleBudgetCell({
+  rule,
+  usageMap,
+}: {
+  rule: SpendRule;
+  usageMap: Map<string, SpendRuleUsage>;
+}): JSX.Element {
+  const usage = rule.enabled ? usageMap.get(rule.id) : undefined;
+  if (!usage) {
+    return (
+      <span
+        className={cn(
+          "text-muted-foreground text-sm",
+          !rule.enabled && "opacity-50",
+        )}
+      >
+        {formatUsd(rule.limitUsd)}/person
+      </span>
+    );
   }
+  return (
+    <span className="block">
+      <UsageBar
+        spendUsd={usage.spendUsd}
+        limitUsd={usage.budgetUsd}
+        warnAtPct={rule.warnAtPct}
+      />
+      <span className="text-muted-foreground block text-xs">
+        {formatUsd(rule.limitUsd)}/person · {usage.matchedUsers}{" "}
+        {usage.matchedUsers === 1 ? "person" : "people"}
+      </span>
+    </span>
+  );
 }
 
-function EventsTab(): JSX.Element {
-  const { rules, events } = useBudgetStore();
+type EventFilter = "all" | "warning" | "breach";
+
+function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   const [filter, setFilter] = useState<EventFilter>("all");
+
+  const { data, isLoading } = useSpendRulesListEvents({
+    eventType: filter === "all" ? undefined : filter,
+    limit: 200,
+  });
+  const events = useMemo(() => data?.events ?? [], [data]);
 
   const versionByRuleId = useMemo(() => {
     const map = new Map<string, number>();
-    for (const rule of rules) map.set(rule.id, rule.version);
+    for (const rule of rules) map.set(rule.id, Number(rule.version));
     return map;
   }, [rules]);
 
-  const filtered = useMemo(
-    () =>
-      events
-        .filter((event) => eventMatchesFilter(event, filter))
-        .sort(
-          (a, b) =>
-            new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-        ),
-    [events, filter],
-  );
-
-  const columns = useMemo<Column<SpendControlEvent>[]>(
+  const columns = useMemo<Column<SpendRuleEvent>[]>(
     () => [
       {
         key: "time",
@@ -534,7 +528,7 @@ function EventsTab(): JSX.Element {
         width: "170px",
         render: (event) => (
           <span className="text-muted-foreground font-mono text-xs">
-            {new Date(event.occurredAt).toLocaleString()}
+            {event.createdAt.toLocaleString()}
           </span>
         ),
       },
@@ -542,7 +536,7 @@ function EventsTab(): JSX.Element {
         key: "type",
         header: "Event",
         width: "160px",
-        render: (event) => <EventTypeBadge type={event.type} />,
+        render: (event) => <EventTypeBadge type={event.eventType} />,
       },
       {
         key: "rule",
@@ -553,14 +547,10 @@ function EventsTab(): JSX.Element {
         ),
       },
       {
-        key: "summary",
-        header: "What happened",
-        width: "2fr",
-        render: (event) => (
-          <span className="text-muted-foreground block text-xs">
-            {event.summary}
-          </span>
-        ),
+        key: "person",
+        header: "Person",
+        width: "1fr",
+        render: (event) => <EventPersonCell event={event} />,
       },
       {
         key: "spend",
@@ -572,11 +562,32 @@ function EventsTab(): JSX.Element {
     [versionByRuleId],
   );
 
+  if (isLoading) {
+    return <SkeletonTable />;
+  }
+
+  // A filtered-empty list keeps the toolbar so the filter can be changed;
+  // a truly empty history gets the full empty-state card instead of a bare
+  // table row.
+  if (events.length === 0 && filter === "all") {
+    return (
+      <TabEmptyState
+        icon={Inbox}
+        title="No budget events"
+        description={
+          rules.length === 0
+            ? "Create a spend rule first — warnings and breaches are recorded here as people approach or exceed their budgets."
+            : "Warnings and breaches appear here as enabled rules evaluate each person's spend against their budget."
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       <Page.Toolbar>
         <Page.Toolbar.Count>
-          {filtered.length} {filtered.length === 1 ? "event" : "events"}
+          {events.length} {events.length === 1 ? "event" : "events"}
         </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<EventFilter>
@@ -593,7 +604,7 @@ function EventsTab(): JSX.Element {
 
       <Table
         columns={columns}
-        data={filtered}
+        data={events}
         rowKey={(event) => event.id}
         noResultsMessage={<Type>No budget events match this filter.</Type>}
       />
@@ -608,19 +619,12 @@ function EventRuleCell({
   event,
   versionByRuleId,
 }: {
-  event: SpendControlEvent;
+  event: SpendRuleEvent;
   versionByRuleId: Map<string, number>;
 }): JSX.Element {
   const ref = parseRuleUrn(event.ruleUrn);
   const currentVersion = ref ? versionByRuleId.get(ref.id) : undefined;
-  const marker =
-    ref === null
-      ? null
-      : currentVersion === undefined
-        ? `v${ref.version} · rule deleted`
-        : currentVersion !== ref.version
-          ? `v${ref.version} · now v${currentVersion}`
-          : null;
+  const marker = versionMarker(ref, currentVersion);
 
   return (
     <span className="block min-w-0" title={event.ruleUrn}>
@@ -634,11 +638,35 @@ function EventRuleCell({
   );
 }
 
-function EventSpendCell({ event }: { event: SpendControlEvent }): JSX.Element {
-  if (event.spendUsd === undefined || event.limitUsd === undefined) {
-    return <span className="text-muted-foreground text-sm">—</span>;
+function versionMarker(
+  ref: { id: string; version: number } | null,
+  currentVersion: number | undefined,
+): string | null {
+  if (ref === null) return null;
+  if (currentVersion === undefined) return `v${ref.version} · rule deleted`;
+  if (currentVersion !== ref.version) {
+    return `v${ref.version} · now v${currentVersion}`;
   }
-  const over = event.spendUsd > event.limitUsd;
+  return null;
+}
+
+function EventPersonCell({ event }: { event: SpendRuleEvent }): JSX.Element {
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate text-sm">
+        {event.displayName || event.email}
+      </span>
+      {event.displayName && (
+        <span className="text-muted-foreground block truncate text-xs">
+          {event.email}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function EventSpendCell({ event }: { event: SpendRuleEvent }): JSX.Element {
+  const over = event.spendUsd >= event.limitUsd;
   return (
     <span className="text-sm whitespace-nowrap">
       <span className={cn(over && "text-destructive font-medium")}>

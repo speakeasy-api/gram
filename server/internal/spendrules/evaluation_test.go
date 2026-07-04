@@ -1,0 +1,160 @@
+package spendrules_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+)
+
+func testActors() []spendrules.Actor {
+	return []spendrules.Actor{
+		{
+			UserID:      "user_ada",
+			Email:       "ada@acme.com",
+			DisplayName: "Ada",
+			Attrs: celenv.Actor{
+				Email:          "ada@acme.com",
+				DepartmentName: "Engineering",
+				JobTitle:       "Staff Engineer",
+				EmployeeType:   "full_time",
+				DivisionName:   "R&D",
+				CostCenterName: "CC-1001",
+				Groups:         []string{"eng-frontier", "leadership"},
+			},
+		},
+		{
+			UserID: "",
+			Email:  "Sam@Acme.com",
+			Attrs: celenv.Actor{
+				Email:          "Sam@Acme.com",
+				DepartmentName: "Engineering",
+				JobTitle:       "Software Engineer",
+				EmployeeType:   "intern",
+				DivisionName:   "R&D",
+				CostCenterName: "CC-1001",
+				Groups:         []string{"interns"},
+			},
+		},
+		{
+			UserID: "user_bea",
+			Email:  "bea@acme.com",
+			Attrs: celenv.Actor{
+				Email:          "bea@acme.com",
+				DepartmentName: "Finance",
+				JobTitle:       "Manager",
+				EmployeeType:   "full_time",
+				DivisionName:   "Go-To-Market",
+				CostCenterName: "CC-3100",
+				Groups:         []string{"leadership"},
+			},
+		},
+	}
+}
+
+func newEngine(t *testing.T) *celenv.Engine {
+	t.Helper()
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	return eng
+}
+
+func TestMatchActorsByDepartment(t *testing.T) {
+	t.Parallel()
+
+	matched, err := spendrules.MatchActors(newEngine(t), `department_name == "Engineering"`, testActors())
+	require.NoError(t, err)
+	require.Len(t, matched, 2)
+	require.Equal(t, "ada@acme.com", matched[0].Email)
+	require.Equal(t, "Sam@Acme.com", matched[1].Email)
+}
+
+func TestMatchActorsByGroupMembership(t *testing.T) {
+	t.Parallel()
+
+	matched, err := spendrules.MatchActors(newEngine(t), `"leadership" in groups`, testActors())
+	require.NoError(t, err)
+	require.Len(t, matched, 2)
+}
+
+func TestMatchActorsByEmailSuffix(t *testing.T) {
+	t.Parallel()
+
+	matched, err := spendrules.MatchActors(newEngine(t), `email.endsWith("@acme.com")`, testActors())
+	require.NoError(t, err)
+	require.Len(t, matched, 2, "matching is case-sensitive on the raw email value")
+}
+
+func TestMatchActorsRejectsInvalidExpression(t *testing.T) {
+	t.Parallel()
+
+	_, err := spendrules.MatchActors(newEngine(t), `nonexistent_attr == "x"`, testActors())
+	require.Error(t, err)
+
+	_, err = spendrules.MatchActors(newEngine(t), `department_name`, testActors())
+	require.Error(t, err, "non-boolean expressions must be rejected")
+}
+
+func TestBuildActorUsagesOrdersBySpendAndNormalizesEmail(t *testing.T) {
+	t.Parallel()
+
+	actors := testActors()
+	spend := map[string]float64{
+		"ada@acme.com": 120,
+		// Keyed lowercase: Sam's mixed-case directory email must still match.
+		"sam@acme.com": 450,
+	}
+
+	usages := spendrules.BuildActorUsages(actors, spend, 500)
+	require.Len(t, usages, 3)
+	require.Equal(t, "Sam@Acme.com", usages[0].Actor.Email)
+	require.InDelta(t, 450.0, usages[0].SpendUSD, 0.001)
+	require.InDelta(t, 90.0, usages[0].UsedPct, 0.001)
+	require.Equal(t, "ada@acme.com", usages[1].Actor.Email)
+	require.InDelta(t, 24.0, usages[1].UsedPct, 0.001)
+	require.InDelta(t, 0.0, usages[2].SpendUSD, 0.001)
+}
+
+func TestRuleStatusDerivation(t *testing.T) {
+	t.Parallel()
+
+	usage := func(spend, limit float64) spendrules.ActorUsage {
+		pct := 0.0
+		if limit > 0 {
+			pct = spend / limit * 100
+		}
+		return spendrules.ActorUsage{
+			Actor:    spendrules.Actor{Email: "x@acme.com"},
+			SpendUSD: spend,
+			LimitUSD: limit,
+			UsedPct:  pct,
+		}
+	}
+
+	// No actor near the threshold: healthy.
+	require.Equal(t, spendrules.StatusHealthy,
+		spendrules.RuleStatus(spendrules.ActionFlag, 80, []spendrules.ActorUsage{usage(10, 100)}))
+
+	// Past the warn threshold but under the limit: approaching.
+	require.Equal(t, spendrules.StatusApproaching,
+		spendrules.RuleStatus(spendrules.ActionBlock, 80, []spendrules.ActorUsage{usage(85, 100)}))
+
+	// At or past the limit: flagging or blocking by action.
+	require.Equal(t, spendrules.StatusFlagging,
+		spendrules.RuleStatus(spendrules.ActionFlag, 80, []spendrules.ActorUsage{usage(100, 100)}))
+	require.Equal(t, spendrules.StatusBlocking,
+		spendrules.RuleStatus(spendrules.ActionBlock, 80, []spendrules.ActorUsage{usage(150, 100)}))
+
+	// The worst actor wins even when others are healthy.
+	require.Equal(t, spendrules.StatusBlocking,
+		spendrules.RuleStatus(spendrules.ActionBlock, 80, []spendrules.ActorUsage{
+			usage(5, 100),
+			usage(120, 100),
+		}))
+
+	// No matched actors: healthy.
+	require.Equal(t, spendrules.StatusHealthy,
+		spendrules.RuleStatus(spendrules.ActionBlock, 80, nil))
+}

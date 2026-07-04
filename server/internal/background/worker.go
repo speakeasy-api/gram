@@ -365,6 +365,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
+	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -418,6 +421,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -475,6 +481,12 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddSpendRuleEvaluationSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.PluginPublisher != nil {

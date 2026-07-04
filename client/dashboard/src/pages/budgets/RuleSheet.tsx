@@ -19,21 +19,21 @@ import {
 } from "@/components/ui/sheet";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { Check, Trash2, Users } from "lucide-react";
-import { useMemo, useState, type JSX, type ReactNode } from "react";
+import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/index.js";
+import { Check, Loader2, Trash2, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   ACTOR_ATTRIBUTES,
   validateBudgetCel,
   type ActorAttribute,
 } from "./budget-cel";
-import { UsageBar } from "./budget-shared";
 import {
   WINDOW_LABELS,
   defaultRuleDraft,
-  estimateRuleUsage,
   formatUsd,
+  toDraft,
   type BudgetWindow,
-  type MockActor,
+  type PreviewSpendRuleResult,
   type RuleAction,
   type RuleDraft,
   type SpendRule,
@@ -54,14 +54,14 @@ const ACTION_OPTIONS: {
   {
     value: "block",
     title: "Block",
-    hint: "Reject further requests from matched people until the window resets.",
+    hint: "Reject further requests from people over their budget until the window resets.",
   },
 ];
 
 const WINDOW_RESET_HINTS: Record<BudgetWindow, string> = {
-  daily: "Fixed window — resets at midnight.",
-  weekly: "Fixed window — resets every Monday.",
-  monthly: "Fixed window — resets on the 1st of each month.",
+  daily: "Fixed window — resets at midnight UTC.",
+  weekly: "Fixed window — resets every Monday (UTC).",
+  monthly: "Fixed window — resets on the 1st of each month (UTC).",
 };
 
 type ConditionOperator =
@@ -97,17 +97,6 @@ const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   matches: "matches pattern",
   includes: "includes",
 };
-
-function toDraft(rule: SpendRule): RuleDraft {
-  const {
-    id: _id,
-    createdAt: _createdAt,
-    version: _version,
-    evaluatedFrom: _evaluatedFrom,
-    ...draft
-  } = rule;
-  return draft;
-}
 
 function makeDefaultCondition(): TargetCondition {
   const attr = ACTOR_ATTRIBUTES[0]!;
@@ -234,13 +223,14 @@ function unescapeCelString(value: string): string {
   return value.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }
 
-/** Create or edit a spend-control rule. Purely local (prototype). */
+/** Create or edit a spend-control rule. */
 export function RuleSheet({
   open,
   onOpenChange,
   rule,
   onSubmit,
   onDelete,
+  submitting = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -248,6 +238,7 @@ export function RuleSheet({
   rule?: SpendRule;
   onSubmit: (draft: RuleDraft) => void;
   onDelete?: () => void;
+  submitting?: boolean;
 }): JSX.Element {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -258,20 +249,66 @@ export function RuleSheet({
           rule={rule}
           onSubmit={onSubmit}
           onDelete={onDelete}
+          submitting={submitting}
         />
       </SheetContent>
     </Sheet>
   );
 }
 
+/** Debounced server-side preview: matched directory actors plus their
+ *  current-window spend against the proposed per-person limit. */
+function useRulePreview(
+  draft: Pick<RuleDraft, "targetExpr" | "limitUsd" | "windowKind">,
+  evaluatedFrom: Date | undefined,
+  valid: boolean,
+): { preview: PreviewSpendRuleResult | null; loading: boolean } {
+  const previewMutation = useSpendRulesPreviewRuleMutation();
+  const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
+  const { mutate } = previewMutation;
+
+  useEffect(() => {
+    if (!valid || draft.limitUsd <= 0) return;
+    const timer = setTimeout(() => {
+      mutate(
+        {
+          request: {
+            previewSpendRuleRequestBody: {
+              targetExpr: draft.targetExpr,
+              limitUsd: draft.limitUsd,
+              windowKind: draft.windowKind,
+              evaluatedFrom,
+            },
+          },
+        },
+        {
+          onSuccess: (data) => setPreview(data),
+        },
+      );
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [
+    draft.targetExpr,
+    draft.limitUsd,
+    draft.windowKind,
+    evaluatedFrom,
+    valid,
+    mutate,
+  ]);
+
+  return { preview, loading: previewMutation.isPending };
+}
+
 function RuleForm({
   rule,
   onSubmit,
   onDelete,
+  submitting,
 }: {
   rule?: SpendRule;
   onSubmit: (draft: RuleDraft) => void;
   onDelete?: () => void;
+  submitting: boolean;
 }): JSX.Element {
   const [draft, setDraft] = useState<RuleDraft>(
     rule ? toDraft(rule) : defaultRuleDraft(),
@@ -279,36 +316,32 @@ function RuleForm({
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const usage = useMemo(
-    () =>
-      // Pass the identity through when editing so the preview shows the same
-      // (seeded) current spend as the rules table. Saving a material change
-      // bumps the version and restarts evaluation from scratch.
-      estimateRuleUsage({
-        targetExpr: draft.targetExpr,
-        limitUsd: draft.limitUsd,
-        window: draft.window,
-        ...(rule
-          ? {
-              id: rule.id,
-              version: rule.version,
-              evaluatedFrom: rule.evaluatedFrom,
-            }
-          : {}),
-      }),
-    [draft.targetExpr, draft.limitUsd, draft.window, rule],
+  const targetError = validateBudgetCel(draft.targetExpr);
+  // Pass the rule's evaluated_from through when editing so the preview shows
+  // the same numbers the evaluator sees. Material edits reset it server-side.
+  const { preview, loading: previewLoading } = useRulePreview(
+    draft,
+    rule?.evaluatedFrom,
+    !targetError,
   );
 
-  const targetError = validateBudgetCel(draft.targetExpr);
   const canSubmit =
-    draft.name.trim() !== "" && !targetError && draft.limitUsd > 0;
+    draft.name.trim() !== "" &&
+    !targetError &&
+    draft.limitUsd > 0 &&
+    !submitting;
+
+  const overLimitCount = useMemo(() => {
+    if (!preview) return 0;
+    return preview.actors.filter((a) => a.spendUsd >= a.limitUsd).length;
+  }, [preview]);
 
   return (
     <>
       <SheetHeader className="px-6 pt-6">
         <SheetTitle>{rule ? "Edit rule" : "New spend rule"}</SheetTitle>
         <SheetDescription>
-          Give a group of people a fixed-window budget and choose what happens
+          Give each matched person a fixed-window budget and choose what happens
           when it is spent.
         </SheetDescription>
       </SheetHeader>
@@ -343,12 +376,15 @@ function RuleForm({
             value={draft.targetExpr}
             onChange={(targetExpr) => patch({ targetExpr })}
           />
-          <MatchedActors matched={usage.matched} />
+          <MatchedActors
+            preview={targetError ? null : preview}
+            loading={previewLoading}
+          />
         </div>
 
         {/* Limit + window + warn threshold */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Budget limit">
+          <Field label="Budget per person">
             <div className="flex items-center">
               <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center rounded-l-md border border-r-0 px-3 text-sm">
                 $
@@ -367,8 +403,8 @@ function RuleForm({
 
           <Field label="Window">
             <Select
-              value={draft.window}
-              onValueChange={(v) => patch({ window: v as BudgetWindow })}
+              value={draft.windowKind}
+              onValueChange={(v) => patch({ windowKind: v as BudgetWindow })}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -407,14 +443,15 @@ function RuleForm({
           </Field>
         </div>
         <p className="text-muted-foreground -mt-4 text-xs">
-          {WINDOW_RESET_HINTS[draft.window]} Turns Approaching and records a
-          warning event at {draft.warnAtPct}% of the budget.
+          {WINDOW_RESET_HINTS[draft.windowKind]} Each matched person gets{" "}
+          {formatUsd(draft.limitUsd)} per window; a warning event fires at{" "}
+          {draft.warnAtPct}% of it.
         </p>
 
         {/* On breach */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">
-            When the budget is spent
+            When a person's budget is spent
           </Label>
           <RadioGroup
             value={draft.action}
@@ -447,27 +484,32 @@ function RuleForm({
         <div className="bg-muted/30 space-y-2 rounded-lg border p-4">
           <div className="flex items-center justify-between">
             <Type variant="small" className="font-medium">
-              Estimated usage this {draft.window} window
+              Current usage this {draft.windowKind} window
             </Type>
-            <span className="text-muted-foreground text-xs">
-              Projected {formatUsd(usage.projectedSpendUsd)}
-            </span>
+            {previewLoading && (
+              <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+            )}
           </div>
-          {usage.matched === null ? (
+          {targetError || !preview ? (
             <p className="text-muted-foreground text-xs">
               Enter a valid target expression to preview usage.
             </p>
           ) : (
             <>
-              <UsageBar
-                usage={usage}
-                limitUsd={draft.limitUsd}
-                warnAtPct={draft.warnAtPct}
-              />
-              <ProjectedBreachText
-                overLimit={usage.projectedOverLimit}
-                action={draft.action}
-              />
+              <p className="text-muted-foreground text-xs">
+                {preview.matchedCount} matched{" "}
+                {preview.matchedCount === 1 ? "person" : "people"}, each with a{" "}
+                {formatUsd(draft.limitUsd)} budget.
+              </p>
+              {overLimitCount > 0 && (
+                <p className="text-destructive text-xs">
+                  {overLimitCount}{" "}
+                  {overLimitCount === 1 ? "person is" : "people are"} already
+                  over this limit in the current window.
+                  {draft.action === "block" &&
+                    " This rule would block their requests."}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -479,6 +521,7 @@ function RuleForm({
             variant="ghost"
             size="sm"
             onClick={onDelete}
+            disabled={submitting}
             className="text-destructive hover:text-destructive"
           >
             <Trash2 className="mr-2 h-4 w-4" />
@@ -497,14 +540,18 @@ function RuleForm({
 }
 
 function MatchedActors({
-  matched,
+  preview,
+  loading,
 }: {
-  matched: MockActor[] | null;
+  preview: PreviewSpendRuleResult | null;
+  loading: boolean;
 }): JSX.Element {
-  if (matched === null) {
+  if (!preview) {
     return (
       <p className="text-muted-foreground text-xs">
-        Matched actors will appear here once the expression is valid.
+        {loading
+          ? "Matching directory users…"
+          : "Matched people will appear here once the expression is valid."}
       </p>
     );
   }
@@ -512,27 +559,32 @@ function MatchedActors({
     <div className="border-border rounded-lg border">
       <div className="border-border bg-muted/40 flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
         <Users className="size-3.5" />
-        {matched.length} matched actor{matched.length === 1 ? "" : "s"}
+        {preview.matchedCount} matched{" "}
+        {preview.matchedCount === 1 ? "person" : "people"}
       </div>
-      {matched.length === 0 ? (
+      {preview.actors.length === 0 ? (
         <p className="text-muted-foreground px-3 py-3 text-xs">
-          No actors in the mock directory match this expression.
+          No directory-synced people match this expression.
         </p>
       ) : (
         <ul className="divide-border max-h-40 divide-y overflow-y-auto">
-          {matched.map((actor) => (
+          {preview.actors.map((actor) => (
             <li
-              key={actor.id}
+              key={actor.email}
               className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
             >
               <div className="min-w-0">
-                <div className="truncate">{actor.name}</div>
-                <div className="text-muted-foreground truncate">
-                  {actor.department_name} · {actor.job_title}
+                <div className="truncate">
+                  {actor.displayName || actor.email}
                 </div>
+                {actor.displayName && (
+                  <div className="text-muted-foreground truncate">
+                    {actor.email}
+                  </div>
+                )}
               </div>
               <span className="text-muted-foreground shrink-0 font-mono">
-                {formatUsd(actor.monthlySpendUsd)}/mo
+                {formatUsd(actor.spendUsd)} this window
               </span>
             </li>
           ))}
@@ -605,46 +657,43 @@ function TargetConditionField({
             ))}
           </SelectContent>
         </Select>
-        <Select
+        <ConditionValueInput
+          attribute={attribute}
           value={condition.value}
-          onValueChange={(nextValue) =>
-            update({ ...condition, value: nextValue })
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {attribute.samples.map((sample) => (
-              <SelectItem key={sample} value={sample}>
-                {sample}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(nextValue) => update({ ...condition, value: nextValue })}
+        />
       </div>
       <p className="text-muted-foreground text-xs">{attribute.description}</p>
     </div>
   );
 }
 
-function ProjectedBreachText({
-  overLimit,
-  action,
+/** Free-text value with sample suggestions. Real directories carry values the
+ *  samples can't enumerate, so the field accepts anything. */
+function ConditionValueInput({
+  attribute,
+  value,
+  onChange,
 }: {
-  overLimit: boolean;
-  action: RuleAction;
-}): JSX.Element | null {
-  if (!overLimit) return null;
-
-  const outcome =
-    action === "block"
-      ? "block requests from matched people"
-      : "flag overspend for review";
+  attribute: ActorAttribute;
+  value: string;
+  onChange: (value: string) => void;
+}): JSX.Element {
+  const listId = `budget-samples-${attribute.name}`;
   return (
-    <p className="text-destructive text-xs">
-      Projected to exceed the limit this window. This rule would {outcome}.
-    </p>
+    <>
+      <Input
+        value={value}
+        onChange={onChange}
+        placeholder={attribute.samples[0] ?? "Value"}
+        list={listId}
+      />
+      <datalist id={listId}>
+        {attribute.samples.map((sample) => (
+          <option key={sample} value={sample} />
+        ))}
+      </datalist>
+    </>
   );
 }
 

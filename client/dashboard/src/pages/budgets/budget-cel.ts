@@ -1,13 +1,9 @@
-// A small, self-contained CEL-flavored expression layer for the Budgets /
-// Spend Control prototype. It mirrors the security CEL authoring experience
-// (Monaco editor + reference + live validation) but targets a mocked
-// directory-synced *actor* attribute schema instead of the risk message model.
-//
-// This is prototype scaffolding: the parser/evaluator here is intentionally a
-// tiny subset of CEL (boolean predicates over actor attributes) so the mock can
-// validate expressions and compute "matched actors" entirely in the browser
-// with no backend. The real feature will compile these against the server-side
-// CEL infra (see server/internal/risk/celenv) with an actor-shaped env.
+// A small, self-contained CEL-flavored expression layer for the Spend Control
+// rule editor: attribute reference data plus fast client-side validation as
+// the author types. The parser/evaluator here is intentionally a tiny subset
+// of CEL (boolean predicates over actor attributes); the server-side CEL env
+// (server/internal/spendrules/celenv) is authoritative and re-validates every
+// expression at create/update time.
 
 /** A directory-synced attribute an actor rule can be written against. */
 export interface ActorAttribute {
@@ -22,8 +18,8 @@ export interface ActorAttribute {
  * The actor attributes available to spend-control rules. These map to the
  * WorkOS directory-sync attributes Gram already ingests (department_name,
  * job_title, employee_type, division_name, cost_center_name) plus identity
- * dimensions (email, groups, roles). Keep in sync with the telemetry attribute
- * allowlist when this graduates from a mock.
+ * dimensions (email, groups). Keep in sync with the server CEL environment in
+ * server/internal/spendrules/celenv.
  */
 export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
   {
@@ -67,12 +63,6 @@ export const ACTOR_ATTRIBUTES: ActorAttribute[] = [
     type: "list",
     description: "IdP / directory group memberships.",
     samples: ["eng-frontier", "ml-team", "interns", "leadership"],
-  },
-  {
-    name: "roles",
-    type: "list",
-    description: "Gram org roles assigned to the actor.",
-    samples: ["admin", "member", "viewer"],
   },
 ];
 
@@ -339,10 +329,8 @@ class Parser {
   }
 }
 
-/** A directory actor the mock evaluates rules against. The index type
- *  admits `number` so richer mock actor records (e.g. with a spend field) are
- *  assignable; the evaluator only reads string/list attributes. */
-export type ActorRecord = { [key: string]: string | string[] | number };
+/** A representative actor record used to type-check expressions. */
+type ActorRecord = { [key: string]: string | string[] };
 
 type Value =
   | { kind: "string"; v: string }
@@ -472,33 +460,4 @@ export function validateBudgetCel(expr: string): string | null {
     return err instanceof Error ? err.message : "Invalid expression";
   }
   return null;
-}
-
-/**
- * Evaluate a target expression against a set of actors, returning the ones it
- * matches. Returns null when the expression can't be evaluated (so callers can
- * show a "can't preview" state rather than an empty match set).
- */
-export function matchActors<T extends ActorRecord>(
-  expr: string,
-  actors: T[],
-): T[] | null {
-  const trimmed = expr.trim();
-  if (!trimmed) return null;
-  let ast: Node;
-  try {
-    ast = parse(trimmed);
-  } catch {
-    return null;
-  }
-  const matched: T[] = [];
-  for (const actor of actors) {
-    try {
-      const result = evalNode(ast, actor);
-      if (result.kind === "bool" && result.v) matched.push(actor);
-    } catch {
-      return null;
-    }
-  }
-  return matched;
 }
