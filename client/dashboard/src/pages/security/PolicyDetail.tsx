@@ -12,6 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
@@ -28,7 +36,7 @@ import {
 } from "@gram/client/react-query/riskPoliciesGet.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -38,6 +46,8 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  TriangleAlert,
+  X,
 } from "lucide-react";
 import {
   Fragment,
@@ -96,8 +106,18 @@ import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useRiskSaveEvalReviewMutation } from "@gram/client/react-query/riskSaveEvalReview.js";
 import { useRiskDeleteEvalReviewMutation } from "@gram/client/react-query/riskDeleteEvalReview.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { PromptGuardrailMessageVerdict } from "@gram/client/models/components/promptguardrailmessageverdict.js";
+import {
+  ChatTranscript,
+  type RowContext,
+  type TranscriptPagination,
+} from "@/pages/chatLogs/ChatTranscript";
+import {
+  buildDisplayItems,
+  buildTranscript,
+} from "@/pages/chatLogs/transcript";
+import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
+import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
 // Judge models offered in the workbench (mirrors PolicyCenter's list; the
 // picker is intentionally small until the model catalog is centralized).
@@ -640,6 +660,8 @@ function PromptPolicyEditor({
       : new Set<string>(),
   );
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [reviewVerdictFilter, setReviewVerdictFilter] =
+    useState<EvalVerdict | null>(null);
 
   const dirty =
     !!policy &&
@@ -761,9 +783,8 @@ function PromptPolicyEditor({
   const canCreate = prompt.trim().length > 0;
 
   // The inline guardrail the Evaluate step replays against real sessions. Memoized
-  // so its identity is stable while the author isn't editing — the eval queries
+  // so its identity is stable while the author isn't editing; the eval queries
   // are keyed by it, and a debounce further bounds re-judging (see EvalTuner).
-  // Only message-type scope is applied server-side (CEL scope is not replayed yet).
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
@@ -771,8 +792,19 @@ function PromptPolicyEditor({
       temperature,
       failOpen,
       messageTypes: scopeMode === "messageTypes" ? [...messageTypes] : [],
+      scopeInclude: scopeMode === "cel" ? scopeInclude : "",
+      scopeExempt,
     }),
-    [prompt, model, temperature, failOpen, scopeMode, messageTypes],
+    [
+      prompt,
+      model,
+      temperature,
+      failOpen,
+      scopeMode,
+      messageTypes,
+      scopeInclude,
+      scopeExempt,
+    ],
   );
 
   const header = (
@@ -831,6 +863,8 @@ function PromptPolicyEditor({
           onPromptChange={setPrompt}
           verdicts={evalReview.verdicts}
           setVerdict={evalReview.setVerdict}
+          reviewVerdictFilter={reviewVerdictFilter}
+          setReviewVerdictFilter={setReviewVerdictFilter}
         />
       )}
 
@@ -861,6 +895,11 @@ function PromptPolicyEditor({
           audienceType={audienceType}
           audiencePrincipalCount={audiencePrincipalUrns.size}
           verdicts={evalReview.verdicts}
+          activeVerdict={reviewVerdictFilter}
+          onVerdictSelect={(verdict) => {
+            setReviewVerdictFilter(verdict);
+            handleStep(2);
+          }}
         />
       )}
 
@@ -1204,17 +1243,13 @@ type Guardrail = {
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
+  scopeInclude: string;
+  scopeExempt: string;
 };
 
 // Cap the session picker so the lazy per-row judge (one call per visible row,
 // cached per guardrail+chat) stays bounded.
 const EVAL_SESSION_LIMIT = 8;
-
-const ROLE_LABEL: Record<string, string> = {
-  user: "User",
-  assistant: "Assistant",
-  tool: "Tool result",
-};
 
 // Build the judge request body for one chat under the current guardrail. The
 // query key derives from this, so equal guardrails hit the same cache.
@@ -1231,6 +1266,8 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       messageTypes: guardrail.messageTypes.length
         ? guardrail.messageTypes
         : undefined,
+      scopeInclude: guardrail.scopeInclude.trim() || undefined,
+      scopeExempt: guardrail.scopeExempt.trim() || undefined,
     },
   };
 }
@@ -1265,6 +1302,8 @@ function guardrailEvalKey(guardrail: Guardrail): string {
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
+    scopeInclude: guardrail.scopeInclude,
+    scopeExempt: guardrail.scopeExempt,
   });
 }
 
@@ -1350,11 +1389,15 @@ function EvalTuner({
   onPromptChange,
   verdicts,
   setVerdict,
+  reviewVerdictFilter,
+  setReviewVerdictFilter,
 }: {
   guardrail: Guardrail;
   onPromptChange: (v: string) => void;
   verdicts: Map<string, EvalVerdict>;
   setVerdict: (chatId: string, verdict: EvalVerdict) => void;
+  reviewVerdictFilter: EvalVerdict | null;
+  setReviewVerdictFilter: (verdict: EvalVerdict | null) => void;
 }): JSX.Element {
   // Judge against a debounced guardrail so typing doesn't re-judge every row on
   // each keystroke; the card itself edits the prompt live.
@@ -1364,6 +1407,13 @@ function EvalTuner({
     () => guardrailEvalKey(judgeGuardrail),
     [judgeGuardrail],
   );
+  useEffect(() => {
+    if (!reviewVerdictFilter) return;
+    for (const current of verdicts.values()) {
+      if (current === reviewVerdictFilter) return;
+    }
+    setReviewVerdictFilter(null);
+  }, [reviewVerdictFilter, setReviewVerdictFilter, verdicts]);
 
   return (
     <div className="grid gap-6 @3xl:grid-cols-2">
@@ -1373,12 +1423,20 @@ function EvalTuner({
           onPromptChange={onPromptChange}
           rows={10}
         />
-        <ReviewScorecard verdicts={verdicts} />
+        <ReviewScorecard
+          verdicts={verdicts}
+          activeVerdict={reviewVerdictFilter}
+          onVerdictSelect={(next) =>
+            setReviewVerdictFilter(reviewVerdictFilter === next ? null : next)
+          }
+        />
       </Stack>
       <SessionReview
         guardrail={judgeGuardrail}
         debouncePending={guardrailKey !== judgeGuardrailKey}
         verdicts={verdicts}
+        reviewVerdictFilter={reviewVerdictFilter}
+        onClearReviewVerdictFilter={() => setReviewVerdictFilter(null)}
         onVerdict={setVerdict}
       />
     </div>
@@ -1398,6 +1456,8 @@ function PromptReview({
   audienceType,
   audiencePrincipalCount,
   verdicts,
+  activeVerdict,
+  onVerdictSelect,
 }: {
   prompt: string;
   model: string;
@@ -1411,13 +1471,10 @@ function PromptReview({
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
   verdicts: Map<string, EvalVerdict>;
+  activeVerdict: EvalVerdict | null;
+  onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const scopeText =
-    scopeMode === "cel"
-      ? scopeInclude.trim() || "All messages matching a CEL expression"
-      : [...messageTypes]
-          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-          .join(", ") || "No message types selected";
+  const scopeText = scopeSummaryText(scopeMode, messageTypes, scopeInclude);
   const modelLabel =
     JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
@@ -1449,23 +1506,18 @@ function PromptReview({
               </Type>
             </SummaryRow>
           ) : null}
-          <SummaryRow label="Action">
-            <Badge variant={action === "block" ? "warning" : "neutral"}>
-              {action === "block" ? "Block" : "Flag"}
-            </Badge>
-          </SummaryRow>
-          <SummaryRow label="Audience">
-            <Type small>
-              {audienceType === "targeted"
-                ? `${audiencePrincipalCount} targeted principal${
-                    audiencePrincipalCount === 1 ? "" : "s"
-                  }`
-                : "Everyone"}
-            </Type>
-          </SummaryRow>
+          <PolicyActionAudienceRows
+            action={action}
+            audienceType={audienceType}
+            audiencePrincipalCount={audiencePrincipalCount}
+          />
         </Stack>
       </Card>
-      <ReviewScorecard verdicts={verdicts} />
+      <ReviewScorecard
+        verdicts={verdicts}
+        activeVerdict={activeVerdict}
+        onVerdictSelect={onVerdictSelect}
+      />
     </Stack>
   );
 }
@@ -1474,8 +1526,12 @@ function PromptReview({
 // directions (which tell you which way to tune the guardrail).
 function ReviewScorecard({
   verdicts,
+  activeVerdict,
+  onVerdictSelect,
 }: {
   verdicts: Map<string, EvalVerdict>;
+  activeVerdict?: EvalVerdict | null;
+  onVerdictSelect?: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const reviewed = verdicts.size;
   let correct = 0;
@@ -1506,18 +1562,30 @@ function ReviewScorecard({
             </Type>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <ScoreStat label="Correct" value={correct} />
+            <ScoreStat
+              label="Correct"
+              value={correct}
+              verdict="correct"
+              active={activeVerdict === "correct"}
+              onSelect={onVerdictSelect}
+            />
             <ScoreStat
               label="False positives"
               value={falsePositive}
+              verdict="false_positive"
               hint="tighten"
               warn={falsePositive > 0}
+              active={activeVerdict === "false_positive"}
+              onSelect={onVerdictSelect}
             />
             <ScoreStat
               label="Missed"
               value={missed}
+              verdict="missed"
               hint="broaden"
               warn={missed > 0}
+              active={activeVerdict === "missed"}
+              onSelect={onVerdictSelect}
             />
           </div>
         </Stack>
@@ -1529,16 +1597,23 @@ function ReviewScorecard({
 function ScoreStat({
   label,
   value,
+  verdict,
   hint,
   warn,
+  active,
+  onSelect,
 }: {
   label: string;
   value: number;
+  verdict: EvalVerdict;
   hint?: string;
   warn?: boolean;
+  active?: boolean;
+  onSelect?: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  return (
-    <div className="rounded-lg border p-3">
+  const clickable = value > 0 && onSelect;
+  const content = (
+    <>
       <Type className={cn("text-xl font-semibold", warn && "text-warning")}>
         {value}
       </Type>
@@ -1550,8 +1625,28 @@ function ScoreStat({
           {hint}
         </Type>
       ) : null}
-    </div>
+    </>
   );
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(verdict)}
+        aria-pressed={active}
+        className={cn(
+          "rounded-lg border p-3 text-left transition-colors",
+          active
+            ? "border-foreground/40 bg-muted/70"
+            : "hover:bg-muted/40 hover:border-foreground/30",
+        )}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-lg border p-3">{content}</div>;
 }
 
 type JudgedMatch = {
@@ -1613,7 +1708,10 @@ function rowHiddenByFilter(
   return filter === "flagged" ? !flagged : flagged;
 }
 
-function sessionUserLabel(chat: ChatOverview): string {
+function sessionUserLabel(chat: {
+  externalUserId?: string | undefined;
+  userId?: string | undefined;
+}): string {
   return chat.externalUserId || chat.userId || "Unknown user";
 }
 
@@ -1646,21 +1744,152 @@ function chatMatchesVisibleSearch(chat: ChatOverview, query: string): boolean {
   return textContainsQuery(title, query) || textContainsQuery(userLabel, query);
 }
 
+function reviewedChatIdsForVerdict(
+  verdicts: Map<string, EvalVerdict>,
+  verdict: EvalVerdict | null,
+): string[] {
+  if (!verdict) return [];
+  const ids: string[] = [];
+  for (const [chatId, current] of verdicts) {
+    if (current === verdict) ids.push(chatId);
+  }
+  return ids;
+}
+
+function ReviewedSessionRows({
+  chatIds,
+  verdict,
+  activeChatId,
+  onClear,
+  onSelect,
+}: {
+  chatIds: string[];
+  verdict: EvalVerdict;
+  activeChatId: string | null;
+  onClear: () => void;
+  onSelect: (chatId: string) => void;
+}): JSX.Element {
+  return (
+    <div>
+      <div className="bg-muted/30 flex items-center justify-between gap-3 border-b px-3 py-2">
+        <div className="min-w-0">
+          <Type small className="font-medium">
+            {evalVerdictLabel(verdict)}
+          </Type>
+          <Type small muted>
+            {chatIds.length} reviewed{" "}
+            {chatIds.length === 1 ? "session" : "sessions"}
+          </Type>
+        </div>
+        <Button variant="secondary" size="sm" onClick={onClear}>
+          <Button.Text>Clear</Button.Text>
+        </Button>
+      </div>
+      {chatIds.length === 0 ? (
+        <Type small muted className="block px-3 py-6 text-center">
+          No reviewed sessions for this verdict.
+        </Type>
+      ) : (
+        chatIds.map((chatId, i) => (
+          <ReviewedSessionRow
+            key={chatId}
+            chatId={chatId}
+            verdict={verdict}
+            active={chatId === activeChatId}
+            first={i === 0}
+            onSelect={() => onSelect(chatId)}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function ReviewedSessionRow({
+  chatId,
+  verdict,
+  active,
+  first,
+  onSelect,
+}: {
+  chatId: string;
+  verdict: EvalVerdict;
+  active: boolean;
+  first: boolean;
+  onSelect: () => void;
+}): JSX.Element {
+  const chatQuery = useLoadChat(
+    { id: chatId, limit: 1, fromStart: true },
+    undefined,
+    {
+      staleTime: 5 * 60 * 1000,
+      throwOnError: false,
+    },
+  );
+  const chat = chatQuery.data;
+  const title = chat?.title || "Untitled session";
+  const userLabel = chat ? sessionUserLabel(chat) : "Resolving session…";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+        !first && "border-t",
+        active ? "bg-muted/60" : "hover:bg-muted/30",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <Type small className="truncate font-medium">
+          {title}
+        </Type>
+        <Type small muted className="flex min-w-0 items-center gap-1 truncate">
+          <span className="truncate">{userLabel}</span>
+          {chat ? (
+            <>
+              <span>·</span>
+              <span>{formatRelative(chat.lastMessageTimestamp)}</span>
+            </>
+          ) : null}
+          {chatQuery.isError ? (
+            <>
+              <span>·</span>
+              <span>metadata unavailable</span>
+            </>
+          ) : null}
+        </Type>
+      </div>
+      <Badge variant={verdict === "missed" ? "warning" : "neutral"}>
+        {evalVerdictLabel(verdict)}
+      </Badge>
+    </button>
+  );
+}
+
 function SessionReview({
   guardrail,
   debouncePending,
   verdicts,
+  reviewVerdictFilter,
+  onClearReviewVerdictFilter,
   onVerdict,
 }: {
   guardrail: Guardrail;
   debouncePending: boolean;
   verdicts: Map<string, EvalVerdict>;
+  reviewVerdictFilter: EvalVerdict | null;
+  onClearReviewVerdictFilter: () => void;
   onVerdict: (chatId: string, verdict: EvalVerdict) => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<EvalMatchFilter>("all");
   const [selectedIdState, setSelectedIdState] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const reviewedChatIds = useMemo(
+    () => reviewedChatIdsForVerdict(verdicts, reviewVerdictFilter),
+    [verdicts, reviewVerdictFilter],
+  );
 
   const chatsQuery = useListChats({
     search: deferredQuery.trim() || undefined,
@@ -1740,11 +1969,15 @@ function SessionReview({
     [],
   );
 
-  // Derive the selected id during render so it stays valid as results change.
+  // Keep the drawer closed until the user opens a row. If the selected row drops
+  // out of the current result set, close the drawer rather than auto-opening the
+  // first session.
   const selectedId =
-    selectedIdState && chats.some((c) => c.id === selectedIdState)
+    selectedIdState &&
+    (chats.some((c) => c.id === selectedIdState) ||
+      reviewedChatIds.includes(selectedIdState))
       ? selectedIdState
-      : (chats[0]?.id ?? null);
+      : null;
   const selectedChat = chats.find((c) => c.id === selectedId) ?? null;
   const hasGuardrail = guardrail.prompt.trim().length > 0;
   const flaggedForCurrentGuardrail = (chatId: string) => {
@@ -1767,7 +2000,7 @@ function SessionReview({
   return (
     <Card className="flex flex-col">
       <SectionHeader description="Search by title or user, review how this guardrail judges the transcript, then mark the verdict." />
-      <div className="flex flex-1 flex-col gap-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         {/* Search + match filter */}
         <Stack gap={2}>
           <div className="flex flex-wrap items-center gap-2">
@@ -1805,8 +2038,16 @@ function SessionReview({
         </Stack>
 
         {/* Results list */}
-        <div className="max-h-56 overflow-auto rounded-lg border">
-          {chatsQuery.isLoading ? (
+        <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+          {reviewVerdictFilter ? (
+            <ReviewedSessionRows
+              chatIds={reviewedChatIds}
+              verdict={reviewVerdictFilter}
+              activeChatId={selectedId}
+              onClear={onClearReviewVerdictFilter}
+              onSelect={setSelectedIdState}
+            />
+          ) : chatsQuery.isLoading ? (
             <Type small muted className="block px-3 py-6 text-center">
               Loading sessions…
             </Type>
@@ -1833,20 +2074,20 @@ function SessionReview({
             ))
           )}
         </div>
-
-        {/* Transcript + review controls */}
-        {selectedChat && (
-          <SessionTranscript
-            chat={selectedChat}
-            guardrail={guardrail}
-            guardrailKey={guardrailKey}
-            verdict={verdicts.get(selectedChat.id) ?? null}
-            reviewDisabled={debouncePending || transcriptJudging}
-            onVerdict={(v) => onVerdict(selectedChat.id, v)}
-            onJudging={reportTranscriptJudging}
-          />
-        )}
       </div>
+      <EvalSessionTranscriptSheet
+        chatId={selectedId}
+        chat={selectedChat}
+        guardrail={guardrail}
+        guardrailKey={guardrailKey}
+        verdict={selectedId ? (verdicts.get(selectedId) ?? null) : null}
+        reviewDisabled={debouncePending || transcriptJudging}
+        onClose={() => setSelectedIdState(null)}
+        onVerdict={(v) => {
+          if (selectedId) onVerdict(selectedId, v);
+        }}
+        onJudging={reportTranscriptJudging}
+      />
     </Card>
   );
 }
@@ -1930,9 +2171,7 @@ function SessionRow({
             {highlightQuery(userLabel, searchQuery)}
           </span>
           <span>·</span>
-          <span>{chat.numMessages} messages</span>
-          {chat.source ? ` · ${chat.source}` : ""} ·{" "}
-          {formatRelative(chat.lastMessageTimestamp)}
+          <span>{formatRelative(chat.lastMessageTimestamp)}</span>
         </Type>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
@@ -1968,27 +2207,109 @@ function SessionMatchBadge({
   );
 }
 
-function SessionTranscript({
+function EvalSessionTranscriptSheet({
+  chatId,
   chat,
   guardrail,
   guardrailKey,
   verdict,
   reviewDisabled,
+  onClose,
   onVerdict,
   onJudging,
 }: {
-  chat: ChatOverview;
+  chatId: string | null;
+  chat: ChatOverview | null;
   guardrail: Guardrail;
   guardrailKey: string;
   verdict: EvalVerdict | null;
   reviewDisabled: boolean;
+  onClose: () => void;
   onVerdict: (v: EvalVerdict) => void;
   onJudging: (chatId: string, judging: boolean, guardrailKey: string) => void;
 }): JSX.Element {
-  const chatQuery = useLoadChat({ id: chat.id, limit: 200 });
+  return (
+    <Sheet
+      open={Boolean(chatId)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        className="flex h-full w-[min(760px,calc(100vw-2rem))] flex-col gap-0 p-0 sm:max-w-[760px]"
+        showCloseButton={false}
+      >
+        {chatId && (
+          <SessionTranscript
+            chatId={chatId}
+            chat={chat}
+            guardrail={guardrail}
+            guardrailKey={guardrailKey}
+            verdict={verdict}
+            reviewDisabled={reviewDisabled}
+            onClose={onClose}
+            onVerdict={onVerdict}
+            onJudging={onJudging}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function EvalJudgeVerdictBlock({
+  verdict,
+}: {
+  verdict: PromptGuardrailMessageVerdict;
+}): JSX.Element {
+  return (
+    <div className="border-warning bg-warning/10 rounded-sm border-l-[3px] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <TriangleAlert className="text-warning size-4 shrink-0" />
+          <span>LLM Judge</span>
+          <Badge variant="warning" background>
+            Flagged
+          </Badge>
+        </div>
+        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+          {formatEvalConfidence(verdict.confidence)} ·{" "}
+          {formatEvalLatency(verdict.latencyMs)}
+        </span>
+      </div>
+      <div className="text-foreground mt-1 text-xs leading-relaxed">
+        {verdict.rationale || "Flagged by the guardrail"}
+      </div>
+    </div>
+  );
+}
+
+function SessionTranscript({
+  chatId,
+  chat,
+  guardrail,
+  guardrailKey,
+  verdict,
+  reviewDisabled,
+  onClose,
+  onVerdict,
+  onJudging,
+}: {
+  chatId: string;
+  chat: ChatOverview | null;
+  guardrail: Guardrail;
+  guardrailKey: string;
+  verdict: EvalVerdict | null;
+  reviewDisabled: boolean;
+  onClose: () => void;
+  onVerdict: (v: EvalVerdict) => void;
+  onJudging: (chatId: string, judging: boolean, guardrailKey: string) => void;
+}): JSX.Element {
+  const transcript = useChatTranscript(chatId, true);
+  const headerChat = chat ?? transcript.chat ?? null;
   const judge = usePromptGuardrailEval(
     guardrail,
-    chat.id,
+    chatId,
     guardrail.prompt.trim().length > 0,
   );
 
@@ -1998,59 +2319,161 @@ function SessionTranscript({
     return m;
   }, [judge.data]);
 
-  const messages = chatQuery.data?.messages ?? [];
+  const rows = useMemo(
+    () => buildTranscript(transcript.messages),
+    [transcript.messages],
+  );
+  const displayItems = useMemo(
+    () =>
+      buildDisplayItems({
+        rows,
+        hasMoreBefore: transcript.hasMoreBefore,
+        hasMoreAfter: transcript.hasMoreAfter,
+      }),
+    [rows, transcript.hasMoreBefore, transcript.hasMoreAfter],
+  );
+  const pagination = useMemo<TranscriptPagination>(
+    () => ({
+      hasMoreBefore: transcript.hasMoreBefore,
+      hasMoreAfter: transcript.hasMoreAfter,
+      onLoadOlder: transcript.fetchOlder,
+      onLoadNewer: transcript.fetchNewer,
+      isFetchingOlder: transcript.isFetchingOlder,
+      isFetchingNewer: transcript.isFetchingNewer,
+      initialScrollIndex: null,
+      scrollToFinding: false,
+    }),
+    [
+      transcript.hasMoreBefore,
+      transcript.hasMoreAfter,
+      transcript.fetchOlder,
+      transcript.fetchNewer,
+      transcript.isFetchingOlder,
+      transcript.isFetchingNewer,
+    ],
+  );
+  const rowCtx = useMemo<RowContext>(
+    () => ({
+      dimNonRisk: false,
+      userLabel: headerChat ? sessionUserLabel(headerChat) : undefined,
+      rowDecoration: (messageIds) => {
+        const matched = messageIds
+          .map((id) => verdictByMessage.get(id))
+          .find((v) => v?.matched);
+        if (!matched) return null;
+        return {
+          tone: "warning",
+          footer: <EvalJudgeVerdictBlock verdict={matched} />,
+        };
+      },
+    }),
+    [headerChat, verdictByMessage],
+  );
   const judgeFlagged = judge.data?.flagged;
   const judgeSettled = judgeFlagged !== undefined && !judge.isFetching;
   const canReview = judgeSettled && !reviewDisabled;
 
   useEffect(() => {
-    onJudging(chat.id, judge.isFetching, guardrailKey);
-  }, [chat.id, guardrailKey, judge.isFetching, onJudging]);
+    onJudging(chatId, judge.isFetching, guardrailKey);
+  }, [chatId, guardrailKey, judge.isFetching, onJudging]);
   useEffect(
-    () => () => onJudging(chat.id, false, guardrailKey),
-    [chat.id, guardrailKey, onJudging],
+    () => () => onJudging(chatId, false, guardrailKey),
+    [chatId, guardrailKey, onJudging],
   );
 
   return (
-    <Stack gap={3} className="min-w-0">
-      <Stack direction="horizontal" gap={2} align="center">
-        <Type small className="font-medium">
-          {chat.title || "Untitled session"}
-        </Type>
-        {judge.isFetching ? (
-          <Type small muted>
-            Judging…
-          </Type>
-        ) : null}
-      </Stack>
+    <div className="bg-background flex h-full min-h-0 flex-col">
+      <SheetHeader className="border-b px-4 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <SheetTitle className="truncate text-base">
+              {headerChat?.title || "Untitled session"}
+            </SheetTitle>
+            <SheetDescription asChild>
+              <div className="flex flex-col gap-2">
+                <div className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
+                  <span className="truncate">
+                    {headerChat
+                      ? sessionUserLabel(headerChat)
+                      : "Resolving session…"}
+                  </span>
+                  {headerChat ? (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {formatRelative(headerChat.lastMessageTimestamp)}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {headerChat ? (
+                    <Badge variant="neutral">
+                      {headerChat.numMessages} messages
+                    </Badge>
+                  ) : null}
+                  {headerChat?.source ? (
+                    <Badge variant="neutral">{headerChat.source}</Badge>
+                  ) : null}
+                  {judge.data ? (
+                    <Badge variant="neutral">
+                      {formatEvalCostLatency(
+                        judge.data.totalCostUsd,
+                        judge.data.totalLatencyMs,
+                      )}
+                    </Badge>
+                  ) : null}
+                  {judge.isFetching ? (
+                    <Badge variant="neutral">Judging…</Badge>
+                  ) : null}
+                </div>
+              </div>
+            </SheetDescription>
+          </div>
+          <button
+            onClick={onClose}
+            className="hover:bg-muted rounded-md p-1 transition-colors"
+            aria-label="Close panel"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+      </SheetHeader>
 
-      {chatQuery.isLoading ? (
-        <Type small muted>
-          Loading transcript…
-        </Type>
-      ) : messages.length === 0 ? (
-        <Type small muted>
-          This session has no messages.
-        </Type>
-      ) : (
-        <Stack gap={2}>
-          {messages.map((m) => (
-            <TranscriptMessage
-              key={m.id}
-              message={m}
-              verdict={verdictByMessage.get(m.id) ?? null}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {transcript.isLoading ? (
+            <Type small muted className="block p-6 text-center">
+              Loading transcript…
+            </Type>
+          ) : transcript.isError ? (
+            <Type small muted className="block p-6 text-center">
+              Failed to load transcript.
+            </Type>
+          ) : transcript.messages.length === 0 ? (
+            <Type small muted className="block p-6 text-center">
+              This session has no messages.
+            </Type>
+          ) : (
+            <ChatTranscript
+              items={displayItems}
+              ctx={rowCtx}
+              pagination={pagination}
+              emptyMessage="This session has no messages."
             />
-          ))}
-        </Stack>
-      )}
+          )}
+        </div>
+      </div>
 
-      <ReviewAgreementControl
-        flagged={judgeFlagged}
-        verdict={verdict}
-        disabled={!canReview}
-        onVerdict={onVerdict}
-      />
-    </Stack>
+      <SheetFooter className="border-t px-4 py-3">
+        <ReviewAgreementControl
+          flagged={judgeFlagged}
+          verdict={verdict}
+          disabled={!canReview}
+          onVerdict={onVerdict}
+        />
+      </SheetFooter>
+    </div>
   );
 }
 
@@ -2083,7 +2506,7 @@ function ReviewAgreementControl({
   };
 
   return (
-    <Stack gap={3} align="center" className="border-border border-t pt-3">
+    <Stack gap={3} align="center">
       <Stack gap={1} align="center" className="text-center">
         <Type small muted className="font-medium">
           {judgeLabel}
@@ -2134,109 +2557,6 @@ function ReviewAgreementControl({
         })}
       </Stack>
     </Stack>
-  );
-}
-
-// Flatten a chat message's content (string, multimodal parts, or null) to text.
-function messageText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) =>
-        typeof part === "string"
-          ? part
-          : part && typeof (part as { text?: unknown }).text === "string"
-            ? (part as { text: string }).text
-            : "",
-      )
-      .join("")
-      .trim();
-  }
-  return "";
-}
-
-// Summarize the first tool call on an assistant tool-request message.
-function toolCallSummary(
-  toolCalls: string | undefined,
-): { name: string; args: string } | null {
-  if (!toolCalls) return null;
-  try {
-    const calls: unknown = JSON.parse(toolCalls);
-    const first = Array.isArray(calls) ? calls[0] : null;
-    const fn = (first as { function?: { name?: string; arguments?: string } })
-      ?.function;
-    if (!fn) return null;
-    return { name: fn.name ?? "", args: fn.arguments ?? "" };
-  } catch {
-    return null;
-  }
-}
-
-function TranscriptMessage({
-  message,
-  verdict,
-}: {
-  message: ChatMessage;
-  verdict: PromptGuardrailMessageVerdict | null;
-}): JSX.Element {
-  const tool = toolCallSummary(message.toolCalls);
-  const isTool = message.role === "tool" || tool !== null;
-  const roleLabel = tool
-    ? "Tool call"
-    : (ROLE_LABEL[message.role] ?? message.role);
-  const body = tool ? tool.args : messageText(message.content);
-  const flagged = verdict?.matched ?? false;
-
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-2.5",
-        flagged
-          ? "border-warning/40 bg-warning/10"
-          : "border-border/60 bg-muted/20",
-      )}
-    >
-      <Stack direction="horizontal" gap={2} align="center" className="mb-1">
-        <Badge variant="neutral">{roleLabel}</Badge>
-        {tool?.name ? (
-          <Type small mono muted className="truncate">
-            {tool.name}
-          </Type>
-        ) : null}
-      </Stack>
-      {body ? (
-        isTool ? (
-          <Type small mono className="break-all">
-            {body}
-          </Type>
-        ) : (
-          <Type small>{body}</Type>
-        )
-      ) : (
-        <Type small muted className="italic">
-          (no text content)
-        </Type>
-      )}
-      {verdict?.matched ? (
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          className="border-warning/30 mt-2 border-t pt-2"
-        >
-          <Icon
-            name="triangle-alert"
-            className="text-warning h-4 w-4 shrink-0"
-          />
-          <Type small className="flex-1">
-            {verdict.rationale || "Flagged by the guardrail"}
-          </Type>
-          <Type small muted className="tabular-nums">
-            {formatPct(verdict.confidence)}
-          </Type>
-        </Stack>
-      ) : null}
-    </div>
   );
 }
 
@@ -2647,12 +2967,11 @@ function StandardReview({
     );
   }
 
-  const scopeText =
-    scopeMode === "cel"
-      ? scopeInclude.trim() || "All messages matching a CEL expression"
-      : [...selectedMessageTypes]
-          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-          .join(", ") || "No message types selected";
+  const scopeText = scopeSummaryText(
+    scopeMode,
+    selectedMessageTypes,
+    scopeInclude,
+  );
 
   return (
     <Card>
@@ -2688,22 +3007,43 @@ function StandardReview({
             </Type>
           </SummaryRow>
         ) : null}
-        <SummaryRow label="Action">
-          <Badge variant={action === "block" ? "warning" : "neutral"}>
-            {action === "block" ? "Block" : "Flag"}
-          </Badge>
-        </SummaryRow>
-        <SummaryRow label="Audience">
-          <Type small>
-            {audienceType === "targeted"
-              ? `${audiencePrincipalCount} targeted principal${
-                  audiencePrincipalCount === 1 ? "" : "s"
-                }`
-              : "Everyone"}
-          </Type>
-        </SummaryRow>
+        <PolicyActionAudienceRows
+          action={action}
+          audienceType={audienceType}
+          audiencePrincipalCount={audiencePrincipalCount}
+        />
       </Stack>
     </Card>
+  );
+}
+
+// Action + Audience summary rows shared by both review confirmations.
+function PolicyActionAudienceRows({
+  action,
+  audienceType,
+  audiencePrincipalCount,
+}: {
+  action: PolicyAction;
+  audienceType: "everyone" | "targeted";
+  audiencePrincipalCount: number;
+}): JSX.Element {
+  return (
+    <>
+      <SummaryRow label="Action">
+        <Badge variant={action === "block" ? "warning" : "neutral"}>
+          {action === "block" ? "Block" : "Flag"}
+        </Badge>
+      </SummaryRow>
+      <SummaryRow label="Audience">
+        <Type small>
+          {audienceType === "targeted"
+            ? `${audiencePrincipalCount} targeted principal${
+                audiencePrincipalCount === 1 ? "" : "s"
+              }`
+            : "Everyone"}
+        </Type>
+      </SummaryRow>
+    </>
   );
 }
 
@@ -2738,6 +3078,23 @@ function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
   return true;
 }
 
+// Human summary of a policy's scope: the CEL expression, or the selected
+// message-type labels, with a fallback when neither is set.
+function scopeSummaryText(
+  scopeMode: "messageTypes" | "cel",
+  messageTypes: Set<PolicyMessageType>,
+  scopeInclude: string,
+): string {
+  if (scopeMode === "cel") {
+    return scopeInclude.trim() || "All messages matching a CEL expression";
+  }
+  return (
+    [...messageTypes]
+      .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+      .join(", ") || "No message types selected"
+  );
+}
+
 function formatRelative(date: Date): string {
   const secs = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (secs < 60) return "just now";
@@ -2749,6 +3106,16 @@ function formatRelative(date: Date): string {
   return `${days}d ago`;
 }
 
-function formatPct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+function formatEvalConfidence(confidence: number): string {
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function formatEvalLatency(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0ms";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+}
+
+function formatEvalCostLatency(costUsd: number, latencyMs: number): string {
+  return `${formatUsageCost(costUsd)} eval · ${formatEvalLatency(latencyMs)}`;
 }
