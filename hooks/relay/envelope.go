@@ -7,99 +7,11 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
+
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
 const schemaVersion = "hook.ingest.v1"
-
-type ingestSource struct {
-	Adapter        string `json:"adapter"`
-	AdapterVersion string `json:"adapter_version,omitempty"`
-	RawEventName   string `json:"raw_event_name,omitempty"`
-	Hostname       string `json:"hostname,omitempty"`
-}
-
-type ingestSession struct {
-	ID     string `json:"id,omitempty"`
-	TurnID string `json:"turn_id,omitempty"`
-	CWD    string `json:"cwd,omitempty"`
-	Model  string `json:"model,omitempty"`
-}
-
-type ingestEvent struct {
-	Type       string `json:"type"`
-	OccurredAt string `json:"occurred_at,omitempty"`
-}
-
-type promptData struct {
-	Text string `json:"text"`
-}
-
-type toolCallData struct {
-	ID             string          `json:"id,omitempty"`
-	Name           string          `json:"name,omitempty"`
-	Input          json.RawMessage `json:"input,omitempty"`
-	Output         json.RawMessage `json:"output,omitempty"`
-	Error          json.RawMessage `json:"error,omitempty"`
-	IsInterrupt    *bool           `json:"is_interrupt,omitempty"`
-	PermissionType string          `json:"permission_type,omitempty"`
-	DurationMS     *float64        `json:"duration_ms,omitempty"`
-	Status         string          `json:"status,omitempty"`
-}
-
-type mcpData struct {
-	ServerName     string `json:"server_name,omitempty"`
-	ServerIdentity string `json:"server_identity,omitempty"`
-	URL            string `json:"url,omitempty"`
-	Command        string `json:"command,omitempty"`
-	ResultJSON     string `json:"result_json,omitempty"`
-}
-
-type usageData struct {
-	InputTokens      *int     `json:"input_tokens,omitempty"`
-	OutputTokens     *int     `json:"output_tokens,omitempty"`
-	CacheReadTokens  *int     `json:"cache_read_tokens,omitempty"`
-	CacheWriteTokens *int     `json:"cache_write_tokens,omitempty"`
-	Cost             *float64 `json:"cost,omitempty"`
-	LoopCount        *int     `json:"loop_count,omitempty"`
-	Status           string   `json:"status,omitempty"`
-}
-
-type messageData struct {
-	Text       string   `json:"text"`
-	Role       string   `json:"role,omitempty"`
-	DurationMS *float64 `json:"duration_ms,omitempty"`
-}
-
-type skillData struct {
-	Name   string `json:"name"`
-	Source string `json:"source,omitempty"`
-}
-
-type notificationData struct {
-	Type    string `json:"type,omitempty"`
-	Title   string `json:"title,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
-type ingestData struct {
-	Prompt       *promptData       `json:"prompt,omitempty"`
-	ToolCall     *toolCallData     `json:"tool_call,omitempty"`
-	MCP          *mcpData          `json:"mcp,omitempty"`
-	Usage        *usageData        `json:"usage,omitempty"`
-	Message      *messageData      `json:"message,omitempty"`
-	Skill        *skillData        `json:"skill,omitempty"`
-	Notification *notificationData `json:"notification,omitempty"`
-}
-
-type ingestPayload struct {
-	SchemaVersion  string          `json:"schema_version"`
-	IdempotencyKey string          `json:"idempotency_key,omitempty"`
-	Source         ingestSource    `json:"source"`
-	Session        *ingestSession  `json:"session,omitempty"`
-	Event          ingestEvent     `json:"event"`
-	Data           *ingestData     `json:"data,omitempty"`
-	Raw            json.RawMessage `json:"raw,omitempty"`
-}
 
 // adapterSlug maps an agenthooks provider onto the stable Gram adapter slug the
 // backend expects (it keys its provider-style telemetry vocabulary on these).
@@ -116,89 +28,89 @@ func adapterSlug(p agenthooks.Provider) string {
 // event. It mirrors the per-provider native→canonical tables the bash senders
 // used so the backend's raw-event-name round-trip keeps counting rows, then
 // falls back to a kind-based mapping for providers/events those tables omit.
-func canonicalEventType(e *agenthooks.Event) string {
+func canonicalEventType(e *agenthooks.Event) components.Type {
 	switch e.Provider {
 	case agenthooks.ProviderClaudeCode:
 		switch e.NativeName {
 		case "SessionStart":
-			return "session.started"
+			return components.TypeSessionStarted
 		case "ConfigChange":
-			return "session.updated"
+			return components.TypeSessionUpdated
 		case "PreToolUse":
-			return "tool.requested"
+			return components.TypeToolRequested
 		case "PostToolUse":
-			return "tool.completed"
+			return components.TypeToolCompleted
 		case "PostToolUseFailure":
-			return "tool.failed"
+			return components.TypeToolFailed
 		case "UserPromptSubmit":
-			return "prompt.submitted"
+			return components.TypePromptSubmitted
 		case "Stop":
-			return "assistant.responded"
+			return components.TypeAssistantResponded
 		case "SessionEnd":
-			return "session.ended"
+			return components.TypeSessionEnded
 		case "Notification":
-			return "notification.reported"
+			return components.TypeNotificationReported
 		}
 	case agenthooks.ProviderCursor:
 		switch e.NativeName {
 		case "sessionStart":
-			return "session.started"
+			return components.TypeSessionStarted
 		case "beforeSubmitPrompt":
-			return "prompt.submitted"
+			return components.TypePromptSubmitted
 		case "afterAgentResponse":
-			return "assistant.responded"
+			return components.TypeAssistantResponded
 		case "afterAgentThought":
-			return "assistant.thought"
+			return components.TypeAssistantThought
 		case "preToolUse", "beforeShellExecution", "beforeReadFile":
-			return "tool.requested"
+			return components.TypeToolRequested
 		case "postToolUse", "afterShellExecution":
-			return "tool.completed"
+			return components.TypeToolCompleted
 		case "postToolUseFailure":
-			return "tool.failed"
+			return components.TypeToolFailed
 		case "beforeMCPExecution":
-			return "tool.requested"
+			return components.TypeToolRequested
 		case "afterMCPExecution":
-			return "tool.completed"
+			return components.TypeToolCompleted
 		case "stop":
-			return "usage.reported"
+			return components.TypeUsageReported
 		}
 	case agenthooks.ProviderCodex:
 		switch e.NativeName {
 		case "SessionStart":
-			return "session.started"
+			return components.TypeSessionStarted
 		case "PreToolUse", "PermissionRequest":
-			return "tool.requested"
+			return components.TypeToolRequested
 		case "PostToolUse":
-			return "tool.completed"
+			return components.TypeToolCompleted
 		case "UserPromptSubmit":
-			return "prompt.submitted"
+			return components.TypePromptSubmitted
 		case "Stop":
-			return "assistant.responded"
+			return components.TypeAssistantResponded
 		}
 	}
 	return kindEventType(e.Kind)
 }
 
-func kindEventType(k agenthooks.EventKind) string {
+func kindEventType(k agenthooks.EventKind) components.Type {
 	switch k {
 	case agenthooks.KindSessionStart:
-		return "session.started"
+		return components.TypeSessionStarted
 	case agenthooks.KindSessionEnd:
-		return "session.ended"
+		return components.TypeSessionEnded
 	case agenthooks.KindPromptSubmitted:
-		return "prompt.submitted"
+		return components.TypePromptSubmitted
 	case agenthooks.KindToolPre, agenthooks.KindPermission:
-		return "tool.requested"
+		return components.TypeToolRequested
 	case agenthooks.KindToolPost:
-		return "tool.completed"
+		return components.TypeToolCompleted
 	case agenthooks.KindToolError:
-		return "tool.failed"
+		return components.TypeToolFailed
 	case agenthooks.KindStop, agenthooks.KindSubagentStop:
-		return "assistant.responded"
+		return components.TypeAssistantResponded
 	case agenthooks.KindNotification:
-		return "notification.reported"
+		return components.TypeNotificationReported
 	default:
-		return "session.updated"
+		return components.TypeSessionUpdated
 	}
 }
 
@@ -206,13 +118,13 @@ func kindEventType(k agenthooks.EventKind) string {
 // ingest payload. Feature blocks are populated only for the event's kind; the
 // verbatim provider payload rides under raw for debugging (the backend never
 // reads it for behavior).
-func buildEnvelope(typed any, hostname string) ingestPayload {
+func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	base := agenthooks.EventOf(typed)
 	eventType := canonicalEventType(base)
-	data := &ingestData{
+	data := &components.HookIngestData{
 		Prompt:       nil,
 		ToolCall:     nil,
-		MCP:          nil,
+		Mcp:          nil,
 		Usage:        nil,
 		Message:      nil,
 		Skill:        nil,
@@ -222,7 +134,7 @@ func buildEnvelope(typed any, hostname string) ingestPayload {
 	switch ev := typed.(type) {
 	case *agenthooks.PromptEvent:
 		if ev.Prompt != "" {
-			data.Prompt = &promptData{Text: ev.Prompt}
+			data.Prompt = &components.HookPromptData{Text: new(ev.Prompt)}
 		}
 	case *agenthooks.ToolPreEvent:
 		eventType = applyToolCall(data, base, &ev.Tool, eventType, "", nil, nil, nil, nil)
@@ -246,43 +158,45 @@ func buildEnvelope(typed any, hostname string) ingestPayload {
 		eventType = applyToolCall(data, base, &ev.Tool, eventType, "", output, errOut, interrupt, ev.DurationMS)
 	case *agenthooks.StopEvent:
 		if ev.FinalMessage != "" {
-			data.Message = &messageData{Text: ev.FinalMessage, Role: "assistant", DurationMS: nil}
+			data.Message = &components.HookMessageData{Text: new(ev.FinalMessage), Role: new("assistant"), DurationMs: nil}
 		}
 		if ev.Usage != nil {
-			data.Usage = &usageData{
-				InputTokens:      ev.Usage.InputTokens,
-				OutputTokens:     ev.Usage.OutputTokens,
-				CacheReadTokens:  ev.Usage.CacheReadTokens,
-				CacheWriteTokens: ev.Usage.CacheWriteTokens,
+			data.Usage = &components.HookUsageData{
+				InputTokens:      int64Ptr(ev.Usage.InputTokens),
+				OutputTokens:     int64Ptr(ev.Usage.OutputTokens),
+				CacheReadTokens:  int64Ptr(ev.Usage.CacheReadTokens),
+				CacheWriteTokens: int64Ptr(ev.Usage.CacheWriteTokens),
 				Cost:             ev.Usage.Cost,
-				LoopCount:        ev.Usage.LoopCount,
-				Status:           ev.Usage.Status,
+				LoopCount:        int64Ptr(ev.Usage.LoopCount),
+				Status:           optStr(ev.Usage.Status),
 			}
 		}
 	case *agenthooks.NotificationEvent:
 		if ev.Message != "" {
-			data.Notification = &notificationData{Type: "", Title: "", Message: ev.Message}
+			data.Notification = &components.HookNotificationData{Type: nil, Title: nil, Message: new(ev.Message)}
 		}
 	case *agenthooks.ModelEvent:
 		applyModelResponse(data, base)
 	}
 
-	payload := ingestPayload{
-		SchemaVersion:  schemaVersion,
-		IdempotencyKey: "",
-		Source: ingestSource{
+	payload := components.IngestRequestBody{
+		SchemaVersion: schemaVersion,
+		Source: components.HookIngestSource{
 			Adapter:        adapterSlug(base.Provider),
-			AdapterVersion: "",
-			RawEventName:   base.NativeName,
-			Hostname:       hostname,
+			AdapterVersion: nil,
+			RawEventName:   optStr(base.NativeName),
+			Hostname:       optStr(hostname),
 		},
 		Session: sessionOf(base),
-		Event: ingestEvent{
+		Event: components.HookIngestEvent{
 			Type:       eventType,
 			OccurredAt: occurredAt(base),
 		},
 		Data: data,
-		Raw:  base.Raw,
+		Raw:  nil,
+	}
+	if len(base.Raw) > 0 {
+		payload.Raw = json.RawMessage(base.Raw)
 	}
 	if isEmptyData(data) {
 		payload.Data = nil
@@ -293,43 +207,52 @@ func buildEnvelope(typed any, hostname string) ingestPayload {
 // applyToolCall fills the tool_call (and, for MCP tools, mcp) feature blocks and
 // returns a possibly-reclassified event type: a Claude "Skill" tool call is
 // promoted to skill.activated the way the backend expects.
-func applyToolCall(data *ingestData, base *agenthooks.Event, tool *agenthooks.ToolCall, eventType, permissionType string, output, errOut json.RawMessage, interrupt *bool, duration *float64) string {
-	tc := &toolCallData{
-		ID:             tool.ID,
-		Name:           tool.Name,
-		Input:          normalizeInput(tool.Input),
-		Output:         output,
-		Error:          errOut,
+func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool *agenthooks.ToolCall, eventType components.Type, permissionType string, output, errOut json.RawMessage, interrupt *bool, duration *float64) components.Type {
+	tc := &components.HookToolCallData{
+		ID:             optStr(tool.ID),
+		Name:           optStr(tool.Name),
+		Input:          nil,
+		Output:         nil,
+		Error:          nil,
 		IsInterrupt:    interrupt,
-		PermissionType: permissionType,
-		DurationMS:     duration,
-		Status:         "",
+		PermissionType: optStr(permissionType),
+		DurationMs:     duration,
+		Status:         nil,
+	}
+	if in := normalizeInput(tool.Input); in != nil {
+		tc.Input = in
+	}
+	if len(output) > 0 {
+		tc.Output = output
+	}
+	if len(errOut) > 0 {
+		tc.Error = errOut
 	}
 	data.ToolCall = tc
 
 	if tool.MCP != nil {
-		m := &mcpData{
-			ServerName:     tool.MCP.Server,
-			ServerIdentity: "",
-			URL:            redactURL(tool.MCP.URL),
-			Command:        redactCommand(tool.MCP.Command),
-			ResultJSON:     "",
+		m := &components.HookMCPData{
+			ServerName:     optStr(tool.MCP.Server),
+			ServerIdentity: nil,
+			URL:            optStr(redactURL(tool.MCP.URL)),
+			Command:        optStr(redactCommand(tool.MCP.Command)),
+			ResultJSON:     nil,
 		}
-		if m.URL == "" && m.Command != "" {
+		if m.URL == nil && m.Command != nil {
 			m.ServerIdentity = m.Command
 		} else {
-			m.ServerIdentity = tool.MCP.Server
+			m.ServerIdentity = optStr(tool.MCP.Server)
 		}
 		if len(output) > 0 {
-			m.ResultJSON = string(output)
+			m.ResultJSON = new(string(output))
 		}
-		data.MCP = m
+		data.Mcp = m
 	}
 
 	if base.Provider == agenthooks.ProviderClaudeCode && strings.EqualFold(tool.Name, "Skill") {
 		if name := skillNameOf(tool.Input); name != "" {
-			data.Skill = &skillData{Name: name, Source: ""}
-			return "skill.activated"
+			data.Skill = &components.HookSkillData{Name: name, Source: nil}
+			return components.TypeSkillActivated
 		}
 	}
 	return eventType
@@ -339,53 +262,54 @@ func applyToolCall(data *ingestData, base *agenthooks.Event, tool *agenthooks.To
 // model-response event carries into the canonical feature blocks. The
 // normalized ModelEvent exposes only the envelope, so both live in the raw
 // provider payload (cursor afterAgentResponse/afterAgentThought).
-func applyModelResponse(data *ingestData, base *agenthooks.Event) {
+func applyModelResponse(data *components.HookIngestData, base *agenthooks.Event) {
 	var raw struct {
 		Text             string   `json:"text"`
-		InputTokens      *int     `json:"input_tokens"`
-		OutputTokens     *int     `json:"output_tokens"`
-		CacheReadTokens  *int     `json:"cache_read_tokens"`
-		CacheWriteTokens *int     `json:"cache_write_tokens"`
+		InputTokens      *int64   `json:"input_tokens"`
+		OutputTokens     *int64   `json:"output_tokens"`
+		CacheReadTokens  *int64   `json:"cache_read_tokens"`
+		CacheWriteTokens *int64   `json:"cache_write_tokens"`
 		Cost             *float64 `json:"cost"`
 	}
 	if json.Unmarshal(base.Raw, &raw) != nil {
 		return
 	}
 	if raw.Text != "" {
-		data.Message = &messageData{Text: raw.Text, Role: "assistant", DurationMS: nil}
+		data.Message = &components.HookMessageData{Text: new(raw.Text), Role: new("assistant"), DurationMs: nil}
 	}
 	if raw.InputTokens != nil || raw.OutputTokens != nil || raw.CacheReadTokens != nil ||
 		raw.CacheWriteTokens != nil || raw.Cost != nil {
-		data.Usage = &usageData{
+		data.Usage = &components.HookUsageData{
 			InputTokens:      raw.InputTokens,
 			OutputTokens:     raw.OutputTokens,
 			CacheReadTokens:  raw.CacheReadTokens,
 			CacheWriteTokens: raw.CacheWriteTokens,
 			Cost:             raw.Cost,
 			LoopCount:        nil,
-			Status:           "",
+			Status:           nil,
 		}
 	}
 }
 
-func sessionOf(base *agenthooks.Event) *ingestSession {
-	s := &ingestSession{
-		ID:     base.Session.ID,
-		TurnID: base.Session.TurnID,
-		CWD:    base.Session.CWD,
-		Model:  base.Session.Model,
+func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
+	s := &components.HookIngestSession{
+		ID:     optStr(base.Session.ID),
+		TurnID: optStr(base.Session.TurnID),
+		Cwd:    optStr(base.Session.CWD),
+		Model:  optStr(base.Session.Model),
 	}
-	if s.ID == "" && s.TurnID == "" && s.CWD == "" && s.Model == "" {
+	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil {
 		return nil
 	}
 	return s
 }
 
-func occurredAt(base *agenthooks.Event) string {
+func occurredAt(base *agenthooks.Event) *time.Time {
 	if base.Time.IsZero() {
-		return ""
+		return nil
 	}
-	return base.Time.UTC().Format(time.RFC3339Nano)
+	t := base.Time.UTC()
+	return &t
 }
 
 func permissionTypeOf(base *agenthooks.Event) string {
@@ -455,9 +379,25 @@ func skillNameOf(input json.RawMessage) string {
 	return ""
 }
 
-func isEmptyData(d *ingestData) bool {
-	return d.Prompt == nil && d.ToolCall == nil && d.MCP == nil && d.Usage == nil &&
+func isEmptyData(d *components.HookIngestData) bool {
+	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil
+}
+
+// optStr returns a pointer to s, or nil when s is empty so the field is
+// omitted from the wire payload like the legacy senders omitted empty strings.
+func optStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return new(s)
+}
+
+func int64Ptr(v *int) *int64 {
+	if v == nil {
+		return nil
+	}
+	return new(int64(*v))
 }
 
 func hostname() string {

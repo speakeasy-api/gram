@@ -1,0 +1,12 @@
+# HookIngestSource
+
+Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+
+## Fields
+
+| Field            | Type      | Required           | Description                                                               |
+| ---------------- | --------- | ------------------ | ------------------------------------------------------------------------- |
+| `Adapter`        | `string`  | :heavy_check_mark: | Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name. |
+| `AdapterVersion` | `*string` | :heavy_minus_sign: | Adapter implementation version.                                           |
+| `Hostname`       | `*string` | :heavy_minus_sign: | Hostname of the machine that emitted the hook event.                      |
+| `RawEventName`   | `*string` | :heavy_minus_sign: | Provider-native event name, if one exists.                                |

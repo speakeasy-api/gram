@@ -36,7 +36,7 @@ type Relay struct {
 func NewRelay(cfg Config) *Relay {
 	return &Relay{
 		cfg:    cfg,
-		client: newClient(),
+		client: newClient(cfg.ServerURL),
 		login:  newLoginFlow(cfg),
 	}
 }
@@ -113,7 +113,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	payload := buildEnvelope(typed, hostname())
-	res := r.client.send(ctx, r.cfg.ServerURL, c, payload)
+	res := r.client.send(ctx, c, payload)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A cache-sourced key the server rejected is forgotten; only the
