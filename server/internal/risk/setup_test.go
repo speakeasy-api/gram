@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -85,6 +86,20 @@ func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid
 	return nil
 }
 
+// stubJudge is a settable ra.PromptJudge for eval-endpoint tests. When evaluate
+// is nil it never matches; otherwise it delegates so a test can flag messages by
+// content.
+type stubJudge struct {
+	evaluate func(in ra.JudgeInput) *ra.JudgeVerdict
+}
+
+func (s *stubJudge) Evaluate(_ context.Context, in ra.JudgeInput) *ra.JudgeVerdict {
+	if s.evaluate == nil {
+		return nil
+	}
+	return s.evaluate(in)
+}
+
 type testInstance struct {
 	service        *risk.Service
 	conn           *pgxpool.Pool
@@ -93,6 +108,7 @@ type testInstance struct {
 	chatRepo       *chatrepo.Queries
 	flags          *feature.InMemory
 	cacheAdapter   cache.Cache
+	judge          *stubJudge
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -127,7 +143,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
+	judge := &stubJudge{evaluate: nil}
+
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), judge)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -137,6 +155,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		chatRepo:       chatrepo.New(conn),
 		flags:          flags,
 		cacheAdapter:   cacheAdapter,
+		judge:          judge,
 	}
 }
 

@@ -53,6 +53,10 @@ type Server struct {
 	DeleteRiskExclusion            http.Handler
 	SuggestCustomDetectionRule     http.Handler
 	TestDetectionRule              http.Handler
+	EvaluatePromptGuardrail        http.Handler
+	SaveRiskEvalReview             http.Handler
+	ListRiskEvalReviews            http.Handler
+	DeleteRiskEvalReview           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -116,6 +120,10 @@ func New(
 			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
 			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.suggestCustomRules"},
 			{"TestDetectionRule", "POST", "/rpc/risk.testRule"},
+			{"EvaluatePromptGuardrail", "POST", "/rpc/riskEvals.evaluate"},
+			{"SaveRiskEvalReview", "POST", "/rpc/riskEvals.saveReview"},
+			{"ListRiskEvalReviews", "GET", "/rpc/riskEvals.listReviews"},
+			{"DeleteRiskEvalReview", "DELETE", "/rpc/riskEvals.deleteReview"},
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
@@ -151,6 +159,10 @@ func New(
 		DeleteRiskExclusion:            NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
 		TestDetectionRule:              NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailHandler(e.EvaluatePromptGuardrail, mux, decoder, encoder, errhandler, formatter),
+		SaveRiskEvalReview:             NewSaveRiskEvalReviewHandler(e.SaveRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
+		ListRiskEvalReviews:            NewListRiskEvalReviewsHandler(e.ListRiskEvalReviews, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskEvalReview:           NewDeleteRiskEvalReviewHandler(e.DeleteRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -193,6 +205,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteRiskExclusion = m(s.DeleteRiskExclusion)
 	s.SuggestCustomDetectionRule = m(s.SuggestCustomDetectionRule)
 	s.TestDetectionRule = m(s.TestDetectionRule)
+	s.EvaluatePromptGuardrail = m(s.EvaluatePromptGuardrail)
+	s.SaveRiskEvalReview = m(s.SaveRiskEvalReview)
+	s.ListRiskEvalReviews = m(s.ListRiskEvalReviews)
+	s.DeleteRiskEvalReview = m(s.DeleteRiskEvalReview)
 }
 
 // MethodNames returns the methods served.
@@ -234,6 +250,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteRiskExclusionHandler(mux, h.DeleteRiskExclusion)
 	MountSuggestCustomDetectionRuleHandler(mux, h.SuggestCustomDetectionRule)
 	MountTestDetectionRuleHandler(mux, h.TestDetectionRule)
+	MountEvaluatePromptGuardrailHandler(mux, h.EvaluatePromptGuardrail)
+	MountSaveRiskEvalReviewHandler(mux, h.SaveRiskEvalReview)
+	MountListRiskEvalReviewsHandler(mux, h.ListRiskEvalReviews)
+	MountDeleteRiskEvalReviewHandler(mux, h.DeleteRiskEvalReview)
 }
 
 // Mount configures the mux to serve the risk endpoints.
@@ -2030,6 +2050,218 @@ func NewTestDetectionRuleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "testDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountEvaluatePromptGuardrailHandler configures the mux to serve the "risk"
+// service "evaluatePromptGuardrail" endpoint.
+func MountEvaluatePromptGuardrailHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/riskEvals.evaluate", f)
+}
+
+// NewEvaluatePromptGuardrailHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "evaluatePromptGuardrail" endpoint.
+func NewEvaluatePromptGuardrailHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeEvaluatePromptGuardrailRequest(mux, decoder)
+		encodeResponse = EncodeEvaluatePromptGuardrailResponse(encoder)
+		encodeError    = EncodeEvaluatePromptGuardrailError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "evaluatePromptGuardrail")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSaveRiskEvalReviewHandler configures the mux to serve the "risk"
+// service "saveRiskEvalReview" endpoint.
+func MountSaveRiskEvalReviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/riskEvals.saveReview", f)
+}
+
+// NewSaveRiskEvalReviewHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "saveRiskEvalReview" endpoint.
+func NewSaveRiskEvalReviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSaveRiskEvalReviewRequest(mux, decoder)
+		encodeResponse = EncodeSaveRiskEvalReviewResponse(encoder)
+		encodeError    = EncodeSaveRiskEvalReviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "saveRiskEvalReview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRiskEvalReviewsHandler configures the mux to serve the "risk"
+// service "listRiskEvalReviews" endpoint.
+func MountListRiskEvalReviewsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/riskEvals.listReviews", f)
+}
+
+// NewListRiskEvalReviewsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listRiskEvalReviews" endpoint.
+func NewListRiskEvalReviewsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRiskEvalReviewsRequest(mux, decoder)
+		encodeResponse = EncodeListRiskEvalReviewsResponse(encoder)
+		encodeError    = EncodeListRiskEvalReviewsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskEvalReviews")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteRiskEvalReviewHandler configures the mux to serve the "risk"
+// service "deleteRiskEvalReview" endpoint.
+func MountDeleteRiskEvalReviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/riskEvals.deleteReview", f)
+}
+
+// NewDeleteRiskEvalReviewHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "deleteRiskEvalReview" endpoint.
+func NewDeleteRiskEvalReviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteRiskEvalReviewRequest(mux, decoder)
+		encodeResponse = EncodeDeleteRiskEvalReviewResponse(encoder)
+		encodeError    = EncodeDeleteRiskEvalReviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRiskEvalReview")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

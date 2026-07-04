@@ -55,6 +55,46 @@ func RiskPolicyAudienceTypeEnum() {
 	Enum("everyone", "targeted")
 }
 
+// RiskPolicyEvalVerdictEnum constrains a policy-eval review verdict. It is the
+// reviewer's ground-truth judgment of a chat session under a prompt-based
+// policy: `correct` (guardrail agreed), `false_positive` (guardrail flagged a
+// session it should not — tighten), `missed` (guardrail missed one it should
+// flag — broaden).
+func RiskPolicyEvalVerdictEnum() {
+	Enum("correct", "false_positive", "missed")
+}
+
+// RiskPolicyEvalReview is one reviewer's saved ground-truth verdict on a chat
+// session under a prompt-based policy — a row in the policy's durable regression
+// set. Kept physically separate from live findings: eval review activity never
+// touches risk_results, the outbox, or enforcement.
+var RiskPolicyEvalReview = Type("RiskPolicyEvalReview", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The review ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The prompt-based policy the verdict belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "The policy version in effect when the verdict was recorded (provenance).")
+	Attribute("chat_id", String, "The chat session being judged.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("verdict", String, "The reviewer's ground-truth verdict.", func() {
+		RiskPolicyEvalVerdictEnum()
+	})
+	Attribute("reviewed_by", String, "User id of the reviewer who recorded the verdict.")
+	Attribute("created_at", String, "When the verdict was first recorded.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the verdict was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "policy_id", "policy_version", "chat_id", "verdict", "reviewed_by", "created_at", "updated_at")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
