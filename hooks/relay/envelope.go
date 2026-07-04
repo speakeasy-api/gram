@@ -24,75 +24,14 @@ func adapterSlug(p agenthooks.Provider) string {
 	}
 }
 
-// canonicalEventType resolves the Gram canonical event.type for a normalized
-// event. It mirrors the per-provider native→canonical tables the bash senders
-// used so the backend's raw-event-name round-trip keeps counting rows, then
-// falls back to a kind-based mapping for providers/events those tables omit.
+// canonicalEventType resolves the Gram canonical event.type from the unified
+// event kind. Two cursor quirks the unified taxonomy cannot express yet are
+// split inline: its stop hook reports a usage summary rather than a final
+// message, and it is the only provider with a distinct thought stream on the
+// model-response kind (ModelEvent carries no discriminator, so the split
+// reads the native name).
 func canonicalEventType(e *agenthooks.Event) components.Type {
-	switch e.Provider {
-	case agenthooks.ProviderClaudeCode:
-		switch e.NativeName {
-		case "SessionStart":
-			return components.TypeSessionStarted
-		case "ConfigChange":
-			return components.TypeSessionUpdated
-		case "PreToolUse":
-			return components.TypeToolRequested
-		case "PostToolUse":
-			return components.TypeToolCompleted
-		case "PostToolUseFailure":
-			return components.TypeToolFailed
-		case "UserPromptSubmit":
-			return components.TypePromptSubmitted
-		case "Stop":
-			return components.TypeAssistantResponded
-		case "SessionEnd":
-			return components.TypeSessionEnded
-		case "Notification":
-			return components.TypeNotificationReported
-		}
-	case agenthooks.ProviderCursor:
-		switch e.NativeName {
-		case "sessionStart":
-			return components.TypeSessionStarted
-		case "beforeSubmitPrompt":
-			return components.TypePromptSubmitted
-		case "afterAgentResponse":
-			return components.TypeAssistantResponded
-		case "afterAgentThought":
-			return components.TypeAssistantThought
-		case "preToolUse", "beforeShellExecution", "beforeReadFile":
-			return components.TypeToolRequested
-		case "postToolUse", "afterShellExecution":
-			return components.TypeToolCompleted
-		case "postToolUseFailure":
-			return components.TypeToolFailed
-		case "beforeMCPExecution":
-			return components.TypeToolRequested
-		case "afterMCPExecution":
-			return components.TypeToolCompleted
-		case "stop":
-			return components.TypeUsageReported
-		}
-	case agenthooks.ProviderCodex:
-		switch e.NativeName {
-		case "SessionStart":
-			return components.TypeSessionStarted
-		case "PreToolUse", "PermissionRequest":
-			return components.TypeToolRequested
-		case "PostToolUse":
-			return components.TypeToolCompleted
-		case "UserPromptSubmit":
-			return components.TypePromptSubmitted
-		case "Stop":
-			return components.TypeAssistantResponded
-		}
-	}
-	return kindEventType(e.Kind)
-}
-
-func kindEventType(k agenthooks.EventKind) components.Type {
-	switch k {
+	switch e.Kind {
 	case agenthooks.KindSessionStart:
 		return components.TypeSessionStarted
 	case agenthooks.KindSessionEnd:
@@ -105,7 +44,17 @@ func kindEventType(k agenthooks.EventKind) components.Type {
 		return components.TypeToolCompleted
 	case agenthooks.KindToolError:
 		return components.TypeToolFailed
-	case agenthooks.KindStop, agenthooks.KindSubagentStop:
+	case agenthooks.KindStop:
+		if e.Provider == agenthooks.ProviderCursor {
+			return components.TypeUsageReported
+		}
+		return components.TypeAssistantResponded
+	case agenthooks.KindSubagentStop:
+		return components.TypeAssistantResponded
+	case agenthooks.KindModelResponse:
+		if e.NativeName == "afterAgentThought" {
+			return components.TypeAssistantThought
+		}
 		return components.TypeAssistantResponded
 	case agenthooks.KindNotification:
 		return components.TypeNotificationReported
