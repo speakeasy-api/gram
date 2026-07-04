@@ -1018,6 +1018,69 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
   await fs.mkdir(targetDir, { recursive: true });
   await fs.writeFile(targetPath, JSON.stringify(hooks, null, 2));
 }
+// Cursor is the only provider whose hook payloads carry usage totals, and its
+// headless agent never fires the stop hook, so drive the installed stop
+// command directly with recorded-shape payloads. Both pricing shapes matter:
+// API-priced sessions report a cost while subscription sessions report
+// tokens only.
+async function runCursorSyntheticUsage(args) {
+  const hooksPath = path.join(args.pluginDir, "hooks", "hooks.json");
+  const hooks = JSON.parse(await fs.readFile(hooksPath, "utf8"));
+  const entry = (hooks.hooks?.stop ?? [])[0];
+  if (!entry || typeof entry.command !== "string") {
+    fail(`cursor hooks.json has no stop command at ${hooksPath}`);
+  }
+  const escapedPluginDir = args.pluginDir.replace(/(["\\$`])/g, "\\$1");
+  const command = entry.command.replaceAll(
+    "$CURSOR_PLUGIN_ROOT",
+    escapedPluginDir,
+  );
+  const base = {
+    hook_event_name: "stop",
+    workspace_roots: [args.workdir],
+    cwd: args.workdir,
+    model: "e2e-synthetic",
+    status: "completed",
+    loop_count: 1,
+  };
+  const payloads = [
+    {
+      label: "api-pricing",
+      body: {
+        ...base,
+        conversation_id: `${args.runId}-usage-api`,
+        generation_id: `${args.runId}-usage-api-gen`,
+        input_tokens: 1200,
+        output_tokens: 345,
+        cache_read_tokens: 800,
+        cache_write_tokens: 60,
+        cost: 0.0123,
+      },
+    },
+    {
+      label: "subscription",
+      body: {
+        ...base,
+        conversation_id: `${args.runId}-usage-plan`,
+        generation_id: `${args.runId}-usage-plan-gen`,
+        input_tokens: 900,
+        output_tokens: 210,
+      },
+    },
+  ];
+  const results = [];
+  for (const payload of payloads) {
+    const res = await runProcess("sh", ["-c", command], {
+      cwd: args.workdir,
+      input: JSON.stringify(payload.body),
+      timeoutMs: args.timeoutMs,
+    });
+    res.provider = "cursor";
+    res.label = payload.label;
+    results.push(res);
+  }
+  return results;
+}
 async function clickhouseQuery(query) {
   const host = process.env.CLICKHOUSE_HOST ?? "127.0.0.1";
   const port = process.env.CLICKHOUSE_HTTP_PORT ?? "8123";
@@ -1435,15 +1498,37 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "Codex does not expose a distinct failed-tool hook event in this driver"
         : "missing after failure scenario",
   });
+  const usageBlocks = evidence
+    .filter((r) => r.event === "usage.reported")
+    .map((r) => {
+      try {
+        return JSON.parse(String(r.attrs ?? ""))?.gen_ai?.usage ?? null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const usageWithCost = usageBlocks.some(
+    (u) => u.input_tokens > 0 && u.output_tokens > 0 && u.cost > 0,
+  );
+  const usageTokensOnly = usageBlocks.some(
+    (u) => u.input_tokens > 0 && u.output_tokens > 0 && u.cost === undefined,
+  );
   checks.push({
     provider,
     feature: "usage.reported",
-    status: events.has("usage.reported") ? "PASS" : "SKIP",
-    detail: events.has("usage.reported")
-      ? "observed canonical usage event"
-      : provider === "cursor"
-        ? "Cursor Agent headless does not emit a stop/usage hook"
-        : "not emitted as a canonical unified event by this provider scenario",
+    status:
+      provider === "cursor"
+        ? usageWithCost && usageTokensOnly
+          ? "PASS"
+          : "FAIL"
+        : "SKIP",
+    detail:
+      provider === "cursor"
+        ? usageWithCost && usageTokensOnly
+          ? "synthetic stop payloads recorded token attrs for both pricing shapes"
+          : `usage evidence incomplete: with-cost=${usageWithCost} tokens-only=${usageTokensOnly} rows=${usageAttrs.length}`
+        : "provider hook payloads carry no usage totals",
   });
   checks.push({
     provider,
@@ -1891,6 +1976,32 @@ async function runCaptureSuite(args) {
         fail(`${provider} ${scenario} scenario timed out`);
       }
     }
+    if (provider === "cursor") {
+      log.info("cursor: dispatching synthetic stop payloads for usage capture");
+      const usageResults = await runCursorSyntheticUsage({
+        pluginDir: args.pluginDirs.get("cursor"),
+        workdir: args.workdir,
+        runId: args.runId,
+        timeoutMs: args.timeoutSeconds * 1000,
+      });
+      for (const res of usageResults) {
+        commandResults.push(res);
+        await writeCommandArtifacts(
+          args.artifactsDir,
+          "cursor",
+          `capture-usage-${res.label}`,
+          res,
+        );
+        if (res.exitCode !== 0) {
+          fail(
+            `cursor synthetic usage dispatch (${res.label}) failed:\n${res.stderr || res.stdout}`,
+          );
+        }
+        if (res.timedOut) {
+          fail(`cursor synthetic usage dispatch (${res.label}) timed out`);
+        }
+      }
+    }
     if (provider === "claude" || provider === "codex") {
       // Codex validates $name mentions against the skill roots on disk;
       // CODEX_HOME/skills is the only root the isolated env controls
@@ -1944,7 +2055,7 @@ async function runCaptureSuite(args) {
     // waiting for it.
     const requiredEvents = [
       "prompt.submitted",
-      ...(provider === "cursor" ? [] : ["assistant.responded"]),
+      ...(provider === "cursor" ? ["usage.reported"] : ["assistant.responded"]),
       "tool.requested",
       "tool.completed",
     ];
