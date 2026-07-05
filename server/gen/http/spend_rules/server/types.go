@@ -71,7 +71,8 @@ type PreviewSpendRuleRequestBody struct {
 	// UTC calendar window to compute spend over.
 	WindowKind *string `form:"window_kind,omitempty" json:"window_kind,omitempty" xml:"window_kind,omitempty"`
 	// Ignore spend accrued before this instant. Pass an existing rule's
-	// evaluated_from to mirror the evaluator; omit for new rules.
+	// evaluated_from to preview edits against the same active evaluation window;
+	// omit for new rules.
 	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 }
 
@@ -80,7 +81,7 @@ type PreviewSpendRuleRequestBody struct {
 type CreateSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
@@ -113,7 +114,8 @@ type CreateSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator.
+	// Spend accrued before this instant is ignored by the evaluator. New rules
+	// start from creation time; edited rule versions inherit the original value.
 	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -133,7 +135,7 @@ type ListSpendRulesResponseBody struct {
 type GetSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
@@ -166,7 +168,8 @@ type GetSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator.
+	// Spend accrued before this instant is ignored by the evaluator. New rules
+	// start from creation time; edited rule versions inherit the original value.
 	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -179,7 +182,7 @@ type GetSpendRuleResponseBody struct {
 type UpdateSpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
@@ -212,7 +215,8 @@ type UpdateSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator.
+	// Spend accrued before this instant is ignored by the evaluator. New rules
+	// start from creation time; edited rule versions inherit the original value.
 	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1774,7 +1778,7 @@ type SpendRuleTargetConditionResponseBody struct {
 type SpendRuleResponseBody struct {
 	// The spend rule ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// The organization ID.
@@ -1807,7 +1811,8 @@ type SpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator.
+	// Spend accrued before this instant is ignored by the evaluator. New rules
+	// start from creation time; edited rule versions inherit the original value.
 	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`

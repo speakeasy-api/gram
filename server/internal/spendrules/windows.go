@@ -37,16 +37,16 @@ func WindowBounds(kind string, now time.Time) (start time.Time, end time.Time, e
 // SpendRangeStart returns the inclusive lower bound for spend queries: the
 // window start, clamped forward by evaluated_from so spend accrued before a
 // rule's current version is ignored. Because the ClickHouse source is bucketed
-// hourly, a mid-hour evaluated_from is ceiled to the next hour boundary — the
-// evaluator under-counts (never over-counts) the partial hour around a rule
-// change.
+// by minute, a mid-minute evaluated_from is ceiled to the next minute
+// boundary — the evaluator under-counts (never over-counts) the partial minute
+// around a rule change.
 func SpendRangeStart(windowStart, evaluatedFrom time.Time) time.Time {
 	if !evaluatedFrom.After(windowStart) {
 		return windowStart
 	}
-	ceiled := evaluatedFrom.UTC().Truncate(time.Hour)
+	ceiled := evaluatedFrom.UTC().Truncate(time.Minute)
 	if ceiled.Before(evaluatedFrom.UTC()) {
-		ceiled = ceiled.Add(time.Hour)
+		ceiled = ceiled.Add(time.Minute)
 	}
 	return ceiled
 }

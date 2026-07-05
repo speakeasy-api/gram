@@ -125,14 +125,14 @@ export function toDraft(rule: SpendRule): RuleDraft {
 /*  URNs                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Events record the versioned URN (`spend_rule:<slug>:<version>`) they
+/** Events record the versioned URN (`spend_rule:<slug>:v<version>`) they
  *  fired under, which pins the exact config that produced them — the live
  *  rule may have moved on to a newer version since. The slug is unique per
  *  org and immutable after creation. */
 export function parseRuleUrn(
   urn: string,
 ): { slug: string; version: number } | null {
-  const match = /^spend_rule:([a-z0-9_-]+):(\d+)$/.exec(urn);
+  const match = /^spend_rule:([a-z0-9_-]+):v(\d+)$/.exec(urn);
   if (!match) return null;
   return { slug: match[1]!, version: Number(match[2]!) };
 }

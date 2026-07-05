@@ -45243,7 +45243,7 @@ components:
             properties:
                 evaluated_from:
                     type: string
-                    description: Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to mirror the evaluator; omit for new rules.
+                    description: Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.
                     format: date-time
                 limit_usd:
                     type: number
@@ -48993,7 +48993,7 @@ components:
                     description: Whether the rule is active.
                 evaluated_from:
                     type: string
-                    description: Spend accrued before this instant is ignored by the evaluator.
+                    description: Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.
                     format: date-time
                 id:
                     type: string
@@ -49026,7 +49026,7 @@ components:
                     format: date-time
                 urn:
                     type: string
-                    description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.
+                    description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.
                 version:
                     type: integer
                     description: Rule version, incremented on material config changes.

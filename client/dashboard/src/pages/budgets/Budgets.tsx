@@ -11,7 +11,6 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -25,7 +24,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Table, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Inbox, Plus, Wallet } from "lucide-react";
+import { Inbox, Plus, SearchX, Wallet } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
@@ -380,13 +379,20 @@ function RulesTab({
         </Page.Toolbar.Actions>
       </Page.Toolbar>
 
-      <Table
-        columns={columns}
-        data={filtered}
-        rowKey={(rule) => rule.id}
-        onRowClick={(rule) => onView(rule)}
-        noResultsMessage={<Type>No rules match your filters.</Type>}
-      />
+      {filtered.length === 0 ? (
+        <TabEmptyState
+          icon={SearchX}
+          title="No matching rules"
+          description="No rules match your search and filters. Try a different search term or clear the action filter."
+        />
+      ) : (
+        <Table
+          columns={columns}
+          data={filtered}
+          rowKey={(rule) => rule.id}
+          onRowClick={(rule) => onView(rule)}
+        />
+      )}
     </div>
   );
 }
@@ -566,22 +572,22 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
     return <SkeletonTable />;
   }
 
-  // A filtered-empty list keeps the toolbar so the filter can be changed;
-  // a truly empty history gets the full empty-state card instead of a bare
-  // table row.
+  // A truly empty history (the "All" filter) gets the full empty-state card on
+  // its own. A filtered view keeps the toolbar so the filter can be changed,
+  // but still renders a design-system empty-state card — never a bare table
+  // row — when nothing matches.
   if (events.length === 0 && filter === "all") {
+    const copy = eventsEmptyCopy("all", rules.length);
     return (
       <TabEmptyState
         icon={Inbox}
-        title="No budget events"
-        description={
-          rules.length === 0
-            ? "Create a spend rule first — warnings and breaches are recorded here as people approach or exceed their budgets."
-            : "Warnings and breaches appear here as enabled rules evaluate each person's spend against their budget."
-        }
+        title={copy.title}
+        description={copy.description}
       />
     );
   }
+
+  const filteredEmpty = eventsEmptyCopy(filter, rules.length);
 
   return (
     <div className="space-y-3">
@@ -602,14 +608,48 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
         </Page.Toolbar.Actions>
       </Page.Toolbar>
 
-      <Table
-        columns={columns}
-        data={events}
-        rowKey={(event) => event.id}
-        noResultsMessage={<Type>No budget events match this filter.</Type>}
-      />
+      {events.length === 0 ? (
+        <TabEmptyState
+          icon={Inbox}
+          title={filteredEmpty.title}
+          description={filteredEmpty.description}
+        />
+      ) : (
+        <Table columns={columns} data={events} rowKey={(event) => event.id} />
+      )}
     </div>
   );
+}
+
+/** Empty-state copy for the Events tab, keyed by the active filter. Warnings
+ *  and breaches get their own reassuring "nothing here yet" message instead of
+ *  a generic no-results row so the filtered empty view matches the design
+ *  system. */
+function eventsEmptyCopy(
+  filter: EventFilter,
+  rulesCount: number,
+): { title: string; description: string } {
+  switch (filter) {
+    case "warning":
+      return {
+        title: "No warnings",
+        description:
+          "No one has crossed a budget warning threshold yet. Warnings appear here as people approach their limits.",
+      };
+    case "breach":
+      return {
+        title: "No breaches",
+        description:
+          "No one has gone over budget yet. Breaches appear here when people exceed their limits.",
+      };
+    case "all": {
+      const description =
+        rulesCount === 0
+          ? "Create a spend rule first — warnings and breaches are recorded here as people approach or exceed their budgets."
+          : "Warnings and breaches appear here as enabled rules evaluate each person's spend against their budget.";
+      return { title: "No budget events", description };
+    }
+  }
 }
 
 /** Rule name as recorded on the event, plus a version marker whenever the

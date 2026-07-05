@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -188,11 +189,12 @@ function RuleForm({
   const [draft, setDraft] = useState<RuleDraft>(
     rule ? toDraft(rule) : defaultRuleDraft(),
   );
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
   // Pass the rule's evaluated_from through when editing so the preview shows
-  // the same numbers the evaluator sees. Material edits reset it server-side.
+  // the same in-window usage the evaluator sees after saving.
   const { preview, loading: previewLoading } = useRulePreview(
     draft,
     rule?.evaluatedFrom,
@@ -208,6 +210,27 @@ function RuleForm({
     if (!preview) return 0;
     return preview.actors.filter((a) => a.breached).length;
   }, [preview]);
+
+  const requiresConfirmation =
+    rule !== undefined &&
+    isMaterialRuleEdit(rule, draft) &&
+    draft.action === "block";
+
+  const confirmationDescription =
+    blockingEditConfirmationDescription(overLimitCount);
+
+  const handleSubmit = () => {
+    if (requiresConfirmation) {
+      setConfirmOpen(true);
+      return;
+    }
+    onSubmit(draft);
+  };
+
+  const handleConfirmSubmit = () => {
+    setConfirmOpen(false);
+    onSubmit(draft);
+  };
 
   return (
     <>
@@ -403,13 +426,70 @@ function RuleForm({
         ) : (
           <span />
         )}
-        <Button disabled={!canSubmit} onClick={() => onSubmit(draft)}>
+        <Button disabled={!canSubmit} onClick={handleSubmit}>
           <Check className="mr-2 h-4 w-4" />
           {rule ? "Save changes" : "Create rule"}
         </Button>
       </SheetFooter>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Apply blocking rule changes?</Dialog.Title>
+            <Dialog.Description>{confirmationDescription}</Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmSubmit}
+              disabled={submitting}
+            >
+              Save and apply
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </>
   );
+}
+
+function isMaterialRuleEdit(rule: SpendRule, draft: RuleDraft): boolean {
+  const current = toDraft(rule);
+  return (
+    !sameTargetCondition(current.target, draft.target) ||
+    rule.limitUsd !== draft.limitUsd ||
+    rule.windowKind !== draft.windowKind ||
+    rule.warnAtPct !== draft.warnAtPct ||
+    rule.action !== draft.action
+  );
+}
+
+function sameTargetCondition(
+  left: RuleTargetCondition,
+  right: RuleTargetCondition,
+): boolean {
+  return (
+    left.attribute === right.attribute &&
+    left.operator === right.operator &&
+    left.value === right.value
+  );
+}
+
+function blockingEditConfirmationDescription(overLimitCount: number): string {
+  if (overLimitCount === 1) {
+    return "This rule keeps its current evaluation window. One matched person is already over the proposed limit, so their requests may be blocked as soon as this change is evaluated.";
+  }
+  if (overLimitCount > 1) {
+    return `This rule keeps its current evaluation window. ${overLimitCount} matched people are already over the proposed limit, so their requests may be blocked as soon as this change is evaluated.`;
+  }
+  return "This rule keeps its current evaluation window. If any matched people are already over the proposed limit, their requests may be blocked as soon as this change is evaluated.";
 }
 
 function MatchedActors({

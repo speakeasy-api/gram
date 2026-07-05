@@ -13,7 +13,7 @@ func TestSpendRuleRoundTrip(t *testing.T) {
 
 	original := urn.NewSpendRule("eng-monthly-cap", 3)
 
-	require.Equal(t, "spend_rule:eng-monthly-cap:3", original.String())
+	require.Equal(t, "spend_rule:eng-monthly-cap:v3", original.String())
 
 	parsed, err := urn.ParseSpendRule(original.String())
 	require.NoError(t, err)
@@ -22,7 +22,7 @@ func TestSpendRuleRoundTrip(t *testing.T) {
 
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
-	require.Equal(t, `"spend_rule:eng-monthly-cap:3"`, string(data))
+	require.Equal(t, `"spend_rule:eng-monthly-cap:v3"`, string(data))
 
 	var fromJSON urn.SpendRule
 	err = json.Unmarshal(data, &fromJSON)
@@ -59,15 +59,15 @@ func TestSpendRuleRejectsInvalidValues(t *testing.T) {
 		{name: "empty", value: ""},
 		{name: "wrong prefix", value: "toolset:eng-monthly-cap:1"},
 		{name: "missing version", value: "spend_rule:eng-monthly-cap"},
-		{name: "empty slug", value: "spend_rule::1"},
-		{name: "uppercase slug", value: "spend_rule:Eng-Monthly-Cap:1"},
-		{name: "slug with spaces", value: "spend_rule:eng monthly cap:1"},
+		{name: "empty slug", value: "spend_rule::v1"},
+		{name: "uppercase slug", value: "spend_rule:Eng-Monthly-Cap:v1"},
+		{name: "slug with spaces", value: "spend_rule:eng monthly cap:v1"},
 		{name: "empty version", value: "spend_rule:eng-monthly-cap:"},
 		{name: "non-numeric version", value: "spend_rule:eng-monthly-cap:vX"},
-		{name: "prefixed version", value: "spend_rule:eng-monthly-cap:v1"},
-		{name: "zero version", value: "spend_rule:eng-monthly-cap:0"},
-		{name: "negative version", value: "spend_rule:eng-monthly-cap:-1"},
-		{name: "trailing segment", value: "spend_rule:eng-monthly-cap:1:extra"},
+		{name: "missing version prefix", value: "spend_rule:eng-monthly-cap:1"},
+		{name: "zero version", value: "spend_rule:eng-monthly-cap:v0"},
+		{name: "negative version", value: "spend_rule:eng-monthly-cap:v-1"},
+		{name: "trailing segment", value: "spend_rule:eng-monthly-cap:v1:extra"},
 	}
 	for _, tc := range cases {
 		_, err := urn.ParseSpendRule(tc.value)

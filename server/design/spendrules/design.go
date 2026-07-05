@@ -226,7 +226,7 @@ var _ = Service("spendRules", func() {
 			Attribute("window_kind", String, "UTC calendar window to compute spend over.", func() {
 				SpendRuleWindowKindEnum()
 			})
-			Attribute("evaluated_from", String, "Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to mirror the evaluator; omit for new rules.", func() {
+			Attribute("evaluated_from", String, "Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.", func() {
 				Format(FormatDateTime)
 			})
 			Required("target", "limit_usd", "window_kind")
@@ -330,7 +330,7 @@ var SpendRule = Type("SpendRule", func() {
 	Attribute("id", String, "The spend rule ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.")
+	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.")
 	Attribute("organization_id", String, "The organization ID.")
 	Attribute("name", String, "The rule name.")
 	Attribute("slug", String, "URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.")
@@ -348,7 +348,7 @@ var SpendRule = Type("SpendRule", func() {
 	})
 	Attribute("enabled", Boolean, "Whether the rule is active.")
 	Attribute("version", Int64, "Rule version, incremented on material config changes.")
-	Attribute("evaluated_from", String, "Spend accrued before this instant is ignored by the evaluator.", func() {
+	Attribute("evaluated_from", String, "Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("created_at", String, "When the rule was created.", func() {

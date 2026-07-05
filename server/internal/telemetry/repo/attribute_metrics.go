@@ -340,6 +340,51 @@ func (q *Queries) ListActorSpend(ctx context.Context, projectIDs []string, timeS
 	return out, nil
 }
 
+// ListActorSpendForRules returns per-actor total_cost over [timeStart, timeEnd]
+// from the dedicated spend-rule rollup. The rollup is bucketed by minute and is
+// intentionally narrower than attribute_metrics_summaries so enforcement stays
+// decoupled from analytics dimensions.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListActorSpendForRules(ctx context.Context, projectIDs []string, timeStart, timeEnd int64) ([]ActorSpendRow, error) {
+	if len(projectIDs) == 0 {
+		return nil, nil
+	}
+
+	sb := sq.Select("user_email").
+		Column(squirrel.Expr("sum(total_cost) AS m_total_cost")).
+		From("spend_rule_usage_summaries").
+		Where(squirrel.Eq{"gram_project_id": projectIDs}).
+		Where("time_bucket >= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeStart).
+		Where("time_bucket <= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeEnd).
+		Where("user_email != ''").
+		GroupBy("user_email")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building actor spend for rules query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ActorSpendRow
+	for rows.Next() {
+		var row ActorSpendRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning actor spend for rules row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueryAttributeMetricsTable returns one row per group value (or a single row
 // when GroupBy is empty), aggregated over the whole time range and ordered by
 // SortBy descending. No top_n limit is applied here — the service layer decides

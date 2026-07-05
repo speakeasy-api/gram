@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 )
 
 // recordingRiskScanner counts ScanForEnforcement calls so tests can assert
@@ -34,18 +36,57 @@ func (s *recordingRiskScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uu
 	return false, nil
 }
 
-// seedSpendBlock writes circuit state marking the given identifiers blocked.
+// seedSpendBlock writes gate state that makes the given identifiers breach a
+// blocking rule. The request path still evaluates both target and rule CEL.
 func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, identifiers ...string) {
 	t.Helper()
-	blocks := spendrules.BlockSet{}
+	ruleURN := "spend_rule:33333333-3333-3333-3333-333333333333:v2"
+	state := spendrules.NewGateState(nil)
+	state.Rules = append(state.Rules, spendrules.GateRule{
+		RuleURN:    ruleURN,
+		RuleName:   "Intern hard limit",
+		Action:     spendrules.ActionBlock,
+		TargetExpr: `true`,
+		RuleExpr:   `spend_usd >= limit_usd`,
+		LimitUSD:   100,
+		WarnAtPct:  80,
+		WindowEnd:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	})
 	for _, id := range identifiers {
-		blocks[id] = spendrules.Block{
-			RuleURN:   "spend_rule:33333333-3333-3333-3333-333333333333:v2",
-			RuleName:  "Intern hard limit",
-			WindowEnd: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		actor := spendrules.Actor{
+			UserID:      id,
+			Email:       "",
+			DisplayName: "",
+			Attrs: celenv.Actor{
+				Email:          "",
+				DepartmentName: "",
+				JobTitle:       "",
+				EmployeeType:   "",
+				DivisionName:   "",
+				CostCenterName: "",
+				Groups:         nil,
+				Roles:          nil,
+				SpendUSD:       0,
+				LimitUSD:       0,
+				UsedPct:        0,
+				WarnAtPct:      0,
+			},
 		}
+		if strings.Contains(id, "@") {
+			actor.UserID = ""
+			actor.Email = id
+			actor.Attrs.Email = id
+		}
+		state.SetActor(actor)
+		state.SetUsage(ruleURN, spendrules.ActorUsage{
+			Actor:    actor,
+			SpendUSD: 100,
+			LimitUSD: 100,
+			UsedPct:  100,
+			Breached: true,
+		})
 	}
-	require.NoError(t, spendrules.WriteBlockSet(ctx, ti.service.cache, organizationID, blocks))
+	require.NoError(t, spendrules.WriteGateState(ctx, ti.service.cache, organizationID, state))
 }
 
 func TestClaude_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {

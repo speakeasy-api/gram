@@ -1,4 +1,4 @@
-h1:iuxQ1DuFpkYJu+VUbnpaUwShwgiA9Ae+7eA24gcmlFg=
+h1:8M0Ck8kVMLptLxNwHXcYdo1qS5FKhkJO8UGLeD+4J0M=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -49,3 +49,4 @@ h1:iuxQ1DuFpkYJu+VUbnpaUwShwgiA9Ae+7eA24gcmlFg=
 20260630211520_pat-account-type-and-provider-summaries.up.sql h1:wrCaTdUI04yt6OVHWsSpAgGguG796dA1JaJsXq8vccs=
 20260701215636_billing-mode-summaries.up.sql h1:FVVzDONmxyl12Is07m4O2NElV/aZ+GIHDIcC+3aH5r8=
 20260702073000_attribute-metrics-attribution-dimensions.up.sql h1:YJND0xZ2gb9EQ6LhaX1cbqLMTN8dE8vqlznSXKOY+FQ=
+20260705154500_add-spend-rule-usage-summaries.up.sql h1:iYrZTtR7gbzk2tO4acjzlNcdm1jLL7kbR7folimZTTA=

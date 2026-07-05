@@ -12,7 +12,7 @@ package types
 type SpendRule struct {
 	// The spend rule ID.
 	ID string
-	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule
+	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
 	Urn string
 	// The organization ID.
@@ -45,7 +45,8 @@ type SpendRule struct {
 	Enabled bool
 	// Rule version, incremented on material config changes.
 	Version int64
-	// Spend accrued before this instant is ignored by the evaluator.
+	// Spend accrued before this instant is ignored by the evaluator. New rules
+	// start from creation time; edited rule versions inherit the original value.
 	EvaluatedFrom string
 	// When the rule was created.
 	CreatedAt string

@@ -56,7 +56,7 @@ export type SpendRule = {
    */
   enabled: boolean;
   /**
-   * Spend accrued before this instant is ignored by the evaluator.
+   * Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.
    */
   evaluatedFrom: Date;
   /**
@@ -93,7 +93,7 @@ export type SpendRule = {
    */
   updatedAt: Date;
   /**
-   * Versioned rule URN, e.g. spend_rule:eng-monthly-cap:3. Pins the exact rule configuration that produced an event.
+   * Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.
    */
   urn: string;
   /**

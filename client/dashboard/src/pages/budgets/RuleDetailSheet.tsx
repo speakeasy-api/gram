@@ -12,7 +12,7 @@ import {
   useSpendRulesListEvents,
   useSpendRulesPreviewRuleMutation,
 } from "@gram/client/react-query/index.js";
-import { Loader2, Pencil, Users } from "lucide-react";
+import { Loader2, Pencil, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import {
   EventTypeBadge,
@@ -145,14 +145,6 @@ function RuleDetail({
       </SheetHeader>
 
       <div className="flex-1 space-y-6 px-6 py-4">
-        {status === "blocking" && (
-          <p className="border-destructive/50 bg-destructive/5 text-destructive rounded-md border px-3 py-2 text-xs">
-            Circuit open — requests from people over their budget are being
-            rejected until the window resets in{" "}
-            {timeUntilWindowReset(rule.windowKind)}.
-          </p>
-        )}
-
         {/* Budget state */}
         <section className="space-y-2">
           <div className="flex items-baseline justify-between">
@@ -188,30 +180,11 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        <section className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Users className="size-3.5" />
-            <Type variant="small" className="font-medium">
-              People {preview ? `(${preview.matchedCount})` : ""}
-            </Type>
-            {actorsLoading && (
-              <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
-            )}
-          </div>
-          {actors.length === 0 ? (
-            <p className="text-muted-foreground text-xs">
-              {actorsLoading
-                ? "Matching members…"
-                : "No members match this rule right now."}
-            </p>
-          ) : (
-            <ul className="divide-border rounded-lg border divide-y">
-              {actors.map((actor) => (
-                <ActorRow key={actor.email} actor={actor} />
-              ))}
-            </ul>
-          )}
-        </section>
+        <PeopleSection
+          actors={actors}
+          matchedCount={preview?.matchedCount ?? 0}
+          loading={actorsLoading}
+        />
 
         {/* Lifecycle events */}
         <section className="space-y-2">
@@ -265,6 +238,116 @@ function RuleDetail({
         </Button>
       </SheetFooter>
     </>
+  );
+}
+
+/** Number of people shown before the list collapses behind a "show all"
+ *  toggle. Large orgs can match hundreds of people; the top spenders are the
+ *  ones worth surfacing first. */
+const ACTOR_PREVIEW_LIMIT = 5;
+
+/** Matched people driving the spend, sorted by spend (highest first) from the
+ *  server. Shows the top few by default and lets the admin search or expand
+ *  the full returned list so a large org doesn't flood the sheet. */
+function PeopleSection({
+  actors,
+  matchedCount,
+  loading,
+}: {
+  actors: SpendRuleActorUsage[];
+  matchedCount: number;
+  loading: boolean;
+}): JSX.Element {
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  const searching = query.trim().length > 0;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return actors;
+    return actors.filter(
+      (actor) =>
+        actor.email.toLowerCase().includes(q) ||
+        (actor.displayName ?? "").toLowerCase().includes(q),
+    );
+  }, [actors, query]);
+
+  const visible =
+    searching || expanded ? filtered : filtered.slice(0, ACTOR_PREVIEW_LIMIT);
+  const hiddenCount = filtered.length - visible.length;
+  const searchable = actors.length > ACTOR_PREVIEW_LIMIT;
+  // The server caps the returned list; note when more people match than we can
+  // search through here.
+  const cappedCount = matchedCount - actors.length;
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Users className="size-3.5" />
+        <Type variant="small" className="font-medium">
+          People {matchedCount > 0 ? `(${matchedCount})` : ""}
+        </Type>
+        {loading && (
+          <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+        )}
+      </div>
+
+      {searchable && (
+        <div className="relative">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search people"
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-xs outline-none focus-visible:ring-[3px]"
+          />
+        </div>
+      )}
+
+      {actors.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          {loading
+            ? "Matching members…"
+            : "No members match this rule right now."}
+        </p>
+      ) : visible.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          No people match “{query.trim()}”.
+        </p>
+      ) : (
+        <ul className="divide-border rounded-lg border divide-y">
+          {visible.map((actor) => (
+            <ActorRow key={actor.email} actor={actor} />
+          ))}
+        </ul>
+      )}
+
+      {!searching && hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+        >
+          Show all {filtered.length} people
+        </button>
+      )}
+      {!searching && expanded && filtered.length > ACTOR_PREVIEW_LIMIT && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+        >
+          Show less
+        </button>
+      )}
+      {cappedCount > 0 && (
+        <p className="text-muted-foreground text-xs">
+          Showing the top {actors.length} spenders of {matchedCount} matched
+          people.
+        </p>
+      )}
+    </section>
   );
 }
 

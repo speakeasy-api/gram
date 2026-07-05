@@ -1,7 +1,7 @@
 // Package spend_rules holds the background activities that evaluate spend
 // control rules: per-organization budget evaluation against ClickHouse spend,
-// warning/breach event writes, and circuit-state publication for the hooks
-// gate.
+// warning/breach event writes, and spend gate snapshot publication for the
+// hooks gate.
 package spend_rules
 
 import (
@@ -49,7 +49,7 @@ func (a *ListOrgs) Do(ctx context.Context) ([]string, error) {
 // EvaluateOrg evaluates every enabled spend rule for one organization:
 // CEL-matches directory actors, sums their window spend from ClickHouse,
 // records warning/breach events (deduped by the unique index), and replaces
-// the organization's circuit block set.
+// the organization's spend gate snapshot.
 type EvaluateOrg struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
@@ -118,8 +118,8 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	}
 
 	if len(rules) == 0 {
-		if err := spendrules.WriteBlockSet(ctx, a.cacheImpl, args.OrganizationID, nil); err != nil {
-			return fmt.Errorf("clear circuit state: %w", err)
+		if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateState{Rules: nil, Actors: nil}); err != nil {
+			return fmt.Errorf("clear spend gate snapshot: %w", err)
 		}
 		return nil
 	}
@@ -139,18 +139,18 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	}
 
 	now := time.Now().UTC()
-	blocks := spendrules.BlockSet{}
+	gateState := spendrules.NewGateState(actors)
 
 	for _, rule := range rules {
-		if err := a.evaluateRule(ctx, logger, queries, rule, actors, projectIDs, now, blocks); err != nil {
+		if err := a.evaluateRule(ctx, logger, queries, rule, actors, projectIDs, now, &gateState); err != nil {
 			// One broken rule (e.g. an expression that no longer compiles)
 			// must not stall evaluation of the org's other rules.
 			logger.ErrorContext(ctx, "evaluate spend rule", attr.SlogError(err))
 		}
 	}
 
-	if err := spendrules.WriteBlockSet(ctx, a.cacheImpl, args.OrganizationID, blocks); err != nil {
-		return fmt.Errorf("write circuit state: %w", err)
+	if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, gateState); err != nil {
+		return fmt.Errorf("write spend gate snapshot: %w", err)
 	}
 
 	return nil
@@ -164,23 +164,35 @@ func (a *EvaluateOrg) evaluateRule(
 	actors []spendrules.Actor,
 	projectIDs []string,
 	now time.Time,
-	blocks spendrules.BlockSet,
+	gateState *spendrules.GateState,
 ) error {
-	matched, err := spendrules.MatchActors(a.celEng, rule.TargetExpr, actors)
-	if err != nil {
-		return fmt.Errorf("match actors for rule %s: %w", rule.ID, err)
-	}
-	if len(matched) == 0 {
-		return nil
-	}
-
 	windowStart, windowEnd, err := spendrules.WindowBounds(rule.WindowKind, now)
 	if err != nil {
 		return fmt.Errorf("window bounds for rule %s: %w", rule.ID, err)
 	}
+	ruleURN := urn.NewSpendRule(rule.Slug, rule.Version)
+
+	matched, err := spendrules.MatchActors(a.celEng, rule.TargetExpr, actors)
+	if err != nil {
+		return fmt.Errorf("match actors for rule %s: %w", rule.ID, err)
+	}
+	gateState.Rules = append(gateState.Rules, spendrules.GateRule{
+		RuleURN:    ruleURN.String(),
+		RuleName:   rule.Name,
+		Action:     rule.Action,
+		TargetExpr: rule.TargetExpr,
+		RuleExpr:   rule.RuleExpr,
+		LimitUSD:   rule.LimitUsd,
+		WarnAtPct:  rule.WarnAtPct,
+		WindowEnd:  windowEnd,
+	})
+	if len(matched) == 0 {
+		return nil
+	}
+
 	spendFrom := spendrules.SpendRangeStart(windowStart, rule.EvaluatedFrom.Time)
 
-	spendRows, err := a.chQueries.ListActorSpend(ctx, projectIDs, spendFrom.UnixNano(), now.UnixNano())
+	spendRows, err := a.chQueries.ListActorSpendForRules(ctx, projectIDs, spendFrom.UnixNano(), now.UnixNano())
 	if err != nil {
 		return fmt.Errorf("list actor spend for rule %s: %w", rule.ID, err)
 	}
@@ -189,7 +201,6 @@ func (a *EvaluateOrg) evaluateRule(
 		spendByEmail[conv.NormalizeEmail(row.Email)] += row.TotalCost
 	}
 
-	ruleURN := urn.NewSpendRule(rule.Slug, rule.Version)
 	usages := spendrules.BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
 	usages, err = spendrules.EvalRuleUsages(a.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
 	if err != nil {
@@ -197,6 +208,8 @@ func (a *EvaluateOrg) evaluateRule(
 	}
 
 	for _, usage := range usages {
+		gateState.SetUsage(ruleURN.String(), usage)
+
 		breached := usage.Breached
 		warned := !breached && usage.UsedPct >= float64(rule.WarnAtPct)
 
@@ -225,19 +238,6 @@ func (a *EvaluateOrg) evaluateRule(
 			logger.ErrorContext(ctx, "record spend rule event", attr.SlogError(err))
 		}
 
-		if breached && rule.Action == spendrules.ActionBlock {
-			block := spendrules.Block{
-				RuleURN:   ruleURN.String(),
-				RuleName:  rule.Name,
-				WindowEnd: windowEnd,
-			}
-			if usage.Actor.UserID != "" {
-				blocks[usage.Actor.UserID] = block
-			}
-			if usage.Actor.Email != "" {
-				blocks[conv.NormalizeEmail(usage.Actor.Email)] = block
-			}
-		}
 	}
 
 	return nil

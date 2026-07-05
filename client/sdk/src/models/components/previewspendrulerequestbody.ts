@@ -28,7 +28,7 @@ export type PreviewSpendRuleRequestBodyWindowKind = ClosedEnum<
 
 export type PreviewSpendRuleRequestBody = {
   /**
-   * Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to mirror the evaluator; omit for new rules.
+   * Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.
    */
   evaluatedFrom?: Date | undefined;
   /**

@@ -11,7 +11,7 @@ import (
 )
 
 // SpendRule is a versioned URN for a spend control rule, e.g.
-// "spend_rule:eng-monthly-cap:3". The slug names the rule (unique per
+// "spend_rule:eng-monthly-cap:v3". The slug names the rule (unique per
 // organization, immutable after creation) and the version segment pins the
 // exact rule configuration that produced an event so historical events remain
 // interpretable after the rule is edited.
@@ -43,7 +43,7 @@ func ParseSpendRule(value string) (SpendRule, error) {
 
 	parts := strings.SplitN(value, delimiter, 3)
 	if len(parts) != 3 || parts[1] == "" || parts[2] == "" || strings.Contains(parts[2], delimiter) {
-		return SpendRule{}, fmt.Errorf("%w: expected three segments (spend_rule:<slug>:<version>)", ErrInvalid)
+		return SpendRule{}, fmt.Errorf("%w: expected three segments (spend_rule:<slug>:v<version>)", ErrInvalid)
 	}
 
 	if parts[0] != "spend_rule" {
@@ -55,7 +55,12 @@ func ParseSpendRule(value string) (SpendRule, error) {
 		return SpendRule{}, fmt.Errorf("%w: version segment is too long", ErrInvalid)
 	}
 
-	version, err := strconv.ParseInt(parts[2], 10, 64)
+	versionText, ok := strings.CutPrefix(parts[2], "v")
+	if !ok || versionText == "" {
+		return SpendRule{}, fmt.Errorf("%w: invalid spend_rule version prefix", ErrInvalid)
+	}
+
+	version, err := strconv.ParseInt(versionText, 10, 64)
 	if err != nil {
 		return SpendRule{}, fmt.Errorf("%w: invalid spend_rule version", ErrInvalid)
 	}
@@ -73,7 +78,7 @@ func (u SpendRule) IsZero() bool {
 }
 
 func (u SpendRule) String() string {
-	return "spend_rule" + delimiter + u.Slug + delimiter + strconv.FormatInt(u.Version, 10)
+	return "spend_rule" + delimiter + u.Slug + delimiter + "v" + strconv.FormatInt(u.Version, 10)
 }
 
 func (u SpendRule) MarshalJSON() ([]byte, error) {

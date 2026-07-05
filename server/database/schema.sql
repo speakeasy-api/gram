@@ -3837,7 +3837,7 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   name TEXT NOT NULL,
   -- URL-safe identifier derived from the name at creation time. Unique per
   -- organization and immutable thereafter: the rule URN
-  -- ('spend_rule:<slug>:<version>') embeds it, so renames must not change it
+  -- ('spend_rule:<slug>:v<version>') embeds it, so renames must not change it
   -- or historical events would detach from their rule.
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
@@ -3860,9 +3860,9 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   -- window_kind, warn_at_pct, action). Historical configs live in
   -- spend_rule_versions.
   version BIGINT NOT NULL DEFAULT 1,
-  -- Spend accrued before this instant is ignored by the evaluator. Reset to
-  -- now() on material changes so a new rule version starts evaluating from a
-  -- clean slate mid-window.
+  -- Spend accrued before this instant is ignored by the evaluator. New rules
+  -- start evaluating at creation time; later rule versions inherit this value
+  -- so edits continue evaluating the same active window.
   evaluated_from timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3925,7 +3925,7 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   spend_rule_id uuid NOT NULL,
-  -- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:3'.
+-- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
   rule_urn TEXT NOT NULL,
   event_type TEXT NOT NULL,
 

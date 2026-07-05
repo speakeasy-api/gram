@@ -197,15 +197,12 @@ func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestUpdateSpendRule_MaterialBumpsVersionAndResetsEvaluation(t *testing.T) {
+func TestUpdateSpendRule_MaterialBumpsVersionAndKeepsEvaluationStart(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)
 
 	created, err := ti.service.CreateSpendRule(ctx, createTestRulePayload())
-	require.NoError(t, err)
-
-	createdEvaluatedFrom, err := time.Parse(time.RFC3339, created.EvaluatedFrom)
 	require.NoError(t, err)
 
 	updated, err := ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
@@ -219,10 +216,7 @@ func TestUpdateSpendRule_MaterialBumpsVersionAndResetsEvaluation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, `"eng-frontier" in groups`, updated.TargetExpr)
 	require.Equal(t, int64(2), updated.Version, "target changes are material")
-
-	updatedEvaluatedFrom, err := time.Parse(time.RFC3339, updated.EvaluatedFrom)
-	require.NoError(t, err)
-	require.False(t, updatedEvaluatedFrom.Before(createdEvaluatedFrom))
+	require.Equal(t, created.EvaluatedFrom, updated.EvaluatedFrom, "material edits inherit evaluation state")
 	require.NotEqual(t, created.Urn, updated.Urn)
 
 	require.Equal(t, created.Slug, updated.Slug, "material edits keep the slug")

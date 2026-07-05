@@ -2,125 +2,163 @@ package spendrules_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// memoryCache is a minimal in-memory cache.Cache for gate tests. Only the
-// methods the gate and block-set writer use are functional.
-type memoryCache struct {
-	values map[string]spendrules.BlockSet
+type gateCache struct {
+	values map[string]any
 	getErr error
 }
 
-var _ cache.Cache = (*memoryCache)(nil)
-
-func newMemoryCache() *memoryCache {
-	return &memoryCache{values: map[string]spendrules.BlockSet{}, getErr: nil}
+func newGateCache() *gateCache {
+	return &gateCache{values: map[string]any{}, getErr: nil}
 }
 
-func (m *memoryCache) Get(_ context.Context, key string, value any) error {
-	if m.getErr != nil {
-		return m.getErr
+func (c *gateCache) Get(_ context.Context, key string, value any) error {
+	if c.getErr != nil {
+		return c.getErr
 	}
-	stored, ok := m.values[key]
+	raw, ok := c.values[key]
 	if !ok {
 		return redisCache.ErrCacheMiss
 	}
-	target, ok := value.(*spendrules.BlockSet)
-	if !ok {
-		return errors.New("unexpected target type")
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return fmt.Errorf("marshal gate cache value: %w", err)
 	}
-	*target = stored
-	return nil
-}
-
-func (m *memoryCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
-	blocks, ok := value.(spendrules.BlockSet)
-	if !ok {
-		return errors.New("unexpected value type")
+	if err := json.Unmarshal(data, value); err != nil {
+		return fmt.Errorf("unmarshal gate cache value: %w", err)
 	}
-	m.values[key] = blocks
 	return nil
 }
 
-func (m *memoryCache) Delete(_ context.Context, key string) error {
-	delete(m.values, key)
+func (c *gateCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	if err := c.Get(ctx, key, value); err != nil {
+		return err
+	}
+	delete(c.values, key)
 	return nil
 }
 
-func (m *memoryCache) GetAndDelete(context.Context, string, any) error { return nil }
-func (m *memoryCache) Add(context.Context, string, time.Duration) (bool, error) {
-	return false, nil
-}
-func (m *memoryCache) Update(context.Context, string, any) error           { return nil }
-func (m *memoryCache) Expire(context.Context, string, time.Duration) error { return nil }
-func (m *memoryCache) ListAppend(context.Context, string, any, time.Duration) error {
+func (c *gateCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
+	c.values[key] = value
 	return nil
 }
-func (m *memoryCache) ListRange(context.Context, string, int64, int64, any) error {
-	return nil
-}
-func (m *memoryCache) DeleteByPrefix(context.Context, string) error { return nil }
 
-func TestGateBlockSetRoundTrip(t *testing.T) {
+func (c *gateCache) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
+	if _, ok := c.values[key]; ok {
+		return false, nil
+	}
+	c.values[key] = "1"
+	return true, nil
+}
+
+func (c *gateCache) Update(ctx context.Context, key string, value any) error {
+	return c.Set(ctx, key, value, 0)
+}
+
+func (c *gateCache) Delete(_ context.Context, key string) error {
+	delete(c.values, key)
+	return nil
+}
+
+func (c *gateCache) Expire(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (c *gateCache) ListAppend(_ context.Context, _ string, _ any, _ time.Duration) error {
+	return nil
+}
+
+func (c *gateCache) ListRange(_ context.Context, _ string, _, _ int64, _ any) error {
+	return nil
+}
+
+func (c *gateCache) DeleteByPrefix(_ context.Context, prefix string) error {
+	for key := range c.values {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(c.values, key)
+		}
+	}
+	return nil
+}
+
+func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mem := newMemoryCache()
-	gate := spendrules.NewGate(testenv.NewLogger(t), mem)
+	cacheImpl := newGateCache()
+	actors := testActors()
+	windowEnd := time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC)
+	state := spendrules.NewGateState(actors)
+	state.Rules = append(state.Rules, spendrules.GateRule{
+		RuleURN:    "spend_rule:engineering:v1",
+		RuleName:   "Engineering budget",
+		Action:     spendrules.ActionBlock,
+		TargetExpr: `department_name == "Engineering"`,
+		RuleExpr:   `used_pct >= warn_at_pct`,
+		LimitUSD:   100,
+		WarnAtPct:  80,
+		WindowEnd:  windowEnd,
+	})
+	state.SetUsage("spend_rule:engineering:v1", spendrules.ActorUsage{
+		Actor:    actors[0],
+		SpendUSD: 90,
+		LimitUSD: 100,
+		UsedPct:  90,
+		Breached: true,
+	})
 
-	windowEnd := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	blocks := spendrules.BlockSet{
-		"user_ada":     {RuleURN: "spend_rule:33333333-3333-3333-3333-333333333333:v2", RuleName: "Intern cap", WindowEnd: windowEnd},
-		"ada@acme.com": {RuleURN: "spend_rule:33333333-3333-3333-3333-333333333333:v2", RuleName: "Intern cap", WindowEnd: windowEnd},
-	}
-	require.NoError(t, spendrules.WriteBlockSet(ctx, mem, "org_1", blocks))
+	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	// Blocked by user id.
-	block, err := gate.CheckBlocked(ctx, "org_1", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
 	require.NoError(t, err)
 	require.NotNil(t, block)
-	require.Equal(t, "Intern cap", block.RuleName)
-	require.Equal(t, windowEnd, block.WindowEnd.UTC())
-
-	// Blocked by email, normalized case-insensitively.
-	block, err = gate.CheckBlocked(ctx, "org_1", "", "ADA@ACME.COM")
-	require.NoError(t, err)
-	require.NotNil(t, block)
-
-	// Unblocked actor in the same org.
-	block, err = gate.CheckBlocked(ctx, "org_1", "user_bea", "bea@acme.com")
-	require.NoError(t, err)
-	require.Nil(t, block)
-
-	// Another org has no circuit state at all.
-	block, err = gate.CheckBlocked(ctx, "org_2", "user_ada", "ada@acme.com")
-	require.NoError(t, err)
-	require.Nil(t, block)
+	require.Equal(t, "spend_rule:engineering:v1", block.RuleURN)
+	require.Equal(t, "Engineering budget", block.RuleName)
+	require.Equal(t, windowEnd, block.WindowEnd)
 }
 
-func TestGateWriteEmptyBlockSetClearsState(t *testing.T) {
+func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mem := newMemoryCache()
-	gate := spendrules.NewGate(testenv.NewLogger(t), mem)
+	cacheImpl := newGateCache()
+	actors := testActors()
+	state := spendrules.NewGateState(actors)
+	state.Rules = append(state.Rules, spendrules.GateRule{
+		RuleURN:    "spend_rule:engineering:v1",
+		RuleName:   "Engineering budget",
+		Action:     spendrules.ActionBlock,
+		TargetExpr: `department_name == "Engineering"`,
+		RuleExpr:   `spend_usd >= limit_usd`,
+		LimitUSD:   100,
+		WarnAtPct:  80,
+		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
+	})
+	state.SetUsage("spend_rule:engineering:v1", spendrules.ActorUsage{
+		Actor:    actors[1],
+		SpendUSD: 150,
+		LimitUSD: 100,
+		UsedPct:  150,
+		Breached: true,
+	})
 
-	require.NoError(t, spendrules.WriteBlockSet(ctx, mem, "org_1", spendrules.BlockSet{
-		"user_ada": {RuleURN: "spend_rule:33333333-3333-3333-3333-333333333333:v1", RuleName: "Cap", WindowEnd: time.Now()},
-	}))
-	require.NoError(t, spendrules.WriteBlockSet(ctx, mem, "org_1", nil))
+	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_1", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_sam", "Sam@Acme.com")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -129,15 +167,15 @@ func TestGateSkipsUnresolvedIdentity(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mem := newMemoryCache()
-	mem.getErr = errors.New("gate must not read the cache for unresolved identities")
-	gate := spendrules.NewGate(testenv.NewLogger(t), mem)
+	cacheImpl := newGateCache()
+	cacheImpl.getErr = errors.New("gate must not read the cache for unresolved identities")
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
 	block, err := gate.CheckBlocked(ctx, "", "user_ada", "ada@acme.com")
 	require.NoError(t, err)
 	require.Nil(t, block)
 
-	block, err = gate.CheckBlocked(ctx, "org_1", "", "")
+	block, err = gate.CheckBlocked(ctx, "org_123", "", "")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -146,13 +184,37 @@ func TestGateSurfacesCacheFailuresForFailOpen(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mem := newMemoryCache()
-	mem.getErr = errors.New("redis unavailable")
-	gate := spendrules.NewGate(testenv.NewLogger(t), mem)
+	cacheImpl := newGateCache()
+	cacheImpl.getErr = errors.New("redis unavailable")
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	// Infrastructure failures return (nil, err): the caller logs and treats
-	// the actor as not blocked.
-	block, err := gate.CheckBlocked(ctx, "org_1", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
 	require.Error(t, err)
+	require.Nil(t, block)
+}
+
+func TestGateWriteEmptyStateClearsCache(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	state := spendrules.NewGateState(testActors())
+	state.Rules = append(state.Rules, spendrules.GateRule{
+		RuleURN:    "spend_rule:engineering:v1",
+		RuleName:   "Engineering budget",
+		Action:     spendrules.ActionBlock,
+		TargetExpr: `department_name == "Engineering"`,
+		RuleExpr:   `spend_usd >= limit_usd`,
+		LimitUSD:   100,
+		WarnAtPct:  80,
+		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
+	})
+
+	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
+	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", spendrules.GateState{Rules: nil, Actors: nil}))
+
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
+	require.NoError(t, err)
 	require.Nil(t, block)
 }

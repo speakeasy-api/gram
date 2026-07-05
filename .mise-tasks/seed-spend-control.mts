@@ -9,13 +9,12 @@
 //                assignments (admin/member). Your real account is enriched
 //                with a directory profile too so you can target yourself.
 //   ClickHouse – hourly `gen_ai` usage rows per member across the current
-//                month, shaped to satisfy the attribute_metrics_summaries_mv
-//                predicate so ListActorSpend sees the spend.
+//                month, shaped to satisfy the spend_rule_usage_summaries_mv
+//                predicate so spend-rule evaluation sees the spend.
 //
 // Re-runnable: every write is keyed on stable seed identifiers, ClickHouse
-// seed rows are replaced wholesale, and existing spend rules get their
-// evaluated_from backdated to the start of the month so the seeded history
-// counts. Re-run after creating a rule to backdate it.
+// seed rows are replaced wholesale, and existing spend rules are backdated to
+// the start of the month for local testing so the seeded history counts.
 
 import crypto from "node:crypto";
 
@@ -266,8 +265,8 @@ function usageRows(
       const outputTokens = Math.round(cost * 400);
 
       // Flat dotted keys land on the same JSON paths the ingest pipeline
-      // writes; shaped to satisfy is_generic_usage_row in
-      // attribute_metrics_summaries_mv (gen_ai.operation.name = 'chat' plus a
+      // writes; shaped to satisfy is_generic_usage_row in the spend-rule and
+      // attribute metrics rollups (gen_ai.operation.name = 'chat' plus a
       // non-empty gen_ai.usage.cost).
       const attrs = JSON.stringify({
         "user.email": email,
@@ -366,15 +365,29 @@ async function main(): Promise<void> {
   // Real (non-seeded) org members — typically just you. They get the same
   // directory treatment so rules can target them.
   const selfRows = await psql(
-    `SELECT u.id, u.email, COALESCE(u.workos_id, '') FROM organization_user_relationships our JOIN users u ON u.id = our.user_id WHERE our.organization_id = ${sqlString(orgId)} AND our.deleted IS FALSE AND u.id NOT LIKE 'usr_spend_%' AND u.id NOT LIKE 'usr_seed_%';`,
+    `SELECT u.id, COALESCE(NULLIF(du.email, ''), u.email), COALESCE(u.workos_id, ''), COALESCE(du.workos_directory_user_id, '') FROM organization_user_relationships our JOIN users u ON u.id = our.user_id LEFT JOIN LATERAL (SELECT d.email, d.workos_directory_user_id FROM directory_users d WHERE d.organization_id = our.organization_id AND d.user_id = u.id AND d.deleted IS FALSE AND d.workos_deleted IS FALSE ORDER BY d.created_at DESC LIMIT 1) du ON TRUE WHERE our.organization_id = ${sqlString(orgId)} AND our.deleted IS FALSE AND u.id NOT LIKE 'usr_spend_%' AND u.id NOT LIKE 'usr_seed_%';`,
   );
   const selfMembers = selfRows
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [userId, email, workosId] = line.split("|");
-      return { userId: userId!, email: email!, workosId: workosId! };
+      const [userId, email, workosId, dirId] = line.split("|");
+      return {
+        userId: userId!,
+        email: email!,
+        workosId: workosId!,
+        dirId: dirId || `spend_dir_self_${hash(userId!)}`,
+      };
     });
+
+  if (selfMembers.length > 0) {
+    const selfEmailValues = selfMembers
+      .map((m) => `(${sqlString(m.userId)}, ${sqlString(m.email)})`)
+      .join(",\n");
+    await psql(
+      `UPDATE users u SET email = self.email FROM (VALUES\n${selfEmailValues}\n) AS self (user_id, email) WHERE u.id = self.user_id AND u.email <> self.email;`,
+    );
+  }
 
   const directoryValues = [
     ...members.map(
@@ -383,7 +396,7 @@ async function main(): Promise<void> {
     ),
     ...selfMembers.map(
       (m) =>
-        `(${sqlString(orgId)}, ${sqlString(m.userId)}, ${sqlString(`spend_dir_self_${hash(m.email)}`)}, ${sqlString(m.email)}, ${sqlString(directoryAttributesJSON(SELF_PROFILE))}::jsonb, now(), now())`,
+        `(${sqlString(orgId)}, ${sqlString(m.userId)}, ${sqlString(m.dirId)}, ${sqlString(m.email)}, ${sqlString(directoryAttributesJSON(SELF_PROFILE))}::jsonb, now(), now())`,
     ),
   ].join(",\n");
   await psql(
@@ -399,7 +412,7 @@ async function main(): Promise<void> {
     ),
     ...selfMembers.flatMap((m) =>
       SELF_PROFILE.groups.map((g) => ({
-        dirId: `spend_dir_self_${hash(m.email)}`,
+        dirId: m.dirId,
         groupId: `spend_grp_${g}`,
       })),
     ),
@@ -460,6 +473,9 @@ async function main(): Promise<void> {
   await clickhouse(
     `ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id IN (${projectList}) AND user_email IN (${allEmails})`,
   );
+  await clickhouse(
+    `ALTER TABLE spend_rule_usage_summaries DELETE WHERE gram_project_id IN (${projectList}) AND user_email IN (${allEmails})`,
+  );
 
   const rows = spenders.flatMap((s) =>
     usageRows(s.email, s.profile, s.roles, s.monthlySpendUsd, projectId),
@@ -470,15 +486,15 @@ async function main(): Promise<void> {
   log.info(`Inserted ${rows.length} usage rows into ClickHouse`);
 
   const spendCheck = await clickhouse(
-    `SELECT user_email, round(sumIfMerge(total_cost), 2) AS spend FROM attribute_metrics_summaries WHERE gram_project_id IN (${projectList}) AND user_email IN (${allEmails}) GROUP BY user_email ORDER BY spend DESC FORMAT PrettyCompactMonoBlock`,
+    `SELECT user_email, round(sum(total_cost), 2) AS spend FROM spend_rule_usage_summaries WHERE gram_project_id IN (${projectList}) AND user_email IN (${allEmails}) GROUP BY user_email ORDER BY spend DESC FORMAT PrettyCompactMonoBlock`,
   );
   log.info(`Aggregated month-to-date spend per member:\n${spendCheck}`);
 
   /* ---------------------------- Backdate ---------------------------- */
 
-  // New/edited rules start evaluating from "now", which would ignore the
-  // seeded history. Pin every rule's evaluation start to the month start so
-  // the full seeded month counts. Re-run this task after creating rules.
+  // New rules start evaluating at creation time, which would ignore this
+  // deterministic historical seed data. For local testing only, pin every
+  // rule's evaluation start to the month start so the seeded month counts.
   const backdated = await psql(
     `UPDATE spend_rules SET evaluated_from = date_trunc('month', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc' WHERE organization_id = ${sqlString(orgId)} AND deleted IS FALSE RETURNING slug;`,
   );

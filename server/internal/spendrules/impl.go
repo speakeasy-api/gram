@@ -43,7 +43,10 @@ var _ gen.Auther = (*Service)(nil)
 
 const (
 	defaultEventsPageLimit = 50
-	previewActorCap        = 50
+	// previewActorCap bounds the per-actor breakdown returned by the preview
+	// endpoint. The dashboard shows the top few and lets admins search the rest
+	// of this list, so it holds enough of a large org's spenders to be useful.
+	previewActorCap = 100
 )
 
 // EvaluationSignaler triggers an immediate evaluation cycle for an
@@ -337,8 +340,8 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	}
 
 	// Material changes alter what the rule measures or does, so the version
-	// bumps and evaluation restarts from now. Name/description/enabled edits
-	// keep the current version and accrued state.
+	// bumps. The evaluation start is inherited so edits continue evaluating the
+	// same active window; only brand-new rules start from creation time.
 	material := targetExpr != existing.TargetExpr ||
 		ruleExpr != existing.RuleExpr ||
 		limitUSD != existing.LimitUsd ||
@@ -350,7 +353,6 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	evaluatedFrom := existing.EvaluatedFrom
 	if material {
 		version++
-		evaluatedFrom = conv.ToPGTimestamptz(time.Now().UTC())
 	}
 
 	row, err := queries.UpdateSpendRule(ctx, repo.UpdateSpendRuleParams{
@@ -773,7 +775,7 @@ func (s *Service) actorSpendByEmail(ctx context.Context, organizationID string, 
 		projectIDs = append(projectIDs, p.ID.String())
 	}
 
-	rows, err := chrepo.New(s.chConn).ListActorSpend(ctx, projectIDs, from.UnixNano(), to.UnixNano())
+	rows, err := chrepo.New(s.chConn).ListActorSpendForRules(ctx, projectIDs, from.UnixNano(), to.UnixNano())
 	if err != nil {
 		return nil, fmt.Errorf("list actor spend: %w", err)
 	}
