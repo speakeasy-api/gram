@@ -267,9 +267,9 @@ type SpendRulesOverviewResult struct {
 	RulesUnhealthy int
 	// Total enabled rules.
 	RulesTotal int
-	// Projected end-of-window spend beyond budget in USD, extrapolated linearly
-	// from spend so far across enabled rules.
-	ProjectedOverrunUsd float64
+	// Current spend over planned budget in USD, summed across actors over their
+	// per-person limits.
+	SpendOverBudgetUsd float64
 	// Current-window usage per enabled rule.
 	Rules []*SpendRuleUsage
 }

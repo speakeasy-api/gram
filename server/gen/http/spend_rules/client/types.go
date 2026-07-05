@@ -251,9 +251,9 @@ type GetSpendRulesOverviewResponseBody struct {
 	RulesUnhealthy *int `form:"rules_unhealthy,omitempty" json:"rules_unhealthy,omitempty" xml:"rules_unhealthy,omitempty"`
 	// Total enabled rules.
 	RulesTotal *int `form:"rules_total,omitempty" json:"rules_total,omitempty" xml:"rules_total,omitempty"`
-	// Projected end-of-window spend beyond budget in USD, extrapolated linearly
-	// from spend so far across enabled rules.
-	ProjectedOverrunUsd *float64 `form:"projected_overrun_usd,omitempty" json:"projected_overrun_usd,omitempty" xml:"projected_overrun_usd,omitempty"`
+	// Current spend over planned budget in USD, summed across actors over their
+	// per-person limits.
+	SpendOverBudgetUsd *float64 `form:"spend_over_budget_usd,omitempty" json:"spend_over_budget_usd,omitempty" xml:"spend_over_budget_usd,omitempty"`
 	// Current-window usage per enabled rule.
 	Rules []*SpendRuleUsageResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
@@ -3152,13 +3152,13 @@ func NewListSpendRuleEventsGatewayError(body *ListSpendRuleEventsGatewayErrorRes
 // service "getSpendRulesOverview" endpoint result from a HTTP "OK" response.
 func NewGetSpendRulesOverviewSpendRulesOverviewResultOK(body *GetSpendRulesOverviewResponseBody) *spendrules.SpendRulesOverviewResult {
 	v := &spendrules.SpendRulesOverviewResult{
-		TotalSpendUsd:       *body.TotalSpendUsd,
-		TotalBudgetUsd:      *body.TotalBudgetUsd,
-		UsersBreached:       *body.UsersBreached,
-		UsersTotal:          *body.UsersTotal,
-		RulesUnhealthy:      *body.RulesUnhealthy,
-		RulesTotal:          *body.RulesTotal,
-		ProjectedOverrunUsd: *body.ProjectedOverrunUsd,
+		TotalSpendUsd:      *body.TotalSpendUsd,
+		TotalBudgetUsd:     *body.TotalBudgetUsd,
+		UsersBreached:      *body.UsersBreached,
+		UsersTotal:         *body.UsersTotal,
+		RulesUnhealthy:     *body.RulesUnhealthy,
+		RulesTotal:         *body.RulesTotal,
+		SpendOverBudgetUsd: *body.SpendOverBudgetUsd,
 	}
 	v.Rules = make([]*spendrules.SpendRuleUsage, len(body.Rules))
 	for i, val := range body.Rules {
@@ -3649,8 +3649,8 @@ func ValidateGetSpendRulesOverviewResponseBody(body *GetSpendRulesOverviewRespon
 	if body.RulesTotal == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rules_total", "body"))
 	}
-	if body.ProjectedOverrunUsd == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("projected_overrun_usd", "body"))
+	if body.SpendOverBudgetUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("spend_over_budget_usd", "body"))
 	}
 	if body.Rules == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))

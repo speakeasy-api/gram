@@ -633,14 +633,14 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 	}
 
 	result := &gen.SpendRulesOverviewResult{
-		TotalSpendUsd:       0,
-		TotalBudgetUsd:      0,
-		UsersBreached:       0,
-		UsersTotal:          0,
-		RulesUnhealthy:      0,
-		RulesTotal:          len(rules),
-		ProjectedOverrunUsd: 0,
-		Rules:               []*gen.SpendRuleUsage{},
+		TotalSpendUsd:      0,
+		TotalBudgetUsd:     0,
+		UsersBreached:      0,
+		UsersTotal:         0,
+		RulesUnhealthy:     0,
+		RulesTotal:         len(rules),
+		SpendOverBudgetUsd: 0,
+		Rules:              []*gen.SpendRuleUsage{},
 	}
 	if len(rules) == 0 {
 		return result, nil
@@ -675,7 +675,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 			continue
 		}
 
-		windowStart, windowEnd, err := WindowBounds(rule.WindowKind, now)
+		_, _, err = WindowBounds(rule.WindowKind, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "compute window bounds").LogError(ctx, s.logger)
 		}
@@ -708,6 +708,9 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 			} else if u.UsedPct >= float64(rule.WarnAtPct) {
 				usersWarned++
 			}
+			if u.SpendUSD > u.LimitUSD {
+				result.SpendOverBudgetUsd += u.SpendUSD - u.LimitUSD
+			}
 			if u.UsedPct > worstPct {
 				worstPct = u.UsedPct
 			}
@@ -721,7 +724,6 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 		if status != StatusHealthy {
 			result.RulesUnhealthy++
 		}
-		result.ProjectedOverrunUsd += projectedOverrun(ruleSpend, budget, windowStart, windowEnd, now)
 
 		result.Rules = append(result.Rules, &gen.SpendRuleUsage{
 			RuleID:        rule.ID.String(),
@@ -739,27 +741,6 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 	result.UsersBreached = len(breachedEmails)
 
 	return result, nil
-}
-
-// projectedOverrun extrapolates end-of-window spend linearly from the elapsed
-// fraction of the evaluation range and returns how far past budget it lands.
-// Ranges that have barely started (under 2% elapsed) are not extrapolated —
-// a fresh window or just-reset rule would otherwise project wild numbers from
-// minutes of data.
-func projectedOverrun(spend, budget float64, from, windowEnd, now time.Time) float64 {
-	total := windowEnd.Sub(from)
-	if total <= 0 {
-		return 0
-	}
-	frac := float64(now.Sub(from)) / float64(total)
-	projected := spend
-	if frac >= 0.02 && frac < 1 {
-		projected = spend / frac
-	}
-	if projected <= budget {
-		return 0
-	}
-	return projected - budget
 }
 
 // actorSpendByEmail sums each actor's LLM cost across the organization's

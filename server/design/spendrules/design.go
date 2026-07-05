@@ -434,10 +434,10 @@ var SpendRulesOverviewResult = Type("SpendRulesOverviewResult", func() {
 	Attribute("users_total", Int, "Distinct users matched by at least one enabled rule.")
 	Attribute("rules_unhealthy", Int, "Enabled rules whose status is not healthy.")
 	Attribute("rules_total", Int, "Total enabled rules.")
-	Attribute("projected_overrun_usd", Float64, "Projected end-of-window spend beyond budget in USD, extrapolated linearly from spend so far across enabled rules.")
+	Attribute("spend_over_budget_usd", Float64, "Current spend over planned budget in USD, summed across actors over their per-person limits.")
 	Attribute("rules", ArrayOf(SpendRuleUsage), "Current-window usage per enabled rule.")
 
-	Required("total_spend_usd", "total_budget_usd", "users_breached", "users_total", "rules_unhealthy", "rules_total", "projected_overrun_usd", "rules")
+	Required("total_spend_usd", "total_budget_usd", "users_breached", "users_total", "rules_unhealthy", "rules_total", "spend_over_budget_usd", "rules")
 })
 
 var ListSpendRulesResult = Type("ListSpendRulesResult", func() {

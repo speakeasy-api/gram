@@ -251,9 +251,9 @@ type GetSpendRulesOverviewResponseBody struct {
 	RulesUnhealthy int `form:"rules_unhealthy" json:"rules_unhealthy" xml:"rules_unhealthy"`
 	// Total enabled rules.
 	RulesTotal int `form:"rules_total" json:"rules_total" xml:"rules_total"`
-	// Projected end-of-window spend beyond budget in USD, extrapolated linearly
-	// from spend so far across enabled rules.
-	ProjectedOverrunUsd float64 `form:"projected_overrun_usd" json:"projected_overrun_usd" xml:"projected_overrun_usd"`
+	// Current spend over planned budget in USD, summed across actors over their
+	// per-person limits.
+	SpendOverBudgetUsd float64 `form:"spend_over_budget_usd" json:"spend_over_budget_usd" xml:"spend_over_budget_usd"`
 	// Current-window usage per enabled rule.
 	Rules []*SpendRuleUsageResponseBody `form:"rules" json:"rules" xml:"rules"`
 }
@@ -2033,13 +2033,13 @@ func NewListSpendRuleEventsResponseBody(res *spendrules.ListSpendRuleEventsResul
 // result of the "getSpendRulesOverview" endpoint of the "spendRules" service.
 func NewGetSpendRulesOverviewResponseBody(res *spendrules.SpendRulesOverviewResult) *GetSpendRulesOverviewResponseBody {
 	body := &GetSpendRulesOverviewResponseBody{
-		TotalSpendUsd:       res.TotalSpendUsd,
-		TotalBudgetUsd:      res.TotalBudgetUsd,
-		UsersBreached:       res.UsersBreached,
-		UsersTotal:          res.UsersTotal,
-		RulesUnhealthy:      res.RulesUnhealthy,
-		RulesTotal:          res.RulesTotal,
-		ProjectedOverrunUsd: res.ProjectedOverrunUsd,
+		TotalSpendUsd:      res.TotalSpendUsd,
+		TotalBudgetUsd:     res.TotalBudgetUsd,
+		UsersBreached:      res.UsersBreached,
+		UsersTotal:         res.UsersTotal,
+		RulesUnhealthy:     res.RulesUnhealthy,
+		RulesTotal:         res.RulesTotal,
+		SpendOverBudgetUsd: res.SpendOverBudgetUsd,
 	}
 	if res.Rules != nil {
 		body.Rules = make([]*SpendRuleUsageResponseBody, len(res.Rules))

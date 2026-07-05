@@ -14,10 +14,6 @@ import {
 
 export type SpendRulesOverviewResult = {
   /**
-   * Projected end-of-window spend beyond budget in USD, extrapolated linearly from spend so far across enabled rules.
-   */
-  projectedOverrunUsd: number;
-  /**
    * Current-window usage per enabled rule.
    */
   rules: Array<SpendRuleUsage>;
@@ -29,6 +25,10 @@ export type SpendRulesOverviewResult = {
    * Enabled rules whose status is not healthy.
    */
   rulesUnhealthy: number;
+  /**
+   * Current spend over planned budget in USD, summed across actors over their per-person limits.
+   */
+  spendOverBudgetUsd: number;
   /**
    * Total budgeted spend in USD across enabled rules (per-person limits times matched users).
    */
@@ -53,10 +53,10 @@ export const SpendRulesOverviewResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    projected_overrun_usd: z.number(),
     rules: z.array(SpendRuleUsage$inboundSchema),
     rules_total: z.int(),
     rules_unhealthy: z.int(),
+    spend_over_budget_usd: z.number(),
     total_budget_usd: z.number(),
     total_spend_usd: z.number(),
     users_breached: z.int(),
@@ -64,9 +64,9 @@ export const SpendRulesOverviewResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "projected_overrun_usd": "projectedOverrunUsd",
       "rules_total": "rulesTotal",
       "rules_unhealthy": "rulesUnhealthy",
+      "spend_over_budget_usd": "spendOverBudgetUsd",
       "total_budget_usd": "totalBudgetUsd",
       "total_spend_usd": "totalSpendUsd",
       "users_breached": "usersBreached",

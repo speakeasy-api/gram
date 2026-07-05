@@ -281,15 +281,15 @@ function StatusSummaryCards({
         }
       />
       <MetricCard
-        title="Projected overrun"
-        value={overview.projectedOverrunUsd}
-        displayValue={formatUsd(overview.projectedOverrunUsd)}
+        title="Spend over budget"
+        value={overview.spendOverBudgetUsd}
+        displayValue={formatUsd(overview.spendOverBudgetUsd)}
         format="number"
-        tooltip="Estimated end-of-window spend past budget, extrapolated from spend so far across enabled rules."
+        tooltip="Current spend beyond planned budget, summed across people over their individual limits."
         subtext={
-          overview.projectedOverrunUsd === 0
-            ? "every budget on pace for its window"
-            : "spend past budget at the current pace"
+          overview.spendOverBudgetUsd === 0
+            ? "no one is over their budget"
+            : "overages across individual limits"
         }
       />
     </div>

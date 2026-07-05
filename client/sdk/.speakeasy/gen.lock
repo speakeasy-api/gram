@@ -5455,7 +5455,7 @@ examples:
     speakeasy-default-get-spend-rules-overview:
       responses:
         "200":
-          application/json: {"projected_overrun_usd": 892.68, "rules": [{"budget_usd": 1364.37, "matched_users": 585557, "rule_id": "4e69b49e-176a-475c-9e0e-af3132696209", "spend_usd": 4978.33, "status": "healthy", "users_breached": 582716, "users_warned": 432197, "worst_used_pct": 8991.7}], "rules_total": 333366, "rules_unhealthy": 262224, "total_budget_usd": 3187.35, "total_spend_usd": 4016.88, "users_breached": 989028, "users_total": 718990}
+          application/json: {"rules": [{"budget_usd": 1364.37, "matched_users": 585557, "rule_id": "4e69b49e-176a-475c-9e0e-af3132696209", "spend_usd": 4978.33, "status": "healthy", "users_breached": 582716, "users_warned": 432197, "worst_used_pct": 8991.7}], "rules_total": 333366, "rules_unhealthy": 262224, "spend_over_budget_usd": 892.68, "total_budget_usd": 3187.35, "total_spend_usd": 4016.88, "users_breached": 989028, "users_total": 718990}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

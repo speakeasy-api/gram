@@ -48801,10 +48801,6 @@ components:
     SpendRulesOverviewResult:
       type: object
       properties:
-        projected_overrun_usd:
-          type: number
-          description: Projected end-of-window spend beyond budget in USD, extrapolated linearly from spend so far across enabled rules.
-          format: double
         rules:
           type: array
           items:
@@ -48818,6 +48814,10 @@ components:
           type: integer
           description: Enabled rules whose status is not healthy.
           format: int64
+        spend_over_budget_usd:
+          type: number
+          description: Current spend over planned budget in USD, summed across actors over their per-person limits.
+          format: double
         total_budget_usd:
           type: number
           description: Total budgeted spend in USD across enabled rules (per-person limits times matched users).
@@ -48841,7 +48841,7 @@ components:
         - users_total
         - rules_unhealthy
         - rules_total
-        - projected_overrun_usd
+        - spend_over_budget_usd
         - rules
     SubmitFeedbackRequestBody:
       type: object
