@@ -70,10 +70,6 @@ type PreviewSpendRuleRequestBody struct {
 	WarnAtPct *int `form:"warn_at_pct,omitempty" json:"warn_at_pct,omitempty" xml:"warn_at_pct,omitempty"`
 	// UTC calendar window to compute spend over.
 	WindowKind *string `form:"window_kind,omitempty" json:"window_kind,omitempty" xml:"window_kind,omitempty"`
-	// Ignore spend accrued before this instant. Pass an existing rule's
-	// evaluated_from to preview edits against the same active evaluation window;
-	// omit for new rules.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 }
 
 // CreateSpendRuleResponseBody is the type of the "spendRules" service
@@ -114,9 +110,6 @@ type CreateSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the rule was last updated.
@@ -168,9 +161,6 @@ type GetSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the rule was last updated.
@@ -215,9 +205,6 @@ type UpdateSpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the rule was last updated.
@@ -1811,9 +1798,6 @@ type SpendRuleResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Rule version, incremented on material config changes.
 	Version int64 `form:"version" json:"version" xml:"version"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom string `form:"evaluated_from" json:"evaluated_from" xml:"evaluated_from"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the rule was last updated.
@@ -1919,7 +1903,6 @@ func NewCreateSpendRuleResponseBody(res *types.SpendRule) *CreateSpendRuleRespon
 		Action:         res.Action,
 		Enabled:        res.Enabled,
 		Version:        res.Version,
-		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -1966,7 +1949,6 @@ func NewGetSpendRuleResponseBody(res *types.SpendRule) *GetSpendRuleResponseBody
 		Action:         res.Action,
 		Enabled:        res.Enabled,
 		Version:        res.Version,
-		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -1994,7 +1976,6 @@ func NewUpdateSpendRuleResponseBody(res *types.SpendRule) *UpdateSpendRuleRespon
 		Action:         res.Action,
 		Enabled:        res.Enabled,
 		Version:        res.Version,
-		EvaluatedFrom:  res.EvaluatedFrom,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -3333,9 +3314,8 @@ func NewDeleteSpendRulePayload(id string, apikeyToken *string, sessionToken *str
 // endpoint payload.
 func NewPreviewSpendRulePayload(body *PreviewSpendRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.PreviewSpendRulePayload {
 	v := &spendrules.PreviewSpendRulePayload{
-		LimitUsd:      *body.LimitUsd,
-		WindowKind:    *body.WindowKind,
-		EvaluatedFrom: body.EvaluatedFrom,
+		LimitUsd:   *body.LimitUsd,
+		WindowKind: *body.WindowKind,
 	}
 	if body.WarnAtPct != nil {
 		v.WarnAtPct = *body.WarnAtPct
@@ -3503,9 +3483,6 @@ func ValidatePreviewSpendRuleRequestBody(body *PreviewSpendRuleRequestBody) (err
 		if !(*body.WindowKind == "daily" || *body.WindowKind == "weekly" || *body.WindowKind == "monthly") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window_kind", *body.WindowKind, []any{"daily", "weekly", "monthly"}))
 		}
-	}
-	if body.EvaluatedFrom != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 	}
 	return
 }

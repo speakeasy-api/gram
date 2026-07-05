@@ -136,7 +136,6 @@ export function RuleSheet({
  *  current-window spend against the proposed per-person limit. */
 function useRulePreview(
   draft: Pick<RuleDraft, "target" | "limitUsd" | "warnAtPct" | "windowKind">,
-  evaluatedFrom: Date | undefined,
 ): { preview: PreviewSpendRuleResult | null; loading: boolean } {
   const previewMutation = useSpendRulesPreviewRuleMutation();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
@@ -153,7 +152,6 @@ function useRulePreview(
               limitUsd: draft.limitUsd,
               warnAtPct: draft.warnAtPct,
               windowKind: draft.windowKind,
-              evaluatedFrom,
             },
           },
         },
@@ -163,14 +161,7 @@ function useRulePreview(
       );
     }, 350);
     return () => clearTimeout(timer);
-  }, [
-    draft.target,
-    draft.limitUsd,
-    draft.warnAtPct,
-    draft.windowKind,
-    evaluatedFrom,
-    mutate,
-  ]);
+  }, [draft.target, draft.limitUsd, draft.warnAtPct, draft.windowKind, mutate]);
 
   return { preview, loading: previewMutation.isPending };
 }
@@ -193,12 +184,7 @@ function RuleForm({
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  // Pass the rule's evaluated_from through when editing so the preview shows
-  // the same in-window usage the evaluator sees after saving.
-  const { preview, loading: previewLoading } = useRulePreview(
-    draft,
-    rule?.evaluatedFrom,
-  );
+  const { preview, loading: previewLoading } = useRulePreview(draft);
 
   const canSubmit =
     draft.name.trim() !== "" &&
@@ -484,12 +470,12 @@ function sameTargetCondition(
 
 function blockingEditConfirmationDescription(overLimitCount: number): string {
   if (overLimitCount === 1) {
-    return "This rule keeps its current evaluation window. One matched person is already over the proposed limit, so their requests may be blocked as soon as this change is evaluated.";
+    return "One matched person is already over the proposed limit for the current fixed window, so their requests may be blocked as soon as this change is evaluated.";
   }
   if (overLimitCount > 1) {
-    return `This rule keeps its current evaluation window. ${overLimitCount} matched people are already over the proposed limit, so their requests may be blocked as soon as this change is evaluated.`;
+    return `${overLimitCount} matched people are already over the proposed limit for the current fixed window, so their requests may be blocked as soon as this change is evaluated.`;
   }
-  return "This rule keeps its current evaluation window. If any matched people are already over the proposed limit, their requests may be blocked as soon as this change is evaluated.";
+  return "If any matched people are already over the proposed limit for the current fixed window, their requests may be blocked as soon as this change is evaluated.";
 }
 
 function MatchedActors({

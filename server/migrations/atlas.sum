@@ -1,4 +1,4 @@
-h1:Lsb+ZZe1e7CdTqh40HVzvPH+vEjnpEpiHd4AfQRP6IA=
+h1:9M0GebH84OorGtec0vO8naXalnKp3qFm+/PkVJujutw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -242,4 +242,4 @@ h1:Lsb+ZZe1e7CdTqh40HVzvPH+vEjnpEpiHd4AfQRP6IA=
 20260702131714_risk-policy-challenges.sql h1:f38+NYpcLxP3/EZAaz1uMUKUsswKlkTWwEMQzH5w+JM=
 20260703095550_risk-policy-challenges-fk-cascade-indexes.sql h1:aR2L9eT4Wfdh2L91ZoOLk43oANOAAUDqLjmABGm58RM=
 20260703134504_rename-tunneled-mcp-columns.sql h1:httREsZ8T4QWXUQZOpzmv4U7zRybXkB4g5TPOaCskGY=
-20260704193200_spend_rules.sql h1:4cxNdhh/O/cKv/hy33YsF61IM4i7cmsGwH/o99k/hvs=
+20260705191935_spend_rules.sql h1:L0NdGeIKXNjoUw0gNqqPkfbQ0WV+RcO5M118jxj+E7Q=

@@ -70,10 +70,6 @@ type PreviewSpendRuleRequestBody struct {
 	WarnAtPct int `form:"warn_at_pct" json:"warn_at_pct" xml:"warn_at_pct"`
 	// UTC calendar window to compute spend over.
 	WindowKind string `form:"window_kind" json:"window_kind" xml:"window_kind"`
-	// Ignore spend accrued before this instant. Pass an existing rule's
-	// evaluated_from to preview edits against the same active evaluation window;
-	// omit for new rules.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 }
 
 // CreateSpendRuleResponseBody is the type of the "spendRules" service
@@ -114,9 +110,6 @@ type CreateSpendRuleResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Rule version, incremented on material config changes.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 	// When the rule was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the rule was last updated.
@@ -168,9 +161,6 @@ type GetSpendRuleResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Rule version, incremented on material config changes.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 	// When the rule was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the rule was last updated.
@@ -215,9 +205,6 @@ type UpdateSpendRuleResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Rule version, incremented on material config changes.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 	// When the rule was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the rule was last updated.
@@ -1823,9 +1810,6 @@ type SpendRuleResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Rule version, incremented on material config changes.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom *string `form:"evaluated_from,omitempty" json:"evaluated_from,omitempty" xml:"evaluated_from,omitempty"`
 	// When the rule was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the rule was last updated.
@@ -1966,10 +1950,9 @@ func NewUpdateSpendRuleRequestBody(p *spendrules.UpdateSpendRulePayload) *Update
 // of the "previewSpendRule" endpoint of the "spendRules" service.
 func NewPreviewSpendRuleRequestBody(p *spendrules.PreviewSpendRulePayload) *PreviewSpendRuleRequestBody {
 	body := &PreviewSpendRuleRequestBody{
-		LimitUsd:      p.LimitUsd,
-		WarnAtPct:     p.WarnAtPct,
-		WindowKind:    p.WindowKind,
-		EvaluatedFrom: p.EvaluatedFrom,
+		LimitUsd:   p.LimitUsd,
+		WarnAtPct:  p.WarnAtPct,
+		WindowKind: p.WindowKind,
 	}
 	if p.Target != nil {
 		body.Target = marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionRequestBody(p.Target)
@@ -2001,7 +1984,6 @@ func NewCreateSpendRuleSpendRuleOK(body *CreateSpendRuleResponseBody) *types.Spe
 		Action:         *body.Action,
 		Enabled:        *body.Enabled,
 		Version:        *body.Version,
-		EvaluatedFrom:  *body.EvaluatedFrom,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -2344,7 +2326,6 @@ func NewGetSpendRuleSpendRuleOK(body *GetSpendRuleResponseBody) *types.SpendRule
 		Action:         *body.Action,
 		Enabled:        *body.Enabled,
 		Version:        *body.Version,
-		EvaluatedFrom:  *body.EvaluatedFrom,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -2521,7 +2502,6 @@ func NewUpdateSpendRuleSpendRuleOK(body *UpdateSpendRuleResponseBody) *types.Spe
 		Action:         *body.Action,
 		Enabled:        *body.Enabled,
 		Version:        *body.Version,
-		EvaluatedFrom:  *body.EvaluatedFrom,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -3390,9 +3370,6 @@ func ValidateCreateSpendRuleResponseBody(body *CreateSpendRuleResponseBody) (err
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.EvaluatedFrom == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_from", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3416,9 +3393,6 @@ func ValidateCreateSpendRuleResponseBody(body *CreateSpendRuleResponseBody) (err
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
-	}
-	if body.EvaluatedFrom != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3493,9 +3467,6 @@ func ValidateGetSpendRuleResponseBody(body *GetSpendRuleResponseBody) (err error
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.EvaluatedFrom == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_from", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3519,9 +3490,6 @@ func ValidateGetSpendRuleResponseBody(body *GetSpendRuleResponseBody) (err error
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
-	}
-	if body.EvaluatedFrom != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3580,9 +3548,6 @@ func ValidateUpdateSpendRuleResponseBody(body *UpdateSpendRuleResponseBody) (err
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.EvaluatedFrom == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_from", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3606,9 +3571,6 @@ func ValidateUpdateSpendRuleResponseBody(body *UpdateSpendRuleResponseBody) (err
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
-	}
-	if body.EvaluatedFrom != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5687,9 +5649,6 @@ func ValidateSpendRuleResponseBody(body *SpendRuleResponseBody) (err error) {
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.EvaluatedFrom == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_from", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5713,9 +5672,6 @@ func ValidateSpendRuleResponseBody(body *SpendRuleResponseBody) (err error) {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
-	}
-	if body.EvaluatedFrom != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

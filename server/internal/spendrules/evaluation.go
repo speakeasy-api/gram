@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/repo"
 )
 
@@ -151,6 +152,31 @@ func BuildActorUsages(matched []Actor, spendByEmail map[string]float64, limitUSD
 	}
 	sort.Slice(usages, func(i, j int) bool { return usages[i].SpendUSD > usages[j].SpendUSD })
 	return usages
+}
+
+// BuildActorWindowUsages pairs matched actors with spend from one fixed window,
+// keyed by normalized email, against a per-person limit.
+func BuildActorWindowUsages(matched []Actor, windowSpendByEmail map[string]chrepo.ActorWindowSpendRow, windowKind string, limitUSD float64) ([]ActorUsage, error) {
+	usages := make([]ActorUsage, 0, len(matched))
+	for _, actor := range matched {
+		spend, err := windowSpendByEmail[conv.NormalizeEmail(actor.Email)].SpendUSD(windowKind)
+		if err != nil {
+			return nil, fmt.Errorf("select actor spend for %s: %w", actor.Email, err)
+		}
+		usedPct := 0.0
+		if limitUSD > 0 {
+			usedPct = spend / limitUSD * 100
+		}
+		usages = append(usages, ActorUsage{
+			Actor:    actor,
+			SpendUSD: spend,
+			LimitUSD: limitUSD,
+			UsedPct:  usedPct,
+			Breached: false,
+		})
+	}
+	sort.Slice(usages, func(i, j int) bool { return usages[i].SpendUSD > usages[j].SpendUSD })
+	return usages, nil
 }
 
 // EvalRuleUsages compiles the rule expression and marks each matched actor

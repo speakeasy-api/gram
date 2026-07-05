@@ -3860,10 +3860,6 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   -- window_kind, warn_at_pct, action). Historical configs live in
   -- spend_rule_versions.
   version BIGINT NOT NULL DEFAULT 1,
-  -- Spend accrued before this instant is ignored by the evaluator. New rules
-  -- start evaluating at creation time; later rule versions inherit this value
-  -- so edits continue evaluating the same active window.
-  evaluated_from timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

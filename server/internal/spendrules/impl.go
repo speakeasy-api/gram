@@ -340,8 +340,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	}
 
 	// Material changes alter what the rule measures or does, so the version
-	// bumps. The evaluation start is inherited so edits continue evaluating the
-	// same active window; only brand-new rules start from creation time.
+	// bumps and future events pin the new configuration.
 	material := targetExpr != existing.TargetExpr ||
 		ruleExpr != existing.RuleExpr ||
 		limitUSD != existing.LimitUsd ||
@@ -350,7 +349,6 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		action != existing.Action
 
 	version := existing.Version
-	evaluatedFrom := existing.EvaluatedFrom
 	if material {
 		version++
 	}
@@ -368,7 +366,6 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		Action:         action,
 		Enabled:        enabled,
 		Version:        version,
-		EvaluatedFrom:  evaluatedFrom,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update spend rule").LogError(ctx, s.logger)
@@ -491,15 +488,6 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid window kind")
 	}
 
-	spendFrom := windowStart
-	if payload.EvaluatedFrom != nil && *payload.EvaluatedFrom != "" {
-		evaluatedFrom, err := time.Parse(time.RFC3339, *payload.EvaluatedFrom)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid evaluated_from timestamp")
-		}
-		spendFrom = SpendRangeStart(windowStart, evaluatedFrom)
-	}
-
 	actors, err := LoadActors(ctx, repo.New(s.db), authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load org actors").LogError(ctx, s.logger)
@@ -517,7 +505,7 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 
 	spendByEmail := map[string]float64{}
 	if len(matched) > 0 {
-		spendByEmail, err = s.actorSpendByEmail(ctx, authCtx.ActiveOrganizationID, spendFrom, now)
+		spendByEmail, err = s.actorSpendByEmail(ctx, authCtx.ActiveOrganizationID, windowStart, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load actor spend").LogError(ctx, s.logger)
 		}
@@ -664,6 +652,19 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 	}
 
 	now := time.Now().UTC()
+	projects, err := projectsRepo.New(s.db).ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization projects").LogError(ctx, s.logger)
+	}
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+	actorWindowSpend, err := chrepo.LoadActorWindowSpend(ctx, chrepo.New(s.chConn), projectIDs, now)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load actor window spend").LogError(ctx, s.logger)
+	}
+
 	matchedEmails := map[string]struct{}{}
 	breachedEmails := map[string]struct{}{}
 
@@ -678,17 +679,15 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "compute window bounds").LogError(ctx, s.logger)
 		}
-		spendFrom := SpendRangeStart(windowStart, rule.EvaluatedFrom.Time)
 
-		spendByEmail := map[string]float64{}
+		usages := []ActorUsage{}
 		if len(matched) > 0 {
-			spendByEmail, err = s.actorSpendByEmail(ctx, authCtx.ActiveOrganizationID, spendFrom, now)
+			usages, err = BuildActorWindowUsages(matched, actorWindowSpend, rule.WindowKind, rule.LimitUsd)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "load actor spend").LogError(ctx, s.logger)
 			}
 		}
 
-		usages := BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
 		usages, err = EvalRuleUsages(s.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "evaluate spend rule expression", attr.SlogError(err), attr.SlogOrganizationID(rule.OrganizationID))
@@ -722,7 +721,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 		if status != StatusHealthy {
 			result.RulesUnhealthy++
 		}
-		result.ProjectedOverrunUsd += projectedOverrun(ruleSpend, budget, spendFrom, windowEnd, now)
+		result.ProjectedOverrunUsd += projectedOverrun(ruleSpend, budget, windowStart, windowEnd, now)
 
 		result.Rules = append(result.Rules, &gen.SpendRuleUsage{
 			RuleID:        rule.ID.String(),
@@ -959,7 +958,6 @@ func buildSpendRuleView(row repo.SpendRule) *types.SpendRule {
 		Action:         row.Action,
 		Enabled:        row.Enabled,
 		Version:        row.Version,
-		EvaluatedFrom:  row.EvaluatedFrom.Time.UTC().Format(time.RFC3339),
 		CreatedAt:      row.CreatedAt.Time.UTC().Format(time.RFC3339),
 		UpdatedAt:      row.UpdatedAt.Time.UTC().Format(time.RFC3339),
 	}

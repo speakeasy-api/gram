@@ -134,7 +134,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("updateSpendRule", func() {
-		Description("Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.")
+		Description("Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -225,9 +225,6 @@ var _ = Service("spendRules", func() {
 			})
 			Attribute("window_kind", String, "UTC calendar window to compute spend over.", func() {
 				SpendRuleWindowKindEnum()
-			})
-			Attribute("evaluated_from", String, "Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.", func() {
-				Format(FormatDateTime)
 			})
 			Required("target", "limit_usd", "window_kind")
 		})
@@ -348,9 +345,6 @@ var SpendRule = Type("SpendRule", func() {
 	})
 	Attribute("enabled", Boolean, "Whether the rule is active.")
 	Attribute("version", Int64, "Rule version, incremented on material config changes.")
-	Attribute("evaluated_from", String, "Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.", func() {
-		Format(FormatDateTime)
-	})
 	Attribute("created_at", String, "When the rule was created.", func() {
 		Format(FormatDateTime)
 	})
@@ -358,7 +352,7 @@ var SpendRule = Type("SpendRule", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "urn", "organization_id", "name", "slug", "description", "target", "target_expr", "rule_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "evaluated_from", "created_at", "updated_at")
+	Required("id", "urn", "organization_id", "name", "slug", "description", "target", "target_expr", "rule_expr", "limit_usd", "window_kind", "warn_at_pct", "action", "enabled", "version", "created_at", "updated_at")
 })
 
 var SpendRuleEvent = Type("SpendRuleEvent", func() {

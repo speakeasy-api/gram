@@ -490,23 +490,6 @@ async function main(): Promise<void> {
   );
   log.info(`Aggregated month-to-date spend per member:\n${spendCheck}`);
 
-  /* ---------------------------- Backdate ---------------------------- */
-
-  // New rules start evaluating at creation time, which would ignore this
-  // deterministic historical seed data. For local testing only, pin every
-  // rule's evaluation start to the month start so the seeded month counts.
-  const backdated = await psql(
-    `UPDATE spend_rules SET evaluated_from = date_trunc('month', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc' WHERE organization_id = ${sqlString(orgId)} AND deleted IS FALSE RETURNING slug;`,
-  );
-  const ruleSlugs = backdated
-    .split("\n")
-    .filter((line) => line && !line.startsWith("UPDATE"));
-  log.info(
-    ruleSlugs.length > 0
-      ? `Backdated evaluated_from to month start for rules: ${ruleSlugs.join(", ")}`
-      : "No spend rules to backdate yet — create rules in the dashboard, then re-run this task so the seeded history counts.",
-  );
-
   log.info(
     [
       "Try these rule targets:",

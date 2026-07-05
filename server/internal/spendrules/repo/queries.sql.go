@@ -39,7 +39,7 @@ VALUES (
   , $10
   , $11
 )
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSpendRuleParams struct {
@@ -85,7 +85,6 @@ func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams
 		&i.Action,
 		&i.Enabled,
 		&i.Version,
-		&i.EvaluatedFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -101,7 +100,7 @@ SET deleted_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSpendRuleParams struct {
@@ -126,7 +125,6 @@ func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams
 		&i.Action,
 		&i.Enabled,
 		&i.Version,
-		&i.EvaluatedFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -136,7 +134,7 @@ func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams
 }
 
 const getSpendRule = `-- name: GetSpendRule :one
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
@@ -165,7 +163,6 @@ func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (Spe
 		&i.Action,
 		&i.Enabled,
 		&i.Version,
-		&i.EvaluatedFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -175,7 +172,7 @@ func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (Spe
 }
 
 const getSpendRuleForUpdate = `-- name: GetSpendRuleForUpdate :one
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
@@ -205,7 +202,6 @@ func (q *Queries) GetSpendRuleForUpdate(ctx context.Context, arg GetSpendRuleFor
 		&i.Action,
 		&i.Enabled,
 		&i.Version,
-		&i.EvaluatedFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -332,7 +328,7 @@ func (q *Queries) InsertSpendRuleVersion(ctx context.Context, arg InsertSpendRul
 }
 
 const listEnabledSpendRules = `-- name: ListEnabledSpendRules :many
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE organization_id = $1
   AND enabled IS TRUE
@@ -363,7 +359,6 @@ func (q *Queries) ListEnabledSpendRules(ctx context.Context, organizationID stri
 			&i.Action,
 			&i.Enabled,
 			&i.Version,
-			&i.EvaluatedFrom,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -582,7 +577,7 @@ func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEven
 }
 
 const listSpendRules = `-- name: ListSpendRules :many
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 FROM spend_rules
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -612,7 +607,6 @@ func (q *Queries) ListSpendRules(ctx context.Context, organizationID string) ([]
 			&i.Action,
 			&i.Enabled,
 			&i.Version,
-			&i.EvaluatedFrom,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -662,12 +656,11 @@ SET name = $1
   , action = $8
   , enabled = $9
   , version = $10
-  , evaluated_from = $11
   , updated_at = clock_timestamp()
-WHERE id = $12
-  AND organization_id = $13
+WHERE id = $11
+  AND organization_id = $12
   AND deleted IS FALSE
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, evaluated_from, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSpendRuleParams struct {
@@ -681,7 +674,6 @@ type UpdateSpendRuleParams struct {
 	Action         string
 	Enabled        bool
 	Version        int64
-	EvaluatedFrom  pgtype.Timestamptz
 	ID             uuid.UUID
 	OrganizationID string
 }
@@ -698,7 +690,6 @@ func (q *Queries) UpdateSpendRule(ctx context.Context, arg UpdateSpendRuleParams
 		arg.Action,
 		arg.Enabled,
 		arg.Version,
-		arg.EvaluatedFrom,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -717,7 +708,6 @@ func (q *Queries) UpdateSpendRule(ctx context.Context, arg UpdateSpendRuleParams
 		&i.Action,
 		&i.Enabled,
 		&i.Version,
-		&i.EvaluatedFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

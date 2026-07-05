@@ -2,10 +2,12 @@ package hooks
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 )
 
 // recordingRiskScanner counts ScanForEnforcement calls so tests can assert
@@ -22,6 +25,8 @@ import (
 type recordingRiskScanner struct {
 	scans int
 }
+
+var spendGateSeedMu sync.Mutex
 
 func (s *recordingRiskScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
 	s.scans++
@@ -36,13 +41,23 @@ func (s *recordingRiskScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uu
 	return false, nil
 }
 
-// seedSpendBlock writes gate state that makes the given identifiers breach a
+// seedSpendBlock writes gate state that makes the given emails breach a
 // blocking rule. The request path still evaluates both target and rule CEL.
-func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, identifiers ...string) {
+func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, emails ...string) {
 	t.Helper()
 	ruleURN := "spend_rule:33333333-3333-3333-3333-333333333333:v2"
-	state := spendrules.NewGateState(nil)
-	state.Rules = append(state.Rules, spendrules.GateRule{
+	spendGateSeedMu.Lock()
+	defer spendGateSeedMu.Unlock()
+
+	state := spendrules.NewGateState(organizationID, nil)
+	err := ti.service.cache.Get(ctx, "spend_gate:"+organizationID, &state)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		require.NoError(t, err)
+	}
+	if state.Actors == nil {
+		state.Actors = map[string]spendrules.GateActor{}
+	}
+	state.Rules = []spendrules.GateRule{{
 		RuleURN:    ruleURN,
 		RuleName:   "Intern hard limit",
 		Action:     spendrules.ActionBlock,
@@ -50,15 +65,16 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 		RuleExpr:   `spend_usd >= limit_usd`,
 		LimitUSD:   100,
 		WarnAtPct:  80,
+		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
-	})
-	for _, id := range identifiers {
+	}}
+	for _, email := range emails {
 		actor := spendrules.Actor{
-			UserID:      id,
-			Email:       "",
+			UserID:      "",
+			Email:       email,
 			DisplayName: "",
 			Attrs: celenv.Actor{
-				Email:          "",
+				Email:          email,
 				DepartmentName: "",
 				JobTitle:       "",
 				EmployeeType:   "",
@@ -72,18 +88,12 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 				WarnAtPct:      0,
 			},
 		}
-		if strings.Contains(id, "@") {
-			actor.UserID = ""
-			actor.Email = id
-			actor.Attrs.Email = id
-		}
-		state.SetActor(actor)
-		state.SetUsage(ruleURN, spendrules.ActorUsage{
-			Actor:    actor,
-			SpendUSD: 100,
-			LimitUSD: 100,
-			UsedPct:  100,
-			Breached: true,
+		state.SetActor(organizationID, actor)
+		state.SetActorWindowSpend(organizationID, actor, chrepo.ActorWindowSpendRow{
+			Email:       actor.Email,
+			DailyCost:   0,
+			WeeklyCost:  0,
+			MonthlyCost: 100,
 		})
 	}
 	require.NoError(t, spendrules.WriteGateState(ctx, ti.service.cache, organizationID, state))
@@ -100,11 +110,11 @@ func TestClaude_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
 	require.True(t, ok)
 
 	// The Claude path resolves the actor from the payload email, not the API
-	// key owner — seed a linked user and block them by Gram user id.
+	// key owner.
 	userID := "user_spend_prompt_block"
 	userEmail := "spend-prompt-block@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userID)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
 
 	sessionID := uuid.NewString()
 	prompt := "please write some code"
@@ -139,7 +149,7 @@ func TestClaude_PreToolUse_SpendGateDeniesNativeTool(t *testing.T) {
 	userID := "user_spend_tool_block"
 	userEmail := "spend-tool-block@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userID)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
 
 	sessionID := uuid.NewString()
 	toolName := "Bash"
@@ -199,7 +209,7 @@ func TestClaude_SpendGateAllowsUnblockedUser(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	// A different actor is blocked; the caller must pass through.
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, "someone_else")
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, "someone-else@example.com")
 
 	sessionID := uuid.NewString()
 	prompt := "hello"
@@ -219,7 +229,8 @@ func TestClaude_SpendGateSkipsUnresolvedIdentity(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
 	// Clear the caller identity: the event context resolves no user, so the
 	// gate must fail open rather than guess.
@@ -245,7 +256,8 @@ func TestIngest_SpendGateDeniesClaudePrompt(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
 	payload := canonicalIngestPayload("claude", "prompt.submitted", "spend-gate-ingest")
 	text := "hello"
@@ -267,7 +279,8 @@ func TestIngest_SpendGateDeniesClaudeToolCallWithBlockURL(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
 	payload := canonicalIngestPayload("claude", "tool.requested", "spend-gate-ingest-tool")
 	toolName := "Bash"
@@ -295,7 +308,8 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
 	payload := canonicalIngestPayload("cursor", "prompt.submitted", "spend-gate-cursor")
 	text := "hello"

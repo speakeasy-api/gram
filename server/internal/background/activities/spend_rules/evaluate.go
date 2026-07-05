@@ -91,16 +91,6 @@ type EvaluateOrgArgs struct {
 }
 
 func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) {
-	if a.celEng == nil {
-		return fmt.Errorf("spend rules CEL engine unavailable")
-	}
-	if a.chQueries == nil {
-		return fmt.Errorf("clickhouse queries unavailable")
-	}
-	if a.cacheImpl == nil {
-		return fmt.Errorf("cache unavailable")
-	}
-
 	ctx, span := a.tracer.Start(ctx, "spendrules.evaluateOrg")
 	defer func() {
 		if err != nil {
@@ -139,10 +129,18 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	}
 
 	now := time.Now().UTC()
-	gateState := spendrules.NewGateState(actors)
+	actorWindowSpend, err := chrepo.LoadActorWindowSpend(ctx, a.chQueries, projectIDs, now)
+	if err != nil {
+		return fmt.Errorf("load actor window spend: %w", err)
+	}
+
+	gateState := spendrules.NewGateState(args.OrganizationID, actors)
+	for _, actor := range actors {
+		gateState.SetActorWindowSpend(args.OrganizationID, actor, actorWindowSpend[conv.NormalizeEmail(actor.Email)])
+	}
 
 	for _, rule := range rules {
-		if err := a.evaluateRule(ctx, logger, queries, rule, actors, projectIDs, now, &gateState); err != nil {
+		if err := a.evaluateRule(ctx, logger, queries, rule, actors, actorWindowSpend, now, &gateState); err != nil {
 			// One broken rule (e.g. an expression that no longer compiles)
 			// must not stall evaluation of the org's other rules.
 			logger.ErrorContext(ctx, "evaluate spend rule", attr.SlogError(err))
@@ -162,7 +160,7 @@ func (a *EvaluateOrg) evaluateRule(
 	queries *spendrepo.Queries,
 	rule spendrepo.SpendRule,
 	actors []spendrules.Actor,
-	projectIDs []string,
+	actorWindowSpend map[string]chrepo.ActorWindowSpendRow,
 	now time.Time,
 	gateState *spendrules.GateState,
 ) error {
@@ -176,6 +174,7 @@ func (a *EvaluateOrg) evaluateRule(
 	if err != nil {
 		return fmt.Errorf("match actors for rule %s: %w", rule.ID, err)
 	}
+
 	gateState.Rules = append(gateState.Rules, spendrules.GateRule{
 		RuleURN:    ruleURN.String(),
 		RuleName:   rule.Name,
@@ -184,32 +183,24 @@ func (a *EvaluateOrg) evaluateRule(
 		RuleExpr:   rule.RuleExpr,
 		LimitUSD:   rule.LimitUsd,
 		WarnAtPct:  rule.WarnAtPct,
+		WindowKind: rule.WindowKind,
 		WindowEnd:  windowEnd,
 	})
 	if len(matched) == 0 {
 		return nil
 	}
 
-	spendFrom := spendrules.SpendRangeStart(windowStart, rule.EvaluatedFrom.Time)
-
-	spendRows, err := a.chQueries.ListActorSpendForRules(ctx, projectIDs, spendFrom.UnixNano(), now.UnixNano())
+	usages, err := spendrules.BuildActorWindowUsages(matched, actorWindowSpend, rule.WindowKind, rule.LimitUsd)
 	if err != nil {
-		return fmt.Errorf("list actor spend for rule %s: %w", rule.ID, err)
-	}
-	spendByEmail := make(map[string]float64, len(spendRows))
-	for _, row := range spendRows {
-		spendByEmail[conv.NormalizeEmail(row.Email)] += row.TotalCost
+		return fmt.Errorf("select actor spend for rule %s: %w", rule.ID, err)
 	}
 
-	usages := spendrules.BuildActorUsages(matched, spendByEmail, rule.LimitUsd)
 	usages, err = spendrules.EvalRuleUsages(a.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
 	if err != nil {
 		return fmt.Errorf("evaluate rule expression for rule %s: %w", rule.ID, err)
 	}
 
 	for _, usage := range usages {
-		gateState.SetUsage(ruleURN.String(), usage)
-
 		breached := usage.Breached
 		warned := !breached && usage.UsedPct >= float64(rule.WarnAtPct)
 

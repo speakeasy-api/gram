@@ -45,9 +45,6 @@ type SpendRule struct {
 	Enabled bool
 	// Rule version, incremented on material config changes.
 	Version int64
-	// Spend accrued before this instant is ignored by the evaluator. New rules
-	// start from creation time; edited rule versions inherit the original value.
-	EvaluatedFrom string
 	// When the rule was created.
 	CreatedAt string
 	// When the rule was last updated.

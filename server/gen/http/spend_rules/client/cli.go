@@ -302,7 +302,7 @@ func BuildPreviewSpendRulePayload(spendRulesPreviewSpendRuleBody string, spendRu
 	{
 		err = json.Unmarshal([]byte(spendRulesPreviewSpendRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"evaluated_from\": \"1970-01-01T00:00:01Z\",\n      \"limit_usd\": 1,\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit_usd\": 1,\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }'")
 		}
 		if body.Target == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
@@ -318,9 +318,6 @@ func BuildPreviewSpendRulePayload(spendRulesPreviewSpendRuleBody string, spendRu
 		}
 		if !(body.WindowKind == "daily" || body.WindowKind == "weekly" || body.WindowKind == "monthly") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window_kind", body.WindowKind, []any{"daily", "weekly", "monthly"}))
-		}
-		if body.EvaluatedFrom != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.evaluated_from", *body.EvaluatedFrom, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -345,10 +342,9 @@ func BuildPreviewSpendRulePayload(spendRulesPreviewSpendRuleBody string, spendRu
 		}
 	}
 	v := &spendrules.PreviewSpendRulePayload{
-		LimitUsd:      body.LimitUsd,
-		WarnAtPct:     body.WarnAtPct,
-		WindowKind:    body.WindowKind,
-		EvaluatedFrom: body.EvaluatedFrom,
+		LimitUsd:   body.LimitUsd,
+		WarnAtPct:  body.WarnAtPct,
+		WindowKind: body.WindowKind,
 	}
 	if body.Target != nil {
 		v.Target = marshalSpendRuleTargetConditionRequestBodyToTypesSpendRuleTargetCondition(body.Target)

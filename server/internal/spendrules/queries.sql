@@ -84,7 +84,6 @@ SET name = @name
   , action = @action
   , enabled = @enabled
   , version = @version
-  , evaluated_from = @evaluated_from
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id

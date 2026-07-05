@@ -82,20 +82,12 @@ function useRuleActorBreakdown(rule: SpendRule): {
             limitUsd: rule.limitUsd,
             warnAtPct: rule.warnAtPct,
             windowKind: rule.windowKind,
-            evaluatedFrom: rule.evaluatedFrom,
           },
         },
       },
       { onSuccess: (data) => setPreview(data) },
     );
-  }, [
-    rule.target,
-    rule.limitUsd,
-    rule.warnAtPct,
-    rule.windowKind,
-    rule.evaluatedFrom,
-    mutate,
-  ]);
+  }, [rule.target, rule.limitUsd, rule.warnAtPct, rule.windowKind, mutate]);
 
   return { preview, loading: previewMutation.isPending };
 }
@@ -138,7 +130,7 @@ function RuleDetail({
         </p>
         <p
           className="text-muted-foreground font-mono text-xs"
-          title="Versioned rule identity. Events cite the URN they fired under; material edits bump the version and restart evaluation."
+          title="Versioned rule identity. Events cite the URN they fired under; material edits bump the version."
         >
           {rule.urn}
         </p>

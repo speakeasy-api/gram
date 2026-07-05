@@ -27564,7 +27564,7 @@ paths:
         type: mutation
   /rpc/spendrules.updateRule:
     put:
-      description: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
+      description: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
       operationId: updateSpendRule
       parameters:
         - allowEmptyValue: true
@@ -44826,10 +44826,6 @@ components:
     PreviewSpendRuleRequestBody:
       type: object
       properties:
-        evaluated_from:
-          type: string
-          description: Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.
-          format: date-time
         limit_usd:
           type: number
           description: Per-person budget in USD used to compute usage percentages.
@@ -48576,10 +48572,6 @@ components:
         enabled:
           type: boolean
           description: Whether the rule is active.
-        evaluated_from:
-          type: string
-          description: Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.
-          format: date-time
         id:
           type: string
           description: The spend rule ID.
@@ -48643,7 +48635,6 @@ components:
         - action
         - enabled
         - version
-        - evaluated_from
         - created_at
         - updated_at
     SpendRuleActorUsage:

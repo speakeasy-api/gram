@@ -113,7 +113,7 @@ export class GramRules extends ClientSDK {
    * updateSpendRule spendRules
    *
    * @remarks
-   * Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version and reset its evaluation state.
+   * Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
    */
   async update(
     request: operations.UpdateSpendRuleRequest,

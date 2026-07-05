@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 )
 
 // EvaluationInterval is how often the background evaluator recomputes spend
@@ -45,26 +46,21 @@ type GateRule struct {
 	RuleExpr   string    `json:"rule_expr"`
 	LimitUSD   float64   `json:"limit_usd"`
 	WarnAtPct  int32     `json:"warn_at_pct"`
+	WindowKind string    `json:"window_kind"`
 	WindowEnd  time.Time `json:"window_end"`
 }
 
-type GateUsage struct {
-	SpendUSD float64 `json:"spend_usd"`
-	LimitUSD float64 `json:"limit_usd"`
-	UsedPct  float64 `json:"used_pct"`
-}
-
 type GateActor struct {
-	UserID      string               `json:"user_id"`
-	Email       string               `json:"email"`
-	DisplayName string               `json:"display_name"`
-	Attrs       celenv.Actor         `json:"attrs"`
-	UsageByRule map[string]GateUsage `json:"usage_by_rule"`
+	UserID      string                     `json:"user_id"`
+	Email       string                     `json:"email"`
+	DisplayName string                     `json:"display_name"`
+	Attrs       celenv.Actor               `json:"attrs"`
+	Spend       chrepo.ActorWindowSpendRow `json:"spend"`
 }
 
 // GateState is the full request-path state for one organization. Actors are
-// keyed by Gram user id and normalized email, so a hook event can resolve its
-// actor without scanning the organization.
+// keyed by "{org_id}:{user_email}" with normalized email so a hook event can
+// resolve its actor without scanning the organization.
 type GateState struct {
 	Rules  []GateRule           `json:"rules"`
 	Actors map[string]GateActor `json:"actors"`
@@ -72,6 +68,13 @@ type GateState struct {
 
 func spendGateSnapshotKey(organizationID string) string {
 	return "spend_gate:" + organizationID
+}
+
+func spendGateActorKey(organizationID, email string) string {
+	if organizationID == "" || email == "" {
+		return ""
+	}
+	return organizationID + ":" + conv.NormalizeEmail(email)
 }
 
 // Gate is the hot-path spend check consulted by the Claude hooks handlers
@@ -99,12 +102,14 @@ func NewGate(logger *slog.Logger, cacheImpl cache.Cache) *Gate {
 	}
 }
 
-// CheckBlocked reports whether the given actor is currently blocked by a
-// spend rule. Either identifier may be empty. A nil Block means the actor is
-// not blocked. Errors are cache infrastructure failures — callers should
-// treat them as "not blocked" (fail-open); they are returned for logging.
-func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID, email string) (*Block, error) {
-	if organizationID == "" || (userID == "" && email == "") || g.celEng == nil {
+// CheckBlocked reports whether the given actor is currently blocked by a spend
+// rule. The actor is looked up only by "{org_id}:{user_email}". A nil Block
+// means the actor is not blocked. Errors are cache infrastructure failures —
+// callers should treat them as "not blocked" (fail-open); they are returned for
+// logging.
+func (g *Gate) CheckBlocked(ctx context.Context, organizationID, email string) (*Block, error) {
+	actorKey := spendGateActorKey(organizationID, email)
+	if actorKey == "" || g.celEng == nil {
 		return nil, nil
 	}
 
@@ -117,7 +122,7 @@ func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID, email s
 		return nil, fmt.Errorf("read spend gate state: %w", err)
 	}
 
-	actor, ok := lookupGateActor(state.Actors, userID, email)
+	actor, ok := state.Actors[actorKey]
 	if !ok {
 		return nil, nil
 	}
@@ -127,14 +132,22 @@ func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID, email s
 			continue
 		}
 
-		usage := actor.UsageByRule[rule.RuleURN]
-		if usage.LimitUSD == 0 {
-			usage.LimitUSD = rule.LimitUSD
+		spendUSD, err := actor.Spend.SpendUSD(rule.WindowKind)
+		if err != nil {
+			g.logger.WarnContext(ctx, "read spend gate window spend",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(organizationID),
+			)
+			continue
+		}
+		usedPct := 0.0
+		if rule.LimitUSD > 0 {
+			usedPct = spendUSD / rule.LimitUSD * 100
 		}
 		attrs := actor.Attrs
-		attrs.SpendUSD = usage.SpendUSD
-		attrs.LimitUSD = usage.LimitUSD
-		attrs.UsedPct = usage.UsedPct
+		attrs.SpendUSD = spendUSD
+		attrs.LimitUSD = rule.LimitUSD
+		attrs.UsedPct = usedPct
 		attrs.WarnAtPct = float64(rule.WarnAtPct)
 
 		matched, err := g.eval(ctx, organizationID, rule.TargetExpr, attrs)
@@ -156,39 +169,6 @@ func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID, email s
 	}
 
 	return nil, nil
-}
-
-func lookupGateActor(actors map[string]GateActor, userID, email string) (GateActor, bool) {
-	if userID != "" {
-		if actor, ok := actors[userID]; ok {
-			return actor, true
-		}
-	}
-	if email != "" {
-		if actor, ok := actors[conv.NormalizeEmail(email)]; ok {
-			return actor, true
-		}
-	}
-	return GateActor{
-		UserID:      "",
-		Email:       "",
-		DisplayName: "",
-		Attrs: celenv.Actor{
-			Email:          "",
-			DepartmentName: "",
-			JobTitle:       "",
-			EmployeeType:   "",
-			DivisionName:   "",
-			CostCenterName: "",
-			Groups:         nil,
-			Roles:          nil,
-			SpendUSD:       0,
-			LimitUSD:       0,
-			UsedPct:        0,
-			WarnAtPct:      0,
-		},
-		UsageByRule: nil,
-	}, false
 }
 
 func (g *Gate) eval(ctx context.Context, organizationID, expr string, actor celenv.Actor) (bool, error) {
@@ -232,63 +212,60 @@ func (g *Gate) compile(expr string) (cel.Program, error) {
 	return typed, nil
 }
 
-func NewGateState(actors []Actor) GateState {
+func NewGateState(organizationID string, actors []Actor) GateState {
 	state := GateState{
 		Rules:  []GateRule{},
 		Actors: map[string]GateActor{},
 	}
 	for _, actor := range actors {
-		state.SetActor(actor)
+		state.SetActor(organizationID, actor)
 	}
 	return state
 }
 
-func (s *GateState) SetActor(actor Actor) {
+func (s *GateState) SetActor(organizationID string, actor Actor) {
+	actorKey := spendGateActorKey(organizationID, actor.Email)
+	if actorKey == "" {
+		return
+	}
+
 	gateActor := GateActor{
 		UserID:      actor.UserID,
 		Email:       actor.Email,
 		DisplayName: actor.DisplayName,
 		Attrs:       actor.Attrs,
-		UsageByRule: map[string]GateUsage{},
+		Spend: chrepo.ActorWindowSpendRow{
+			Email:       "",
+			DailyCost:   0,
+			WeeklyCost:  0,
+			MonthlyCost: 0,
+		},
 	}
-	if actor.UserID != "" {
-		s.Actors[actor.UserID] = gateActor
-	}
-	if actor.Email != "" {
-		s.Actors[conv.NormalizeEmail(actor.Email)] = gateActor
-	}
+	s.Actors[actorKey] = gateActor
 }
 
-func (s *GateState) SetUsage(ruleURN string, usage ActorUsage) {
-	gateUsage := GateUsage{
-		SpendUSD: usage.SpendUSD,
-		LimitUSD: usage.LimitUSD,
-		UsedPct:  usage.UsedPct,
+func (s *GateState) SetActorWindowSpend(organizationID string, actor Actor, spend chrepo.ActorWindowSpendRow) {
+	actorKey := spendGateActorKey(organizationID, actor.Email)
+	if actorKey == "" {
+		return
 	}
-	if usage.Actor.UserID != "" {
-		s.setUsageForIdentifier(usage.Actor.UserID, usage.Actor, ruleURN, gateUsage)
-	}
-	if usage.Actor.Email != "" {
-		s.setUsageForIdentifier(conv.NormalizeEmail(usage.Actor.Email), usage.Actor, ruleURN, gateUsage)
-	}
-}
-
-func (s *GateState) setUsageForIdentifier(identifier string, actor Actor, ruleURN string, usage GateUsage) {
-	gateActor, ok := s.Actors[identifier]
+	gateActor, ok := s.Actors[actorKey]
 	if !ok {
 		gateActor = GateActor{
 			UserID:      actor.UserID,
 			Email:       actor.Email,
 			DisplayName: actor.DisplayName,
 			Attrs:       actor.Attrs,
-			UsageByRule: map[string]GateUsage{},
+			Spend: chrepo.ActorWindowSpendRow{
+				Email:       "",
+				DailyCost:   0,
+				WeeklyCost:  0,
+				MonthlyCost: 0,
+			},
 		}
 	}
-	if gateActor.UsageByRule == nil {
-		gateActor.UsageByRule = map[string]GateUsage{}
-	}
-	gateActor.UsageByRule[ruleURN] = usage
-	s.Actors[identifier] = gateActor
+	gateActor.Spend = spend
+	s.Actors[actorKey] = gateActor
 }
 
 // WriteGateState replaces the organization's request-path state. An empty set

@@ -4352,7 +4352,7 @@ examples:
         application/json: {"action": "flag", "description": "", "enabled": true, "limit_usd": 3663.62, "name": "<value>", "target": {"attribute": "<value>", "operator": "starts_with", "value": "<value>"}, "warn_at_pct": 80, "window_kind": "daily"}
       responses:
         "200":
-          application/json: {"action": "flag", "created_at": "2024-01-10T06:15:28.911Z", "description": "corporation release deflate culminate truthfully", "enabled": true, "evaluated_from": "2026-08-17T13:30:21.285Z", "id": "cb9a627f-2d59-4b40-ab07-eed905f5e0d5", "limit_usd": 4166.79, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "starts_with", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2026-10-24T08:01:41.843Z", "urn": "<value>", "version": 608912, "warn_at_pct": 796771, "window_kind": "monthly"}
+          application/json: {"action": "flag", "created_at": "2024-01-10T06:15:28.911Z", "description": "corporation release deflate culminate truthfully", "enabled": true, "id": "cb9a627f-2d59-4b40-ab07-eed905f5e0d5", "limit_usd": 4166.79, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "starts_with", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2026-10-24T08:01:41.843Z", "urn": "<value>", "version": 608912, "warn_at_pct": 796771, "window_kind": "monthly"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5446,7 +5446,7 @@ examples:
           id: "0496dcc2-e63e-4f94-be31-2c9417061762"
       responses:
         "200":
-          application/json: {"action": "flag", "created_at": "2025-07-04T22:06:02.270Z", "description": "ferret behind near spherical behind", "enabled": true, "evaluated_from": "2024-06-14T18:47:14.746Z", "id": "e218c2ba-dd78-49c8-ab77-43563065f4ee", "limit_usd": 3161.21, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "equals", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2025-03-31T23:10:04.965Z", "urn": "<value>", "version": 616352, "warn_at_pct": 471973, "window_kind": "daily"}
+          application/json: {"action": "flag", "created_at": "2025-07-04T22:06:02.270Z", "description": "ferret behind near spherical behind", "enabled": true, "id": "e218c2ba-dd78-49c8-ab77-43563065f4ee", "limit_usd": 3161.21, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "equals", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2025-03-31T23:10:04.965Z", "urn": "<value>", "version": 616352, "warn_at_pct": 471973, "window_kind": "daily"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6246,7 +6246,7 @@ examples:
     speakeasy-default-list-spend-rules:
       responses:
         "200":
-          application/json: {"rules": [{"action": "block", "created_at": "2025-12-05T12:58:20.887Z", "description": "elastic greatly inveigle", "enabled": false, "evaluated_from": "2026-07-15T20:53:03.197Z", "id": "840da9aa-1e15-405c-ad89-54dd665ea332", "limit_usd": 4326.94, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "matches", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2024-01-19T17:39:32.661Z", "urn": "<value>", "version": 497450, "warn_at_pct": 141027, "window_kind": "daily"}]}
+          application/json: {"rules": [{"action": "block", "created_at": "2025-12-05T12:58:20.887Z", "description": "elastic greatly inveigle", "enabled": false, "id": "840da9aa-1e15-405c-ad89-54dd665ea332", "limit_usd": 4326.94, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "matches", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2024-01-19T17:39:32.661Z", "urn": "<value>", "version": 497450, "warn_at_pct": 141027, "window_kind": "daily"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7370,7 +7370,7 @@ examples:
         application/json: {"id": "18850314-96ea-4067-97b5-e883c795526a"}
       responses:
         "200":
-          application/json: {"action": "block", "created_at": "2026-09-24T10:20:02.652Z", "description": "pile late boom behold consequently good-natured elliptical so via", "enabled": true, "evaluated_from": "2026-11-05T18:04:01.313Z", "id": "812df747-fa15-43f1-8589-ea4e249502f0", "limit_usd": 4380.24, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "equals", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2026-10-23T09:34:45.756Z", "urn": "<value>", "version": 263648, "warn_at_pct": 701738, "window_kind": "monthly"}
+          application/json: {"action": "block", "created_at": "2026-09-24T10:20:02.652Z", "description": "pile late boom behold consequently good-natured elliptical so via", "enabled": true, "id": "812df747-fa15-43f1-8589-ea4e249502f0", "limit_usd": 4380.24, "name": "<value>", "organization_id": "<id>", "rule_expr": "<value>", "slug": "<value>", "target": {"attribute": "<value>", "operator": "equals", "value": "<value>"}, "target_expr": "<value>", "updated_at": "2026-10-23T09:34:45.756Z", "urn": "<value>", "version": 263648, "warn_at_pct": 701738, "window_kind": "monthly"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

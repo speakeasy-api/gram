@@ -13,7 +13,6 @@ CREATE TABLE "spend_rules" (
   "action" text NOT NULL DEFAULT 'flag',
   "enabled" boolean NOT NULL DEFAULT true,
   "version" bigint NOT NULL DEFAULT 1,
-  "evaluated_from" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,

@@ -65,31 +65,3 @@ func TestWindowBoundsRejectsUnknownKind(t *testing.T) {
 	_, _, err := spendrules.WindowBounds("fortnightly", time.Now())
 	require.Error(t, err)
 }
-
-func TestSpendRangeStartUsesWindowStartWhenEvaluatedEarlier(t *testing.T) {
-	t.Parallel()
-
-	windowStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	evaluatedFrom := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-	require.Equal(t, windowStart, spendrules.SpendRangeStart(windowStart, evaluatedFrom))
-}
-
-func TestSpendRangeStartCeilsMidMinuteEvaluatedFrom(t *testing.T) {
-	t.Parallel()
-
-	windowStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	evaluatedFrom := time.Date(2026, 7, 10, 10, 20, 30, 0, time.UTC)
-	require.Equal(
-		t,
-		time.Date(2026, 7, 10, 10, 21, 0, 0, time.UTC),
-		spendrules.SpendRangeStart(windowStart, evaluatedFrom),
-	)
-}
-
-func TestSpendRangeStartKeepsMinuteAlignedEvaluatedFrom(t *testing.T) {
-	t.Parallel()
-
-	windowStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	evaluatedFrom := time.Date(2026, 7, 10, 11, 12, 0, 0, time.UTC)
-	require.Equal(t, evaluatedFrom, spendrules.SpendRangeStart(windowStart, evaluatedFrom))
-}

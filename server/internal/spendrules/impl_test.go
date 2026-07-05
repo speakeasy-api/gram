@@ -189,7 +189,6 @@ func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
 	require.Equal(t, "Engineering cap (renamed)", updated.Name)
 	require.False(t, updated.Enabled)
 	require.Equal(t, int64(1), updated.Version, "name/description/enabled edits must not bump the version")
-	require.Equal(t, created.EvaluatedFrom, updated.EvaluatedFrom, "non-material edits keep evaluation state")
 	require.Equal(t, created.Urn, updated.Urn)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleUpdate)
@@ -197,7 +196,7 @@ func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestUpdateSpendRule_MaterialBumpsVersionAndKeepsEvaluationStart(t *testing.T) {
+func TestUpdateSpendRule_MaterialBumpsVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)
@@ -216,7 +215,6 @@ func TestUpdateSpendRule_MaterialBumpsVersionAndKeepsEvaluationStart(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, `"eng-frontier" in groups`, updated.TargetExpr)
 	require.Equal(t, int64(2), updated.Version, "target changes are material")
-	require.Equal(t, created.EvaluatedFrom, updated.EvaluatedFrom, "material edits inherit evaluation state")
 	require.NotEqual(t, created.Urn, updated.Urn)
 
 	require.Equal(t, created.Slug, updated.Slug, "material edits keep the slug")

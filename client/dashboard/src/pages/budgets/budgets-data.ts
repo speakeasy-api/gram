@@ -75,7 +75,7 @@ export const SPEND_EVENT_TYPE_LABELS: Record<SpendEventType, string> = {
 };
 
 /** Form shape for creating or editing a rule. Server-generated fields
- *  (id, urn, version, evaluatedFrom, timestamps) are never edited. */
+ *  (id, urn, version, timestamps) are never edited. */
 export interface RuleDraft {
   name: string;
   description: string;

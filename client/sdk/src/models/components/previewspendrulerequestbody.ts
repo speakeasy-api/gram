@@ -28,10 +28,6 @@ export type PreviewSpendRuleRequestBodyWindowKind = ClosedEnum<
 
 export type PreviewSpendRuleRequestBody = {
   /**
-   * Ignore spend accrued before this instant. Pass an existing rule's evaluated_from to preview edits against the same active evaluation window; omit for new rules.
-   */
-  evaluatedFrom?: Date | undefined;
-  /**
    * Per-person budget in USD used to compute usage percentages.
    */
   limitUsd: number;
@@ -54,7 +50,6 @@ export const PreviewSpendRuleRequestBodyWindowKind$outboundSchema:
 
 /** @internal */
 export type PreviewSpendRuleRequestBody$Outbound = {
-  evaluated_from?: string | undefined;
   limit_usd: number;
   target: SpendRuleTargetCondition$Outbound;
   warn_at_pct: number;
@@ -67,9 +62,6 @@ export const PreviewSpendRuleRequestBody$outboundSchema: z.ZodMiniType<
   PreviewSpendRuleRequestBody
 > = z.pipe(
   z.object({
-    evaluatedFrom: z.optional(
-      z.pipe(z.date(), z.transform(v => v.toISOString())),
-    ),
     limitUsd: z.number(),
     target: SpendRuleTargetCondition$outboundSchema,
     warnAtPct: z._default(z.int(), 80),
@@ -77,7 +69,6 @@ export const PreviewSpendRuleRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      evaluatedFrom: "evaluated_from",
       limitUsd: "limit_usd",
       warnAtPct: "warn_at_pct",
       windowKind: "window_kind",

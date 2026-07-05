@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -100,7 +101,7 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	cacheImpl := newGateCache()
 	actors := testActors()
 	windowEnd := time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC)
-	state := spendrules.NewGateState(actors)
+	state := spendrules.NewGateState("org_123", actors)
 	state.Rules = append(state.Rules, spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
@@ -109,20 +110,21 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 		RuleExpr:   `used_pct >= warn_at_pct`,
 		LimitUSD:   100,
 		WarnAtPct:  80,
+		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  windowEnd,
 	})
-	state.SetUsage("spend_rule:engineering:v1", spendrules.ActorUsage{
-		Actor:    actors[0],
-		SpendUSD: 90,
-		LimitUSD: 100,
-		UsedPct:  90,
-		Breached: true,
+	state.SetActorWindowSpend("org_123", actors[0], chrepo.ActorWindowSpendRow{
+		Email:       "ada@acme.com",
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 90,
 	})
+	require.Contains(t, state.Actors, "org_123:ada@acme.com")
 
 	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
 	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "Ada@Acme.com")
 	require.NoError(t, err)
 	require.NotNil(t, block)
 	require.Equal(t, "spend_rule:engineering:v1", block.RuleURN)
@@ -136,7 +138,7 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	ctx := t.Context()
 	cacheImpl := newGateCache()
 	actors := testActors()
-	state := spendrules.NewGateState(actors)
+	state := spendrules.NewGateState("org_123", actors)
 	state.Rules = append(state.Rules, spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
@@ -145,20 +147,20 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 		RuleExpr:   `spend_usd >= limit_usd`,
 		LimitUSD:   100,
 		WarnAtPct:  80,
+		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
 	})
-	state.SetUsage("spend_rule:engineering:v1", spendrules.ActorUsage{
-		Actor:    actors[1],
-		SpendUSD: 150,
-		LimitUSD: 100,
-		UsedPct:  150,
-		Breached: true,
+	state.SetActorWindowSpend("org_123", actors[1], chrepo.ActorWindowSpendRow{
+		Email:       "sam@acme.com",
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 150,
 	})
 
 	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
 	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "user_sam", "Sam@Acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "Sam@Acme.com")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -171,11 +173,11 @@ func TestGateSkipsUnresolvedIdentity(t *testing.T) {
 	cacheImpl.getErr = errors.New("gate must not read the cache for unresolved identities")
 	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "", "user_ada", "ada@acme.com")
+	block, err := gate.CheckBlocked(ctx, "", "ada@acme.com")
 	require.NoError(t, err)
 	require.Nil(t, block)
 
-	block, err = gate.CheckBlocked(ctx, "org_123", "", "")
+	block, err = gate.CheckBlocked(ctx, "org_123", "")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -188,7 +190,7 @@ func TestGateSurfacesCacheFailuresForFailOpen(t *testing.T) {
 	cacheImpl.getErr = errors.New("redis unavailable")
 	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "ada@acme.com")
 	require.Error(t, err)
 	require.Nil(t, block)
 }
@@ -198,7 +200,7 @@ func TestGateWriteEmptyStateClearsCache(t *testing.T) {
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	state := spendrules.NewGateState(testActors())
+	state := spendrules.NewGateState("org_123", testActors())
 	state.Rules = append(state.Rules, spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
@@ -207,6 +209,7 @@ func TestGateWriteEmptyStateClearsCache(t *testing.T) {
 		RuleExpr:   `spend_usd >= limit_usd`,
 		LimitUSD:   100,
 		WarnAtPct:  80,
+		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
 	})
 
@@ -214,7 +217,7 @@ func TestGateWriteEmptyStateClearsCache(t *testing.T) {
 	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", spendrules.GateState{Rules: nil, Actors: nil}))
 
 	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
-	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada", "")
+	block, err := gate.CheckBlocked(ctx, "org_123", "ada@acme.com")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }

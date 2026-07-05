@@ -56,10 +56,6 @@ export type SpendRule = {
    */
   enabled: boolean;
   /**
-   * Spend accrued before this instant is ignored by the evaluator. New rules start from creation time; edited rule versions inherit the original value.
-   */
-  evaluatedFrom: Date;
-  /**
    * The spend rule ID.
    */
   id: string;
@@ -131,10 +127,6 @@ export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z
       ),
       description: z.string(),
       enabled: z.boolean(),
-      evaluated_from: z.pipe(
-        z.iso.datetime({ offset: true }),
-        z.transform(v => new Date(v)),
-      ),
       id: z.string(),
       limit_usd: z.number(),
       name: z.string(),
@@ -155,7 +147,6 @@ export const SpendRule$inboundSchema: z.ZodMiniType<SpendRule, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
-        "evaluated_from": "evaluatedFrom",
         "limit_usd": "limitUsd",
         "organization_id": "organizationId",
         "rule_expr": "ruleExpr",

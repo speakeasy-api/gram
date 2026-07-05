@@ -24,8 +24,7 @@ type Service interface {
 	// Get a spend control rule by ID.
 	GetSpendRule(context.Context, *GetSpendRulePayload) (res *types.SpendRule, err error)
 	// Update a spend control rule. Material changes (target, limit_usd,
-	// window_kind, warn_at_pct, action) bump the rule version and reset its
-	// evaluation state.
+	// window_kind, warn_at_pct, action) bump the rule version.
 	UpdateSpendRule(context.Context, *UpdateSpendRulePayload) (res *types.SpendRule, err error)
 	// Delete a spend control rule. Any open circuits for the rule close on the
 	// next evaluation cycle.
@@ -170,10 +169,6 @@ type PreviewSpendRulePayload struct {
 	WarnAtPct int
 	// UTC calendar window to compute spend over.
 	WindowKind string
-	// Ignore spend accrued before this instant. Pass an existing rule's
-	// evaluated_from to preview edits against the same active evaluation window;
-	// omit for new rules.
-	EvaluatedFrom *string
 }
 
 // PreviewSpendRuleResult is the result type of the spendRules service

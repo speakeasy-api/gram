@@ -2002,7 +2002,6 @@ func unmarshalSpendRuleResponseBodyToTypesSpendRule(v *SpendRuleResponseBody) *t
 		Action:         *v.Action,
 		Enabled:        *v.Enabled,
 		Version:        *v.Version,
-		EvaluatedFrom:  *v.EvaluatedFrom,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
