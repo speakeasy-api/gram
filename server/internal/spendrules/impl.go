@@ -33,8 +33,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	chrepo "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/repo"
-	chrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 

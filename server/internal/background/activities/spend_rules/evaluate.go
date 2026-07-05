@@ -20,8 +20,8 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	chrepo "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	spendrepo "github.com/speakeasy-api/gram/server/internal/spendrules/repo"
-	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,7 +54,7 @@ type EvaluateOrg struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
 	db        *pgxpool.Pool
-	chQueries *telemetryrepo.Queries
+	chQueries *chrepo.Queries
 	cacheImpl cache.Cache
 	celEng    *celenv.Engine
 }
@@ -63,7 +63,7 @@ func NewEvaluateOrg(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	chQueries *telemetryrepo.Queries,
+	chQueries *chrepo.Queries,
 	cacheImpl cache.Cache,
 ) *EvaluateOrg {
 	logger = logger.With(attr.SlogComponent("spend_rules_evaluate_org"))

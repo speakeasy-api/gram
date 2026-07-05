@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -159,9 +160,9 @@ func NewActivities(
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
-	var spendRulesCH *telemetryrepo.Queries
+	var spendRulesCH *spendrulesch.Queries
 	if chConn != nil {
-		spendRulesCH = telemetryrepo.New(chConn)
+		spendRulesCH = spendrulesch.New(chConn)
 	}
 
 	return &Activities{
