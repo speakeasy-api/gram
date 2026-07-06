@@ -472,21 +472,23 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
 SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
+  dp.project_id,
+  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
+FROM plugins dp
+JOIN projects p ON p.id = dp.project_id AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
   SELECT created_by_user_id
   FROM api_keys
-  WHERE project_id = c.project_id
+  WHERE project_id = dp.project_id
     AND deleted IS FALSE
     AND name LIKE 'plugins-mcp-%'
   ORDER BY created_at DESC
   LIMIT 1
 ) k ON TRUE
-WHERE c.project_id > $1
-ORDER BY c.project_id ASC
+WHERE dp.is_default IS TRUE
+  AND dp.deleted IS FALSE
+  AND dp.project_id > $1
+ORDER BY dp.project_id ASC
 LIMIT $2
 `
 
@@ -500,11 +502,20 @@ type ListPluginPublishCandidatesRow struct {
 	CreatedByUserID string
 }
 
-// Lists projects with a GitHub plugin connection for the automated generator
-// rollout, paginated by project_id (pass the zero UUID to start). Each row
-// carries the user that created the project's most recent plugins-mcp API key,
-// used as the publish actor. This is a deliberate cross-project sweep, so unlike
-// the tenant-scoped queries it is not constrained to a single project_id.
+// Lists every project with a Default plugin for the automated generator
+// rollout, paginated by project_id (pass the zero UUID to start), whether or
+// not it has published before. Republishing an unchanged project is cheap
+// (SkipIfUnchanged short-circuits on the fingerprint before any GitHub/key
+// work), so including never-published projects here doubles as the periodic
+// safety net for the best-effort initial-publish trigger fired inline by
+// CreateProject/toolsets/mcpendpoints: if that enqueue is ever lost (e.g. a
+// crash between commit and enqueue), this sweep picks it up within one tick
+// instead of leaving it stuck until a human notices. Each row carries the
+// user that created the project's most recent plugins-mcp API key as the
+// publish actor, falling back to 'system' for a project that has never
+// published (no such key exists yet). This is a deliberate cross-project
+// sweep, so unlike the tenant-scoped queries it is not constrained to a
+// single project_id.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {

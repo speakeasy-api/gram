@@ -113,3 +113,48 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "the colliding server must not have been attached")
 }
+
+func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	// This project has a Default plugin but has never published — no
+	// plugin_github_connections row and no plugins-mcp API key. It must
+	// still show up as a candidate (the periodic safety net for a lost
+	// initial-publish enqueue), with a 'system' actor fallback.
+	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Equal(t, "system", candidates[0].CreatedByUserID)
+}
+
+func TestListPluginPublishCandidates_ExcludesProjectWithoutDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
