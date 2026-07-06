@@ -2322,12 +2322,7 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	}
 }
 
-// EvaluatePromptGuardrail replays an inline prompt guardrail against one chat
-// session's latest generation and returns the judge's per-message verdicts. It
-// is the read-only backend for the policy-eval workbench: no risk_results are
-// written, nothing is published to the outbox, and nothing is enforced. The
-// guardrail is passed inline (prompt + model_config + message_types + CEL
-// scope) so a draft can be tuned before any policy exists.
+// EvaluatePromptGuardrail replays an inline guardrail without persisting findings.
 func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.EvaluatePromptGuardrailPayload) (*gen.PromptGuardrailEvalResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2353,9 +2348,31 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	}
 	cfg := ra.ParseJudgeConfig(modelConfig)
 
-	// Confirm the chat belongs to the caller's project before loading its
-	// transcript. GetChat filters soft-deleted chats, so a missing or deleted
-	// chat surfaces as not-found.
+	return s.evaluateGuardrailForChat(
+		ctx,
+		projectID,
+		authCtx.ActiveOrganizationID,
+		chatID,
+		prompt,
+		cfg,
+		payload.MessageTypes,
+		conv.PtrValOr(payload.ScopeInclude, ""),
+		conv.PtrValOr(payload.ScopeExempt, ""),
+	)
+}
+
+func (s *Service) evaluateGuardrailForChat(
+	ctx context.Context,
+	projectID uuid.UUID,
+	orgID string,
+	chatID uuid.UUID,
+	prompt string,
+	cfg ra.JudgeConfig,
+	messageTypes []string,
+	includeCEL string,
+	exemptCEL string,
+) (*gen.PromptGuardrailEvalResult, error) {
+	// GetChat filters soft-deleted chats.
 	chatRepo := chatrepo.New(s.db)
 	chatRow, err := chatRepo.GetChat(ctx, chatID)
 	switch {
@@ -2390,14 +2407,14 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 		s.logger,
 		s.promptJudge,
 		s.celEng,
-		authCtx.ActiveOrganizationID,
+		orgID,
 		projectID.String(),
 		prompt,
 		cfg,
 		messages,
-		payload.MessageTypes,
-		conv.PtrValOr(payload.ScopeInclude, ""),
-		conv.PtrValOr(payload.ScopeExempt, ""),
+		messageTypes,
+		includeCEL,
+		exemptCEL,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
@@ -2440,10 +2457,7 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	}, nil
 }
 
-// SaveRiskEvalReview records (or replaces) the current reviewer's ground-truth
-// verdict for one chat session under a prompt-based policy — a row in the
-// policy's durable regression set. Isolation: this touches only
-// risk_policy_eval_reviews, never live findings.
+// SaveRiskEvalReview records one review verdict in the policy regression set.
 func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskEvalReviewPayload) (*types.RiskPolicyEvalReview, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2479,7 +2493,14 @@ func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskE
 		return nil, oops.E(oops.CodeNotFound, nil, "chat not found")
 	}
 
-	row, err := s.repo.UpsertRiskPolicyEvalReview(ctx, repo.UpsertRiskPolicyEvalReviewParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin eval review save").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.UpsertRiskPolicyEvalReview(ctx, repo.UpsertRiskPolicyEvalReviewParams{
 		ProjectID:         projectID,
 		OrganizationID:    authCtx.ActiveOrganizationID,
 		RiskPolicyID:      policyID,
@@ -2490,6 +2511,28 @@ func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskE
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save eval review").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogRiskPolicyEvalReviewSave(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policy.ID,
+		RiskPolicyName:   policy.Name,
+		Metadata: &audit.RiskPolicyEvalReviewMetadata{
+			ReviewID:   row.ID.String(),
+			ChatID:     chatID.String(),
+			Verdict:    row.Verdict,
+			ReviewedBy: row.ReviewedBy,
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log eval review save").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit eval review save").LogError(ctx, s.logger)
 	}
 	return evalReviewToType(row), nil
 }
@@ -2525,9 +2568,7 @@ func (s *Service) ListRiskEvalReviews(ctx context.Context, payload *gen.ListRisk
 	return &gen.ListRiskEvalReviewsResult{Reviews: reviews}, nil
 }
 
-// DeleteRiskEvalReview clears the current reviewer's verdict for one session (the
-// toggle-off path). A reviewer can only clear their own verdict; clearing a
-// verdict that does not exist is a no-op.
+// DeleteRiskEvalReview clears the current reviewer's verdict.
 func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteRiskEvalReviewPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2545,15 +2586,50 @@ func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteR
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid chat_id")
 	}
+	projectID := *authCtx.ProjectID
 
-	_, err = s.repo.SoftDeleteRiskPolicyEvalReview(ctx, repo.SoftDeleteRiskPolicyEvalReviewParams{
-		ProjectID:    *authCtx.ProjectID,
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin eval review delete").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.SoftDeleteRiskPolicyEvalReview(ctx, repo.SoftDeleteRiskPolicyEvalReviewParams{
+		ProjectID:    projectID,
 		RiskPolicyID: policyID,
 		ChatID:       chatID,
 		ReviewedBy:   authCtx.UserID,
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, err, "delete eval review").LogError(ctx, s.logger)
+	}
+	if err == nil {
+		if err := s.audit.LogRiskPolicyEvalReviewDelete(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			RiskPolicyID:     policy.ID,
+			RiskPolicyName:   policy.Name,
+			Metadata: &audit.RiskPolicyEvalReviewMetadata{
+				ReviewID:   row.ID.String(),
+				ChatID:     chatID.String(),
+				Verdict:    row.Verdict,
+				ReviewedBy: row.ReviewedBy,
+			},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log eval review delete").LogError(ctx, s.logger)
+		}
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit eval review delete").LogError(ctx, s.logger)
 	}
 	return nil
 }
