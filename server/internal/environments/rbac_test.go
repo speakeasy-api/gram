@@ -122,7 +122,32 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
+func TestEnvironments_RBAC_WriteOps_AllowedWithEnvironmentWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+
+	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-test-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+}
+
+// project:write alone must NOT authorize creating an environment: environment
+// values include secrets, so the environment scope family is intentionally
+// independent from the project scope family (no scope expansion bridges them).
+func TestEnvironments_RBAC_Create_DeniedWithProjectWriteOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
@@ -141,5 +166,142 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 		Description:      nil,
 		Entries:          []*gen.EnvironmentEntryInput{},
 	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_Update_AllowedWithEnvironmentWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-update-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
 	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+
+	_, err = ti.service.UpdateEnvironment(ctx, &gen.UpdateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             env.Slug,
+		Description:      nil,
+		Name:             nil,
+		EntriesToUpdate: []*gen.EnvironmentEntryInput{
+			{Name: "KEY", Value: "value"},
+		},
+		EntriesToRemove: []string{},
+	})
+	require.NoError(t, err)
+}
+
+// The customer-facing bug: environment:write alone was rejected because the
+// handler gated on project:write. project:write must NOT authorize the update.
+func TestEnvironments_RBAC_Update_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-update-pw-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	_, err = ti.service.UpdateEnvironment(ctx, &gen.UpdateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             env.Slug,
+		Description:      nil,
+		Name:             nil,
+		EntriesToUpdate: []*gen.EnvironmentEntryInput{
+			{Name: "KEY", Value: "value"},
+		},
+		EntriesToRemove: []string{},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_Delete_AllowedWithEnvironmentWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-delete-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+
+	err = ti.service.DeleteEnvironment(ctx, &gen.DeleteEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             env.Slug,
+	})
+	require.NoError(t, err)
+}
+
+// project:write alone must NOT authorize deleting an environment.
+func TestEnvironments_RBAC_Delete_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-delete-pw-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	err = ti.service.DeleteEnvironment(ctx, &gen.DeleteEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             env.Slug,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
