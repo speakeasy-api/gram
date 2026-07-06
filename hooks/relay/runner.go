@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,13 +222,19 @@ func (r *Relay) loginNudge(sessionID string) string {
 }
 
 // claimNudge marks the session's nudge as emitted and reports whether this call
-// won the claim (first emission wins).
+// won the claim (first emission wins). The marker is scoped by the credential
+// cache location as well as the session: installs pointed at different auth
+// files sign in independently, so one must not suppress the other's nudge.
+// Installs sharing the auth file share one sign-in, so a single nudge per
+// session is exactly right for them.
 func claimNudge(sessionID string) bool {
 	key := sessionID
 	if key == "" {
 		key = "session"
 	}
-	marker := filepath.Join(os.TempDir(), "speakeasy-hooks-login-nudge-"+sanitizeMarker(key))
+	domain := fnv.New32a()
+	_, _ = domain.Write([]byte(authFilePath()))
+	marker := filepath.Join(os.TempDir(), fmt.Sprintf("speakeasy-hooks-login-nudge-%08x-%s", domain.Sum32(), sanitizeMarker(key)))
 	f, err := os.OpenFile(marker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return false
@@ -268,10 +275,30 @@ func (r *Relay) debugf(format string, args ...any) {
 func (r *Relay) loginCommand() string {
 	cmd := "speakeasy-hooks login"
 	if exe, err := os.Executable(); err == nil && exe != "" {
-		cmd = exe + " login"
+		cmd = shellQuoteArg(exe) + " login"
 	}
 	if r.cfg.ConfigPath != "" {
-		cmd += " --config=" + r.cfg.ConfigPath
+		cmd += " --config=" + shellQuoteArg(r.cfg.ConfigPath)
 	}
 	return cmd
+}
+
+// shellQuoteArg single-quotes an argument for a POSIX shell unless it is made
+// entirely of characters no shell splits or interprets. The nudge command is
+// executed by the agent's shell, so paths with spaces must survive parsing.
+func shellQuoteArg(s string) string {
+	safe := s != "" && !strings.ContainsFunc(s, func(r rune) bool {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return false
+		case strings.ContainsRune("-_./=:@%+,", r):
+			return false
+		default:
+			return true
+		}
+	})
+	if safe {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

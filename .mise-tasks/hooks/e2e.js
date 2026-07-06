@@ -1527,7 +1527,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
       provider === "cursor"
         ? usageWithCost && usageTokensOnly
           ? "synthetic stop payloads recorded token attrs for both pricing shapes"
-          : `usage evidence incomplete: with-cost=${usageWithCost} tokens-only=${usageTokensOnly} rows=${usageAttrs.length}`
+          : `usage evidence incomplete: with-cost=${usageWithCost} tokens-only=${usageTokensOnly} rows=${usageBlocks.length}`
         : "provider hook payloads carry no usage totals",
   });
   checks.push({
@@ -2073,7 +2073,15 @@ async function runCaptureSuite(args) {
         ),
       (rows) => {
         const events = new Set(rows.map((r) => r.event));
-        return requiredEvents.every((e) => events.has(e));
+        if (!requiredEvents.every((e) => events.has(e))) {
+          return false;
+        }
+        // Cursor's two synthetic stop payloads (with-cost and tokens-only)
+        // land as independent ClickHouse rows; featureChecks needs both.
+        return (
+          provider !== "cursor" ||
+          rows.filter((r) => r.event === "usage.reported").length >= 2
+        );
       },
     );
     const chats = await poll(

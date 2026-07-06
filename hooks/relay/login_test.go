@@ -4,13 +4,22 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// forceInteractiveEnv clears the signals loginViable treats as non-interactive
+// (CI runners set CI and have no display) so the sign-in flow runs under test.
+func forceInteractiveEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("CI", "")
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_TTY", "")
+	t.Setenv("DISPLAY", ":0")
+}
 
 // TestLoginRoundtrip drives the full browser sign-in without a real browser:
 // the intercepted opener parses the callback URL and delivers a minted key, and
@@ -19,8 +28,9 @@ func TestLoginRoundtrip(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
-	os.Unsetenv("GRAM_HOOKS_API_KEY")
-	os.Unsetenv("GRAM_API_KEY")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
+	forceInteractiveEnv(t)
 
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
@@ -70,8 +80,9 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "2")
-	os.Unsetenv("GRAM_HOOKS_API_KEY")
-	os.Unsetenv("GRAM_API_KEY")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
+	forceInteractiveEnv(t)
 
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })

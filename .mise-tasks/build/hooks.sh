@@ -8,6 +8,8 @@
 
 set -e
 
+mkdir -p bin
+
 args=()
 if [ "${usage_readonly:-false}" = "true" ]; then
     args+=("-mod=readonly")

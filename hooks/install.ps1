@@ -34,7 +34,8 @@ if (-not $Version) {
 }
 
 $Archive = "${Binary}_windows_${Arch}.zip"
-$Url = "https://github.com/$Repo/releases/download/hooks%40$Version/$Archive"
+$ReleaseBase = "https://github.com/$Repo/releases/download/hooks%40$Version"
+$Url = "$ReleaseBase/$Archive"
 
 $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $TmpDir | Out-Null
@@ -42,6 +43,19 @@ try {
     Write-Host "Downloading $Binary $Version (windows/$Arch)..."
     $ZipPath = Join-Path $TmpDir $Archive
     Invoke-WebRequest -Uri $Url -OutFile $ZipPath
+
+    # Verify the archive against the release's published checksums.
+    $ChecksumsPath = Join-Path $TmpDir "checksums.txt"
+    Invoke-WebRequest -Uri "$ReleaseBase/checksums.txt" -OutFile $ChecksumsPath
+    $Pattern = "\s" + [regex]::Escape($Archive) + "$"
+    $ChecksumLine = Get-Content $ChecksumsPath | Where-Object { $_ -match $Pattern } | Select-Object -First 1
+    if (-not $ChecksumLine) { throw "release checksums.txt has no entry for $Archive" }
+    $WantSha = ($ChecksumLine -split "\s+")[0]
+    $GotSha = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($GotSha -ne $WantSha.ToLowerInvariant()) {
+        throw "checksum mismatch for ${Archive}: expected $WantSha, got $GotSha"
+    }
+
     Expand-Archive -Path $ZipPath -DestinationPath $TmpDir -Force
 
     $BinPath = Get-ChildItem -Path $TmpDir -Filter "$Binary.exe" -Recurse | Select-Object -First 1

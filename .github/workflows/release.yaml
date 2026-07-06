@@ -213,7 +213,7 @@ jobs:
         # local-only tag to help GoReleaser publish.
         run: |
           version=$(jq -r .version hooks/package.json)
-          tag="hooks/$version"
+          tag="hooks@$version"
           git tag -f "$tag"
           echo "Created local tag $tag"
       - name: goreleaser

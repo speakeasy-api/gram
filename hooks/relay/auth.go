@@ -76,7 +76,9 @@ func readAuthFile(path string) (map[string]string, error) {
 // readCachedAuth loads cached credentials, enforcing that the cache was minted
 // for this server and, when both are known, this org. A cache from a different
 // org must not authenticate — with shared slugs like "default" its events would
-// enforce another org's policies.
+// enforce another org's policies. Within the org the key is shared, but the
+// project always comes from this plugin's config: a cache minted in another
+// workspace must not route this workspace's events to its project.
 func readCachedAuth(cfg Config) (creds, bool) {
 	values, err := readAuthFile(authFilePath())
 	if err != nil {
@@ -95,6 +97,9 @@ func readCachedAuth(cfg Config) (creds, bool) {
 	}
 	if cfg.OrgID != "" && c.Org != "" && c.Org != cfg.OrgID {
 		return creds{}, false
+	}
+	if cfg.ProjectSlug != "" {
+		c.Project = cfg.ProjectSlug
 	}
 	return c, true
 }
@@ -124,8 +129,17 @@ func resolveAuth(cfg Config) (creds, bool) {
 }
 
 // writeAuth atomically persists credentials with 0600 permissions and marks the
-// machine as established (the fail-closed ratchet).
+// machine as established (the fail-closed ratchet). Values carrying line breaks
+// are rejected: the cache is line-oriented and a value from the sign-in
+// callback must not be able to inject extra keys. Embedded "=" is fine — the
+// parser splits on the first one only.
 func writeAuth(c creds) error {
+	for _, v := range []string{c.ServerURL, c.APIKey, c.Project, c.Email, c.Org} {
+		if strings.ContainsAny(v, "\r\n") {
+			return fmt.Errorf("credential value contains a line break")
+		}
+	}
+
 	path := authFilePath()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {

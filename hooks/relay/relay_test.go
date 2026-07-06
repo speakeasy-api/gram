@@ -213,8 +213,8 @@ func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
-	os.Unsetenv("GRAM_HOOKS_API_KEY")
-	os.Unsetenv("GRAM_API_KEY")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -230,14 +230,83 @@ func TestRatchetEstablishedFailsClosed(t *testing.T) {
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
-	os.Unsetenv("GRAM_HOOKS_API_KEY")
-	os.Unsetenv("GRAM_API_KEY")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "established machine with broken creds must fail closed")
 	require.Equal(t, 0, fs.count())
+}
+
+// TestAuthRejectedForgetsCachedKey covers the 401 recovery path: a
+// cache-sourced key the server rejects is forgotten, the established marker
+// survives, and the gating call fails closed.
+func TestAuthRejectedForgetsCachedKey(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: ""}
+	})
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=revoked-key\nproject=default\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a rejected credential must fail closed")
+	_, statErr := os.Stat(authFile)
+	require.True(t, os.IsNotExist(statErr), "the rejected cached key must be forgotten")
+	require.True(t, authEstablished(), "forgetting the key must not reopen the ratchet")
+}
+
+// TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
+// present: the server never confirmed the action, so blocking mode denies. A
+// 4xx status exercises the same branch as 5xx without the retry budget's
+// wall-clock cost (5xx is retried for up to 30s).
+func TestServerErrorBlocksToolCall(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "an unconfirmed action must not proceed in blocking mode")
+	require.Contains(t, string(res.Stdout), "HTTP 400")
+}
+
+// TestServerErrorPassesWhenNonblocking mirrors TestServerErrorBlocksToolCall
+// under observability mode: transport failures must not block the agent.
+func TestServerErrorPassesWhenNonblocking(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	cfg.Nonblocking = true
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestCachedAuthUsesConfigProject pins that the plugin's configured project
+// always wins over the project recorded in the shared credential cache, so a
+// key minted in another workspace cannot route this workspace's events there.
+func TestCachedAuthUsesConfigProject(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://gram.test\napi_key=key-1\nproject=other-workspace\norg=org-1\n"), 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+
+	c, ok := readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "this-workspace", OrgID: "org-1", Nonblocking: false, DebugLog: "", ConfigPath: ""})
+	require.True(t, ok)
+	require.Equal(t, "this-workspace", c.Project)
+
+	c, ok = readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "", OrgID: "org-1", Nonblocking: false, DebugLog: "", ConfigPath: ""})
+	require.True(t, ok)
+	require.Equal(t, "other-workspace", c.Project, "cache project remains the fallback when the config has none")
 }
 
 // TestCursorModelResponseRelaysMessage covers the interactive-only cursor
@@ -283,6 +352,14 @@ func TestLoginCommandCarriesConfig(t *testing.T) {
 	require.Contains(t, NewRelay(got).loginCommand(), " login --config="+cfgPath)
 }
 
+// TestLoginCommandQuotesUnsafePaths ensures the nudge command survives shell
+// parsing when the plugin lives under a path with spaces.
+func TestLoginCommandQuotesUnsafePaths(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "plugin dir", "speakeasy.json")
+	cmd := NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: cfgPath}).loginCommand()
+	require.Contains(t, cmd, " --config='"+cfgPath+"'")
+}
+
 func TestNudgeEmittedOncePerSession(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
@@ -290,8 +367,8 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 	// The nudge marker lands in os.TempDir keyed by the fixture's fixed
 	// session id; isolate it so reruns start unclaimed.
 	t.Setenv("TMPDIR", t.TempDir())
-	os.Unsetenv("GRAM_HOOKS_API_KEY")
-	os.Unsetenv("GRAM_API_KEY")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")

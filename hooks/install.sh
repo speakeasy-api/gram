@@ -63,13 +63,32 @@ if [ -z "$version" ]; then
 fi
 
 archive="${BINARY}_${os}_${arch}.zip"
-url="https://github.com/${REPO}/releases/download/hooks%40${version}/${archive}"
+release_base="https://github.com/${REPO}/releases/download/hooks%40${version}"
+url="${release_base}/${archive}"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 echo "Downloading ${BINARY} ${version} (${os}/${arch})..."
 curl -fsSL --retry 5 --retry-delay 1 -o "${tmpdir}/${archive}" "$url"
+
+# Verify the archive against the release's published checksums.
+curl -fsSL --retry 5 --retry-delay 1 -o "${tmpdir}/checksums.txt" "${release_base}/checksums.txt"
+want_sha=$(awk -v f="$archive" '$2 == f { print $1; exit }' "${tmpdir}/checksums.txt")
+if [ -z "$want_sha" ]; then
+  fmt_error "release checksums.txt has no entry for ${archive}"
+  exit 1
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+  got_sha=$(sha256sum "${tmpdir}/${archive}" | awk '{print $1}')
+else
+  got_sha=$(shasum -a 256 "${tmpdir}/${archive}" | awk '{print $1}')
+fi
+if [ "$got_sha" != "$want_sha" ]; then
+  fmt_error "checksum mismatch for ${archive}: expected ${want_sha}, got ${got_sha}"
+  exit 1
+fi
+
 unzip -q -o "${tmpdir}/${archive}" -d "$tmpdir"
 
 bin_path=$(find "$tmpdir" -name "$BINARY" -type f | head -1)

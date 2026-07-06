@@ -193,7 +193,9 @@ func loginViable() (bool, string) {
 	if os.Getenv("CI") != "" || os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" {
 		return false, "non-interactive environment"
 	}
-	if runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+	// Only X11/Wayland platforms signal a display through the environment;
+	// macOS and Windows desktop sessions always have one.
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return false, "no display available"
 	}
 	return true, ""
