@@ -302,7 +302,6 @@ func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -319,7 +318,6 @@ func TestRatchetEstablishedFailsClosed(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -340,7 +338,6 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -349,6 +346,7 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	_, statErr := os.Stat(authFile)
 	require.True(t, os.IsNotExist(statErr), "the rejected cached key must be forgotten")
 	require.True(t, authEstablished(), "forgetting the key must not reopen the ratchet")
+	require.FileExists(t, authFile+".reauth-needed", "the rejection must leave the reconnect marker")
 }
 
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
@@ -456,7 +454,6 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 	// session id; isolate it so reruns start unclaimed.
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
@@ -466,4 +463,248 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 
 	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
 	require.NotContains(t, string(second.Stdout), "additionalContext", "nudge fires at most once per session")
+}
+
+// TestEnvelopeCodexSkillInference mirrors the bash senders' best-effort Codex
+// skill detection: a reader tool opening skills/<name>/SKILL.md and an
+// explicit $skill-name prompt mention (validated against the skill roots on
+// disk) both attach data.skill while the event keeps its true type on the
+// wire — a reclassified event would skip the server's tool/prompt policy scan.
+func TestEnvelopeCodexSkillInference(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	repo := filepath.Join(dir, "repo")
+	cwd := filepath.Join(repo, "nested", "sub")
+	codexHome := filepath.Join(dir, "codex-home")
+	for _, p := range []string{
+		filepath.Join(home, ".agents", "skills", "home-skill"),
+		filepath.Join(repo, ".agents", "skills", "repo-skill"),
+		filepath.Join(codexHome, "skills", ".system", "sys-skill"),
+	} {
+		require.NoError(t, os.MkdirAll(p, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(p, "SKILL.md"), []byte("# skill"), 0o644))
+	}
+	require.NoError(t, os.MkdirAll(cwd, 0o755))
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	envelope := func(payload string) components.IngestRequestBody {
+		t.Helper()
+		runner := agenthooks.New()
+		var got components.IngestRequestBody
+		runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.NoDecision(), nil
+		})
+		runner.OnToolPost(func(_ context.Context, e *agenthooks.ToolPostEvent) (agenthooks.ToolPostDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.Observed(), nil
+		})
+		runner.OnPermission(func(_ context.Context, e *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.NoDecision(), nil
+		})
+		runner.OnPromptSubmitted(func(_ context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.AcceptPrompt(), nil
+		})
+		agenthookstest.Invoke(t, runner, agenthooks.ProviderCodex, []byte(payload))
+		return got
+	}
+	skillOf := func(p components.IngestRequestBody) string {
+		if p.Data == nil || p.Data.Skill == nil {
+			return ""
+		}
+		return p.Data.Skill.Name
+	}
+
+	got := envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_1"}`)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type, "a detected skill read must keep its true event type")
+	require.Equal(t, "repo-skill", skillOf(got), "a SKILL.md path in a reader tool input must resolve the skill name")
+
+	got = envelope(`{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_1"}`)
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
+	require.Empty(t, skillOf(got), "completions must not re-report the activation")
+
+	got = envelope(`{"hook_event_name":"PermissionRequest","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"permission_type":"exec"}`)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Empty(t, skillOf(got), "permission previews may be denied and must not count as activations")
+
+	got = envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"apply_patch","tool_input":{"changes":"` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_2"}`)
+	require.Empty(t, skillOf(got), "editing a SKILL.md is not an activation")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"Check $HOME then use $home-skill please","cwd":"` + cwd + `"}`)
+	require.Equal(t, components.TypePromptSubmitted, got.Event.Type, "a skill mention must keep the prompt event type")
+	require.Equal(t, "home-skill", skillOf(got), "$name mentions must resolve against $HOME/.agents/skills")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"` + cwd + `"}`)
+	require.Equal(t, "repo-skill", skillOf(got), "$name mentions must resolve by walking up from the session cwd")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"pay $50 to $unknown-skill","cwd":"` + cwd + `"}`)
+	require.Empty(t, skillOf(got), "$ tokens that resolve to no skill directory must be ignored")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"please use $home-skill.","cwd":"` + cwd + `"}`)
+	require.Equal(t, "home-skill", skillOf(got), "sentence-final punctuation must not defeat a mention")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"nested/sub"}`)
+	require.Empty(t, skillOf(got), "a relative cwd must terminate the walk without matching")
+
+	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"` + cwd + `"}`)
+	require.Equal(t, "sys-skill", skillOf(got), "bundled skills under a .system subdirectory must resolve by bare name")
+
+	got = envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}`)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Equal(t, "imagegen", skillOf(got), "reads of .system skill paths must infer the bare skill name")
+}
+
+// TestRedactCommandMasksSeparatedHeaderValue pins the tokenized-header shape:
+// quote stripping splits `--header "X-API-Key: abc"` into a bare header token
+// and its value, and the value must not survive redaction.
+func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
+	got := redactCommand(`npx srv --header "X-API-Key: abc123" -H "Cookie: sid=zzz9" tail-arg`)
+	require.NotContains(t, got, "abc123")
+	require.NotContains(t, got, "zzz9")
+	require.Contains(t, got, "X-API-Key: ***")
+	require.Contains(t, got, "Cookie: ***")
+	require.Contains(t, got, "tail-arg", "non-secret arguments must survive")
+
+	got = redactCommand("curl -H authorization:token-value-1")
+	require.NotContains(t, got, "token-value-1", "in-token header values keep masking")
+	require.Contains(t, got, "authorization: ***")
+}
+
+// TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
+// path: when the server rejects the cached key on a prompt submission, the
+// cache is cleared, a reauth marker is left, and the prompt fails open with a
+// reconnect nudge instead of blocking every turn — without ever sending an
+// unauthenticated request.
+func TestRejectedCachedKeyNudgesPromptReconnect(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
+	})
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("TMPDIR", t.TempDir())
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, first.ExitCode, "a rejected cached key must fail the prompt open")
+	require.Contains(t, string(first.Stdout), "additionalContext")
+	require.Contains(t, string(first.Stdout), "login")
+	_, statErr := os.Stat(authFile)
+	require.True(t, os.IsNotExist(statErr), "the rejected cached key must be forgotten")
+	require.FileExists(t, authFile+".established", "clearing a rejected key must preserve the fail-closed ratchet marker")
+	require.FileExists(t, authFile+".reauth-needed")
+	require.Equal(t, 1, fs.count())
+
+	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, second.ExitCode, "prompts keep failing open while reconnect is pending")
+	require.Equal(t, 1, fs.count(), "no unauthenticated request may follow the cleared key")
+}
+
+// TestRejectedCachedKeyStillBlocksToolUse verifies stale-cache recovery is not
+// a general bypass: tool events fail closed on the rejection and keep failing
+// closed (without sending) while the reauth marker stands.
+func TestRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
+	})
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(first.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(first.Stdout), "unauthorized: api_key not found")
+	require.FileExists(t, authFile+".reauth-needed")
+	require.Equal(t, 1, fs.count())
+
+	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(second.Stdout), `"permissionDecision":"deny"`, "reauth-needed tool events must still fail closed")
+	require.Contains(t, string(second.Stdout), "reconnect")
+	require.Equal(t, 1, fs.count(), "reauth-needed tool events must not send unauthenticated requests")
+}
+
+// TestWriteAuthClearsReauthMarker pins the recovery contract: a successful
+// sign-in ends the reconnect posture.
+func TestWriteAuthClearsReauthMarker(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	markReauthNeeded()
+	require.True(t, reauthNeeded())
+	require.NoError(t, writeAuth(creds{ServerURL: "https://gram.test", APIKey: "k", Project: "p", Email: "", Org: "", Source: credCache}))
+	require.False(t, reauthNeeded(), "a fresh credential must clear the reconnect marker")
+}
+
+// TestEnvKeyRejectionNamesConfiguredKey: when the explicitly configured
+// GRAM_HOOKS_API_KEY is rejected, the failure must name the variable — a
+// re-login cannot replace an env key, so pointing at the sign-in flow alone
+// would strand the user.
+func TestEnvKeyRejectionNamesConfiguredKey(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
+	})
+	cfg := authedConfig(t, fs.URL)
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, string(res.Stdout), "unauthorized: api_key not found", "the server response must ride along")
+}
+
+// TestResolveAuthIgnoresGenericGramAPIKey pins that the generic MCP credential
+// no longer authenticates hook telemetry.
+func TestResolveAuthIgnoresGenericGramAPIKey(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_API_KEY", "mcp-key")
+
+	_, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: ""})
+	require.False(t, ok, "GRAM_API_KEY is a different product surface and must not authenticate hooks")
+}
+
+// TestInsecureServerURL pins the plaintext-endpoint policy: only exact
+// loopback hosts may use http.
+func TestInsecureServerURL(t *testing.T) {
+	require.False(t, insecureServerURL("https://app.getgram.ai"))
+	require.False(t, insecureServerURL("http://127.0.0.1:8080"))
+	require.False(t, insecureServerURL("http://localhost/ingest"))
+	require.False(t, insecureServerURL("http://[::1]:3000"))
+	require.True(t, insecureServerURL("http://gram.example.com"))
+	require.True(t, insecureServerURL("http://127.0.0.2"), "only the exact loopback address is exempt")
+	require.True(t, insecureServerURL("http://localhost.evil.example"), "loopback names must match as whole hosts")
+	require.True(t, insecureServerURL("ftp://gram.example.com"))
+}
+
+// TestInsecureServerURLFailsClosedWhenEstablished: an established machine
+// pointed at a plaintext endpoint refuses before any credential leaves it.
+func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
+	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "insecure")
+}
+
+// TestInsecureServerURLFailsOpenNeverAuthed mirrors the ratchet: before first
+// auth an insecure endpoint skips the network silently instead of bricking the
+// agent, so no key can leak either way.
+func TestInsecureServerURLFailsOpenNeverAuthed(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
+	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }

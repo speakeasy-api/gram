@@ -133,9 +133,6 @@ func LoadConfig(defaults Config) Config {
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
 		cfg.ProjectSlug = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_PROJECT_SLUG")); v != "" && cfg.ProjectSlug == "" {
-		cfg.ProjectSlug = v
-	}
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_ID")); v != "" {
 		cfg.OrgID = v
 	}

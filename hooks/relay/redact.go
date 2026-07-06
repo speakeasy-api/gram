@@ -63,6 +63,13 @@ func redactCommand(raw string) string {
 	maskNext := false
 	for _, f := range fields {
 		if maskNext {
+			// An auth-scheme word between a header and its credential
+			// ("authorization: bearer TOKEN") is not the secret; keep the
+			// mask pending for the value that follows it.
+			if strings.EqualFold(f, "bearer") || strings.EqualFold(f, "basic") {
+				out = append(out, f)
+				continue
+			}
 			out = append(out, "***")
 			maskNext = false
 			continue
@@ -81,8 +88,16 @@ func redactCommand(raw string) string {
 			out = append(out, f)
 			maskNext = true
 		case secretHeaderRE.MatchString(f):
+			// `--header "X-API-Key: abc"` tokenizes the value into the next
+			// field after quote stripping; a header with nothing after its
+			// colon must consume that field too.
 			i := strings.IndexByte(f, ':')
-			out = append(out, f[:i]+": ***")
+			if strings.TrimSpace(f[i+1:]) == "" {
+				out = append(out, f[:i]+":")
+				maskNext = true
+			} else {
+				out = append(out, f[:i]+": ***")
+			}
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true

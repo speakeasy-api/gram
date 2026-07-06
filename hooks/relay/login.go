@@ -43,6 +43,9 @@ func newLoginFlow(cfg Config) *loginFlow {
 // tryInteractive runs a best-effort sign-in for the SessionStart preflight:
 // guards and cooldown suppress it silently, and any failure is non-fatal.
 func (l *loginFlow) tryInteractive(ctx context.Context) {
+	if insecureServerURL(l.cfg.ServerURL) {
+		return
+	}
 	if ok, _ := loginViable(); !ok {
 		return
 	}
@@ -57,6 +60,11 @@ func (l *loginFlow) tryInteractive(ctx context.Context) {
 func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if _, ok := resolveAuth(l.cfg); ok && !force {
 		return nil
+	}
+	// A key minted for a plaintext non-loopback server would be refused by
+	// every send; don't open a browser to it in the first place.
+	if insecureServerURL(l.cfg.ServerURL) {
+		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
 	if ok, reason := loginViable(); !ok {
 		return fmt.Errorf("browser sign-in is unavailable: %s", reason)

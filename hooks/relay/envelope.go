@@ -85,6 +85,11 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 		if ev.Prompt != "" {
 			data.Prompt = &components.HookPromptData{Text: new(ev.Prompt)}
 		}
+		if base.Provider == agenthooks.ProviderCodex {
+			if name := codexPromptSkillName(ev.Prompt, base.Session.CWD); name != "" {
+				data.Skill = &components.HookSkillData{Name: name, Source: nil}
+			}
+		}
 	case *agenthooks.ToolPreEvent:
 		eventType = applyToolCall(data, base, &ev.Tool, eventType, "", nil, nil, nil, nil)
 	case *agenthooks.PermissionEvent:
@@ -249,6 +254,14 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 		if name := skillNameOf(tool.Input); name != "" {
 			data.Skill = &components.HookSkillData{Name: name, Source: nil}
 			return components.TypeSkillActivated
+		}
+	}
+	// Codex skill activations are inferred from ordinary tool payloads, so the
+	// event keeps its true type: only pre-tool events count (completions must
+	// not re-report, permission previews may be denied).
+	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindToolPre {
+		if name := codexToolSkillName(tool); name != "" {
+			data.Skill = &components.HookSkillData{Name: name, Source: nil}
 		}
 	}
 	return eventType

@@ -29,7 +29,6 @@ func TestLoginRoundtrip(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	orig := openBrowser
@@ -81,7 +80,6 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "2")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	t.Setenv("GRAM_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	orig := openBrowser

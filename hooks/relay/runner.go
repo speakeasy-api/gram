@@ -24,6 +24,10 @@ const (
 	// stateBroken: no credential but the machine authenticated before; blocking
 	// paths fail closed so a wiped or revoked key cannot disable enforcement.
 	stateBroken
+	// stateReauthNeeded: a cached key was rejected by the server and cleared.
+	// Tool events still fail closed, but prompt submissions nudge the user to
+	// reconnect instead of blocking every turn on a credential that is gone.
+	stateReauthNeeded
 )
 
 // Relay translates coding-agent hook events into Gram ingest requests and
@@ -100,12 +104,32 @@ type verdict struct {
 
 const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but this machine's credentials are missing or invalid. Run the Speakeasy hooks login command to reconnect."
 
+const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
+
+const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in GRAM_HOOKS_API_KEY. Update or unset GRAM_HOOKS_API_KEY, then run the Speakeasy hooks login command to reconnect."
+
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
 // so an unauthenticated install never leaks events.
 func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState) {
+	// Refuse to send credentials over plaintext HTTP before resolving them,
+	// with the ratchet's usual split: never-authenticated machines skip the
+	// network silently, established machines fail closed.
+	if insecureServerURL(r.cfg.ServerURL) {
+		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
+		if authEstablished() {
+			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false}, stateBroken
+		}
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateNeverAuthed
+	}
+
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
+		if reauthNeeded() {
+			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateReauthNeeded
+		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
 			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateBroken
@@ -117,12 +141,23 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	payload := buildEnvelope(typed, hostname())
 	res := r.client.send(ctx, c, payload)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	if res.authRejected && c.Source == credEnv {
+		// The configured key is authoritative and a re-login can never replace
+		// it, so name it in the failure instead of pointing at the cache flow.
+		if msg := strings.TrimSpace(res.decision.Message); msg != "" {
+			res.decision.Message = envKeyRejectedMessage + " Server response: " + msg
+		} else {
+			res.decision.Message = envKeyRejectedMessage
+		}
+		return res, stateReady
+	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A cache-sourced key the server rejected is forgotten; only the
-		// interactive preflight/login re-mints one, so per-event senders then
-		// fall through to the established (fail-closed) posture.
+		// interactive preflight/login re-mints one. The reauth marker keeps
+		// prompt submissions nudging reconnect instead of blocking on it.
 		forgetAuth()
-		return res, stateBroken
+		markReauthNeeded()
+		return res, stateReauthNeeded
 	}
 	return res, stateReady
 }
@@ -138,7 +173,22 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		if r.cfg.Nonblocking {
 			return verdict{block: false, message: "", nudge: false}
 		}
-		return verdict{block: true, message: brokenAuthMessage, nudge: false}
+		msg := res.decision.Message
+		if msg == "" {
+			msg = brokenAuthMessage
+		}
+		return verdict{block: true, message: msg, nudge: false}
+	case stateReauthNeeded:
+		if r.cfg.Nonblocking {
+			return verdict{block: false, message: "", nudge: false}
+		}
+		// Tool events fail closed on the rejection (or its memory); prompt
+		// handlers honor nudge and fail open instead.
+		msg := reauthNeededMessage
+		if res.statusCode != 0 {
+			msg = httpMessage(res)
+		}
+		return verdict{block: true, message: msg, nudge: true}
 	}
 
 	if res.statusCode >= 200 && res.statusCode < 300 {
@@ -157,13 +207,18 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
 	v := r.evaluate(ctx, e)
-	if v.block {
-		return agenthooks.BlockPrompt(v.message), nil
-	}
+	// A nudge-worthy posture (never authenticated, or a cleared rejected key)
+	// fails the prompt open: blocking every turn on a credential the machine
+	// does not hold would brick the session, and the context note routes the
+	// user to sign-in instead.
 	if v.nudge && e.Provider == agenthooks.ProviderClaudeCode {
 		if note := r.loginNudge(e.Session.ID); note != "" {
 			return agenthooks.AcceptPrompt().WithContext(note), nil
 		}
+		return agenthooks.AcceptPrompt(), nil
+	}
+	if v.block {
+		return agenthooks.BlockPrompt(v.message), nil
 	}
 	return agenthooks.AcceptPrompt(), nil
 }
@@ -197,10 +252,11 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 	return agenthooks.Finish(), nil
 }
 
-// onSessionStart runs the interactive sign-in preflight when the machine is not
-// yet authenticated, then relays the session.started telemetry.
+// onSessionStart runs the interactive sign-in preflight when the machine is
+// not yet authenticated — or lost its credential to a server rejection — then
+// relays the session.started telemetry.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
-	if _, ok := resolveAuth(r.cfg); !ok && !authEstablished() {
+	if _, ok := resolveAuth(r.cfg); !ok && (!authEstablished() || reauthNeeded()) {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

@@ -105,12 +105,12 @@ func readCachedAuth(cfg Config) (creds, bool) {
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. The second return is false when the machine holds no credential.
+// the cache. Only GRAM_HOOKS_API_KEY is honored — the generic GRAM_API_KEY is
+// a different product surface (MCP access) and must not silently authenticate
+// hook telemetry. The second return is false when the machine holds no
+// credential.
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
-	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("GRAM_API_KEY"))
-	}
 	if apiKey != "" {
 		project := cfg.ProjectSlug
 		if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
@@ -157,6 +157,7 @@ func writeAuth(c creds) error {
 		return fmt.Errorf("commit auth cache: %w", err)
 	}
 	markEstablished()
+	clearReauthNeeded()
 	return nil
 }
 
@@ -182,4 +183,45 @@ func markEstablished() {
 	if err == nil {
 		_ = f.Close()
 	}
+}
+
+// The reauth-needed marker records that a cached key was rejected by the
+// server and cleared: prompt submissions keep nudging the user to reconnect
+// (fail open) instead of blocking on a credential the machine no longer holds,
+// while tool events still fail closed. It is cleared by the next successful
+// sign-in.
+func markReauthNeeded() {
+	f, err := os.OpenFile(authFilePath()+".reauth-needed", os.O_CREATE|os.O_WRONLY, 0o600)
+	if err == nil {
+		_ = f.Close()
+	}
+}
+
+func reauthNeeded() bool {
+	_, err := os.Stat(authFilePath() + ".reauth-needed")
+	return err == nil
+}
+
+func clearReauthNeeded() {
+	_ = os.Remove(authFilePath() + ".reauth-needed")
+}
+
+// insecureServerURL reports whether sending credentials to serverURL would use
+// plaintext HTTP to a non-loopback host. Only exact loopback hosts are exempt
+// (local dev servers); everything else must be HTTPS so a hooks key never
+// crosses the network in the clear.
+func insecureServerURL(serverURL string) bool {
+	if strings.HasPrefix(serverURL, "https://") {
+		return false
+	}
+	rest, ok := strings.CutPrefix(serverURL, "http://")
+	if !ok {
+		return true
+	}
+	for _, host := range []string{"127.0.0.1", "localhost", "[::1]"} {
+		if rest == host || strings.HasPrefix(rest, host+":") || strings.HasPrefix(rest, host+"/") {
+			return false
+		}
+	}
+	return true
 }
