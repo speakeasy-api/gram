@@ -22,6 +22,7 @@ import anyio
 import structlog
 import uvicorn
 from anyio.abc import TaskStatus
+from asyncer import asyncify
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -112,6 +113,14 @@ async def serve_control(
         lifespan="off",
     )
     server = _NoSignalServer(config)
+
+    # uvicorn lazily imports its HTTP/WebSocket protocol implementations
+    # (h11/httptools/websockets/wsproto) on first start, inside ``config.load``,
+    # which ``serve`` otherwise runs on the event-loop thread. That one-time
+    # synchronous import I/O blocks the loop long enough to trip the blocking-IO
+    # detector at startup. Warm the config in a worker thread so the imports
+    # happen off the loop; ``serve`` sees ``config.loaded`` and skips the work.
+    await asyncify(config.load)()
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(server.serve)
