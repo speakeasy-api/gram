@@ -2130,6 +2130,9 @@ cat >/dev/null
 printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
 printf '{"systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
 `), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "python3"), []byte(`#!/usr/bin/env bash
+exit 1
+`), 0o755))
 
 	authFile := filepath.Join(dir, "auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
@@ -2169,6 +2172,57 @@ printf '{"systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.
 	require.Contains(t, stdout.String(), `"additionalContext"`)
 	requests = string(requireFileBytes(t, capturePath))
 	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.claude"), "reauth-needed prompt submit must not send an unauthenticated request")
+}
+
+func TestCheckedInClaudeSenderRejectedCachedKeyPreservesPromptBlock(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"decision":"block","reason":"blocked by policy","systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-checked-in-stale-block","prompt":"blocked"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "Claude consumes prompt blocks from stdout JSON: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"decision":"block"`)
+	require.Contains(t, stdout.String(), "blocked by policy")
+	require.NotContains(t, stdout.String(), `"additionalContext"`)
+	require.NoFileExists(t, authFile, "rejected cached key must still be cleared when a server block is preserved")
+	require.FileExists(t, authFile+".reauth-needed", "server block path must still remember that reconnect is required")
 }
 
 func TestCheckedInClaudeSenderRejectedCachedKeyStillBlocksToolUse(t *testing.T) {

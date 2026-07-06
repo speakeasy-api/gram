@@ -45,8 +45,9 @@ gram_hooks_env_key_rejected_message() {
 
 gram_hooks_json_escape_string() {
   if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json, sys; print(json.dumps(sys.stdin.read())[1:-1], end="")'
-    return
+    if python3 -c 'import json, sys; print(json.dumps(sys.stdin.read())[1:-1], end="")'; then
+      return
+    fi
   fi
   local s
   s="$(cat)"
@@ -64,6 +65,71 @@ gram_hooks_emit_login_nudge() {
   printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"}}\n' "$escaped"
 }
 
+gram_hooks_top_level_string_value() {
+  local key="$1"
+  local payload="$2"
+  if ! command -v awk >/dev/null 2>&1; then
+    return 1
+  fi
+  printf '%s' "$payload" | awk -v want="$key" '
+BEGIN { depth = 0; in_string = 0; escape = 0; state = "key"; token = ""; current_key = "" }
+{
+  s = s $0 "\n"
+}
+END {
+  for (i = 1; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    if (in_string) {
+      if (escape) {
+        token = token c
+        escape = 0
+      } else if (c == "\\") {
+        escape = 1
+      } else if (c == "\"") {
+        in_string = 0
+        if (depth == 1 && state == "key") {
+          current_key = token
+          state = "colon"
+        } else if (depth == 1 && state == "value") {
+          if (current_key == want) {
+            print token
+            exit 0
+          }
+          state = "after_value"
+        }
+      } else {
+        token = token c
+      }
+      continue
+    }
+    if (c == "\"") {
+      in_string = 1
+      escape = 0
+      token = ""
+      continue
+    }
+    if (c == "{" || c == "[") {
+      depth++
+      continue
+    }
+    if (c == "}" || c == "]") {
+      depth--
+      continue
+    }
+    if (depth == 1 && state == "colon" && c == ":") {
+      state = "value"
+      continue
+    }
+    if (depth == 1 && c == ",") {
+      state = "key"
+      current_key = ""
+      continue
+    }
+  }
+  exit 1
+}'
+}
+
 gram_hooks_is_user_prompt_submit() {
   local payload="$1"
   if command -v python3 >/dev/null 2>&1; then
@@ -78,8 +144,11 @@ except Exception:
 " 2>/dev/null)" || true
     [ "$event" = "UserPromptSubmit" ] && return 0
   fi
-  # Without a JSON parser, do not scan the raw payload: nested tool input can
-  # contain hook-looking text and must not turn a tool event into fail-open.
+  local event
+  event="$(gram_hooks_top_level_string_value hook_event_name "$payload" ||
+    gram_hooks_top_level_string_value event_name "$payload" ||
+    gram_hooks_top_level_string_value event "$payload")" || true
+  [ "$event" = "UserPromptSubmit" ] && return 0
   return 1
 }
 
@@ -101,6 +170,33 @@ except Exception:
   fi
   case "$body" in
     *'"systemMessage":"Speakeasy hooks rejected plugin auth.'*) return 0 ;;
+  esac
+  return 1
+}
+
+gram_hooks_body_has_block_decision() {
+  local body="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    local blocked
+    blocked="$(printf '%s' "$body" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    hook_output = data.get('hookSpecificOutput')
+    print(
+        '1'
+        if data.get('decision') == 'block'
+        or (isinstance(hook_output, dict) and hook_output.get('permissionDecision') == 'deny')
+        else '',
+        end='',
+    )
+except Exception:
+    pass
+" 2>/dev/null)" || true
+    [ "$blocked" = "1" ] && return 0
+  fi
+  case "$body" in
+    *'"decision":"block"'* | *'"permissionDecision":"deny"'*) return 0 ;;
   esac
   return 1
 }
@@ -190,9 +286,9 @@ body="$GRAM_HTTP_BODY"
 
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null &&
   gram_hooks_body_has_auth_failure_signal "$body"; then
+  env_reason=""
   if env_reason="$(gram_hooks_env_key_rejected_message)"; then
-    echo "$env_reason" >&2
-    exit 2
+    :
   fi
   if [ -n "$gram_hooks_cached_auth" ] &&
     type gram_hooks_forget_auth >/dev/null 2>&1; then
@@ -200,6 +296,17 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null 
     if type gram_hooks_mark_reauth_needed >/dev/null 2>&1; then
       gram_hooks_mark_reauth_needed
     fi
+  fi
+  if gram_hooks_body_has_block_decision "$body"; then
+    if [ -n "$env_reason" ]; then
+      echo "$env_reason" >&2
+    fi
+    echo "$body"
+    exit 0
+  fi
+  if [ -n "$env_reason" ]; then
+    echo "$env_reason" >&2
+    exit 2
   fi
   if gram_hooks_is_user_prompt_submit "$payload"; then
     gram_hooks_emit_login_nudge
