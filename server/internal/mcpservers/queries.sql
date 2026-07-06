@@ -104,3 +104,121 @@ UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
+
+-- name: SetMCPServerToolMetadata :many
+-- Authoritative write of an MCP server's tool metadata collection: every tool in
+-- @tools is upserted and every stored tool absent from @tools is retired, in a
+-- single statement. The two branches touch disjoint rows (partitioned by
+-- tool_name), so neither observes the other's writes.
+--
+-- The conflict target is the partial unique index on (mcp_server_id, tool_name)
+-- WHERE deleted IS FALSE, so re-adding a retired tool inserts a fresh row
+-- rather than resurrecting the tombstoned one. A tool_name repeated within
+-- @tools trips the ON CONFLICT cardinality check (SQLSTATE 21000), aborting the
+-- statement rather than silently applying one of the duplicates.
+-- The input CTE unpacks each element with ->> rather than jsonb_to_recordset:
+-- sqlc's static analyzer never learns a column-definition list, so a
+-- recordset alias leaves every input.<column> reference unresolvable (and
+-- crashes sqlc outright under the managed analyzer). Selecting from
+-- jsonb_array_elements references only the element itself, and the per-column
+-- names below are ordinary select-list aliases, which sqlc does understand.
+-- ->> yields NULL for both an absent key and a JSON null, which is exactly the
+-- "hint unset" case these nullable columns encode.
+WITH input AS (
+    SELECT
+        elem->>'tool_name' AS tool_name,
+        elem->>'title' AS title,
+        (elem->>'read_only_hint')::boolean AS read_only_hint,
+        (elem->>'destructive_hint')::boolean AS destructive_hint,
+        (elem->>'idempotent_hint')::boolean AS idempotent_hint,
+        (elem->>'open_world_hint')::boolean AS open_world_hint
+    FROM jsonb_array_elements(@tools::jsonb) AS elem
+),
+upserted AS (
+    INSERT INTO mcp_server_tool_metadata (
+        project_id,
+        mcp_server_id,
+        tool_name,
+        title,
+        read_only_hint,
+        destructive_hint,
+        idempotent_hint,
+        open_world_hint
+    )
+    SELECT
+        @project_id,
+        @mcp_server_id,
+        input.tool_name,
+        input.title,
+        input.read_only_hint,
+        input.destructive_hint,
+        input.idempotent_hint,
+        input.open_world_hint
+    FROM input
+    ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        read_only_hint = EXCLUDED.read_only_hint,
+        destructive_hint = EXCLUDED.destructive_hint,
+        idempotent_hint = EXCLUDED.idempotent_hint,
+        open_world_hint = EXCLUDED.open_world_hint,
+        updated_at = clock_timestamp()
+    WHERE mcp_server_tool_metadata.project_id = @project_id
+    RETURNING *
+),
+retired AS (
+    UPDATE mcp_server_tool_metadata
+    SET deleted_at = clock_timestamp()
+    WHERE mcp_server_id = @mcp_server_id
+      AND project_id = @project_id
+      AND deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1 FROM input WHERE input.tool_name = mcp_server_tool_metadata.tool_name
+      )
+    RETURNING *
+)
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    false AS was_retired
+FROM upserted
+UNION ALL
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    true AS was_retired
+FROM retired
+ORDER BY tool_name;
+
+-- name: ListMCPServerToolMetadata :many
+SELECT *
+FROM mcp_server_tool_metadata
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND (@include_deleted::boolean OR deleted IS FALSE)
+ORDER BY tool_name, created_at;
+
+-- name: UpdateMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET title = @title,
+    read_only_hint = @read_only_hint,
+    destructive_hint = @destructive_hint,
+    idempotent_hint = @idempotent_hint,
+    open_world_hint = @open_world_hint,
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND tool_name = @tool_name
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND tool_name = @tool_name
+  AND deleted IS FALSE
+RETURNING *;
