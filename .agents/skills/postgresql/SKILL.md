@@ -34,7 +34,7 @@ Reference these guidelines when:
 
 - **Data Integrity and Data Types:**
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
-  - Use constraints (e.g., `NOT NULL`, `UNIQUE`, `FOREIGN KEY`) to enforce data integrity.
+  - Use constraints (e.g., `NOT NULL`, `FOREIGN KEY`) to enforce data integrity but not for UNIQUE-ness — that is enforced with unique indexes.
   - Do not use `CHECK` constraints for pure enumeration / value validation (e.g. `CHECK (status IN ('active', 'inactive'))`). Validate allowed values in application code, where they can evolve without a migration. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
