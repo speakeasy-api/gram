@@ -306,8 +306,8 @@ func TestIngest_ExplicitSkillActivationEmitsSingleRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", result.Decision)
 
-	listRows := func() []telemetryrepo.TelemetryLog {
-		rows, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+	listRows := func() ([]telemetryrepo.TelemetryLog, error) {
+		return chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 			GramProjectID: authCtx.ProjectID.String(),
 			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
 			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
@@ -316,14 +316,19 @@ func TestIngest_ExplicitSkillActivationEmitsSingleRow(t *testing.T) {
 			Cursor:        "",
 			Limit:         10,
 		})
-		require.NoError(t, err)
-		return rows
 	}
 
-	require.Eventually(t, func() bool { return len(listRows()) >= 1 }, 2*time.Second, 50*time.Millisecond)
-	require.Never(t, func() bool { return len(listRows()) > 1 }, 500*time.Millisecond, 100*time.Millisecond,
+	require.Eventually(t, func() bool {
+		rows, err := listRows()
+		return err == nil && len(rows) >= 1
+	}, 2*time.Second, 50*time.Millisecond)
+	require.Never(t, func() bool {
+		rows, err := listRows()
+		return err == nil && len(rows) > 1
+	}, 500*time.Millisecond, 100*time.Millisecond,
 		"an explicit skill.activated event must not mint a derived duplicate")
-	rows := listRows()
+	rows, err := listRows()
+	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Contains(t, rows[0].Attributes, "skill.activated")
 	require.Contains(t, rows[0].Attributes, "repo-review")
@@ -360,8 +365,8 @@ func TestIngest_BlockedEventDoesNotEmitDerivedSkillRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "deny", result.Decision)
 
-	listRows := func() []telemetryrepo.TelemetryLog {
-		rows, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+	listRows := func() ([]telemetryrepo.TelemetryLog, error) {
+		return chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 			GramProjectID: authCtx.ProjectID.String(),
 			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
 			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
@@ -370,13 +375,18 @@ func TestIngest_BlockedEventDoesNotEmitDerivedSkillRow(t *testing.T) {
 			Cursor:        "",
 			Limit:         10,
 		})
-		require.NoError(t, err)
-		return rows
 	}
 
-	require.Eventually(t, func() bool { return len(listRows()) >= 1 }, 2*time.Second, 50*time.Millisecond)
+	require.Eventually(t, func() bool {
+		rows, err := listRows()
+		return err == nil && len(rows) >= 1
+	}, 2*time.Second, 50*time.Millisecond)
 	require.Never(t, func() bool {
-		for _, row := range listRows() {
+		rows, err := listRows()
+		if err != nil {
+			return false
+		}
+		for _, row := range rows {
 			if strings.Contains(row.Attributes, "skill.activated") {
 				return true
 			}

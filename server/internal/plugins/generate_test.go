@@ -2490,10 +2490,12 @@ gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
 	require.Equal(t, "prompt.submitted", eventType)
 	require.Empty(t, skill, "$ tokens that resolve to no skill directory must be ignored")
 
-	_, skill = parse(chunks[7])
+	eventType, skill = parse(chunks[7])
+	require.Equal(t, "prompt.submitted", eventType)
 	require.Equal(t, "home-skill", skill, "sentence-final punctuation must not defeat a mention")
 
-	_, skill = parse(chunks[8])
+	eventType, skill = parse(chunks[8])
+	require.Equal(t, "prompt.submitted", eventType)
 	require.Empty(t, skill, "a relative cwd must terminate the walk without matching")
 }
 
