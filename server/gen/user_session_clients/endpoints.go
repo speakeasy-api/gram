@@ -72,7 +72,7 @@ func NewListUserSessionClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -131,7 +131,7 @@ func NewGetUserSessionClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -190,7 +190,7 @@ func NewRevokeUserSessionClientEndpoint(s Service, authAPIKeyFn security.AuthAPI
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

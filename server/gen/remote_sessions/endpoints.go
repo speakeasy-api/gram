@@ -69,7 +69,7 @@ func NewListRemoteSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -128,7 +128,7 @@ func NewRevokeRemoteSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

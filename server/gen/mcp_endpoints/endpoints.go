@@ -79,7 +79,7 @@ func NewCreateMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -138,7 +138,7 @@ func NewGetMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -197,7 +197,7 @@ func NewListMcpEndpointsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -256,7 +256,7 @@ func NewUpdateMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -316,7 +316,7 @@ func NewCheckMcpEndpointSlugAvailabilityEndpoint(s Service, authAPIKeyFn securit
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -375,7 +375,7 @@ func NewDeleteMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

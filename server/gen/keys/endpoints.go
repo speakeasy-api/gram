@@ -119,7 +119,7 @@ func NewVerifyKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
 			RequiredScopes: []string{},
 		}
 		var key string

@@ -98,9 +98,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-// APIKeyAuth authorizes the org-scoped agent API key on the exchange method.
-// Delegates to the same auth.Authorize path agent.getPlugins uses, so the
-// `agent` scope requirement declared in the design is enforced here.
+// APIKeyAuth authorizes the org-scoped install credential on the exchange
+// method. Delegates to the shared auth.Authorize path, so the `agent_install`
+// scope requirement declared in the design is enforced here — a per-user key
+// (which carries `agent`+`hooks`, not `agent_install`) is rejected.
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
@@ -150,13 +151,19 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 	}
 	projectID := uuid.NullUUID{UUID: projects[0].ID, Valid: true}
 
+	// Per-user key name. The api_keys (organization_id, name) unique index
+	// allows only one live key per name per org, so a fixed "device-agent" name
+	// would let only the first user in an org mint. Scoping the name by user id
+	// keeps it unique per user and deterministic for rotation.
+	keyName := deviceAgentKeyName + ":" + user.ID
+
 	// Rotation: best-effort revoke the user's prior device-agent key(s) in this
 	// org before minting a fresh one. Long-lived keys, so revocation is the
 	// lifecycle lever. A revoke failure must not block a fresh mint.
 	if err := s.keysRepo.DeleteAPIKeysByNameAndUser(ctx, keys_repo.DeleteAPIKeysByNameAndUserParams{
 		OrganizationID:  orgID,
 		CreatedByUserID: user.ID,
-		Name:            deviceAgentKeyName,
+		Name:            keyName,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to revoke prior device-agent key(s); minting anyway",
 			attr.SlogError(err),
@@ -179,7 +186,7 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 		OrganizationID:  orgID,
 		ProjectID:       projectID,
 		CreatedByUserID: user.ID,
-		Name:            deviceAgentKeyName,
+		Name:            keyName,
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
 		Scopes:          []string{auth.APIKeyScopeAgent.String(), auth.APIKeyScopeHooks.String()},

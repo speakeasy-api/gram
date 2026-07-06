@@ -23,10 +23,10 @@ var _ = Service("tokenExchange", func() {
 	shared.DeclareErrorResponses()
 
 	Method("exchange", func() {
-		Description("Exchange an org-scoped agent API key plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with the org-scoped API key carrying the 'agent' scope, same scheme as agent.getPlugins. The raw key is returned exactly once.")
+		Description("Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.")
 
 		Security(security.ByKey, func() {
-			Scope("agent")
+			Scope("agent_install")
 		})
 
 		Payload(func() {

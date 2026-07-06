@@ -30,15 +30,22 @@ const (
 	APIKeyScopeChat     APIKeyScope = iota
 	APIKeyScopeHooks    APIKeyScope = iota
 	APIKeyScopeAgent    APIKeyScope = iota
+	// APIKeyScopeAgentInstall is the device-agent *install* credential — the
+	// org-scoped key that may exchange for per-user device-agent keys via
+	// tokenExchange.exchange. It is deliberately distinct from APIKeyScopeAgent:
+	// the per-user keys that mint carries `agent`+`hooks` (data access), NOT
+	// `agent_install`, so a leaked per-user key cannot mint another user's key.
+	APIKeyScopeAgentInstall APIKeyScope = iota
 )
 
 var APIKeyScopes = map[string]APIKeyScope{
-	"invalid":  APIKeyScopeInvalid,
-	"consumer": APIKeyScopeConsumer,
-	"producer": APIKeyScopeProducer,
-	"chat":     APIKeyScopeChat,
-	"hooks":    APIKeyScopeHooks,
-	"agent":    APIKeyScopeAgent,
+	"invalid":       APIKeyScopeInvalid,
+	"consumer":      APIKeyScopeConsumer,
+	"producer":      APIKeyScopeProducer,
+	"chat":          APIKeyScopeChat,
+	"hooks":         APIKeyScopeHooks,
+	"agent":         APIKeyScopeAgent,
+	"agent_install": APIKeyScopeAgentInstall,
 }
 
 func (scope APIKeyScope) String() string {
@@ -53,6 +60,8 @@ func (scope APIKeyScope) String() string {
 		return "hooks"
 	case APIKeyScopeAgent:
 		return "agent"
+	case APIKeyScopeAgentInstall:
+		return "agent_install"
 	default:
 		return "invalid"
 	}
