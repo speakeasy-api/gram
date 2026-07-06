@@ -158,13 +158,16 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 
-	if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID); err != nil {
+	pluginCreated, err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID)
+	if err != nil {
 		return nil, err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -173,18 +176,22 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // the first time it gets a usable endpoint (this is what AddPluginServer's
 // own publishability check requires), so it's included in the
 // auto-published marketplace without a human visiting the Plugins page.
-// No-op if the project has no Default plugin, the server is disabled, or
-// it's already attached (e.g. a second endpoint on the same server).
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) error {
+// No-op if the server is disabled or it's already attached (e.g. a second
+// endpoint on the same server). Returns pluginCreated=true if this call
+// lazily created the Default plugin (project predates this feature) —
+// callers should enqueue an initial publish for it, but only after their
+// own transaction commits, since this runs pre-commit and the DB writes
+// could still roll back.
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) (bool, error) {
 	server, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        mcpServerID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 	if server.Visibility == mcpservers.VisibilityDisabled {
-		return nil
+		return false, nil
 	}
 
 	displayName := mcpServerDisplayName(server)
@@ -197,10 +204,10 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		DisplayName:    displayName,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 	if attached == nil {
-		return nil
+		return false, nil
 	}
 
 	if attached.PluginCreated {
@@ -214,24 +221,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 			PluginName:       attached.PluginName,
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
-		}
-
-		// This project predates the Default-plugin feature (no CreateProject
-		// call ever fired the initial publish for it) — kick one off now so it
-		// isn't left attached-but-never-published. Best-effort, same as
-		// CreateProject's trigger: a non-cancelable ctx since this runs right
-		// before commit and shouldn't be dropped by the request returning.
-		if s.pluginsGitHubEnabled {
-			enqueueCtx := context.WithoutCancel(ctx)
-			if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-				ProjectID:       *authCtx.ProjectID,
-				CreatedByUserID: authCtx.UserID,
-				CommitMessage:   "Initial marketplace publish",
-				SkipIfUnchanged: false,
-			}); err != nil {
-				s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
-			}
+			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
 		}
 	}
 
@@ -252,10 +242,32 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		ToolsetURN:        nil,
 		McpServerURN:      &mcpServerURN,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
 	}
 
-	return nil
+	return attached.PluginCreated, nil
+}
+
+// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
+// publish for a project whose Default plugin was just lazily created. Must
+// only be called after the triggering transaction has committed — enqueuing
+// before commit risks Temporal running against state that a later failure
+// in the same transaction rolls back. Best-effort: a non-cancelable ctx
+// since the request returning shouldn't drop the enqueue.
+func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
+	if !pluginCreated || !s.pluginsGitHubEnabled {
+		return
+	}
+
+	enqueueCtx := context.WithoutCancel(ctx)
+	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+	}
 }
 
 // mcpServerDisplayName derives a default plugin-server display name from an

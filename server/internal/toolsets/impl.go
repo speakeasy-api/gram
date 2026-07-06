@@ -233,8 +233,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
 
+	var pluginCreated bool
 	if createToolParams.McpEnabled {
-		if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name); err != nil {
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -242,6 +244,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
+
+	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
@@ -253,9 +257,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 // attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
 // Default plugin so it's included in the auto-published marketplace without
-// a human visiting the Plugins page. No-op if the project has no Default
-// plugin or the toolset is already attached.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) error {
+// a human visiting the Plugins page. No-op if the toolset is already
+// attached. Returns pluginCreated=true if this call lazily created the
+// Default plugin (project predates this feature) — callers should enqueue
+// an initial publish for it, but only after their own transaction commits,
+// since this runs pre-commit and the DB writes could still roll back.
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
 	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
@@ -264,10 +271,10 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		DisplayName:    displayName,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
 	}
 	if attached == nil {
-		return nil
+		return false, nil
 	}
 
 	if attached.PluginCreated {
@@ -281,24 +288,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 			PluginName:       attached.PluginName,
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
-		}
-
-		// This project predates the Default-plugin feature (no CreateProject
-		// call ever fired the initial publish for it) — kick one off now so it
-		// isn't left attached-but-never-published. Best-effort, same as
-		// CreateProject's trigger: a non-cancelable ctx since this runs right
-		// before commit and shouldn't be dropped by the request returning.
-		if s.pluginsGitHubEnabled {
-			enqueueCtx := context.WithoutCancel(ctx)
-			if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-				ProjectID:       *authCtx.ProjectID,
-				CreatedByUserID: authCtx.UserID,
-				CommitMessage:   "Initial marketplace publish",
-				SkipIfUnchanged: false,
-			}); err != nil {
-				s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
-			}
+			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
 		}
 	}
 
@@ -319,10 +309,32 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		ToolsetURN:        &toolsetURN,
 		McpServerURN:      nil,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
 	}
 
-	return nil
+	return attached.PluginCreated, nil
+}
+
+// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
+// publish for a project whose Default plugin was just lazily created. Must
+// only be called after the triggering transaction has committed — enqueuing
+// before commit risks Temporal running against state that a later failure
+// in the same transaction rolls back. Best-effort: a non-cancelable ctx
+// since the request returning shouldn't drop the enqueue.
+func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
+	if !pluginCreated || !s.pluginsGitHubEnabled {
+		return
+	}
+
+	enqueueCtx := context.WithoutCancel(ctx)
+	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+	}
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -539,8 +551,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
 
+	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
-		if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name); err != nil {
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -620,6 +634,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").LogError(ctx, logger)
 	}
+
+	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	return toolsetDetails, nil
 }
