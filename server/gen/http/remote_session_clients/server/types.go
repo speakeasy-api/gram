@@ -121,9 +121,10 @@ type DetachUserSessionIssuerRequestBody struct {
 type CreateRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -158,9 +159,10 @@ type CreateRemoteSessionClientResponseBody struct {
 type CreateCimdResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -196,9 +198,10 @@ type CreateCimdResponseBody struct {
 type CloneClientFromOAuthProxyProviderResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -234,9 +237,10 @@ type CloneClientFromOAuthProxyProviderResponseBody struct {
 type UpdateRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -272,9 +276,10 @@ type UpdateRemoteSessionClientResponseBody struct {
 type AttachUserSessionIssuerResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -310,9 +315,10 @@ type AttachUserSessionIssuerResponseBody struct {
 type DetachUserSessionIssuerResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -356,9 +362,10 @@ type ListRemoteSessionClientsResponseBody struct {
 type GetRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -2097,9 +2104,10 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
