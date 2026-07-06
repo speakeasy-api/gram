@@ -1,4 +1,4 @@
-import { AccountTypeBadge } from "@/components/account-type-badge";
+import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -498,6 +498,7 @@ export function LogsTools(): JSX.Element {
           <LogsToolsContent
             isLoading={isLoading}
             isFetching={isFetching}
+            onRefresh={refetch}
             error={displayError}
             traces={traces}
             serverOptionGroups={serverOptionGroups}
@@ -554,6 +555,7 @@ export function LogsTools(): JSX.Element {
 function LogsToolsContent({
   isLoading,
   isFetching,
+  onRefresh,
   error,
   traces,
   serverOptionGroups,
@@ -601,6 +603,7 @@ function LogsToolsContent({
 }: {
   isLoading: boolean;
   isFetching: boolean;
+  onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
   serverOptionGroups: Parameters<
@@ -711,6 +714,8 @@ function LogsToolsContent({
                 />
               </div>
             }
+            onRefresh={onRefresh}
+            isRefreshing={isFetching}
           />
 
           {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
@@ -1006,10 +1011,13 @@ function LogsToolsTraceRow({
         </div>
 
         <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <AccountTypeIcon
+            accountType={trace.accountType}
+            className="shrink-0"
+          />
           <span className="text-muted-foreground min-w-0 truncate">
             {userLabel || "—"}
           </span>
-          <AccountTypeBadge accountType={trace.accountType} noTooltip />
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

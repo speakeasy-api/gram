@@ -521,6 +521,20 @@ export function InsightsAgentsContent(): JSX.Element {
               <Page.Toolbar.Actions>
                 <ValueModeToggle mode={valueMode} onChange={setValueMode} />
               </Page.Toolbar.Actions>
+              <Page.Toolbar.Refresh
+                onRefresh={() => {
+                  void usersQuery.refetch();
+                  void projectQuery.refetch();
+                  void overviewQuery.refetch();
+                  void roleUsageQuery.refetch();
+                }}
+                isRefreshing={
+                  usersQuery.isFetching ||
+                  projectQuery.isFetching ||
+                  overviewQuery.isFetching ||
+                  roleUsageQuery.isFetching
+                }
+              />
             </Page.Toolbar>
           </div>
 

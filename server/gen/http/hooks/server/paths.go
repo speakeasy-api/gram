@@ -22,6 +22,11 @@ func CodexHooksPath() string {
 	return "/rpc/hooks.codex"
 }
 
+// IngestHooksPath returns the URL path to the hooks service ingest HTTP endpoint.
+func IngestHooksPath() string {
+	return "/rpc/hooks.ingest"
+}
+
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"

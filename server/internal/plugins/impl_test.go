@@ -1384,15 +1384,19 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
-	// accepts it as an optional header for plugin-driven attribution).
+	// Hook senders must not embed the publish-time hooks key anymore. Each
+	// developer authenticates locally; auth.sh writes the resulting key to a
+	// protected curl config when the hook fires.
 	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
+		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
+		require.NotContains(t, script, hooksKeyPrefix, "%s embeds the publish-time hooks key", path)
 		// Must NOT contain the MCP key — separate scope, separate concerns.
 		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
 	}
+	authScript := string(mock.lastPushedFiles[claudeObservability+"/hooks/auth.sh"])
+	require.Contains(t, authScript, `printf 'header = "Gram-Key: %s"\n'`, "auth.sh must write Gram-Key to curl config")
 }
 
 // The observability plugin must appear FIRST in each platform's marketplace
@@ -1491,7 +1495,9 @@ func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	server, ok := mcpConfig.MCPServers["Codex Server"]
+	// The key is the display name sanitized to Codex's ^[a-zA-Z0-9_-]+$
+	// server-name pattern — "Codex Server" would fail MCP client startup.
+	server, ok := mcpConfig.MCPServers["Codex_Server"]
 	require.True(t, ok)
 	require.Contains(t, server.URL, "/mcp/")
 	require.Contains(t, server.HTTPHeaders["Authorization"], "Bearer gram_local_")
@@ -1595,7 +1601,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	server, ok := mcpConfig.MCPServers["Public Codex Server"]
+	server, ok := mcpConfig.MCPServers["Public_Codex_Server"]
 	require.True(t, ok)
 	// Codex resolves env_http_headers["Authorization"] = "ANALYTICS_API_KEY"
 	// by reading the ANALYTICS_API_KEY env var at runtime and using its
@@ -1647,8 +1653,8 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	require.Contains(t, mcpConfig.MCPServers, "Server codex-enabled")
-	require.NotContains(t, mcpConfig.MCPServers, "Server codex-disabled")
+	require.Contains(t, mcpConfig.MCPServers, "Server_codex-enabled")
+	require.NotContains(t, mcpConfig.MCPServers, "Server_codex-disabled")
 }
 
 // PublishProject with SkipIfUnchanged set re-publishes the first time (no
