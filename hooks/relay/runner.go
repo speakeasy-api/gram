@@ -36,14 +36,20 @@ type Relay struct {
 	cfg    Config
 	client *client
 	login  *loginFlow
+	// backfillDeny carries a blocked verdict from a reporting-only backfilled
+	// prompt (agenthooks discards its decision) to the decision-capable event
+	// that triggered the backfill in this same process. It was the turn's
+	// only prompt-policy check, so the deny gates that event instead.
+	backfillDeny string
 }
 
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
 	return &Relay{
-		cfg:    cfg,
-		client: newClient(cfg.ServerURL),
-		login:  newLoginFlow(cfg),
+		cfg:          cfg,
+		client:       newClient(cfg.ServerURL),
+		login:        newLoginFlow(cfg),
+		backfillDeny: "",
 	}
 }
 
@@ -222,6 +228,15 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
 	v := r.evaluate(ctx, e)
+	if e.Backfilled {
+		if v.block {
+			r.backfillDeny = v.message
+			if r.backfillDeny == "" {
+				r.backfillDeny = "Speakeasy blocked this turn's prompt."
+			}
+		}
+		return agenthooks.AcceptPrompt(), nil
+	}
 	// A nudge-worthy posture (never authenticated, or a cleared rejected key)
 	// fails the prompt open: blocking every turn on a credential the machine
 	// does not hold would brick the session, and the context note routes the
@@ -239,6 +254,13 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 }
 
 func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+	// A denied backfilled prompt would have blocked at prompt submission had
+	// that delivery not been missed; the deny lands on this triggering event
+	// instead, without reporting the tool call the agent never got to make.
+	if msg := r.backfillDeny; msg != "" {
+		r.backfillDeny = ""
+		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
+	}
 	v := r.evaluate(ctx, e)
 	if v.block {
 		// The system message mirrors the deny reason so the block text (and
@@ -250,6 +272,10 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 }
 
 func (r *Relay) onPermission(ctx context.Context, e *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
+	if msg := r.backfillDeny; msg != "" {
+		r.backfillDeny = ""
+		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
+	}
 	v := r.evaluate(ctx, e)
 	if v.block {
 		return agenthooks.Deny(v.message).WithSystemMessage(v.message), nil

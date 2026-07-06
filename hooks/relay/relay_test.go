@@ -741,6 +741,37 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 	require.Contains(t, got, "mcp.example.com/mcp", "userinfo URLs keep host and path, matching the structured MCP URL")
 }
 
+// TestBackfilledPromptDenyGatesTriggeringToolEvent pins the Cursor recovery
+// path: when beforeSubmitPrompt was missed, the backfilled prompt's decision
+// is reporting-only and discarded by agenthooks, so a server deny must gate
+// the tool event that triggered the backfill — it was the turn's only
+// prompt-policy check.
+func TestBackfilledPromptDenyGatesTriggeringToolEvent(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	transcript := filepath.Join(t.TempDir(), "transcript.jsonl")
+	require.NoError(t, os.WriteFile(transcript, []byte(`{"type":"message","role":"user","message":{"content":[{"type":"text","text":"<user_query>run the shipped task</user_query>"}]}}`+"\n"), 0o600))
+
+	var prompts, tools atomic.Int32
+	fs := newFakeServer(t, func(b components.IngestRequestBody) (int, decision) {
+		if b.Event.Type == components.TypePromptSubmitted {
+			prompts.Add(1)
+			return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "Speakeasy blocked this prompt: matched policy pi-guard"}
+		}
+		tools.Add(1)
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	payload := []byte(`{"conversation_id":"conv-backfill-1","generation_id":"gen-1","hook_event_name":"beforeShellExecution","transcript_path":"` + transcript + `","command":"curl example.com","cwd":"/work/repo"}`)
+	runner := NewRunner(cfg)
+	res := agenthookstest.Invoke(t, runner, agenthooks.ProviderCursor, payload, "--variant=cli")
+
+	require.Contains(t, string(res.Stdout), "deny")
+	require.Contains(t, string(res.Stdout), "pi-guard", "the prompt deny message must reach the user on the triggering event")
+	require.Equal(t, int32(1), prompts.Load(), "the backfilled prompt must still be reported")
+	require.Equal(t, int32(0), tools.Load(), "the gated tool call is not reported: the agent never got to make it")
+}
+
 // TestSplitInlineFlagsRecordsConfigError pins that an unreadable --config file
 // is surfaced instead of silently keeping the default deployment identity.
 func TestSplitInlineFlagsRecordsConfigError(t *testing.T) {
