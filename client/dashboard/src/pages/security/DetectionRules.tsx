@@ -72,6 +72,7 @@ const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "account_identity",
   "prompt_injection",
 ];
 

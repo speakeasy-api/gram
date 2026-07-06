@@ -39063,6 +39063,11 @@ components:
                     enum:
                         - flag
                         - block
+                approved_email_domains:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.'
                 audience_principal_urns:
                     type: array
                     items:
@@ -46897,6 +46902,11 @@ components:
                     enum:
                         - flag
                         - block
+                approved_email_domains:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.'
                 audience_principal_urns:
                     type: array
                     items:
@@ -51291,6 +51301,11 @@ components:
                     enum:
                         - flag
                         - block
+                approved_email_domains:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.'
                 audience_principal_urns:
                     type: array
                     items:

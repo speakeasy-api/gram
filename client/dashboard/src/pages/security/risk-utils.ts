@@ -10,6 +10,7 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["prompt_injection", "prompt_injection"],
   ["llm_judge", "prompt_policy"],
   ["cli_destructive", "cli_destructive"],
+  ["account_identity", "account_identity"],
   // Scanner-source fallbacks: when a rule_id doesn't carry its category
   // prefix (e.g. gitleaks' bare "generic-api-key"), classify by source so
   // we never leak the scanner name to the UI. Keep in sync with the Go

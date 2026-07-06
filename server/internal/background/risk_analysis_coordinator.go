@@ -100,6 +100,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
 					// left unset here to avoid a second config source.
 					PresidioScoreThreshold: 0,
+					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
 				})
 				futures = append(futures, f)

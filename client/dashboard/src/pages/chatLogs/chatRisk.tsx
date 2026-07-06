@@ -13,6 +13,7 @@ import {
   getRiskBadgeLabel,
   highlightMatches,
   maskValue,
+  matchShownInDescription,
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
@@ -243,7 +244,10 @@ export function RiskBadge({
                     More Info
                   </Link>
                 )}
-                {spans.length > 0 && (
+                {/* Skip the reveal-gated span chip for policy types whose match
+                 * already appears in the description above (e.g. the
+                 * account_identity email), so it isn't repeated. */}
+                {spans.length > 0 && !matchShownInDescription(r) && (
                   <div className="mt-1 flex flex-col gap-1">
                     {spans.map((span, i) => {
                       const label = spanFieldLabel(span);
