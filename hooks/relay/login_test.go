@@ -124,3 +124,15 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 	values, _ := readAuthFile(authFile)
 	require.Empty(t, values["api_key"])
 }
+
+// TestLoginRefusesBrokenConfig: a sign-in under an unreadable plugin config
+// would mint a key against the default server, not this plugin's workspace.
+func TestLoginRefusesBrokenConfig(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	forceInteractiveEnv(t)
+
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+	err := NewRelay(cfg).Login(t.Context(), true)
+	require.ErrorContains(t, err, "reinstall")
+}

@@ -741,6 +741,47 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 	require.Contains(t, got, "mcp.example.com/mcp", "userinfo URLs keep host and path, matching the structured MCP URL")
 }
 
+// TestSplitInlineFlagsRecordsConfigError pins that an unreadable --config file
+// is surfaced instead of silently keeping the default deployment identity.
+func TestSplitInlineFlagsRecordsConfigError(t *testing.T) {
+	cfg, rest := SplitInlineFlags(Config{}, []string{"--config=" + filepath.Join(t.TempDir(), "missing.json"), "run"})
+	require.NotEmpty(t, cfg.ConfigError)
+	require.Equal(t, []string{"run"}, rest)
+}
+
+// TestBrokenConfigFailsClosedWhenEstablished: with the plugin config
+// unreadable the deployment identity is unknown, so an established machine
+// must block without sending anything — a cached key for the fallback server
+// would route this workspace's events to another project.
+func TestBrokenConfigFailsClosedWhenEstablished(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=cached-key\nproject=other-project\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "Reinstall")
+	require.Equal(t, 0, fs.count(), "no event may leave the machine under an unknown deployment identity")
+}
+
+// TestBrokenConfigFailsOpenNeverAuthed: a fresh install with an unreadable
+// config stays silent — fail open, and no login nudge since sign-in cannot
+// recover the deployment identity.
+func TestBrokenConfigFailsOpenNeverAuthed(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("TMPDIR", t.TempDir())
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.NotContains(t, string(res.Stdout), "additionalContext")
+}
+
 // TestSendBoundsTotalRetryTime pins the overall send budget: an endpoint that
 // accepts connections but never responds must not stack the SDK's internal
 // retry budget with the transport replays past a controlled deadline.

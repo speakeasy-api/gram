@@ -112,6 +112,19 @@ const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured i
 // credential posture. It performs no work when the machine holds no credential
 // so an unauthenticated install never leaks events.
 func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState) {
+	// An unreadable speakeasy.json means the deployment identity is unknown:
+	// the default server plus a cached key would route this workspace's events
+	// to whatever project the cache was minted for. Skip the network with the
+	// ratchet's usual split instead.
+	if r.cfg.ConfigError != "" {
+		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
+		if authEstablished() {
+			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false}, stateBroken
+		}
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateNeverAuthed
+	}
+
 	// Refuse to send credentials over plaintext HTTP before resolving them,
 	// with the ratchet's usual split: never-authenticated machines skip the
 	// network silently, established machines fail closed.
@@ -168,7 +181,9 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	res, state := r.deliver(ctx, typed)
 	switch state {
 	case stateNeverAuthed:
-		return verdict{block: false, message: "", nudge: true}
+		// A broken config suppresses the nudge: sign-in cannot recover an
+		// unknown deployment identity, only a reinstall can.
+		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == ""}
 	case stateBroken:
 		if r.cfg.Nonblocking {
 			return verdict{block: false, message: "", nudge: false}

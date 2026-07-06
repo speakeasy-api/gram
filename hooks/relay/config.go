@@ -40,6 +40,11 @@ type Config struct {
 	// login nudge can point the sign-in command at the same deployment identity
 	// instead of the production defaults.
 	ConfigPath string
+	// ConfigError records a failure to read an explicitly referenced
+	// speakeasy.json. The deployment identity is unknown, so events must not
+	// fall back to the default server where a cached key could route them to
+	// another workspace.
+	ConfigError string
 }
 
 // FileConfig is the on-disk schema of a plugin's speakeasy.json. Evolution is
@@ -62,17 +67,20 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: ""}
+	overrides := Config{ServerURL: "", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
 		case strings.HasPrefix(a, "--config="):
 			cfg.ConfigPath = strings.TrimPrefix(a, "--config=")
 			if fc, err := readFileConfig(cfg.ConfigPath); err == nil {
+				cfg.ConfigError = ""
 				cfg.ServerURL = fc.ServerURL
 				cfg.ProjectSlug = fc.Project
 				cfg.OrgID = fc.Org
 				cfg.Nonblocking = fc.Nonblocking
+			} else {
+				cfg.ConfigError = err.Error()
 			}
 		case strings.HasPrefix(a, "--server-url="):
 			overrides.ServerURL = strings.TrimPrefix(a, "--server-url=")

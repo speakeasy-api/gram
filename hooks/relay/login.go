@@ -44,7 +44,7 @@ func newLoginFlow(cfg Config) *loginFlow {
 // tryInteractive runs a best-effort sign-in for the SessionStart preflight:
 // guards and cooldown suppress it silently, and any failure is non-fatal.
 func (l *loginFlow) tryInteractive(ctx context.Context) {
-	if insecureServerURL(l.cfg.ServerURL) {
+	if l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) {
 		return
 	}
 	if ok, _ := loginViable(); !ok {
@@ -59,6 +59,12 @@ func (l *loginFlow) tryInteractive(ctx context.Context) {
 // Run performs an explicit sign-in (the login subcommand). force re-mints even
 // when a credential is already cached and bypasses the cooldown.
 func (l *loginFlow) Run(ctx context.Context, force bool) error {
+	// With the deployment identity unreadable, a sign-in would mint a key
+	// against the default server instead of this plugin's workspace — and a
+	// cache minted that way must not read as already signed in.
+	if l.cfg.ConfigError != "" {
+		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
+	}
 	if _, ok := resolveAuth(l.cfg); ok && !force {
 		return nil
 	}
