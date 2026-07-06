@@ -70,6 +70,11 @@ func redactCommand(raw string) string {
 	// A secret flag's value gets no such exception — it is the secret even
 	// when it collides with a scheme word.
 	schemeNext := false
+	// cookieNext continues a masked multi-part cookie ("Cookie: sid=abc;
+	// csrf=def") whose fragments tokenize separately, but only through
+	// cookie-pair-shaped tokens, so a trailing ';' on the last fragment
+	// cannot swallow an unrelated following argument.
+	cookieNext := false
 	for _, f := range fields {
 		if maskNext {
 			if schemeNext && authSchemeRE.MatchString(f) {
@@ -78,12 +83,18 @@ func redactCommand(raw string) string {
 				continue
 			}
 			out = append(out, "***")
-			// A quoted multi-part cookie tokenizes into ';'-terminated
-			// fragments ("Cookie: sid=abc; csrf=def"); the mask must keep
-			// riding until the fragment that ends the value.
-			maskNext = strings.HasSuffix(f, ";")
-			schemeNext = false
+			cookieNext = strings.HasSuffix(f, ";")
+			maskNext, schemeNext = false, false
 			continue
+		}
+		if cookieNext {
+			cookieNext = false
+			if strings.Contains(f, "=") && !strings.Contains(f, "://") {
+				out = append(out, "***")
+				cookieNext = strings.HasSuffix(f, ";")
+				continue
+			}
+			// Not a cookie pair: the value ended at the ';'.
 		}
 		switch {
 		case secretEnvAssignRE.MatchString(f):

@@ -590,10 +590,15 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	got = redactCommand("cmd --api-key token tail3")
 	require.Contains(t, got, "--api-key *** tail3", "a flag value colliding with a scheme word is still the secret")
 
-	got = redactCommand(`curl -H "Cookie: sid=abc; csrf=def" tail4`)
+	got = redactCommand(`curl -H "Cookie: sid=abc; csrf=def; theme=dark" tail4`)
 	require.NotContains(t, got, "sid=abc")
 	require.NotContains(t, got, "csrf=def", "every fragment of a multi-part cookie is credential material")
+	require.NotContains(t, got, "theme=dark")
 	require.Contains(t, got, "tail4", "masking must stop with the cookie value")
+
+	got = redactCommand(`curl -H "Cookie: sid=abc;" https://api.example.com/v1`)
+	require.NotContains(t, got, "sid=abc")
+	require.Contains(t, got, "api.example.com", "a trailing ';' on the last fragment must not swallow the next argument")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
