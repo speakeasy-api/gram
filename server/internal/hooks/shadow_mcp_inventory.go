@@ -9,7 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, projectID string, sessionID string, entries []MCPServerEntry) {
+func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string, projectID string, sessionID string, entries []MCPServerEntry) {
 	if s.telemetryLogger == nil || projectID == "" || len(entries) == 0 {
 		return
 	}
@@ -18,6 +18,9 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, projectID st
 	inventoryURLs := make([]telemetry.ShadowMCPInventoryURL, 0, len(entries))
 	for _, entry := range entries {
 		if entry.URL == "" {
+			continue
+		}
+		if s.isGramHostedMCPURLForOrg(ctx, entry.URL, orgID) {
 			continue
 		}
 		invURL, ok := shadowmcp.CanonicalizeInventoryURL(entry.URL)

@@ -446,14 +446,17 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	orgID := ""
 	projectID := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		orgID = authCtx.ActiveOrganizationID
 		projectID = authCtx.ProjectID.String()
 	} else if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
+		orgID = metadata.GramOrgID
 		projectID = metadata.ProjectID
 	}
 	if projectID != "" {
-		s.upsertShadowMCPInventoryURLs(ctx, projectID, *payload.SessionID, entries)
+		s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
 	}
 }
 

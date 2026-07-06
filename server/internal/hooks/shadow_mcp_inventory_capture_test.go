@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -42,6 +44,53 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	require.Equal(t, "https://mcp.speakeasy.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "mcp.speakeasy.com", rows[0].URLHost)
 	require.Equal(t, "speakeasy", rows[0].ServerName)
+}
+
+func TestClaudeSessionStartSkipsHostedMCPInventoryURLs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	customDomain := "hooks-hosted-" + uuid.NewString()[:8] + ".example.com"
+
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          customDomain,
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	_, err = customdomainsrepo.New(ti.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		ID:              domain.ID,
+	})
+	require.NoError(t, err)
+
+	sessionID := uuid.NewString()
+	userEmail := "claude-hosted-inventory@example.com"
+	_, err = ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "" +
+				"external: https://external.example.com/mcp?token=secret (HTTP) - connected\n" +
+				"gram: https://app.getgram.ai/mcp/hosted (HTTP) - connected\n" +
+				"custom: https://" + customDomain + "/mcp/custom (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+
+	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	require.Equal(t, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "external.example.com", rows[0].URLHost)
+	require.Equal(t, "external", rows[0].ServerName)
 }
 
 func TestClaudeConfigChangeUpsertsCoworkShadowMCPInventoryURLs(t *testing.T) {
