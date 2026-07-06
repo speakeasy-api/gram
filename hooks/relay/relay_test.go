@@ -577,6 +577,15 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	got = redactCommand(`curl --header "Authorization:Bearer tok-77" https://api.example.com/v1`)
 	require.NotContains(t, got, "tok-77", "a scheme-only header value keeps the mask pending for the credential")
 	require.Contains(t, got, "Authorization: Bearer ***")
+
+	got = redactCommand(`curl -H "Authorization: Token secret123" tail2`)
+	require.NotContains(t, got, "secret123", "non-bearer auth schemes keep the mask pending")
+	require.Contains(t, got, "Authorization: Token ***")
+	require.Contains(t, got, "tail2")
+
+	got = redactCommand("curl -H Authorization:Digest cred-abc-1")
+	require.NotContains(t, got, "cred-abc-1")
+	require.Contains(t, got, "Authorization: Digest ***")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery

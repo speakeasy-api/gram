@@ -44,7 +44,10 @@ var (
 	secretAssignRE    = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
 	secretFlagRE      = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
 	secretHeaderRE    = regexp.MustCompile(`(?i)^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:`)
-	tokenPrefixRE     = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
+	// authSchemeRE matches auth scheme words that precede the credential in a
+	// header value ("Authorization: Token abc"); the scheme is not the secret.
+	authSchemeRE  = regexp.MustCompile(`(?i)^(bearer|basic|token|digest|negotiate|ntlm|dpop|oauth|hawk|apikey)$`)
+	tokenPrefixRE = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
 )
 
 // redactCommand masks secret flag values and inline tokens in a stdio MCP
@@ -66,7 +69,7 @@ func redactCommand(raw string) string {
 			// An auth-scheme word between a header and its credential
 			// ("authorization: bearer TOKEN") is not the secret; keep the
 			// mask pending for the value that follows it.
-			if strings.EqualFold(f, "bearer") || strings.EqualFold(f, "basic") {
+			if authSchemeRE.MatchString(f) {
 				out = append(out, f)
 				continue
 			}
@@ -99,7 +102,7 @@ func redactCommand(raw string) string {
 			case value == "":
 				out = append(out, f[:i]+":")
 				maskNext = true
-			case strings.EqualFold(value, "bearer") || strings.EqualFold(value, "basic"):
+			case authSchemeRE.MatchString(value):
 				out = append(out, f[:i]+": "+value)
 				maskNext = true
 			default:
