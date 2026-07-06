@@ -1,4 +1,4 @@
-h1:WFNgQB2D1/du354hmlwe7CLHQ21kRVfbP549DWaIGV8=
+h1:7264v3TC7iiL9l9NoxX6T7EKwqCUdSjSAH+cMEL9vPg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -243,6 +243,6 @@ h1:WFNgQB2D1/du354hmlwe7CLHQ21kRVfbP549DWaIGV8=
 20260703095550_risk-policy-challenges-fk-cascade-indexes.sql h1:aR2L9eT4Wfdh2L91ZoOLk43oANOAAUDqLjmABGm58RM=
 20260703134504_rename-tunneled-mcp-columns.sql h1:httREsZ8T4QWXUQZOpzmv4U7zRybXkB4g5TPOaCskGY=
 20260703160051_plugins-add-is-default.sql h1:Vd7RqDOV6+53NX5jHTWaEl0OWDmuLdVrDuMiVpRD0Fs=
-20260704062005_risk-policy-eval-reviews.sql h1:nsITaCRtt/dSn1/jTxKlA6oJ/Iy1uVhaCgYlzLG886I=
-20260706170316_json-web-key-sets-json-web-keys.sql h1:C0BsXzAoiem+9bR3ssR1VfliNrI6Yy1h8f3pNBieWNI=
-20260706233448_drop-session-capture-exclusions.sql h1:8Bx4rwhwIrs//o2rVZGk6Fzusqfd4l2/oqhC7WVefbw=
+20260706170316_json-web-key-sets-json-web-keys.sql h1:F7gFxdLCa1Q1gZc19/SrpAIiJgmZ7cUV/49iQD9GbN4=
+20260706233448_drop-session-capture-exclusions.sql h1:CZfr4NqnLrq4r4Av+m/KVY39PEEH6TrBHe8sz61y4Co=
+20260707070702_risk-policy-eval-reviews.sql h1:RjhJvs0KrFmEk9tuNDI9slvcm1uGbnyEf44mDlZ8/MI=

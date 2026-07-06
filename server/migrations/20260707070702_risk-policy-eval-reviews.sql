@@ -19,15 +19,5 @@ CREATE TABLE "risk_policy_eval_reviews" (
   CONSTRAINT "risk_policy_eval_reviews_risk_policy_id_fkey" FOREIGN KEY ("risk_policy_id") REFERENCES "risk_policies" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "risk_policy_eval_reviews_verdict_check" CHECK (verdict = ANY (ARRAY['correct'::text, 'false_positive'::text, 'missed'::text]))
 );
--- Create index "risk_policy_eval_reviews_chat_id_idx" to table: "risk_policy_eval_reviews"
-CREATE INDEX "risk_policy_eval_reviews_chat_id_idx" ON "risk_policy_eval_reviews" ("chat_id");
--- Create index "risk_policy_eval_reviews_organization_id_idx" to table: "risk_policy_eval_reviews"
-CREATE INDEX "risk_policy_eval_reviews_organization_id_idx" ON "risk_policy_eval_reviews" ("organization_id");
 -- Create index "risk_policy_eval_reviews_policy_chat_reviewer_key" to table: "risk_policy_eval_reviews"
 CREATE UNIQUE INDEX "risk_policy_eval_reviews_policy_chat_reviewer_key" ON "risk_policy_eval_reviews" ("project_id", "risk_policy_id", "chat_id", "reviewed_by") WHERE (deleted IS FALSE);
--- Create index "risk_policy_eval_reviews_policy_idx" to table: "risk_policy_eval_reviews"
-CREATE INDEX "risk_policy_eval_reviews_policy_idx" ON "risk_policy_eval_reviews" ("project_id", "risk_policy_id") WHERE (deleted IS FALSE);
--- Create index "risk_policy_eval_reviews_project_id_idx" to table: "risk_policy_eval_reviews"
-CREATE INDEX "risk_policy_eval_reviews_project_id_idx" ON "risk_policy_eval_reviews" ("project_id");
--- Create index "risk_policy_eval_reviews_risk_policy_id_idx" to table: "risk_policy_eval_reviews"
-CREATE INDEX "risk_policy_eval_reviews_risk_policy_id_idx" ON "risk_policy_eval_reviews" ("risk_policy_id");

@@ -3467,28 +3467,10 @@ CREATE TABLE IF NOT EXISTS risk_policy_eval_reviews (
   CONSTRAINT risk_policy_eval_reviews_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );
 
--- One active verdict per reviewer per session per policy. Saving a verdict
--- upserts on this key.
+-- One active verdict per reviewer per session per policy.
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_eval_reviews_policy_chat_reviewer_key
 ON risk_policy_eval_reviews (project_id, risk_policy_id, chat_id, reviewed_by)
 WHERE deleted IS FALSE;
-
--- List the regression set for a policy.
-CREATE INDEX IF NOT EXISTS risk_policy_eval_reviews_policy_idx
-ON risk_policy_eval_reviews (project_id, risk_policy_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS risk_policy_eval_reviews_chat_id_idx
-ON risk_policy_eval_reviews (chat_id);
-
-CREATE INDEX IF NOT EXISTS risk_policy_eval_reviews_organization_id_idx
-ON risk_policy_eval_reviews (organization_id);
-
-CREATE INDEX IF NOT EXISTS risk_policy_eval_reviews_project_id_idx
-ON risk_policy_eval_reviews (project_id);
-
-CREATE INDEX IF NOT EXISTS risk_policy_eval_reviews_risk_policy_id_idx
-ON risk_policy_eval_reviews (risk_policy_id);
 
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
