@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import {
   buildEmployees,
   type Employee,
+  type EmployeeAccount,
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
@@ -586,9 +587,7 @@ function EmployeeTable({
         sortable: true,
         sortValue: (item) => item.lastActivityTimestamp,
         width: "1fr",
-        render: (item) => (
-          <span className="text-muted-foreground">{item.lastActivity}</span>
-        ),
+        render: (item) => <LastActivityCell employee={item} />,
       },
       {
         key: "action",
@@ -793,15 +792,20 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
   );
 }
 
-// Per-employee accounts cell: a clickable trigger summarizing the linked
-// accounts (count), opening a popover that lists every account with its email,
-// provider, and type. Robust to any number of accounts across providers.
-function AccountsCell({ employee }: { employee: Employee }) {
-  const { accounts } = employee;
-  if (accounts.length === 0) {
-    return <span className="text-muted-foreground/50 text-sm">—</span>;
-  }
-
+// Shared popover shell for table cells that reveal linked accounts: a clickable
+// trigger (label + chevron) opening a popover that lists each account with its
+// email, provider, and type.
+function AccountsPopover({
+  label,
+  labelClassName,
+  title,
+  accounts,
+}: {
+  label: string;
+  labelClassName?: string;
+  title: string;
+  accounts: EmployeeAccount[];
+}) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -811,8 +815,8 @@ function AccountsCell({ employee }: { employee: Employee }) {
           onClick={(e) => e.stopPropagation()}
           className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
         >
-          <span className="text-muted-foreground text-xs">
-            {accounts.length} account{accounts.length === 1 ? "" : "s"}
+          <span className={cn("text-muted-foreground", labelClassName)}>
+            {label}
           </span>
           <Icon
             name="chevron-down"
@@ -822,7 +826,7 @@ function AccountsCell({ employee }: { employee: Employee }) {
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
         <div className="border-b px-3 py-2">
-          <p className="text-xs font-medium">Linked accounts</p>
+          <p className="text-xs font-medium">{title}</p>
         </div>
         <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
           {accounts.map((a, i) => (
@@ -833,6 +837,44 @@ function AccountsCell({ employee }: { employee: Employee }) {
         </ul>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// Per-employee accounts cell: a clickable trigger summarizing the linked
+// accounts (count), opening a popover that lists every account with its email,
+// provider, and type. Robust to any number of accounts across providers.
+function AccountsCell({ employee }: { employee: Employee }) {
+  const { accounts } = employee;
+  if (accounts.length === 0) {
+    return <span className="text-muted-foreground/50 text-sm">—</span>;
+  }
+
+  return (
+    <AccountsPopover
+      label={`${accounts.length} account${accounts.length === 1 ? "" : "s"}`}
+      labelClassName="text-xs"
+      title="Linked accounts"
+      accounts={accounts}
+    />
+  );
+}
+
+// Last-activity cell: when the directory knows which account produced the most
+// recent activity, the timestamp becomes a dropdown identifying that account —
+// the workspace the employee was last working in. Plain text otherwise.
+function LastActivityCell({ employee }: { employee: Employee }) {
+  if (!employee.mostRecentAccount) {
+    return (
+      <span className="text-muted-foreground">{employee.lastActivity}</span>
+    );
+  }
+
+  return (
+    <AccountsPopover
+      label={employee.lastActivity}
+      title="Most recent account"
+      accounts={[employee.mostRecentAccount]}
+    />
   );
 }
 

@@ -201,3 +201,84 @@ describe("buildEmployees attributed/unattributed split", () => {
     );
   });
 });
+
+describe("buildEmployees most recent account", () => {
+  const member = makeMember({
+    id: "member-1",
+    email: "ada@example.com",
+    name: "Ada Lovelace",
+  });
+
+  it("picks the linked account with the latest last-seen", () => {
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "member-1",
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada@example.com",
+            accountType: "team",
+            lastSeenUnixNano: "1750000000000000000",
+          },
+          {
+            provider: "anthropic",
+            email: "ada@personal.com",
+            accountType: "personal",
+            lastSeenUnixNano: "1760000000000000000",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees[0]!.mostRecentAccount?.email).toBe("ada@personal.com");
+    expect(employees[0]!.mostRecentAccount?.accountType).toBe("personal");
+  });
+
+  it("skips accounts without a last-seen when ranking", () => {
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "member-1",
+        accounts: [
+          {
+            provider: "openai",
+            email: "ada@example.com",
+            accountType: "team",
+          },
+          {
+            provider: "anthropic",
+            email: "ada@example.com",
+            accountType: "team",
+            lastSeenUnixNano: "1750000000000000000",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees[0]!.mostRecentAccount?.provider).toBe("anthropic");
+  });
+
+  it("returns null when no account has a last-seen", () => {
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "member-1",
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada@example.com",
+            accountType: "team",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees[0]!.mostRecentAccount).toBeNull();
+  });
+
+  it("returns null when there are no linked accounts", () => {
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({ userId: "member-1" }),
+    ]);
+
+    expect(employees[0]!.mostRecentAccount).toBeNull();
+  });
+});
