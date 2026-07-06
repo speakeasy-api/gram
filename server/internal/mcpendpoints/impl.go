@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -36,16 +37,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	auth                 *auth.Auth
+	authz                *authz.Engine
+	audit                *audit.Logger
+	temporalEnv          *tenv.Environment
+	pluginsGitHubEnabled bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -58,16 +62,20 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	temporalEnv *tenv.Environment,
+	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpendpoints"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpendpoints"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpendpoints"),
+		logger:               logger,
+		db:                   db,
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		authz:                authzEngine,
+		audit:                auditLogger,
+		temporalEnv:          temporalEnv,
+		pluginsGitHubEnabled: pluginsGitHubEnabled,
 	}
 }
 
@@ -184,6 +192,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
 		DisplayName:    displayName,
 	})
@@ -206,6 +215,23 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+		}
+
+		// This project predates the Default-plugin feature (no CreateProject
+		// call ever fired the initial publish for it) — kick one off now so it
+		// isn't left attached-but-never-published. Best-effort, same as
+		// CreateProject's trigger: a non-cancelable ctx since this runs right
+		// before commit and shouldn't be dropped by the request returning.
+		if s.pluginsGitHubEnabled {
+			enqueueCtx := context.WithoutCancel(ctx)
+			if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+				ProjectID:       *authCtx.ProjectID,
+				CreatedByUserID: authCtx.UserID,
+				CommitMessage:   "Initial marketplace publish",
+				SkipIfUnchanged: false,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+			}
 		}
 	}
 

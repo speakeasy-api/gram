@@ -1,7 +1,10 @@
 package mcpendpoints_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -350,4 +353,65 @@ func TestCreateMcpEndpoint_LazilyCreatesDefaultPluginWhenMissing(t *testing.T) {
 	afterAddCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)
 	require.Equal(t, beforeAddCount+1, afterAddCount)
+}
+
+// TestCreateMcpEndpoint_LegacyProject_TriggersInitialPublish covers the
+// "legacy project" gap: a project that predates the Default-plugin feature
+// (no CreateProject call ever ran for it, so no Default plugin and no
+// GitHub connection exist) must still get its marketplace repo published
+// the first time a server becomes attachable, not just the plugin_servers
+// row. Uses a real Temporal worker wired with a fake (no-op) GitHub client
+// so the initial-publish workflow runs to actual completion instead of just
+// being enqueued.
+func TestCreateMcpEndpoint_LegacyProject_TriggersInitialPublish(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, temporalEnv := newTestServiceWithGitHubPublishing(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	_, err := pluginsQueries.GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.Error(t, err, "legacy project fixture must start with no GitHub connection")
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
+	})
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                mcpServerID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText("Legacy Gap Server"),
+		Slug:              conv.ToPGText("legacy-gap-server-" + uuid.NewString()),
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "public",
+	})
+	require.NoError(t, err)
+
+	// The server's first endpoint lazily creates the Default plugin, which
+	// should kick off the initial publish.
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      mcpServerID.String(),
+		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-legacy-gap"),
+	})
+	require.NoError(t, err)
+
+	workflowID := fmt.Sprintf("v1:plugin-initial-publish/%s", authCtx.ProjectID.String())
+	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	require.NoError(t, temporalEnv.Client().GetWorkflow(waitCtx, workflowID, "").Get(waitCtx, nil), "initial publish workflow did not complete")
+
+	conn, err := pluginsQueries.GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err, "expected a GitHub connection to have been published for this legacy project")
+	require.NotEmpty(t, conn.RepoName)
 }

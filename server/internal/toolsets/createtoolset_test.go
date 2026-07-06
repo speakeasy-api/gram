@@ -1,7 +1,10 @@
 package toolsets_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -478,4 +481,47 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached")
 	require.NotEqual(t, uuid.MustParse(second.ID), servers[0].ToolsetID.UUID)
+}
+
+// TestToolsetsService_CreateToolset_LegacyProject_TriggersInitialPublish
+// covers the "legacy project" gap: a project that predates the
+// Default-plugin feature (no CreateProject call ever ran for it, so no
+// Default plugin and no GitHub connection exist) must still get its
+// marketplace repo published the first time a server becomes attachable,
+// not just the plugin_servers row. Uses a real Temporal worker wired with a
+// fake (no-op) GitHub client so the initial-publish workflow runs to actual
+// completion instead of just being enqueued.
+func TestToolsetsService_CreateToolset_LegacyProject_TriggersInitialPublish(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsServiceWithGitHubPublishing(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	_, err := pluginsQueries.GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.Error(t, err, "legacy project fixture must start with no GitHub connection")
+
+	// First toolset in the org auto-enables MCP, which lazily creates the
+	// Default plugin and should kick off the initial publish.
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Legacy Gap Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	workflowID := fmt.Sprintf("v1:plugin-initial-publish/%s", authCtx.ProjectID.String())
+	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	require.NoError(t, ti.temporalEnv.Client().GetWorkflow(waitCtx, workflowID, "").Get(waitCtx, nil), "initial publish workflow did not complete")
+
+	conn, err := pluginsQueries.GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err, "expected a GitHub connection to have been published for this legacy project")
+	require.NotEmpty(t, conn.RepoName)
 }

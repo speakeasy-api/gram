@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -58,20 +60,22 @@ var validOAuthProxyAuthMethods = map[string]bool{
 }
 
 type Service struct {
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	repo            *repo.Queries
-	environmentRepo *environmentsRepo.Queries
-	auth            *auth.Auth
-	authz           *authz.Engine
-	toolsets        *Toolsets
-	domainsRepo     *domainsRepo.Queries
-	usageRepo       *usageRepo.Queries
-	oauthRepo       *oauthRepo.Queries
-	mcpmetadataRepo *mcpmetadataRepo.Queries
-	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
-	audit           *audit.Logger
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	repo                 *repo.Queries
+	environmentRepo      *environmentsRepo.Queries
+	auth                 *auth.Auth
+	authz                *authz.Engine
+	toolsets             *Toolsets
+	domainsRepo          *domainsRepo.Queries
+	usageRepo            *usageRepo.Queries
+	oauthRepo            *oauthRepo.Queries
+	mcpmetadataRepo      *mcpmetadataRepo.Queries
+	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit                *audit.Logger
+	temporalEnv          *tenv.Environment
+	pluginsGitHubEnabled bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -84,24 +88,28 @@ func NewService(
 	cacheAdapter cache.Cache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	temporalEnv *tenv.Environment,
+	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		environmentRepo: environmentsRepo.New(db),
-		toolsets:        NewToolsets(db),
-		domainsRepo:     domainsRepo.New(db),
-		usageRepo:       usageRepo.New(db),
-		oauthRepo:       oauthRepo.New(db),
-		mcpmetadataRepo: mcpmetadataRepo.New(db),
-		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
-		audit:           auditLogger,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
+		logger:               logger,
+		db:                   db,
+		repo:                 repo.New(db),
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		authz:                authzEngine,
+		environmentRepo:      environmentsRepo.New(db),
+		toolsets:             NewToolsets(db),
+		domainsRepo:          domainsRepo.New(db),
+		usageRepo:            usageRepo.New(db),
+		oauthRepo:            oauthRepo.New(db),
+		mcpmetadataRepo:      mcpmetadataRepo.New(db),
+		toolsetCache:         cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:                auditLogger,
+		temporalEnv:          temporalEnv,
+		pluginsGitHubEnabled: pluginsGitHubEnabled,
 	}
 }
 
@@ -252,6 +260,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		DisplayName:    displayName,
 	})
 	if err != nil {
@@ -273,6 +282,23 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+		}
+
+		// This project predates the Default-plugin feature (no CreateProject
+		// call ever fired the initial publish for it) — kick one off now so it
+		// isn't left attached-but-never-published. Best-effort, same as
+		// CreateProject's trigger: a non-cancelable ctx since this runs right
+		// before commit and shouldn't be dropped by the request returning.
+		if s.pluginsGitHubEnabled {
+			enqueueCtx := context.WithoutCancel(ctx)
+			if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+				ProjectID:       *authCtx.ProjectID,
+				CreatedByUserID: authCtx.UserID,
+				CommitMessage:   "Initial marketplace publish",
+				SkipIfUnchanged: false,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+			}
 		}
 	}
 
