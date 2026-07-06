@@ -103,6 +103,11 @@ func redactCommand(raw string) string {
 			maskNext = true
 		case tokenPrefixRE.MatchString(f):
 			out = append(out, "***")
+		case strings.Contains(f, "://"):
+			// A server URL passed as an argument (npx mcp-remote <url>) can
+			// carry credentials in its query string; give it the same
+			// treatment as a structured MCP URL.
+			out = append(out, redactURL(f))
 		default:
 			out = append(out, f)
 		}

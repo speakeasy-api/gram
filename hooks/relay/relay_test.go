@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
@@ -707,4 +708,45 @@ func TestInsecureServerURLFailsOpenNeverAuthed(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestRedactCommandMasksURLQuerySecrets: a server URL passed as a plain
+// command argument (npx mcp-remote <url>) must get the same query-string
+// masking as the structured MCP URL.
+func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
+	got := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?api_key=sekrit22&channel=eng")
+	require.NotContains(t, got, "sekrit22")
+	require.Contains(t, got, "mcp.example.com", "the host must survive so the identity stays matchable")
+	require.Contains(t, got, "channel", "non-secret query parameters must survive")
+}
+
+// TestSendBoundsTotalRetryTime pins the overall send budget: an endpoint that
+// accepts connections but never responds must not stack the SDK's internal
+// retry budget with the transport replays past a controlled deadline.
+func TestSendBoundsTotalRetryTime(t *testing.T) {
+	// The handler never reads the request body, so the server cannot see the
+	// client abandon the connection; cleanup runs LIFO, so close(hung) must be
+	// registered after srv.Close to release the handler before Close waits on
+	// its outstanding request.
+	hung := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-hung
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hung) })
+
+	cl := newClient(srv.URL)
+	cl.budget = 2 * time.Second
+	start := time.Now()
+	res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
+		SchemaVersion: schemaVersion,
+		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil},
+		Session:       nil,
+		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
+		Data:          nil,
+		Raw:           nil,
+	})
+
+	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
+	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
 }

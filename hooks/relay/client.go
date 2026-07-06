@@ -20,6 +20,12 @@ import (
 
 const perAttemptTime = 10 * time.Second
 
+// sendBudget bounds one send end to end — the SDK's internal 30s retry budget
+// and the transport replays below stack, and a gating hook that outlives the
+// provider's 60s timeout fails closed uncontrolled instead of returning a
+// verdict.
+const sendBudget = 45 * time.Second
+
 // decision is the server's verdict for a hook event.
 type decision struct {
 	Decision string `json:"decision"`
@@ -44,10 +50,13 @@ type ingestResult struct {
 // stored exactly once.
 type client struct {
 	sdk *sdk.SpeakeasyHooks
+	// budget caps one send end to end; a field so tests can shrink it.
+	budget time.Duration
 }
 
 func newClient(serverURL string) *client {
 	return &client{
+		budget: sendBudget,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
 			sdk.WithClient(&http.Client{Timeout: perAttemptTime}),
@@ -76,6 +85,9 @@ func newClient(serverURL string) *client {
 // necessary because a blocking hook would otherwise deny over one dropped
 // connection.
 func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
+	ctx, cancel := context.WithTimeout(ctx, cl.budget)
+	defer cancel()
+
 	sec := &operations.IngestHookEventSecurity{
 		ApikeyHeaderGramKey:          new(c.APIKey),
 		ProjectSlugHeaderGramProject: nil,
