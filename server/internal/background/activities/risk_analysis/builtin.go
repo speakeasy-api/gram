@@ -13,7 +13,7 @@ func dropBuiltinFalsePositives(lib *presetlib.Library, findings []Finding) []Fin
 	if lib == nil || len(findings) == 0 {
 		return findings
 	}
-	out := make([]Finding, 0, len(findings))
+	out := make([]Finding, 0)
 	for _, f := range findings {
 		m := presetlib.Match{Source: f.Source, RuleID: f.RuleID, Value: f.Match}
 		if lib.Reason(m) != "" {
