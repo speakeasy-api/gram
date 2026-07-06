@@ -3,23 +3,30 @@
 #MISE description="Test the Gram hooks Claude plugin locally (from marketplace)"
 #MISE dir="{{ config_root }}"
 #USAGE flag "--rm" help="Remove the local Gram hooks Claude plugin from the marketplace after testing"
+#USAGE flag "--scope <scope>" {
+#USAGE   help "Scope for the marketplace and plugin commands"
+#USAGE   default "local"
+#USAGE   choices "local" "user" "project"
+#USAGE }
 
 set -euo pipefail
 
+scope="${usage_scope:-local}"
+
 install() {
-	claude plugin marketplace add "$PWD"
-	claude plugin install --scope local gram-hooks@gram
+	claude plugin marketplace add --scope "$scope" "$PWD"
+	claude plugin install --scope "$scope" gram-hooks@gram
 }
 
 uninstall() {
 	if claude plugin list --json | jq -e 'any(.[]; .id == "gram-hooks@gram")' >/dev/null; then
-		claude plugin uninstall --scope local gram-hooks@gram
+		claude plugin uninstall --scope "$scope" gram-hooks@gram
 	else
 		echo "Plugin gram-hooks@gram is not installed, skipping uninstall"
 	fi
 
 	if claude plugin marketplace list --json | jq -e 'any(.[]; .name == "gram")' >/dev/null; then
-		claude plugin marketplace remove gram
+		claude plugin marketplace remove --scope "$scope" gram
 	else
 		echo "Marketplace gram is not registered, skipping remove"
 	fi
