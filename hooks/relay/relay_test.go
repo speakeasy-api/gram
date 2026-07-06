@@ -604,6 +604,11 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.NotContains(t, got, "sid=abc")
 	require.NotContains(t, got, "csrf=def", "a no-space header value ending in ';' continues the cookie mask")
 	require.Contains(t, got, "tail5")
+
+	got = redactCommand(`curl -H "X-API-Key: abc123;" retry=3 tail6`)
+	require.NotContains(t, got, "abc123")
+	require.Contains(t, got, "retry=3", "cookie continuation is scoped to cookie headers")
+	require.Contains(t, got, "tail6")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery

@@ -73,8 +73,11 @@ func redactCommand(raw string) string {
 	// cookieNext continues a masked multi-part cookie ("Cookie: sid=abc;
 	// csrf=def") whose fragments tokenize separately, but only through
 	// cookie-pair-shaped tokens, so a trailing ';' on the last fragment
-	// cannot swallow an unrelated following argument.
+	// cannot swallow an unrelated following argument. cookiePending scopes
+	// the continuation to cookie headers: other secret values ending in ';'
+	// do not fragment.
 	cookieNext := false
+	cookiePending := false
 	for _, f := range fields {
 		if maskNext {
 			if schemeNext && authSchemeRE.MatchString(f) {
@@ -83,8 +86,8 @@ func redactCommand(raw string) string {
 				continue
 			}
 			out = append(out, "***")
-			cookieNext = strings.HasSuffix(f, ";")
-			maskNext, schemeNext = false, false
+			cookieNext = cookiePending && strings.HasSuffix(f, ";")
+			maskNext, schemeNext, cookiePending = false, false, false
 			continue
 		}
 		if cookieNext {
@@ -117,10 +120,12 @@ func redactCommand(raw string) string {
 			// the credential that follows.
 			i := strings.IndexByte(f, ':')
 			value := strings.TrimSpace(f[i+1:])
+			isCookie := strings.Contains(strings.ToLower(f[:i]), "cookie")
 			switch {
 			case value == "":
 				out = append(out, f[:i]+":")
 				maskNext, schemeNext = true, true
+				cookiePending = isCookie
 			case authSchemeRE.MatchString(value):
 				out = append(out, f[:i]+": "+value)
 				maskNext = true
@@ -129,7 +134,7 @@ func redactCommand(raw string) string {
 				// A no-space header ("Cookie:sid=abc; csrf=def") carries the
 				// first fragment in this token; a ';'-terminated value means
 				// more fragments follow.
-				cookieNext = strings.HasSuffix(value, ";")
+				cookieNext = isCookie && strings.HasSuffix(value, ";")
 			}
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
