@@ -115,7 +115,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		outOfPolicyScope:        outOfPolicyScope,
 		exclusions:              exclusions,
 		builtinEnabled:          args.BuiltinPresetsEnabled,
-		builtinPresets:          a.builtinPresets,
+		builtinPresets:          a.builtinExclusionsPresets,
 		gitleaksFindings:        gitleaksFindings,
 		presidioFindings:        presidioFindings,
 		shadowMCPFindings:       shadowMCPFindings,

@@ -30,22 +30,22 @@ import (
 // AnalyzeBatch scans a batch of messages against one risk policy and replaces
 // that policy's stored results for the fetched message IDs.
 type AnalyzeBatch struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	metrics         *riskMetrics
-	db              *pgxpool.Pool
-	scanner         *gitleaks.Scanner
-	piiScanner      PIIScanner
-	piScanner       *PromptInjectionScanner
-	shadowMCPClient *shadowmcp.Client
-	mcpMatchLookup  MCPMatchLookup
-	judge           PromptJudge
-	flags           feature.Provider
-	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
-	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
-	customRulesPub  gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	celEng          *celenv.Engine
-	builtinPresets  *presetlib.Library
+	logger                   *slog.Logger
+	tracer                   trace.Tracer
+	metrics                  *riskMetrics
+	db                       *pgxpool.Pool
+	scanner                  *gitleaks.Scanner
+	piiScanner               PIIScanner
+	piScanner                *PromptInjectionScanner
+	shadowMCPClient          *shadowmcp.Client
+	mcpMatchLookup           MCPMatchLookup
+	judge                    PromptJudge
+	flags                    feature.Provider
+	presidioPub              gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub              gcp.Publisher[*riskv1.GitleaksAnalysis]
+	customRulesPub           gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	celEng                   *celenv.Engine
+	builtinExclusionsPresets *presetlib.Library
 }
 
 func NewAnalyzeBatch(
@@ -72,22 +72,22 @@ func NewAnalyzeBatch(
 		piScanner = NewPromptInjectionScanner(logger, nil)
 	}
 	return &AnalyzeBatch{
-		logger:          logger.With(attr.SlogComponent("risk-analysis-dispatcher")),
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:         newRiskMetrics(meterProvider, logger),
-		db:              db,
-		scanner:         gitleaks.NewScanner(),
-		piiScanner:      piiScanner,
-		piScanner:       piScanner,
-		shadowMCPClient: shadowMCPClient,
-		mcpMatchLookup:  mcpMatchLookup,
-		judge:           judge,
-		flags:           flags,
-		presidioPub:     presidioPub,
-		gitleaksPub:     gitleaksPub,
-		customRulesPub:  customRulesPub,
-		celEng:          celEng,
-		builtinPresets:  builtinPresets,
+		logger:                   logger.With(attr.SlogComponent("risk-analysis-dispatcher")),
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:                  newRiskMetrics(meterProvider, logger),
+		db:                       db,
+		scanner:                  gitleaks.NewScanner(),
+		piiScanner:               piiScanner,
+		piScanner:                piScanner,
+		shadowMCPClient:          shadowMCPClient,
+		mcpMatchLookup:           mcpMatchLookup,
+		judge:                    judge,
+		flags:                    flags,
+		presidioPub:              presidioPub,
+		gitleaksPub:              gitleaksPub,
+		customRulesPub:           customRulesPub,
+		celEng:                   celEng,
+		builtinExclusionsPresets: builtinPresets,
 	}
 }
 
