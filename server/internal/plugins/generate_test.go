@@ -1173,7 +1173,9 @@ printf '{}\n401'
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block even before first browser login")
 	require.Equal(t, 2, exitErr.ExitCode(), freshErr.String())
-	require.Contains(t, freshErr.String(), "401")
+	require.Contains(t, freshErr.String(), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, freshErr.String(), "Update or unset GRAM_HOOKS_API_KEY")
+	require.Contains(t, freshErr.String(), "hooks/login.sh")
 	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Equal(t, 1, posts, "rejected env credentials must not trigger the cache-relogin retry")
 
@@ -1188,7 +1190,221 @@ printf '{}\n401'
 	err = cached.Run()
 	require.ErrorAs(t, err, &exitErr, cachedErr.String())
 	require.Equal(t, 2, exitErr.ExitCode(), cachedErr.String())
+	require.Contains(t, cachedErr.String(), "GRAM_HOOKS_API_KEY")
 	require.FileExists(t, authFile, "env credential rejection must not wipe the cached browser login")
+}
+
+func TestRenderHookScriptClaudeIgnoresGenericGramAPIKeyForHooksAuth(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_hooks_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-generic-key","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), stderr.String())
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_cached_hooks_key")
+	require.Contains(t, requests, "Gram-Project: acme-prod")
+	require.NotContains(t, requests, "gram_unrelated_mcp_key")
+	require.NotContains(t, requests, "wrong-project")
+}
+
+// TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin covers
+// the stale browser-login cache path: if Gram rejects the cached hooks key, the
+// hook clears that key and falls back to the unauthenticated login nudge instead
+// of repeatedly blocking UserPromptSubmit with the stale token.
+func TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache","prompt":"hi"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "stale cached key should fail open with login nudge: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"additionalContext"`)
+	require.Contains(t, stdout.String(), "login.sh")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".established", "clearing a rejected key must preserve the fail-closed ratchet marker")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that prompt submits should keep nudging reconnect")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.ingest")
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-repeat","prompt":"again"}`)
+	repeat.Env = env
+	var repeatOut, repeatErr bytes.Buffer
+	repeat.Stdout = &repeatOut
+	repeat.Stderr = &repeatErr
+	require.NoError(t, repeat.Run(), "reauth-needed prompt submits should keep nudging login after the stale cache is gone: %s", repeatErr.String())
+	require.Contains(t, repeatOut.String(), `"additionalContext"`)
+	require.Contains(t, repeatOut.String(), "login.sh")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed prompt submit must not send an unauthenticated request")
+}
+
+// TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
+// stale-cache recovery is not a general bypass: after clearing the rejected
+// cached token, blocking non-prompt events still fail closed.
+func TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-stale-cache-tool","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "stale cached key should still block tool-use events")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-stale-cache-tool-repeat","tool_name":"Bash"}`)
+	repeat.Env = env
+	stderr.Reset()
+	repeat.Stderr = &stderr
+	err = repeat.Run()
+	require.ErrorAs(t, err, &exitErr, "reauth-needed tool-use events must still fail closed")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "need to reconnect")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed tool-use event must not send an unauthenticated request")
 }
 
 // TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
