@@ -526,8 +526,42 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]codexMCPServer)
-	for _, s := range p.Servers {
+	// Assign every server its Codex key before building entries. Already-valid
+	// display names reserve their exact key first, so an invalid name that
+	// sanitizes into the same key can never steal it — "Team Slack" must not
+	// displace a server literally named "Team_Slack".
+	keys := make([]string, len(p.Servers))
+	taken := make(map[string]bool, len(p.Servers))
+	for i, s := range p.Servers {
+		if name := codexMCPServerName(s.DisplayName); name == s.DisplayName && !taken[name] {
+			keys[i] = name
+			taken[name] = true
+		}
+	}
+	for i, s := range p.Servers {
+		if keys[i] != "" {
+			continue
+		}
+		base := codexMCPServerName(s.DisplayName)
+		key := base
+		for n := 2; taken[key] && n <= maxCodexServerRenameSuffix; n++ {
+			key = fmt.Sprintf("%s_%d", base, n)
+		}
+		if taken[key] {
+			// Rename attempts exhausted; drop the server rather than
+			// overwrite another entry.
+			continue
+		}
+		keys[i] = key
+		taken[key] = true
+	}
+
+	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
+	for i, s := range p.Servers {
+		if keys[i] == "" {
+			continue
+		}
+
 		entry := codexMCPServer{
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
@@ -550,7 +584,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
-		mcpServers[s.DisplayName] = entry
+		mcpServers[keys[i]] = entry
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -559,6 +593,39 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
 	return nil
+}
+
+// maxCodexServerRenameSuffix bounds the collision-rename attempts for
+// sanitized Codex server keys: a colliding name tries _2 through _6 before
+// the server is dropped from the config.
+const maxCodexServerRenameSuffix = 6
+
+// codexMCPServerName converts a human display name (e.g. "Team Slack") into a
+// Codex-safe MCP server key. Codex validates the keys of .mcp.json against
+// ^[a-zA-Z0-9_-]+$ at MCP client startup and refuses to start clients whose
+// names contain spaces, parentheses, or other punctuation. Each run of
+// disallowed characters collapses into a single underscore; leading and
+// trailing runs are dropped.
+func codexMCPServerName(displayName string) string {
+	var b strings.Builder
+	b.Grow(len(displayName))
+	pendingSep := false
+	for _, r := range displayName {
+		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-'
+		if !valid {
+			pendingSep = true
+			continue
+		}
+		if pendingSep && b.Len() > 0 {
+			b.WriteByte('_')
+		}
+		pendingSep = false
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return "mcp-server"
+	}
+	return b.String()
 }
 
 // ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability
