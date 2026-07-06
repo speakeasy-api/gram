@@ -122,7 +122,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "8"
+const pluginGeneratorVersion = "9"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1678,6 +1678,10 @@ gram_hooks_post_authenticated() {
     && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
+      GRAM_HTTP_CODE="$first_status"
+      return 79
+    fi
     if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
       GRAM_HTTP_CODE="$first_status"
       return 78
@@ -2023,6 +2027,11 @@ fi
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
 
+if [ "$post_status" -eq 79 ] && [ "%s" = "claude" ] && [ "$native_event" = "UserPromptSubmit" ]; then
+  gram_hooks_emit_login_nudge "$provider_payload" "$script_dir"
+  exit 0
+fi
+
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
@@ -2043,7 +2052,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

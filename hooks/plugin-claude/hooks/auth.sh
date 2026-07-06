@@ -621,6 +621,10 @@ gram_hooks_post_authenticated() {
     && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
+      GRAM_HTTP_CODE="$first_status"
+      return 79
+    fi
     if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
       GRAM_HTTP_CODE="$first_status"
       return 78
