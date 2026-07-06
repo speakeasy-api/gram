@@ -64,17 +64,21 @@ func redactCommand(raw string) string {
 	fields := strings.Fields(raw)
 	out := make([]string, 0, len(fields))
 	maskNext := false
+	// schemeNext marks a pending mask that came from a header, whose value may
+	// open with an auth-scheme word ("authorization: bearer TOKEN"); the
+	// scheme is not the secret, so the mask rides through to the credential.
+	// A secret flag's value gets no such exception — it is the secret even
+	// when it collides with a scheme word.
+	schemeNext := false
 	for _, f := range fields {
 		if maskNext {
-			// An auth-scheme word between a header and its credential
-			// ("authorization: bearer TOKEN") is not the secret; keep the
-			// mask pending for the value that follows it.
-			if authSchemeRE.MatchString(f) {
+			if schemeNext && authSchemeRE.MatchString(f) {
 				out = append(out, f)
+				schemeNext = false
 				continue
 			}
 			out = append(out, "***")
-			maskNext = false
+			maskNext, schemeNext = false, false
 			continue
 		}
 		switch {
@@ -101,7 +105,7 @@ func redactCommand(raw string) string {
 			switch {
 			case value == "":
 				out = append(out, f[:i]+":")
-				maskNext = true
+				maskNext, schemeNext = true, true
 			case authSchemeRE.MatchString(value):
 				out = append(out, f[:i]+": "+value)
 				maskNext = true

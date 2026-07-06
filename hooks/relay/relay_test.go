@@ -586,6 +586,9 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	got = redactCommand("curl -H Authorization:Digest cred-abc-1")
 	require.NotContains(t, got, "cred-abc-1")
 	require.Contains(t, got, "Authorization: Digest ***")
+
+	got = redactCommand("cmd --api-key token tail3")
+	require.Contains(t, got, "--api-key *** tail3", "a flag value colliding with a scheme word is still the secret")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
