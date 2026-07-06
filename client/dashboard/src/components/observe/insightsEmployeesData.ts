@@ -14,9 +14,9 @@ export type EmployeeAccount = {
   provider: string;
   // "team" | "personal" | "" (unclassified).
   accountType: string;
-  // Millisecond timestamp of this account's latest activity; null when the
-  // directory has no last-seen recorded for it.
-  lastSeenTimestamp: number | null;
+  // Latest activity for this account in Unix nanoseconds (string for JS int64
+  // precision); null when the directory has no last-seen recorded for it.
+  lastSeenUnixNano: string | null;
 };
 
 export type Employee = {
@@ -48,23 +48,22 @@ function accountsFromSummary(
     email: a.email ?? "",
     provider: a.provider,
     accountType: a.accountType ?? "",
-    lastSeenTimestamp: a.lastSeenUnixNano
-      ? Number(BigInt(a.lastSeenUnixNano) / 1_000_000n)
-      : null,
+    lastSeenUnixNano: a.lastSeenUnixNano ?? null,
   }));
 }
 
-// The account with the latest recorded activity; accounts the directory has no
-// last-seen for can't be ranked and are skipped.
+// The account with the latest recorded activity, compared at full nanosecond
+// precision. Accounts the directory has no last-seen for can't be ranked and
+// are skipped.
 function mostRecentAccount(
   accounts: EmployeeAccount[],
 ): EmployeeAccount | null {
   let latest: EmployeeAccount | null = null;
   for (const account of accounts) {
-    if (account.lastSeenTimestamp == null) continue;
+    if (account.lastSeenUnixNano == null) continue;
     if (
-      latest?.lastSeenTimestamp == null ||
-      account.lastSeenTimestamp > latest.lastSeenTimestamp
+      latest?.lastSeenUnixNano == null ||
+      BigInt(account.lastSeenUnixNano) > BigInt(latest.lastSeenUnixNano)
     ) {
       latest = account;
     }

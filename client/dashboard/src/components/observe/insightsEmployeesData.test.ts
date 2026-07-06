@@ -234,6 +234,32 @@ describe("buildEmployees most recent account", () => {
     expect(employees[0]!.mostRecentAccount?.accountType).toBe("personal");
   });
 
+  it("ranks accounts at full nanosecond precision", () => {
+    // Both timestamps fall in the same millisecond; the ranking must not
+    // truncate precision or the first account would win the tie.
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "member-1",
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada@example.com",
+            accountType: "team",
+            lastSeenUnixNano: "1750000000000364000",
+          },
+          {
+            provider: "cursor",
+            email: "ada@personal.com",
+            accountType: "personal",
+            lastSeenUnixNano: "1750000000000400000",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees[0]!.mostRecentAccount?.provider).toBe("cursor");
+  });
+
   it("skips accounts without a last-seen when ranking", () => {
     const employees = buildEmployees([member], noRoles, [
       makeSummary({
