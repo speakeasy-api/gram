@@ -534,7 +534,7 @@ gram_hooks_codex_skill_name() {
       esac
       tool_input="$(gram_hooks_json_value "$payload" "tool_input")"
       [ -n "$tool_input" ] || return 0
-      match="$(printf '%%s\n' "$tool_input" | sed -n 's/.*skills\/\([A-Za-z0-9][A-Za-z0-9._-]*\)\/SKILL\.md.*/\1/p' | sed -n '1p')"
+      match="$(printf '%%s\n' "$tool_input" | sed -n 's/.*skills\/\(\.system\/\)\{0,1\}\([A-Za-z0-9][A-Za-z0-9._-]*\)\/SKILL\.md.*/\2/p' | sed -n '1p')"
       printf '%%s' "$match"
       ;;
     UserPromptSubmit)

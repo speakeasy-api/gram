@@ -2427,6 +2427,7 @@ prompt_miss='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","pr
 prompt_punct='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"please use $home-skill.","cwd":"%[2]s"}'
 prompt_relcwd='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"nested/sub"}'
 prompt_system='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"%[2]s"}'
+read_system='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}'
 gram_hooks_build_canonical_payload "$read_req" "test-host"
 printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$read_res" "test-host"
@@ -2446,6 +2447,8 @@ printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
 printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$prompt_system" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$read_system" "test-host"
 `, repoDir, cwd)
 	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
 
@@ -2455,7 +2458,7 @@ gram_hooks_build_canonical_payload "$prompt_system" "test-host"
 	require.NoError(t, err, string(output))
 
 	chunks := strings.Split(string(output), "\n---GRAM---\n")
-	require.Len(t, chunks, 10)
+	require.Len(t, chunks, 11)
 
 	parse := func(raw string) (eventType string, skillName string) {
 		var parsed map[string]any
@@ -2507,6 +2510,10 @@ gram_hooks_build_canonical_payload "$prompt_system" "test-host"
 	eventType, skill = parse(chunks[9])
 	require.Equal(t, "prompt.submitted", eventType)
 	require.Equal(t, "sys-skill", skill, "bundled skills under a .system subdirectory must resolve by bare name")
+
+	eventType, skill = parse(chunks[10])
+	require.Equal(t, "tool.requested", eventType)
+	require.Equal(t, "imagegen", skill, "reads of .system skill paths must infer the bare skill name")
 }
 
 // TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies pins the
