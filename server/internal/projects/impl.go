@@ -241,9 +241,12 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	// Best-effort: the marketplace repo isn't required for the project to
 	// exist. No GitHub collaborators are added here — we don't have a
 	// customer GitHub username yet; that's supplied later via the dashboard
-	// publish/marketplace-settings flow.
+	// publish/marketplace-settings flow. Uses a non-cancelable derived ctx so
+	// the request returning (or its caller disconnecting) right after commit
+	// can't drop the enqueue.
 	if s.pluginsGitHubEnabled {
-		if _, err := background.ExecutePluginInitialPublishWorkflow(ctx, s.temporalEnv, plugins.PublishProjectInput{
+		enqueueCtx := context.WithoutCancel(ctx)
+		if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
 			ProjectID:       prj.ID,
 			CreatedByUserID: authCtx.UserID,
 			CommitMessage:   "Initial marketplace publish",

@@ -3,10 +3,12 @@ package plugins_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -73,4 +75,41 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 
 	_, err = plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	require.Error(t, err)
+}
+
+func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	first := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server", mcpservers.VisibilityPublic)
+	result, err := plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
+		DisplayName:    "Attach Test Server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// A different mcp_server that happens to derive the same display name
+	// must not be silently dropped — the display_name unique violation is a
+	// different failure mode than "already attached" and must surface.
+	second := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server 2", mcpservers.VisibilityPublic)
+	_, err = plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
+		DisplayName:    "Attach Test Server",
+	})
+	require.Error(t, err)
+
+	servers, err := queries.ListPluginServers(ctx, result.PluginID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1, "the colliding server must not have been attached")
 }

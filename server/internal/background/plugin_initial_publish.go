@@ -24,7 +24,10 @@ func ExecutePluginInitialPublishWorkflow(ctx context.Context, temporalEnv *tenv.
 		ID:                    fmt.Sprintf("v1:plugin-initial-publish/%s", input.ProjectID),
 		TaskQueue:             string(temporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    10 * time.Minute,
+		// Must exceed the activity's worst-case retry budget (3 attempts x
+		// 5m StartToCloseTimeout + backoff ~= 16m), or the workflow can expire
+		// mid-retry and drop the final result.
+		WorkflowRunTimeout: 20 * time.Minute,
 	}, PluginInitialPublishWorkflow, input)
 }
 

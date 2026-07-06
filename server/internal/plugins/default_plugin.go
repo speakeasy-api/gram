@@ -107,7 +107,16 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, nil
+			switch pgErr.ConstraintName {
+			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key":
+				// Already attached — expected no-op, not an error.
+				return nil, nil
+			default:
+				// display_name collision with a different, already-attached
+				// server (or a manually-added one) is a real conflict, not
+				// "already attached" — surface it instead of silently
+				// dropping the server from the Default plugin.
+			}
 		}
 		return nil, fmt.Errorf("attach server to default plugin: %w", err)
 	}
