@@ -226,6 +226,42 @@ func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
 	assert.Equal(t, msg1, findings[0].ChatMessageID)
 }
 
+func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
+
+	// Account classified personal before its email is known (email rides on
+	// later api_request logs).
+	chatID, externalAccountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
+	msg1 := seedChatMessage(t, conn, td, chatID)
+	msg2 := seedChatMessage(t, conn, td, chatID)
+
+	ab := newAccountIdentityAnalyzeBatch(t, conn)
+
+	// First batch flags the personal account with no email yet: generic
+	// description, empty match.
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
+	findings := accountIdentityFindings(t, conn, td, policyID)
+	require.Len(t, findings, 1)
+	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
+	assert.Empty(t, findings[0].Match.String)
+	assert.Equal(t, "Session authenticated with a personal AI account.", findings[0].Description.String)
+
+	// The email arrives, then a later batch of the same session runs. Dedupe
+	// drops the re-emit, so the finding recorded on msg1 must be enriched in
+	// place rather than left generic.
+	setAccountEmail(t, conn, td, externalAccountUUID, "jane@gmail.com")
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
+
+	findings = accountIdentityFindings(t, conn, td, policyID)
+	require.Len(t, findings, 1, "enrichment must update in place, not add a second finding")
+	assert.Equal(t, msg1, findings[0].ChatMessageID)
+	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
+	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
+}
+
 func TestAnalyzeBatch_AccountIdentityVersionBumpReemits(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

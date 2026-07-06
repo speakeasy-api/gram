@@ -876,10 +876,11 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 }
 
 const getBatchChatIdentities = `-- name: GetBatchChatIdentities :many
-SELECT earliest_message_id, account_type, email, flagged_rule_ids
+SELECT earliest_message_id, chat_id, account_type, email, flagged_rule_ids
 FROM (
   SELECT DISTINCT ON (cm.chat_id)
       cm.id AS earliest_message_id
+    , cm.chat_id
     , ua.account_type
     , ua.email
     , (
@@ -914,6 +915,7 @@ type GetBatchChatIdentitiesParams struct {
 
 type GetBatchChatIdentitiesRow struct {
 	EarliestMessageID uuid.UUID
+	ChatID            uuid.UUID
 	AccountType       pgtype.Text
 	Email             pgtype.Text
 	FlaggedRuleIds    []string
@@ -951,6 +953,7 @@ func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatId
 		var i GetBatchChatIdentitiesRow
 		if err := rows.Scan(
 			&i.EarliestMessageID,
+			&i.ChatID,
 			&i.AccountType,
 			&i.Email,
 			&i.FlaggedRuleIds,
@@ -2983,6 +2986,55 @@ type MarkMessagesRiskAnalyzedParams struct {
 func (q *Queries) MarkMessagesRiskAnalyzed(ctx context.Context, arg MarkMessagesRiskAnalyzedParams) error {
 	_, err := q.db.Exec(ctx, markMessagesRiskAnalyzed, arg.MessageIds, arg.ProjectID)
 	return err
+}
+
+const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
+UPDATE risk_results rr
+SET description = $1, match = $2
+FROM chat_messages cm
+WHERE rr.chat_message_id = cm.id
+  AND cm.chat_id = $3::uuid
+  AND rr.project_id = $4::uuid
+  AND rr.risk_policy_id = $5
+  AND rr.risk_policy_version = $6
+  AND rr.source = 'account_identity'
+  AND rr.rule_id = $7
+  AND rr.found IS TRUE
+  AND (rr.match IS NULL OR rr.match = '')
+`
+
+type RefreshAccountIdentityFindingMatchParams struct {
+	Description       pgtype.Text
+	Match             pgtype.Text
+	ChatID            uuid.UUID
+	ProjectID         uuid.UUID
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	RuleID            pgtype.Text
+}
+
+// Enriches an already-recorded account_identity finding in place once identity
+// fields that were unknown at first analysis arrive — e.g. a personal account
+// classified before its email was known. Session-scoped findings dedupe per
+// rule (GetBatchChatIdentities.flagged_rule_ids), so a later batch's richer
+// finding is dropped rather than inserted; without this the original row keeps
+// its empty match and generic description forever. Restricted to rows whose
+// match is still empty so it is idempotent and never clobbers a finding that
+// already carries its detail.
+func (q *Queries) RefreshAccountIdentityFindingMatch(ctx context.Context, arg RefreshAccountIdentityFindingMatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshAccountIdentityFindingMatch,
+		arg.Description,
+		arg.Match,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.RuleID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many

@@ -688,10 +688,11 @@ WHERE id = ANY(@ids::uuid[])
 -- versa), so a later batch can legitimately fire a rule the first batch could
 -- not evaluate yet. Findings on in-batch messages do not block re-emission
 -- because the writer deletes and re-inserts results for the batch's messages.
-SELECT earliest_message_id, account_type, email, flagged_rule_ids
+SELECT earliest_message_id, chat_id, account_type, email, flagged_rule_ids
 FROM (
   SELECT DISTINCT ON (cm.chat_id)
       cm.id AS earliest_message_id
+    , cm.chat_id
     , ua.account_type
     , ua.email
     , (
@@ -715,6 +716,28 @@ FROM (
   ORDER BY cm.chat_id, cm.id ASC
 ) batch_chats
 ORDER BY earliest_message_id ASC;
+
+-- name: RefreshAccountIdentityFindingMatch :execrows
+-- Enriches an already-recorded account_identity finding in place once identity
+-- fields that were unknown at first analysis arrive — e.g. a personal account
+-- classified before its email was known. Session-scoped findings dedupe per
+-- rule (GetBatchChatIdentities.flagged_rule_ids), so a later batch's richer
+-- finding is dropped rather than inserted; without this the original row keeps
+-- its empty match and generic description forever. Restricted to rows whose
+-- match is still empty so it is idempotent and never clobbers a finding that
+-- already carries its detail.
+UPDATE risk_results rr
+SET description = @description, match = @match
+FROM chat_messages cm
+WHERE rr.chat_message_id = cm.id
+  AND cm.chat_id = @chat_id::uuid
+  AND rr.project_id = @project_id::uuid
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.risk_policy_version = @risk_policy_version
+  AND rr.source = 'account_identity'
+  AND rr.rule_id = @rule_id
+  AND rr.found IS TRUE
+  AND (rr.match IS NULL OR rr.match = '');
 
 -- name: InsertRiskResults :copyfrom
 INSERT INTO risk_results (

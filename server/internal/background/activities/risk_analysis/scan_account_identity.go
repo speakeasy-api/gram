@@ -56,7 +56,8 @@ type sessionFinding struct {
 // concurrently analyzed batches can rarely double-emit; that is accepted as
 // cosmetic.
 func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatchArgs) ([]sessionFinding, error) {
-	rows, err := repo.New(a.db).GetBatchChatIdentities(ctx, repo.GetBatchChatIdentitiesParams{
+	r := repo.New(a.db)
+	rows, err := r.GetBatchChatIdentities(ctx, repo.GetBatchChatIdentitiesParams{
 		Ids:               args.MessageIDs,
 		ProjectID:         args.ProjectID,
 		RiskPolicyID:      args.RiskPolicyID,
@@ -69,11 +70,33 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 	approvedDomains := normalizeApprovedDomains(args.ApprovedEmailDomains)
 	var out []sessionFinding
 	for _, row := range rows {
-		findings := evaluateAccountIdentity(
-			conv.FromPGTextOrEmpty[string](row.AccountType),
-			conv.FromPGTextOrEmpty[string](row.Email),
-			approvedDomains,
-		)
+		accountType := conv.FromPGTextOrEmpty[string](row.AccountType)
+		email := conv.FromPGTextOrEmpty[string](row.Email)
+
+		// Enrich a personal_account finding recorded on an earlier batch before
+		// this account's email was known. Session findings dedupe per rule, so
+		// the email-bearing finding is dropped below rather than inserted;
+		// without this the original row keeps its empty match and generic
+		// description forever. The update is scoped to empty-match rows so it is
+		// idempotent. Only personal_account can be recorded match-less — the
+		// unapproved_domain rule only fires once an email is present.
+		if accountType == "personal" && email != "" &&
+			slices.Contains(row.FlaggedRuleIds, guard(RuleIdentityPersonalAccount)) {
+			ruleID, description := DescribeIdentityPersonalAccount(email)
+			if _, err := r.RefreshAccountIdentityFindingMatch(ctx, repo.RefreshAccountIdentityFindingMatchParams{
+				Description:       conv.ToPGText(description),
+				Match:             conv.ToPGText(email),
+				ChatID:            row.ChatID,
+				ProjectID:         args.ProjectID,
+				RiskPolicyID:      args.RiskPolicyID,
+				RiskPolicyVersion: args.PolicyVersion,
+				RuleID:            conv.ToPGText(ruleID),
+			}); err != nil {
+				return nil, fmt.Errorf("refresh account identity finding match: %w", err)
+			}
+		}
+
+		findings := evaluateAccountIdentity(accountType, email, approvedDomains)
 		findings = slices.DeleteFunc(findings, func(f Finding) bool {
 			return slices.Contains(row.FlaggedRuleIds, f.RuleID)
 		})
