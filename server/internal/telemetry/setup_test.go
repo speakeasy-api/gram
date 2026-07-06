@@ -57,6 +57,7 @@ type testInstance struct {
 	chClient           *repo.Queries
 	sessionManager     *sessions.Manager
 	orgID              string
+	projectID          string
 	disabledLogsOrgID  string
 	enabledToolIOOrgID string
 }
@@ -125,6 +126,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		chClient:           chClient,
 		sessionManager:     sessionManager,
 		orgID:              authCtx.ActiveOrganizationID,
+		projectID:          authCtx.ProjectID.String(),
 		disabledLogsOrgID:  disabledLogsOrgID,
 		enabledToolIOOrgID: enabledToolIOOrgID,
 	}
