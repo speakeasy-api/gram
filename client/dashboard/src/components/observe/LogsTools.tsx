@@ -1,3 +1,4 @@
+import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -6,6 +7,7 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -53,11 +55,7 @@ import type {
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
-import {
-  useGramContext,
-  useListAttributeKeys,
-  useListToolsets,
-} from "@gram/client/react-query";
+import { useGramContext, useListAttributeKeys } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { BadgeProps } from "@speakeasy-api/moonshine";
@@ -96,6 +94,30 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
       ...(values !== undefined ? { values } : {}),
     };
   });
+}
+
+// Free-text search and arbitrary attribute filters can't be served by the
+// pre-aggregated trace_summaries view, so they fall back to scanning raw logs.
+// Surface that to the user when either is active; the structured filters
+// (server, user, agent, type, date) stay on the fast summary path.
+function isCustomSearchActive(
+  attributeSearchQuery: string | null,
+  attributeFilters: ActiveLogFilter[],
+): boolean {
+  return (attributeSearchQuery?.length ?? 0) > 0 || attributeFilters.length > 0;
+}
+
+function SlowSearchNotice() {
+  return (
+    <SimpleTooltip tooltip="Free-text search and custom attribute filters scan raw logs instead of the pre-aggregated summaries, so results may take longer to load. Server, user, agent, type, and date filters stay fast.">
+      <Badge variant="warning">
+        <Badge.LeftIcon>
+          <Icon name="info" size="small" />
+        </Badge.LeftIcon>
+        <Badge.Text>Custom search — may be slower</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
 }
 
 function useAttributeSearchParams() {
@@ -249,8 +271,6 @@ export function LogsTools(): JSX.Element {
     [selectedHookTypes],
   );
 
-  const { data: toolsetsData } = useListToolsets();
-
   const { data: filterOptionsData } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
@@ -279,7 +299,6 @@ export function LogsTools(): JSX.Element {
   const serverOptionGroups = useMemo(
     () =>
       buildServerOptionGroups({
-        hostedToolsets: toolsetsData?.toolsets ?? [],
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
         activeFilters,
@@ -290,7 +309,6 @@ export function LogsTools(): JSX.Element {
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
       serverNameMappings,
-      toolsetsData?.toolsets,
     ],
   );
 
@@ -314,6 +332,37 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
+  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
+  // filters on the materialized gram.account_type column via the raw-logs path.
+  // "team" is expressed as "not personal" so unclassified rows count as team
+  // (matching the badge semantics elsewhere).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountType = ((): string => {
+    const v = searchParams.get("account_type");
+    return v === "team" || v === "personal" ? v : "";
+  })();
+  const setAccountType = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  // account_type is sent as a first-class payload filter (below), not an
+  // attribute filter, so it stays on the fast trace_summaries path rather than
+  // forcing the raw-logs scan.
+  const queryFilters = attributeSdkFilters;
+
   const {
     data: tracesData,
     error,
@@ -335,7 +384,8 @@ export function LogsTools(): JSX.Element {
         userFilters,
         hookSources,
         attributeSearchQuery,
-        attributeSdkFilters,
+        queryFilters,
+        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -350,11 +400,9 @@ export function LogsTools(): JSX.Element {
               targetTypes,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
+              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
-              filters:
-                attributeSdkFilters.length > 0
-                  ? attributeSdkFilters
-                  : undefined,
+              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -450,6 +498,7 @@ export function LogsTools(): JSX.Element {
           <LogsToolsContent
             isLoading={isLoading}
             isFetching={isFetching}
+            onRefresh={refetch}
             error={displayError}
             traces={traces}
             serverOptionGroups={serverOptionGroups}
@@ -492,6 +541,8 @@ export function LogsTools(): JSX.Element {
             onAttributeSearchSubmit={updateAttributeSearchQuery}
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
+            accountType={accountType}
+            onAccountTypeChange={setAccountType}
             from={from}
             to={to}
           />
@@ -504,6 +555,7 @@ export function LogsTools(): JSX.Element {
 function LogsToolsContent({
   isLoading,
   isFetching,
+  onRefresh,
   error,
   traces,
   serverOptionGroups,
@@ -544,11 +596,14 @@ function LogsToolsContent({
   onAttributeSearchSubmit,
   onAttributeFiltersChange,
   onAddFilterFromLog,
+  accountType,
+  onAccountTypeChange,
   from,
   to,
 }: {
   isLoading: boolean;
   isFetching: boolean;
+  onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
   serverOptionGroups: Parameters<
@@ -591,6 +646,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit: (query: string) => void;
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
 }) {
@@ -642,6 +699,8 @@ function LogsToolsContent({
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
+            accountType={accountType}
+            onAccountTypeChange={onAccountTypeChange}
             attributeSearchControl={
               <div className="min-w-[260px] flex-[1.2]">
                 <LogFilterBar
@@ -655,7 +714,15 @@ function LogsToolsContent({
                 />
               </div>
             }
+            onRefresh={onRefresh}
+            isRefreshing={isFetching}
           />
+
+          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
+            <div className="flex shrink-0">
+              <SlowSearchNotice />
+            </div>
+          )}
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto border">
@@ -689,6 +756,7 @@ function LogsToolsContent({
                       selectedTypes.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
+                      accountType !== "" ||
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
@@ -942,8 +1010,14 @@ function LogsToolsTraceRow({
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
-          {userLabel || "—"}
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <AccountTypeIcon
+            accountType={trace.accountType}
+            className="shrink-0"
+          />
+          <span className="text-muted-foreground min-w-0 truncate">
+            {userLabel || "—"}
+          </span>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

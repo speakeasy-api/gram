@@ -57,7 +57,7 @@ export type UpdateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+   * Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -86,13 +86,25 @@ export type UpdateRiskPolicyRequestBody = {
    */
   presidioEntities?: Array<string> | undefined;
   /**
+   * Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).
+   */
+  presidioScoreThreshold?: number | undefined;
+  /**
    * For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.
    */
   prompt?: string | undefined;
   /**
-   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
    */
   promptInjectionRules?: Array<string> | undefined;
+  /**
+   * CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+   */
+  scopeExempt?: string | undefined;
+  /**
+   * CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
+   */
+  scopeInclude?: string | undefined;
   /**
    * Detection sources to enable.
    */
@@ -128,8 +140,11 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
+  presidio_score_threshold?: number | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  scope_exempt?: string | undefined;
+  scope_include?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -154,8 +169,11 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
+    presidioScoreThreshold: z.optional(z.number()),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    scopeExempt: z.optional(z.string()),
+    scopeInclude: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -169,7 +187,10 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       messageTypes: "message_types",
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",
+      presidioScoreThreshold: "presidio_score_threshold",
       promptInjectionRules: "prompt_injection_rules",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
       userMessage: "user_message",
     });
   }),

@@ -8,10 +8,17 @@ export function DotTable({
   headers,
   children,
   className,
+  selectionHeader,
 }: {
   headers: { label: string; className?: string }[];
   children: React.ReactNode;
   className?: string;
+  /**
+   * When provided, renders a leading selection column (after the dot column)
+   * with this node as its header — typically a select-all checkbox. Rows must
+   * render a matching leading cell so columns stay aligned.
+   */
+  selectionHeader?: React.ReactNode;
 }): JSX.Element {
   return (
     <div
@@ -25,6 +32,9 @@ export function DotTable({
           <tr className="bg-muted/30 border-b">
             {/* Empty header for the dot-pattern column */}
             <th className="w-17" />
+            {selectionHeader !== undefined && (
+              <th className="w-10 px-3 py-2.5">{selectionHeader}</th>
+            )}
             {headers.map((header, index) => (
               <th
                 key={header.label || `header-${index}`}

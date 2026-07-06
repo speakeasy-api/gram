@@ -1,6 +1,8 @@
 package risk_analysis
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -34,4 +36,14 @@ func TestFilterMessagesByMessageTypes(t *testing.T) {
 	all := filterMessagesByMessageTypes(messages, nil)
 	require.Len(t, all, 4)
 	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID})
+}
+
+func TestParseRecordedToolCallsMalformedFallback(t *testing.T) {
+	t.Parallel()
+
+	calls := parseRecordedToolCalls(context.Background(), slog.New(slog.DiscardHandler), []byte(`rm -rf /tmp/x`)) //nolint:forbidigo // same-package test import-cycles with testenv
+
+	require.Len(t, calls, 1)
+	require.Equal(t, malformedToolCallsName, calls[0].Function.Name)
+	require.Equal(t, `rm -rf /tmp/x`, calls[0].Function.Arguments)
 }

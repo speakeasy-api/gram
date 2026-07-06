@@ -13,6 +13,7 @@ import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
+import { CliAuth } from "./cliauth.js";
 import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
@@ -101,6 +102,11 @@ export class Gram extends ClientSDK {
   private _chatSessions?: ChatSessions;
   get chatSessions(): ChatSessions {
     return (this._chatSessions ??= new ChatSessions(this._options));
+  }
+
+  private _cliAuth?: CliAuth;
+  get cliAuth(): CliAuth {
+    return (this._cliAuth ??= new CliAuth(this._options));
   }
 
   private _collections?: Collections;

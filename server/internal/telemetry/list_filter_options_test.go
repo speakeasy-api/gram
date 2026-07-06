@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,26 +55,29 @@ func TestListFilterOptions_FilterByAPIKey(t *testing.T) {
 	// apiKey2 has 1 unique chat
 	insertLogWithAPIKey(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), uuid.New().String(), apiKey2)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-		From:       from,
-		To:         to,
-		FilterType: "api_key",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+			From:       from,
+			To:         to,
+			FilterType: "api_key",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Options, 2)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Options, 2)
-
-	// Results should be ordered by count descending
-	require.Equal(t, apiKey1, result.Options[0].ID)
-	require.Equal(t, int64(3), result.Options[0].Count)
-	require.Equal(t, apiKey2, result.Options[1].ID)
-	require.Equal(t, int64(1), result.Options[1].Count)
+		// Results should be ordered by count descending
+		assert.Equal(c, apiKey1, res.Options[0].ID)
+		assert.Equal(c, int64(3), res.Options[0].Count)
+		assert.Equal(c, apiKey2, res.Options[1].ID)
+		assert.Equal(c, int64(1), res.Options[1].Count)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestListFilterOptions_FilterByUser(t *testing.T) {
@@ -99,26 +103,29 @@ func TestListFilterOptions_FilterByUser(t *testing.T) {
 	insertLogWithExternalUser(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), uuid.New().String(), user2)
 	insertLogWithExternalUser(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), uuid.New().String(), user2)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-		From:       from,
-		To:         to,
-		FilterType: "user",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+			From:       from,
+			To:         to,
+			FilterType: "user",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Options, 2)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Options, 2)
-
-	// Results should be ordered by count descending
-	require.Equal(t, user2, result.Options[0].ID)
-	require.Equal(t, int64(3), result.Options[0].Count)
-	require.Equal(t, user1, result.Options[1].ID)
-	require.Equal(t, int64(2), result.Options[1].Count)
+		// Results should be ordered by count descending
+		assert.Equal(c, user2, res.Options[0].ID)
+		assert.Equal(c, int64(3), res.Options[0].Count)
+		assert.Equal(c, user1, res.Options[1].ID)
+		assert.Equal(c, int64(2), res.Options[1].Count)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestListFilterOptions_InvalidFilterType(t *testing.T) {
@@ -180,24 +187,27 @@ func TestListFilterOptions_CountsUniqueChatSessions(t *testing.T) {
 	insertLogWithAPIKey(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, apiKey)
 	insertLogWithAPIKey(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID, apiKey)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-		From:       from,
-		To:         to,
-		FilterType: "api_key",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+			From:       from,
+			To:         to,
+			FilterType: "api_key",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Options, 1)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Options, 1)
-
-	// Should count as 1 unique chat, not 3
-	require.Equal(t, apiKey, result.Options[0].ID)
-	require.Equal(t, int64(1), result.Options[0].Count)
+		// Should count as 1 unique chat, not 3
+		assert.Equal(c, apiKey, res.Options[0].ID)
+		assert.Equal(c, int64(1), res.Options[0].Count)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestListFilterOptions_TimeRangeFilter(t *testing.T) {
@@ -219,24 +229,27 @@ func TestListFilterOptions_TimeRangeFilter(t *testing.T) {
 	// Insert log outside the time range (2 hours ago)
 	insertLogWithAPIKey(t, ctx, projectID, deploymentID, now.Add(-2*time.Hour), uuid.New().String(), apiKeyOutOfRange)
 
-	time.Sleep(200 * time.Millisecond)
-
 	// Query for last hour only
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
-		From:       from,
-		To:         to,
-		FilterType: "api_key",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.ListFilterOptions(ctx, &gen.ListFilterOptionsPayload{
+			From:       from,
+			To:         to,
+			FilterType: "api_key",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Options, 1)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Options, 1)
-
-	// Only the in-range API key should be returned
-	require.Equal(t, apiKeyInRange, result.Options[0].ID)
+		// Only the in-range API key should be returned
+		assert.Equal(c, apiKeyInRange, res.Options[0].ID)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 // insertLogWithAPIKey inserts a log with the gram.api_key.id attribute set.

@@ -1,6 +1,8 @@
 package proxy_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -702,6 +704,112 @@ func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, proxy.ErrBodyTooLarge)
 }
 
+func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// A non-spec-compliant remote returned a non-SSE body that isn't a single
+	// JSON-RPC message (observed in prod as a bare heartbeat scalar). The proxy
+	// must relay it verbatim with the upstream status rather than surfacing a
+	// 5xx — mirroring the SSE relay path's treatment of undecodable events.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("3"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code, "undecodable upstream body must not surface as a 5xx")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "3", rr.Body.String(), "undecodable upstream body must reach the client unmangled")
+}
+
+func TestProxy_Post_GzipEncodedUpstreamBodyIsDecodedAndIntercepted(t *testing.T) {
+	t.Parallel()
+
+	// The client advertises gzip. The proxy must not forward Accept-Encoding
+	// verbatim — doing so makes the Go transport decline transparent
+	// decompression, so a valid gzipped JSON-RPC response would reach
+	// readJSONRPCBody compressed, fail to decode, and be relayed verbatim with
+	// interceptors skipped. With the header stripped, the transport unwinds the
+	// encoding and the response decodes and runs through interception.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		_, _ = gz.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`))
+		_ = gz.Close()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(buf.Bytes())
+	}))
+	t.Cleanup(upstream.Close)
+
+	observed := []jsonrpc.Message{}
+	p := newProxyForTest(t, upstream.URL)
+	p.RemoteMessageInterceptors = []proxy.RemoteMessageInterceptor{
+		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Len(t, observed, 1, "gzipped upstream response must decode and run through interception")
+	require.Empty(t, rr.Header().Get("Content-Encoding"), "transparently decompressed body must not carry a stale Content-Encoding")
+	require.Contains(t, rr.Body.String(), `"ok":true`, "client must receive the decoded JSON-RPC body")
+}
+
+func TestProxy_Post_ConfiguredAcceptEncodingHeaderIsStripped(t *testing.T) {
+	t.Parallel()
+
+	// A configured header forces Accept-Encoding: gzip. It is applied after the
+	// user-header filter, so without an explicit strip it would survive, make
+	// the Go transport decline transparent decompression, and leave a gzipped
+	// body that fails to decode and bypasses interception. The proxy must drop
+	// it so the transport owns content-encoding negotiation.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		_, _ = gz.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`))
+		_ = gz.Close()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(buf.Bytes())
+	}))
+	t.Cleanup(upstream.Close)
+
+	observed := []jsonrpc.Message{}
+	p := newProxyForTest(t, upstream.URL)
+	p.Headers = []proxy.ConfiguredHeader{
+		{Name: "Accept-Encoding", StaticValue: "gzip"},
+	}
+	p.RemoteMessageInterceptors = []proxy.RemoteMessageInterceptor{
+		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Len(t, observed, 1, "configured Accept-Encoding must not defeat decompression and interception")
+	require.Contains(t, rr.Body.String(), `"ok":true`, "client must receive the decoded JSON-RPC body")
+}
+
 func TestProxy_Post_OversizedUserBodyReturnsError(t *testing.T) {
 	t.Parallel()
 
@@ -876,7 +984,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
-	p.ServerID = "srv-abc"
+	p.Identity = proxy.ServerIdentity{RemoteMCPServerID: "srv-abc", McpServerID: "mcp-abc"}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
@@ -899,6 +1007,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 		attr.HTTPRequestMethod(http.MethodPost),
 		attr.RemoteMCPProxyRemoteStatusClass("2xx"),
 		attr.RemoteMCPServerID("srv-abc"),
+		attr.McpServerID("mcp-abc"),
 	)
 
 	duration, ok := byName[proxy.MeterRequestDuration]

@@ -84,6 +84,8 @@ type GetAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -111,6 +113,8 @@ type CreateAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -138,6 +142,8 @@ type UpdateAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -170,6 +176,35 @@ type SendMessageResponseBody struct {
 	Accepted bool `form:"accepted" json:"accepted" xml:"accepted"`
 }
 
+// GetManagedAssistantResponseBody is the type of the "assistants" service
+// "getManagedAssistant" endpoint HTTP response body.
+type GetManagedAssistantResponseBody struct {
+	// The assistant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID owning the assistant.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// The assistant name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The model identifier used by the assistant.
+	Model string `form:"model" json:"model" xml:"model"`
+	// The system instructions for the assistant.
+	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
+	// Toolsets available to the assistant.
+	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// Warm runtime TTL in seconds.
+	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
+	// Maximum active warm runtimes for the assistant.
+	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// The assistant status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // EnsureManagedAssistantResponseBody is the type of the "assistants" service
 // "ensureManagedAssistant" endpoint HTTP response body.
 type EnsureManagedAssistantResponseBody struct {
@@ -177,6 +212,8 @@ type EnsureManagedAssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -1303,6 +1340,196 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetManagedAssistantUnauthorizedResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetManagedAssistantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantForbiddenResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "forbidden" error.
+type GetManagedAssistantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantBadRequestResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "bad_request" error.
+type GetManagedAssistantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantNotFoundResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "not_found" error.
+type GetManagedAssistantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantConflictResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the "conflict"
+// error.
+type GetManagedAssistantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantUnsupportedMediaResponseBody is the type of the
+// "assistants" service "getManagedAssistant" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetManagedAssistantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantInvalidResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the "invalid"
+// error.
+type GetManagedAssistantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantInvariantViolationResponseBody is the type of the
+// "assistants" service "getManagedAssistant" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetManagedAssistantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantUnexpectedResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "unexpected" error.
+type GetManagedAssistantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetManagedAssistantGatewayErrorResponseBody is the type of the "assistants"
+// service "getManagedAssistant" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetManagedAssistantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // EnsureManagedAssistantUnauthorizedResponseBody is the type of the
 // "assistants" service "ensureManagedAssistant" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1499,6 +1726,8 @@ type AssistantResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID owning the assistant.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -1560,16 +1789,17 @@ func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAs
 // the "getAssistant" endpoint of the "assistants" service.
 func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody {
 	body := &GetAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1590,16 +1820,17 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantResponseBody {
 	body := &CreateAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1620,16 +1851,17 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantResponseBody {
 	body := &UpdateAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -1657,20 +1889,52 @@ func NewSendMessageResponseBody(res *assistants.SendMessageResult) *SendMessageR
 	return body
 }
 
+// NewGetManagedAssistantResponseBody builds the HTTP response body from the
+// result of the "getManagedAssistant" endpoint of the "assistants" service.
+func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssistantResponseBody {
+	body := &GetManagedAssistantResponseBody{
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.Toolsets != nil {
+		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
+		for i, val := range res.Toolsets {
+			if val == nil {
+				body.Toolsets[i] = nil
+				continue
+			}
+			body.Toolsets[i] = marshalTypesAssistantToolsetRefToAssistantToolsetRefResponseBody(val)
+		}
+	} else {
+		body.Toolsets = []*AssistantToolsetRefResponseBody{}
+	}
+	return body
+}
+
 // NewEnsureManagedAssistantResponseBody builds the HTTP response body from the
 // result of the "ensureManagedAssistant" endpoint of the "assistants" service.
 func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedAssistantResponseBody {
 	body := &EnsureManagedAssistantResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		Name:           res.Name,
-		Model:          res.Model,
-		Instructions:   res.Instructions,
-		WarmTTLSeconds: res.WarmTTLSeconds,
-		MaxConcurrency: res.MaxConcurrency,
-		Status:         res.Status,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2540,6 +2804,155 @@ func NewSendMessageGatewayErrorResponseBody(res *goa.ServiceError) *SendMessageG
 	return body
 }
 
+// NewGetManagedAssistantUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantUnauthorizedResponseBody(res *goa.ServiceError) *GetManagedAssistantUnauthorizedResponseBody {
+	body := &GetManagedAssistantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantForbiddenResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantForbiddenResponseBody(res *goa.ServiceError) *GetManagedAssistantForbiddenResponseBody {
+	body := &GetManagedAssistantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantBadRequestResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantBadRequestResponseBody(res *goa.ServiceError) *GetManagedAssistantBadRequestResponseBody {
+	body := &GetManagedAssistantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantNotFoundResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantNotFoundResponseBody(res *goa.ServiceError) *GetManagedAssistantNotFoundResponseBody {
+	body := &GetManagedAssistantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantConflictResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantConflictResponseBody(res *goa.ServiceError) *GetManagedAssistantConflictResponseBody {
+	body := &GetManagedAssistantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getManagedAssistant" endpoint of the
+// "assistants" service.
+func NewGetManagedAssistantUnsupportedMediaResponseBody(res *goa.ServiceError) *GetManagedAssistantUnsupportedMediaResponseBody {
+	body := &GetManagedAssistantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantInvalidResponseBody builds the HTTP response body from
+// the result of the "getManagedAssistant" endpoint of the "assistants" service.
+func NewGetManagedAssistantInvalidResponseBody(res *goa.ServiceError) *GetManagedAssistantInvalidResponseBody {
+	body := &GetManagedAssistantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getManagedAssistant" endpoint of the
+// "assistants" service.
+func NewGetManagedAssistantInvariantViolationResponseBody(res *goa.ServiceError) *GetManagedAssistantInvariantViolationResponseBody {
+	body := &GetManagedAssistantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantUnexpectedResponseBody(res *goa.ServiceError) *GetManagedAssistantUnexpectedResponseBody {
+	body := &GetManagedAssistantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetManagedAssistantGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getManagedAssistant" endpoint of the "assistants"
+// service.
+func NewGetManagedAssistantGatewayErrorResponseBody(res *goa.ServiceError) *GetManagedAssistantGatewayErrorResponseBody {
+	body := &GetManagedAssistantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewEnsureManagedAssistantUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "ensureManagedAssistant" endpoint of the
 // "assistants" service.
@@ -2784,6 +3197,16 @@ func NewSendMessagePayload(body *SendMessageRequestBody, sessionToken *string, p
 		ChatID:         body.ChatID,
 		IdempotencyKey: body.IdempotencyKey,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetManagedAssistantPayload builds a assistants service
+// getManagedAssistant endpoint payload.
+func NewGetManagedAssistantPayload(sessionToken *string, projectSlugInput *string) *assistants.GetManagedAssistantPayload {
+	v := &assistants.GetManagedAssistantPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

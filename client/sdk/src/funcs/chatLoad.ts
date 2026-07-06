@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -31,7 +32,7 @@ import { Result } from "../types/fp.js";
  * loadChat chat
  *
  * @remarks
- * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
+ * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
  */
 export function chatLoad(
   client: GramCore,
@@ -96,8 +97,14 @@ async function $do(
   const path = pathToFunc("/rpc/chat.load")();
 
   const query = encodeFormQuery({
+    "after_seq": payload.after_seq,
+    "before_seq": payload.before_seq,
+    "from_start": payload.from_start,
     "generation": payload.generation,
     "id": payload.id,
+    "limit": payload.limit,
+    "query": payload.query,
+    "risk_only": payload.risk_only,
   });
 
   const headers = new Headers(compactMap({
@@ -172,19 +179,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

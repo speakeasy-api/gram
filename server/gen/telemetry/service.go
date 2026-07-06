@@ -39,6 +39,16 @@ type Service interface {
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
+	// Generic, org-scoped analytics query over pre-aggregated usage metrics.
+	// Returns both a grouped table and a per-group hourly timeseries for the same
+	// slice of data, supporting arbitrary allowlisted group-by dimensions and
+	// filters (e.g. group by department_name, then drill in by filtering
+	// department_name and grouping by role).
+	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
+	// Org-scoped list of individual chat sessions for a slice of usage, filtered
+	// by the same allowlisted dimensions as telemetry.query. Returns per-session
+	// cost, token, and tool metrics with cursor pagination.
+	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -78,7 +88,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [19]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -188,6 +198,11 @@ type GetEmployeeDataFlowGraphPayload struct {
 	UserID *string
 	// External user ID to get the graph for (mutually exclusive with user_id)
 	ExternalUserID *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// graph to that one account
+	ExternalOrgID *string
 }
 
 // GetEmployeeDataFlowGraphResult is the result type of the telemetry service
@@ -265,10 +280,18 @@ type GetObservabilityOverviewPayload struct {
 	ToolsetSlug *string
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// overview to that one account
+	ExternalOrgID *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
@@ -368,6 +391,11 @@ type GetToolUsageSummaryPayload struct {
 	ShadowServerNames []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service
@@ -407,6 +435,11 @@ type GetUserMetricsSummaryPayload struct {
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes
+	// metrics to that one account
+	ExternalOrgID *string
 }
 
 // GetUserMetricsSummaryResult is the result type of the telemetry service
@@ -597,6 +630,33 @@ type ListHooksTracesResult struct {
 	NextCursor *string
 }
 
+// ListSessionsPayload is the payload type of the telemetry service
+// listSessions method.
+type ListSessionsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Measure used to rank sessions. Defaults to total_cost.
+	SortBy string
+	// Number of sessions to return (1-1000)
+	Limit int
+	// Opaque cursor for pagination
+	Cursor *string
+}
+
+// ListSessionsResult is the result type of the telemetry service listSessions
+// method.
+type ListSessionsResult struct {
+	// List of chat session summaries
+	Sessions []*SessionSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
 // ListToolUsageTracesPayload is the payload type of the telemetry service
 // listToolUsageTraces method.
 type ListToolUsageTracesPayload struct {
@@ -618,6 +678,9 @@ type ListToolUsageTracesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// Optional account type filter ('team' or 'personal'). 'team' includes
+	// unclassified traces.
+	AccountType *string
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -775,6 +838,103 @@ type ProjectSummary struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
+}
+
+// A single filter predicate on an allowlisted dimension
+type QueryFilter struct {
+	// Dimension to filter on
+	Dimension string
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string
+}
+
+// Aggregated measure values for a group or time bucket
+type QueryMeasures struct {
+	// Total cost in USD
+	TotalCost float64
+	// Sum of input tokens
+	TotalInputTokens int64
+	// Sum of output tokens
+	TotalOutputTokens int64
+	// Sum of all tokens
+	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of distinct chat sessions
+	TotalChats int64
+}
+
+// QueryPayload is the payload type of the telemetry service query method.
+type QueryPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional dimension to break results down by. When omitted, a single
+	// aggregate row/series for the whole slice is returned.
+	GroupBy *string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Optional timeseries bucket size in seconds. Defaults to an interval derived
+	// from the time range and is floored to 3600 (the source data is bucketed
+	// hourly).
+	GranularitySeconds *int64
+	// When group_by is set, keep at most this many groups (ranked by sort_by); the
+	// remainder are rolled into an 'Other' group. Defaults to 10.
+	TopN int
+	// Measure used to rank groups for top_n. Defaults to total_cost.
+	SortBy string
+}
+
+// A single time bucket within a series
+type QueryPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Aggregated measures for this bucket
+	Measures *QueryMeasures
+}
+
+// QueryResult is the result type of the telemetry service query method.
+type QueryResult struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy string
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds int64
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRow
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeries
+}
+
+// One row of the grouped table: measures aggregated over the full time range
+// for a single group value.
+type QueryRow struct {
+	// The dimension value for this row. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Aggregated measures for this group
+	Measures *QueryMeasures
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string
+}
+
+// A gap-filled timeseries for a single group value (one line on the chart).
+type QuerySeries struct {
+	// The dimension value for this series. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Time buckets in ascending order, gap-filled with zeros.
+	Points []*QueryPoint
 }
 
 // Aggregated usage summary for a role
@@ -964,6 +1124,11 @@ type SearchUsersFilter struct {
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code').
 	HookSource *string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id (the
+	// per-account discriminator); scopes results to that one account.
+	ExternalOrgID *string
 }
 
 // SearchUsersPayload is the payload type of the telemetry service searchUsers
@@ -1003,6 +1168,42 @@ type ServiceInfo struct {
 	Name string
 	// Service version
 	Version *string
+}
+
+// Org-scoped summary information for a chat session
+type SessionSummary struct {
+	// Chat session ID
+	GramChatID string
+	// Project ID that emitted this chat session
+	ProjectID string
+	// User email associated with this chat session
+	UserEmail *string
+	// Client or agent surface associated with this chat session
+	HookSource *string
+	// LLM model used in this chat session
+	Model *string
+	// Chat title, when the session resolves to a named chat
+	Title *string
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string
+	// Chat session duration in seconds
+	DurationSeconds float64
+	// Number of LLM completion messages in this chat session
+	MessageCount int64
+	// Number of tool calls in this chat session
+	ToolCallCount int64
+	// Total input tokens used
+	TotalInputTokens int64
+	// Total output tokens used
+	TotalOutputTokens int64
+	// Total tokens used
+	TotalTokens int64
+	// Total cost in USD
+	TotalCost float64
+	// Chat session status
+	Status string
 }
 
 // Per-(skill, user) aggregated counts
@@ -1151,6 +1352,8 @@ type ToolUsageFilterOptionType string
 type ToolUsageHostedServerFilterOption struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug string
+	// Hosted MCP toolset display name
+	ToolsetName string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }
@@ -1302,6 +1505,9 @@ type ToolUsageTraceSummary struct {
 	HookStatus *string
 	// Hook block reason when hook_status is blocked
 	BlockReason *string
+	// AI account classification ('team' or 'personal'); empty/absent when
+	// unclassified
+	AccountType *string
 }
 
 // Typed user identity filter
@@ -1404,10 +1610,32 @@ type TopUser struct {
 	ActivityCount int64
 }
 
+// A linked AI account for a user. The identity is (provider, email): the same
+// email registered on two providers is two distinct accounts.
+type UserAccount struct {
+	// Account record id (user_accounts.id); used to scope chat/session views to
+	// this account
+	ID *string
+	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+	Provider string
+	// Email associated with the account; may differ from the user's work email for
+	// personal accounts
+	Email *string
+	// 'team' (enterprise) or 'personal' (individual); empty when not yet classified
+	AccountType *string
+	// Provider org id for this account; the per-account discriminator used to
+	// scope telemetry to this one account
+	ExternalOrgID *string
+	// Latest activity timestamp for this account in Unix nanoseconds
+	LastSeenUnixNano *string
+}
+
 // Aggregated usage summary for a single user
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string
+	// User email associated with this usage, when present
+	UserEmail string
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds
@@ -1440,6 +1668,10 @@ type UserSummary struct {
 	Tools []*ToolUsage
 	// Per-hook-source usage breakdown
 	HookSources []*HookSourceUsage
+	// Distinct account types observed for this user ('team', 'personal')
+	AccountTypes []string
+	// Linked AI accounts for this user (team and personal, across providers)
+	Accounts []*UserAccount
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

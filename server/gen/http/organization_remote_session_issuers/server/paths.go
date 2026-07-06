@@ -67,6 +67,16 @@ func ListClientSessionsOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.listClientSessions"
 }
 
+// CreateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createClient HTTP endpoint.
+func CreateClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.createClient"
+}
+
+// CreateCimdClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createCimdClient HTTP endpoint.
+func CreateCimdClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.createCimdClient"
+}
+
 // UpdateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateClient HTTP endpoint.
 func UpdateClientOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.updateClient"
@@ -85,6 +95,11 @@ func RemoveClientFromMcpServerOrganizationRemoteSessionIssuersPath() string {
 // RevokeSessionOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service revokeSession HTTP endpoint.
 func RevokeSessionOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.revokeSession"
+}
+
+// RefreshSessionOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service refreshSession HTTP endpoint.
+func RefreshSessionOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.refreshSession"
 }
 
 // RevokeAllClientSessionsOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service revokeAllClientSessions HTTP endpoint.

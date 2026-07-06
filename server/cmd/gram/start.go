@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/cliauth"
 	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -82,14 +83,17 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -112,6 +116,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
+
+// shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
+// to complete on SIGTERM before the process exits. It must cover the slowest
+// outbound work any endpoint can do, including the MCP runtime path
+// (POST /mcp/{mcpSlug}).
+//
+// Note: the effective drain is also bounded by infrastructure settings such as
+// terminationGracePeriodSeconds in Kubernetes, which must be set above this
+// value for the full window to be honored.
+const shutdownDrainTimeout = 60 * time.Second
 
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
@@ -283,24 +297,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "posthog-endpoint",
-			Usage:    "The endpoint to proxy product metrics too",
-			EnvVars:  []string{"POSTHOG_ENDPOINT"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-api-key",
-			Usage:    "The posthog public API key",
-			EnvVars:  []string{"POSTHOG_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "posthog-personal-api-key",
-			Usage:    "The posthog personal API key for local feature flag evaluation",
-			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -367,12 +363,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the server working directory.",
-			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
@@ -418,11 +408,6 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"WORKOS_WEBHOOK_SECRET"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name:    "pi-classifier-url",
-			Usage:   "Base URL of the gram-pi-classifier sidecar (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
-			EnvVars: []string{"PI_CLASSIFIER_URL"},
-		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -431,6 +416,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, posthogFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, gcpFlags...)
 
@@ -482,11 +468,6 @@ func newStartCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
-			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
 
@@ -553,6 +534,8 @@ func newStartCommand() *cli.Command {
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -565,6 +548,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -612,7 +596,6 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
 
@@ -702,7 +685,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
@@ -716,14 +699,14 @@ func newStartCommand() *cli.Command {
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
 				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
@@ -850,12 +833,12 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
@@ -886,6 +869,27 @@ func newStartCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("create github app client: %w", err)
 				}
+			}
+
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			if err != nil {
+				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
+				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			publishers, shutdown, err := newPublishers(ctx, psbroker)
+			// Stop and flush the publishers before closing the Pub/Sub client
+			// they publish through. runShutdown executes shutdown funcs
+			// concurrently, so this ordering must be enforced inside a single
+			// func — appending the two separately would race the publisher
+			// flush against the client close and could drop in-flight messages.
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := shutdown(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create publishers: %w", err)
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
@@ -934,8 +938,21 @@ func newStartCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			// Drop client-supplied baggage on public routes before otelhttp
+			// extracts inbound trace context, so untrusted baggage never enters
+			// the request context.
+			mux.Use(middleware.DropInboundOTelBaggage)
 			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+				return otelhttp.NewHandler(h, "http",
+					otelhttp.WithServerName("gram"),
+					// Public MCP/OAuth routes are reachable by any third party, so
+					// their inbound trace context is potentially untrusted input.
+					// Treat them as OTel public endpoints: start a fresh root span
+					// and record the inbound context as a span link rather than
+					// adopting it as the parent. Trusted first-party routes (/rpc,
+					// /admin) keep parent-child continuity.
+					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
+				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -954,17 +971,17 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 			}
 
-			// Same shape for the L1 prompt-injection classifier sidecar. Empty URL
-			// → stub classifier (L1 disabled; L0 heuristics still run when a policy
-			// has the prompt_injection source enabled).
-			var hookPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
-			if piURL := c.String("pi-classifier-url"); piURL != "" {
-				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
-			}
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, featureFlags)
+			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
+			// client is always constructed, so the judge is always available.
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -988,6 +1005,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				tracerProvider,
+				meterProvider,
 				telemLogger,
 				sessionManager,
 				hooksCache,
@@ -1000,6 +1018,7 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
+				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))
@@ -1023,6 +1042,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
@@ -1053,12 +1073,14 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
+			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String()))
-			remotesessions.Attach(mux, remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, cache.NewRedisCacheAdapter(redisClient))
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
+			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
 			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
@@ -1083,7 +1105,11 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
+			// runShutdown runs every func concurrently, which races temporalClient.Close()
+			// against the signaler's trailing-edge flush over the same gRPC connection
+			// ("grpc: the client connection is closing"). Instead it is flushed
+			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
@@ -1098,11 +1124,12 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,
+				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
-				c.String("pi-classifier-url") != "",
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
+				celEngine,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -1121,6 +1148,17 @@ func newStartCommand() *cli.Command {
 				Addr:              c.String("address"),
 				Handler:           mux,
 				ReadHeaderTimeout: 10 * time.Second,
+				// IdleTimeout must exceed the fronting GCLB's backend keepalive
+				// timeout so the backend retires an idle connection AFTER the LB
+				// would, never before. If the backend closes first the LB can
+				// still have an outstanding request on that connection and the
+				// client sees a TCP RST — the transient reset this change set is
+				// hardening against. GCLB's backend keepalive is a fixed 600s and
+				// not configurable, and Google explicitly requires the backend's
+				// value to be > 600s, so 620s. No WriteTimeout: it is an absolute
+				// deadline on the whole response and would sever the long-lived
+				// SSE/MCP streams this mux also serves.
+				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},
@@ -1143,11 +1181,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
-					if piURL := c.String("pi-classifier-url"); piURL != "" {
-						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
-					}
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
@@ -1185,6 +1219,7 @@ func newStartCommand() *cli.Command {
 						SvixClient:                     svixClient,
 						ProductFeatures:                productFeatures,
 						PluginPublisher:                pluginPublisher,
+						Publishers:                     publishers,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
@@ -1197,11 +1232,25 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				graceCtx, graceCancel := context.WithTimeoutCause(
+					context.WithoutCancel(ctx),
+					shutdownDrainTimeout,
+					errors.New("graceful shutdown timed out"),
+				)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
+					if gerr := context.Cause(graceCtx); gerr != nil {
+						err = errors.Join(err, gerr)
+					}
+					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
+				}
+
+				// The HTTP server is now fully drained, so no new risk signals are
+				// produced. Flush the throttle's queued trailing signals here while the
+				// Temporal client is still open — runShutdown closes it concurrently.
+				if err := riskSignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}
 			})
 
@@ -1266,8 +1315,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			cancel()
+			// ListenAndServe returns ErrServerClosed the instant srv.Shutdown is
+			// called, not when the drain finishes. Wait for the drain goroutine to
+			// fully complete before cancelling ctx: ctx is the server's BaseContext,
+			// so cancelling it here would cancel every in-flight request mid-drain
+			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			cancel()
 
 			return nil
 		},

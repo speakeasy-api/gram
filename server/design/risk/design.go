@@ -28,10 +28,17 @@ var _ = Service("risk", func() {
 			})
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
-			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -51,7 +58,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.create")
+			POST("/rpc/risk.createPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -76,7 +83,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskPoliciesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.list")
+			GET("/rpc/risk.listPolicies")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -87,31 +94,6 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
-	})
-
-	Method("getRiskCapabilities", func() {
-		Description("Get server-side risk analysis capabilities for the current project.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(RiskCapabilitiesResult)
-
-		HTTP(func() {
-			GET("/rpc/risk.capabilities.get")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getRiskCapabilities")
-		Meta("openapi:extension:x-speakeasy-group", "risk.capabilities")
-		Meta("openapi:extension:x-speakeasy-name-override", "get")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCapabilities"}`)
 	})
 
 	Method("getRiskPolicy", func() {
@@ -130,7 +112,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.get")
+			GET("/rpc/risk.getPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -156,10 +138,17 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
-			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+				Minimum(0)
+				Maximum(1)
+				Example(0.75)
+			})
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
+			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -178,7 +167,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicy)
 
 		HTTP(func() {
-			PUT("/rpc/risk.policies.update")
+			PUT("/rpc/risk.updatePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -204,7 +193,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/risk.policies.delete")
+			DELETE("/rpc/risk.deletePolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -250,7 +239,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.list")
+			GET("/rpc/risk.listResults")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -306,7 +295,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsForAgentResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.listForAgent")
+			GET("/rpc/risk.listResultsForAgent")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -329,6 +318,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsForAgent"}`)
 	})
 
+	Method("unmaskRiskResult", func() {
+		Description("Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The risk result ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskUnmaskResultResult)
+
+		HTTP(func() {
+			// POST, not GET: unmasking has a side effect (an audit log write
+			// per reveal), so it isn't a safe/idempotent request — a GET here
+			// would be cacheable/prefetchable by browsers and proxies.
+			POST("/rpc/risk.unmaskResult")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmaskRiskResult")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmask")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmaskResult", "type": "mutation"}`)
+	})
+
 	Method("listRiskResultsByChat", func() {
 		Description("List risk results grouped by chat session for the current project.")
 
@@ -346,7 +368,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskResultsByChatResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.results.byChat")
+			GET("/rpc/risk.listResultsByChat")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -379,7 +401,7 @@ var _ = Service("risk", func() {
 		Result(RiskOverviewResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.get")
+			GET("/rpc/risk.getOverview")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -406,7 +428,7 @@ var _ = Service("risk", func() {
 		Result(RiskCategoriesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.categories")
+			GET("/rpc/risk.listCategories")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -417,6 +439,35 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.categories")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
+	})
+
+	Method("compileExpr", func() {
+		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("expr", String, "The CEL expression to compile. Empty is valid and compiles to ok=true.", func() {
+				Default("")
+			})
+		})
+
+		Result(ExprCompileResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.compileCELExpression")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("expr")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "compileExpr")
+		Meta("openapi:extension:x-speakeasy-group", "risk.expr")
+		Meta("openapi:extension:x-speakeasy-name-override", "compile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCompileExpr"}`)
 	})
 
 	Method("getRiskUserBreakdown", func() {
@@ -439,7 +490,7 @@ var _ = Service("risk", func() {
 		Result(RiskUserBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.userBreakdown")
+			GET("/rpc/risk.getUserBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -475,7 +526,7 @@ var _ = Service("risk", func() {
 		Result(RiskRuleBreakdownResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.overview.rules")
+			GET("/rpc/risk.getRuleBreakdown")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -507,7 +558,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskPolicyStatus)
 
 		HTTP(func() {
-			GET("/rpc/risk.policies.status")
+			GET("/rpc/risk.getPolicyStatus")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -542,6 +593,62 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("getRiskBlock", func() {
+		Description("Get a tool call block by its risk result ID for the durable block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			GET("/rpc/risk.getBlock")
+			security.SessionHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskBlock")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetBlock", "type": "query"}`)
+	})
+
+	Method("submitRiskBlockFeedback", func() {
+		Description("Record thumbs-up/thumbs-down feedback for a tool call block from the block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Attribute("sentiment", String, "Feedback sentiment.", func() {
+				Enum("up", "down")
+			})
+			Required("id", "sentiment")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			PUT("/rpc/risk.submitBlockFeedback")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitRiskBlockFeedback")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSubmitBlockFeedback", "type": "mutation"}`)
 	})
 
 	Method("listRiskPolicyBypassRequests", func() {
@@ -686,7 +793,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.policies.trigger")
+			POST("/rpc/risk.triggerPolicy")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -708,18 +815,19 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
+			Attribute("regex", String, "Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
 			})
-			Required("rule_id", "title", "regex")
+			Required("rule_id", "title")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.create")
+			POST("/rpc/risk.createCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -744,7 +852,7 @@ var _ = Service("risk", func() {
 		Result(ListCustomDetectionRulesResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.list")
+			GET("/rpc/risk.listCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -773,7 +881,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			GET("/rpc/risk.customRules.get")
+			GET("/rpc/risk.getCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -799,17 +907,18 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
+			Attribute("regex", String, "Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
-			Required("id", "title", "regex", "severity")
+			Required("id", "title", "severity")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.update")
+			POST("/rpc/risk.updateCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -836,7 +945,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.delete")
+			POST("/rpc/risk.deleteCustomRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1012,7 +1121,7 @@ var _ = Service("risk", func() {
 		Result(SuggestCustomDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.customRules.suggest")
+			POST("/rpc/risk.suggestCustomRules")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1040,14 +1149,14 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Attribute("detection_expr", String, "CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.")
 			Required("rule_id", "text")
 		})
 
 		Result(TestDetectionRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/risk.rules.test")
+			POST("/rpc/risk.testRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1065,7 +1174,8 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("detection_expr", String, "Suggested CEL detection predicate.")
+	Attribute("regex", String, "Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
@@ -1106,16 +1216,19 @@ var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func
 	Required("rules")
 })
 
-var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {
-	Attribute("pi_classifier_enabled", Boolean, "Whether the prompt-injection ML classifier is configured on this server.")
-	Required("pi_classifier_enabled")
-})
-
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
 	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
+})
+
+var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
+	Attribute("id", String, "The risk result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
+	Required("id", "match")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {
@@ -1177,6 +1290,15 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
 
 	Required("categories")
+})
+
+var ExprCompileResult = Type("ExprCompileResult", func() {
+	Description("The result of compiling a single CEL expression for the editor.")
+
+	Attribute("ok", Boolean, "True when the expression compiled successfully.")
+	Attribute("error", String, "Compiler error message when ok is false; empty otherwise.")
+
+	Required("ok", "error")
 })
 
 var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {
@@ -1255,6 +1377,25 @@ var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskBlock = Type("RiskBlock", func() {
+	Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project the block belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("reason", String, "Human-readable reason the tool call was blocked.")
+	Attribute("policy_name", String, "Name of the risk policy that blocked the call.")
+	Attribute("tool_name", String, "Name of the tool that was blocked, when known.")
+	Attribute("created_at", String, "When the block occurred.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("feedback", String, "Existing feedback sentiment recorded for this block, when any.", func() {
+		Enum("up", "down")
+	})
+	Required("id", "project_id", "reason", "policy_name", "created_at")
 })
 
 var RiskIDRequestBody = Type("RiskIDRequestBody", func() {

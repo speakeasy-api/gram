@@ -22,20 +22,31 @@ type RiskPolicy struct {
 	Sources []string
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

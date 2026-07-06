@@ -15,9 +15,8 @@ async def _get(port: int, path: str) -> bytes:
     """
     stream = await anyio.connect_tcp("127.0.0.1", port)
     async with stream:
-        await stream.send(
-            f"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode()
-        )
+        request = f"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        await stream.send(request.encode())
         data = b""
         try:
             while True:

@@ -27,7 +27,7 @@ func TestService_Register(t *testing.T) {
 
 		// Create and store a session with no active organization
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
@@ -66,7 +66,7 @@ func TestService_Register(t *testing.T) {
 
 		// Create and store a session with active organization
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // Has active organization
 			WorkOSSessionID:      "",
@@ -111,7 +111,7 @@ func TestService_Register(t *testing.T) {
 
 		// Create and store a session with no active organization
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
@@ -156,7 +156,7 @@ func TestService_Register(t *testing.T) {
 
 		// Create and store a session with no active organization
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",

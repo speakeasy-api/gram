@@ -39,17 +39,20 @@ func (imp *InMemory) SetFlag(flag Flag, distinctID string, enabled bool) {
 }
 
 // OrgProjectGroups returns the PostHog group memberships used to evaluate
-// org/project-scoped flags, mirroring the groups the dashboard registers (see
-// client/dashboard/src/contexts/Telemetry.tsx): "organization_slug" keyed by
-// the org slug and "slug" keyed by "<orgSlug>/<projectSlug>". Empty slug
-// components are omitted so a release targeting either group matches the same
-// way it does for the frontend. Returns nil when no group can be built.
+// org/project-scoped flags. It keys the "organization" group by the org slug
+// and the "slug" group by "<orgSlug>/<projectSlug>" — the same group types the
+// dashboard (client/dashboard/src/contexts/Telemetry.tsx) and backend event
+// capture (server/internal/thirdparty/posthog) register. PostHog caps a project
+// at 5 group types and these are the only org/project ones that exist; any
+// other group type is silently dropped at ingestion, so a flag release targeting
+// it could never match. Empty slug components are omitted. Returns nil when no
+// group can be built.
 func OrgProjectGroups(orgSlug, projectSlug string) map[string]string {
 	if orgSlug == "" {
 		return nil
 	}
 
-	groups := map[string]string{"organization_slug": orgSlug}
+	groups := map[string]string{"organization": orgSlug}
 	if projectSlug != "" {
 		groups["slug"] = orgSlug + "/" + projectSlug
 	}

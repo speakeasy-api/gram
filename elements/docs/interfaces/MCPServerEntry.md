@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -21,7 +21,7 @@ The MCP server URL.
 
 ### name?
 
-> `optional` **name**: `string`
+> `optional` **name?**: `string`
 
 Namespace prefix prepended to tools from this server with `__` as the
 separator (e.g. `name__tool`) so that tools with identical names from
@@ -32,7 +32,7 @@ the URL.
 
 ### environment?
 
-> `optional` **environment**: `string`
+> `optional` **environment?**: `string`
 
 Environment slug to bind this server's tools to. Sent as the
 `Gram-Environment` header on requests to this MCP server only.

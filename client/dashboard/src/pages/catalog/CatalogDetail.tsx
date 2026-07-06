@@ -2,14 +2,16 @@ import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import {
-  PulseMCPServer,
-  useInfiniteListMCPCatalog,
-} from "@/pages/catalog/hooks";
+import { PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
+import {
+  useLatestDeployment,
+  useListToolsets,
+  useMcpRegistriesGetServerDetails,
+} from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -47,11 +49,10 @@ export default function CatalogDetail(): JSX.Element {
   const decodedSpecifier = serverSpecifier
     ? decodeURIComponent(serverSpecifier)
     : "";
-  // Scope the catalog list to a search hint derived from the specifier's last
-  // segment so the target server is in the first page (backend caps results
-  // at 100 across all registries and only paginates single-registry queries).
-  const searchHint = decodedSpecifier.split("/").pop() ?? "";
-  const { data, isLoading } = useInfiniteListMCPCatalog(searchHint);
+  // The catalog is small and fetched in full, so reuse the unparameterized
+  // catalog query (shared cache key with the list page) and find the server
+  // client-side.
+  const { data, isLoading } = useListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -61,14 +62,34 @@ export default function CatalogDetail(): JSX.Element {
   const { data: toolsetsResult } = useListToolsets();
 
   const server = useMemo(() => {
-    if (!data?.pages || !decodedSpecifier) return null;
-    const allServers = data.pages.flatMap(
-      (page) => page.servers as PulseMCPServer[],
-    );
+    if (!data?.servers || !decodedSpecifier) return null;
+    const allServers = data.servers as PulseMCPServer[];
     return (
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
   }, [data, decodedSpecifier]);
+
+  // The catalog list omits per-tool definitions to stay small, so fetch the
+  // full tool list for the detail view separately (cached server-side).
+  const { data: serverDetails } = useMcpRegistriesGetServerDetails(
+    {
+      registryId: server?.registryId ?? "",
+      serverSpecifier: decodedSpecifier,
+    },
+    undefined,
+    { enabled: !!server?.registryId && !!decodedSpecifier },
+  );
+  const detailTools: Tool[] = useMemo(
+    () =>
+      (serverDetails?.tools ?? [])
+        .filter((tool) => !!tool.name)
+        .map((tool) => ({
+          name: tool.name as string,
+          description: tool.description ?? undefined,
+          annotations: tool.annotations as Tool["annotations"],
+        })),
+    [serverDetails],
+  );
 
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -224,6 +245,7 @@ export default function CatalogDetail(): JSX.Element {
                   {versionMeta?.isLatest && (
                     <Badge variant="neutral">Latest</Badge>
                   )}
+                  <ManualSetupBadge server={server} />
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a
@@ -294,10 +316,7 @@ export default function CatalogDetail(): JSX.Element {
             </Card>
 
             {/* Available Tools */}
-            {versionMeta?.["remotes[0]"]?.tools &&
-              versionMeta["remotes[0]"].tools.length > 0 && (
-                <ToolsSection tools={versionMeta["remotes[0]"].tools} />
-              )}
+            {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
           </div>
 
           {/* Right Column - Info */}

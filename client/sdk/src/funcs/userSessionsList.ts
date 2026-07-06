@@ -4,8 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { dlv } from "../lib/dlv.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -112,8 +112,10 @@ async function $do(
   const path = pathToFunc("/rpc/userSessions.list")();
 
   const query = encodeFormQuery({
+    "client_id": payload?.client_id,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "status": payload?.status,
     "subject_urn": payload?.subject_urn,
     "user_session_issuer_id": payload?.user_session_issuer_id,
   });
@@ -194,19 +196,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });
@@ -269,7 +260,7 @@ async function $do(
     >;
     "~next"?: { cursor: string };
   } => {
-    const nextCursor = dlv(responseData, "next_cursor");
+    const nextCursor = (responseData as { next_cursor?: unknown }).next_cursor;
     if (typeof nextCursor !== "string") {
       return { next: () => null };
     }

@@ -1,5 +1,197 @@
 # dashboard
 
+## 0.82.0
+
+### Minor Changes
+
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- ab1450f: Break down and filter AI usage by account type — Team (enterprise) vs Personal (individual, e.g. Claude Max) — and by provider (Claude, Codex, Cursor) across Costs, Insights, Agent Sessions, Tool Logs, and Employees. Personal usage is flagged at a glance on sessions and logs, and each employee's linked AI accounts are listed with the option to scope their metrics to a single account.
+- ab1450f: Cost is now shown as an estimate ("Est. cost", with an explanation on hover) wherever it appears in Costs and insights, because the figure is derived from token usage at standard API rates — which only reflects real spend on metered (pay-per-token) accounts, not flat-fee subscription plans like Claude Max/Pro/Team/Enterprise. Admins can declare a provider integration's billing mode (Metered / Flat rate / Unknown) under Settings → Logging & Telemetry; once an account is declared metered, its cost reads as a confident "Cost".
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- Updated dependencies [7ce4d76]
+  - @gram-ai/elements@1.40.1
+
+## 0.81.0
+
+### Minor Changes
+
+- 2186673: Support organization-level remote session clients. A `remote_session_client` can now be created with no project (organization-level) so every project in the organization can attach and use it, mirroring organization-level remote session issuers. On `organizationRemoteSessionIssuers.createClient` and `createCimdClient` an omitted `project_id` under an organization-level issuer creates an organization-level client (the same `project_id`-omission convention `createIssuer` already uses), while a supplied `project_id` scopes the client to that project. The consent/token runtime resolver, the project-scoped client reads, and the attach-time single-client invariant now resolve both a project's own clients and organization-level clients in its organization, so a project admin can attach, detach, and use an organization-level client from their own user session issuer but cannot edit or delete it (those stay on the org-admin surface). The `RemoteSessionClient` API shape adds `organization_id` and allows an empty `project_id` for organization-level clients, mirroring the issuer change.
+
+### Patch Changes
+
+- d7b8ec9: Gate the "click to reveal" secret action in Risk Events behind the `chat:read` scope. Users without `chat:read` now see flagged secret values as a non-interactive "Hidden" placeholder (with an explanatory tooltip) instead of a reveal control, and the page-level "Reveal all" toggle is hidden for them. The `chat:read` scope description in the role editor is updated to note that the grant also controls unmasking flagged secrets in Risk Events.
+- fcfd78e: Add server-side controls for unmasking redacted secrets
+- c8597b1: Add the unified `/rpc/hooks.ingest` endpoint for third-party hook ingestion while preserving existing provider-specific hook endpoints. Hook plugins now authenticate each developer locally through the browser callback flow and store a hooks-scoped key on the device.
+- c9da9e5: Add callback URL to the Remote Session Client form
+- Updated dependencies [5c825a9]
+  - @gram-ai/elements@1.40.0
+
+## 0.80.0
+
+### Minor Changes
+
+- fc47698: Allow editing the permissions of system roles (`admin`/`member`) per organization, while keeping their name and description platform-managed. The Admin role is guarded against losing the `org:admin` permission to prevent org lockout. The roles tab is reworked: the whole role row opens the edit sheet (gated on `org:admin`), scope groups no longer auto-expand and show a description when collapsed, and the members column uses a new interactive member facepile (hover focus, click to view all members) that also replaces the facepile on the org home projects list. Adds Directory Sync (SCIM) info alerts on the team, roles, and identity pages explaining that members and roles are managed by the identity provider while SCIM is enabled.
+- c637f6b: Risk policies: configurable detection sensitivity. Adds a per-policy minimum
+  match-confidence threshold with a "Sensitivity" slider in the policy wizard, and
+  lowers the default to 0.5.
+
+### Patch Changes
+
+- c6ddf0e: Fixed the MCP catalog listing duplicate servers (count doubling) when loading more
+
+## 0.79.0
+
+### Minor Changes
+
+- f193c77: Project Assistant: fold the app-injected `<…context>` block in a user turn into a collapsed "Additional context" disclosure (chevron, expand to inspect) instead of rendering the raw tags. The expanded block wraps to the message-bubble width, so opening it no longer widens the bubble.
+- f04e8b0: Add a `chat:read` RBAC scope that gates access to other members' agent session transcripts. The `chat.load` endpoint and the dashboard agent-sessions list are scoped by `chat:read`: anyone can always read sessions they own (the handler grants owner access directly — no `chat:read` grant needed), while reading every member's session requires an unrestricted `chat:read`. The scope is not a default of any system role — not even `admin` — so it must be granted explicitly via a custom role. On the agent-sessions page, callers without `chat:read` see a banner noting they only see their own sessions (with a link to the roles page for org admins). Each dashboard session open is recorded in the audit log as a `chat_session:access` event. The scope is selectable in the role editor (Agent Sessions group) and the dev RBAC override toolbar.
+
+### Patch Changes
+
+- Updated dependencies [f193c77]
+  - @gram-ai/elements@1.39.0
+
+## 0.78.0
+
+### Minor Changes
+
+- 0cd8e96: Add an agent type filter to the Agent Sessions page, populated from the agent sources actually present in each project's chats via a new `chat.listSources` endpoint.
+- 7763a1b: Tool-call blocks are now durable, first-class entities with a stable `/blocks/<id>` URL and 👍/👎 feedback. When the risk engine blocks a tool call, the block is persisted and its reason is injected into the agent-facing response (Claude `PermissionDecisionReason`, Cursor `AgentMessage`, Codex `reason`) along with a link to the block page, so the agent can reason about the denial instead of hallucinating one. New session-scoped, org-admin-gated `getRiskBlock` and `submitRiskBlockFeedback` endpoints back an in-app `BlockDetailPage` (under `AppLayout`) and a slug-free redirect resolver for the agent's external link, with a "More Info" link from the Risk Events modal.
+
+### Patch Changes
+
+- 0405ac9: Distribute → MCP → Tools now shows the same text permission labels (Read-only, Destructive, Idempotent) as Connect → Catalog → MCP, instead of icon-only badges, for quicker at-a-glance access to a tool's behavior hints.
+- 3464cb8: Show the assistant's creator as its owner. Assistants already recorded who created them; that attribution is now surfaced as a profile avatar (reusing the org-home member avatar treatment) on both the assistant card and the assistant setup page's overview panel. The owner resolves to one of three states: the creating member (avatar + name, full name on hover), "No owner" when the assistant was never attributed, or "Orphaned, no owner" when the creator is no longer a member of the organization. Backed by a new optional `created_by_user_id` field on the `Assistant` API type.
+- dd03a11: Plugin detail now shows an explicit "Up to date" badge and surfaces the last-published time even when there are unpublished changes, rounding out the publish-freshness affordance.
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+- b6a94ad: Fix the risk policy creation Detect step so the Continue button enables when only category-level detectors (Prompt Injection, Shadow MCP, Destructive Tools, Destructive CLI Commands) are selected. These categories have no individual sub-rules, so the previous `hasEnabledDetector` check treated them as empty and kept Continue/Save disabled.
+- Updated dependencies [a5d57cb]
+  - @gram-ai/elements@1.38.2
+
+## 0.77.1
+
+### Patch Changes
+
+- 24b41d9: Improve tool observability filter performance by returning hosted MCP server display names from telemetry filter options, allowing the logs and insights pages to avoid hydrating full toolset resources for server filter labels.
+- 1751a59: Publish plugins straight from the plugin detail page. After adding or removing a server, or editing a plugin's metadata, a "Publish now" prompt offers a one-click republish — or opens the first-publish dialog for projects not yet connected to GitHub — so there's no need to return to the plugins list to re-publish. The detail page now also shows publish freshness: an "Unpublished changes" badge when the project's current plugin state differs from what was last published, or the last published time when up to date, alongside a durable publish button and a marketplace install banner.
+
+  This is backed by new `up_to_date` and `last_published_at` fields on the `plugins.getPublishStatus` API, which compare the project's live plugin fingerprint against the fingerprint last pushed to GitHub. Both fields are absent when the project has no GitHub connection.
+
+- 045b0ae: Stop chat-conversation search from erroring on long queries. The `chat.load` API caps `query` at 200 characters, but the find-in-conversation bar sent whatever was typed, so a long query failed with a hard validation error. The bar now gates the request at 200 characters and flags the over-limit state inline: the search icon turns into a red warning icon (with a tooltip) and the match counter shows the live `length/200` count in red.
+- 1751a59: Fix toast notifications rendering twice. A second `<Toaster>` was mounted at the app root in addition to the one inside the provider tree, so every toast appeared (and dismissed) as a duplicate. Removed the redundant root-level Toaster.
+- bbdda53: Pinned chats: pin/unpin conversations on the /chat page. Pinned chats surface in a dedicated "Pinned" section above Recent Chats. Adds a `setPinned` chat API and a `pinned` filter on `listChats`, backed by the `chats.pinned_at` column.
+
+## 0.77.0
+
+### Minor Changes
+
+- f479a1b: Org admins can now register a standalone `remote_session_client` directly from the Remote Identity Provider details page. A new `organizationRemoteSessionIssuers.createClient` endpoint creates a client under an existing issuer with no `user_session_issuer` attachments; the client inherits a project-specific issuer's project, or the admin names a project (downscoping) when the issuer is organization-level. The dashboard surfaces a `New Client` button on the issuer's Clients tab that opens a sheet supporting Dynamic Client Registration (when the issuer advertises a `registration_endpoint`) or manual `client_id` / `client_secret` entry.
+
+### Patch Changes
+
+- 81bc532: Audit trail subjects now link to their detail pages. MCP servers, risk policies, environments, assistants, roles, members, and collections render as links in the org audit log, alongside the deployments, toolsets, projects, plugins, and API keys that were already linked. Project-scoped subjects route under the entry's own project (which may differ from the project in the current URL), and risk policies and roles deep-link to open the specific item.
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+- 9b85ddd: feat(telemetry): include the chat title on `listSessions` results (resolved from Postgres, batched per page) and show it in place of the chat id in the cost dashboard's session table
+- Updated dependencies [4f9b199]
+  - @gram-ai/elements@1.38.1
+
+## 0.76.0
+
+### Minor Changes
+
+- 66fcd5a: feat(assistants): add a search box to the Assistants list. The shared `SearchBar` is always shown above the list and filters the grid by name and model (case-insensitive), with a "no matches" message when a query returns nothing.
+- 1ba5adb: feat(dashboard): search within a chat thread. The chat detail sheet gains a find-in-conversation bar backed by full-thread server-side text search (`chat.load` `query` param returns the messages matching the query plus surrounding context, mirroring the risk-windowed view). Jump between matches with the prev/next controls or Enter/Shift+Enter (wrapping at the ends), Escape clears. The active match is highlighted bright yellow and the rest pale — across message text, tool names, and tool argument/output sections — and the tool holding the active match expands, collapsing again as you navigate away.
+- 0d23d1f: Add an Analytics tab to the MCP Server details page with observability scoped by `mcp_server_id`, spanning both remote-backed and toolset-backed activity: a time-range picker, trend metric cards (tool calls, failed calls, error rate, average latency), a tool-calls time-series chart, and top tools by call count and by failure rate.
+- ef2f5ef: Add an organization-level observability mode that makes generated hook plugins fully non-blocking. When enabled, hooks only observe and report and can never deny or delay a tool call. Defaults off, preserving existing behavior. Toggle it from the organization logging settings.
+- 6f3180d: chat.load now paginates a generation's messages by `seq` keyset (`limit`, `before_seq`, `after_seq`) and exposes each message's `seq` plus `has_more_before`/`has_more_after`. A new `risk_only` flag returns just the messages with active risk findings padded with surrounding context, grouped into contiguous `risk_segments` that can be expanded on demand. The chat detail sheet consumes this with a virtualized transcript (`@tanstack/react-virtual`, constant DOM node count regardless of how many pages are loaded) and infinite scroll (scroll up to load older messages, anchored so the viewport doesn't jump), and renders the risk-only view as expandable segments with load-above/below and gap-fill controls.
+
+### Patch Changes
+
+- c1ef552: `remoteSessionClients` and the org-admin client views now source the `user_session_issuer` relationship entirely from the join table. The `RemoteSessionClient` result replaces the single `user_session_issuer_id` with a `user_session_issuer_ids` array (breaking), create/clone accept zero or more `user_session_issuer_ids` so a client can be created standalone, and a client's issuer attachments are now managed through the new `attachUserSessionIssuer` / `detachUserSessionIssuer` endpoints instead of `update`. No more reads or writes of the legacy `remote_session_clients.user_session_issuer_id` column.
+- 3955c10: Better performance on tool logs page
+- e6c756b: Add drag-to-zoom time window controls to dashboard charts.
+- 4b45485: `chat.load` now returns a `totals` object with whole-generation trace-entry counts (`total`, `user_messages`, `assistant_messages`, `tool_calls`, `tool_results`, `risk_only`). Because the detail-sheet transcript is paginated, the filter bar previously derived its counts from the loaded page — showing e.g. "Showing 150 of 150 entries" on a 19k-message chat, and a risk count that disagreed with the (generation-scoped) risk-only transcript. The dashboard now renders these counts from the server totals. Totals are scoped to the returned generation so they stay consistent with the messages on screen.
+- b968804: Exclude tools lists from registry list view to lean out the response size and make the catalog experience more reliable in flake-y network conditions
+- 03cf22a: Fix two Cmd+K command palette glitches. Recently Visited is now only shown when the search box is empty, so a closer text match always ranks ahead of a recently visited page (AGE-2808). The "Ask AI" row drops below the results while searching, so the closest match keeps the auto-selected highlight instead of requiring an extra ↓ keypress to reach it (AGE-2807).
+- b0a9186: Fix filter sheet options not applying when clicked. The multiselect controls in the unified filter sheet opened their dropdown but never registered option clicks, so filters on the MCP & Tools and Insights pages did not respond.
+- cd3738b: Link the SSO and Directory Sync (SCIM) "Configure" buttons on the org Identity page to the in-product setup wizard (`/setup?step=connect-idp` and `/setup?step=directory-sync`) when no connection has been set up yet, instead of bouncing admins straight to the WorkOS admin portal. Once a connection exists, the buttons continue to open the WorkOS portal to manage it. The entitled-org configure buttons no longer emit `identity_provider_interest` PostHog tracking events; the non-entitled upsell button still does (it backs the "our team has been contacted" notification).
+- d53899a: Fix the Agent filter on the MCP & Tools insights page not reloading data. Selecting an agent updated the filter chip but the tool usage summary ignored the hook source, so the graphs never changed.
+- 5917df2: Enhance the org-level MCP Connections page: multi-select with select-all to revoke sessions in bulk, a search box in the filter bar, brand status badges, and a status filter (removed the OAuth Client filter).
+- Updated dependencies [1ba5adb]
+  - @gram-ai/elements@1.38.0
+
+## 0.75.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+
+### Patch Changes
+
+- 0b4e42b: Unify the search, filters, sort, and view-as controls on every list page into a single `Page.Toolbar` component, replacing the per-page mix of bespoke search boxes, filter sidebars, sort dropdowns, and view toggles.
+
+  - One contained control bar per page (search + filters on the left, sort + count + view on the right), with uniform control heights.
+  - Filter chips and sheet share a typed schema (`defineFilters`/`useFilterState`); adds Status + Source filters to the MCP page.
+  - Folds in fixes: "Reset to default" now clears every filter atomically, the date picker opens inside the filter sheet, and empty filter labels are pluralized ("All servers").
+
+## 0.74.0
+
+### Minor Changes
+
+- bf94bd2: Add a full-page Project Assistant chat as a second way into the assistant, alongside the docked composer.
+
+  - New **Project Assistant** entry in the project sidebar (under Home) opening a `/chat` landing: a personalized "Ask your Project Assistant about your AI usage" composer with a cycling, crossfading placeholder, a `/` slash menu of starter prompts, your recent conversations grouped by time period ("Show all" to expand), and a set of enterprise-focused starter prompts.
+  - A `/chat/:id` conversation view with a back/new-chat bar and the conversation's title in the header, which updates live as the backend generates it.
+  - The project home page now embeds the same "Ask anything" widget.
+  - The dock and the full-page chat share **one** assistant runtime, so an in-flight conversation continues seamlessly when you expand the dock into the page (no lost response). The docked pill offers "Continue chat" to reopen a recent conversation, and pages that host their own chat runtime (Playground, Elements, assistant onboarding) hide the dock to avoid duplicate composers.
+  - A decorative rainbow "powder burst" header on the chat landing.
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+
+### Patch Changes
+
+- 94f624d: Add Beta badges to the Project Assistant (sidebar nav item, footer resume button, and `/chat` landing page) and promote the Assistants surface from Preview to Beta. Both use the shared `ReleaseStageBadge` so the label stays consistent across every surface.
+- 672d9bc: Add optional onboarding for configuring Cursor and Anthropic Compliance API integrations, and show Codex instrumentation plus OpenAI Compliance API configuration as coming soon.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- 2adba2f: Add employee detail metric drilldowns for tool logs, agent sessions, and risk events.
+- 94c551b: Fix the Project Assistant chat getting stuck "loading" after a tool-using turn, where the assistant had already replied but the composer stayed disabled.
+- bd4261a: Use the Speakeasy marketing site favicon for the dashboard
+- dfd4834: The MCP servers screen no longer crashes when a non-critical request fails to load. It now keeps showing the most recently loaded servers with a subtle "couldn't refresh" indicator instead of replacing the whole page with an error.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+- 04ddbd0: Rename and reorder project sidebar navigation groups.
+- 88669aa: Update moonshine - design system dependency to latest
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [bf94bd2]
+  - @gram-ai/elements@1.37.1
+
 ## 0.73.1
 
 ### Patch Changes

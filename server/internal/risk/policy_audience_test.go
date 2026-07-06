@@ -98,7 +98,7 @@ func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	denyPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_deny")
+	scopedPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_scoped")
 	bypassPrincipal := authz.AllUsersPrincipal()
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
 		Resource: authz.Resource{
@@ -106,9 +106,13 @@ func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     created.ID,
 		},
-		Effect:     authz.PolicyEffectDeny,
-		Principals: []urn.Principal{denyPrincipal},
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, created.ID),
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{scopedPrincipal},
+		Selector: authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
+			authz.SelectorKeyResourceID:   created.ID,
+			authz.SelectorKeyServerURL:    "https://scoped.example.com",
+		},
 	}))
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
 		Resource: authz.Resource{
@@ -142,7 +146,7 @@ func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectAllow, "user:"+authCtx.UserID))
-	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectDeny, denyPrincipal.String()))
+	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectAllow, scopedPrincipal.String()))
 
 	bypassGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -176,12 +180,14 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -218,12 +224,14 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		pii,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -264,12 +272,14 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
 		nil,
 		nil,
 		nil,
-		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 

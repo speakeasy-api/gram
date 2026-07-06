@@ -40,6 +40,9 @@ type RemoteSessionIssuer struct {
 	Oidc bool
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool
-	CreatedAt   string
-	UpdatedAt   string
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool
+	CreatedAt                         string
+	UpdatedAt                         string
 }

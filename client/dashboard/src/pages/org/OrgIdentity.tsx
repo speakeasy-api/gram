@@ -1,18 +1,17 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgRoutes } from "@/routes";
 import {
   useGenerateWorkOSAdminPortalLinkMutation,
   useProductFeatures,
 } from "@gram/client/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { FolderSync, Loader2, Lock } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
 
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
@@ -22,7 +21,7 @@ type IdentitySectionId = "sso" | "directory_sync";
 type IdentityCardProps = {
   sectionId: IdentitySectionId;
   heading: string;
-  description: string;
+  description: React.ReactNode;
   providerIcon: React.ReactNode;
   providerTitle: string;
   providerSubtitle: string;
@@ -33,7 +32,12 @@ type IdentityCardProps = {
   children?: React.ReactNode;
 };
 
-function useIdentityInterestCapture(sectionId: IdentitySectionId) {
+/**
+ * Notifies our team that a non-entitled org wants SSO / Directory Sync. This
+ * capture backs the "our team has been contacted" upsell toast, so it stays even
+ * though the entitled-org configure buttons no longer emit tracking events.
+ */
+function useUpsellInterestCapture(sectionId: IdentitySectionId) {
   const telemetry = useTelemetry();
   const { session } = useSessionData();
 
@@ -50,7 +54,7 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
 }
 
 function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
-  const captureInterest = useIdentityInterestCapture(sectionId);
+  const captureInterest = useUpsellInterestCapture(sectionId);
 
   return (
     <SimpleTooltip tooltip={UPSELL_COPY}>
@@ -70,26 +74,27 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
-function useDirectorySyncPortalTelemetry() {
-  const telemetry = useTelemetry();
-  const { session } = useSessionData();
+/**
+ * Routes an admin into Gram's guided setup wizard at the relevant step instead
+ * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
+ * Sync has not been configured yet so first-run setup happens in-product.
+ */
+function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
+  const orgRoutes = useOrgRoutes();
 
-  return () => {
-    telemetry.capture("identity_provider_interest", {
-      section: "directory_sync",
-      action: "dsync_portal_opened",
-      email: session?.user.email ?? "",
-      organization_id: session?.organization?.id ?? "",
-      organization_name: session?.organization?.name ?? "",
-      organization_slug: session?.organization?.slug ?? "",
-    });
-  };
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <orgRoutes.setup.Link queryParams={{ step }}>
+        <Button variant="secondary" size="sm">
+          Configure
+        </Button>
+      </orgRoutes.setup.Link>
+    </RequireScope>
+  );
 }
 
-function SSOConfigureButton({ skipModal }: { skipModal?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const captureInterest = useIdentityInterestCapture("sso");
-
+/** Launches the WorkOS admin portal to manage an existing SSO connection. */
+function SSOConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -109,10 +114,8 @@ function SSOConfigureButton({ skipModal }: { skipModal?: boolean }) {
       },
       {
         onSuccess: (data) => {
-          captureInterest();
           window.open(data.url, "_blank", "noopener,noreferrer");
           toast.info("Continue setup in the WorkOS portal");
-          setOpen(false);
         },
       },
     );
@@ -123,7 +126,7 @@ function SSOConfigureButton({ skipModal }: { skipModal?: boolean }) {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => (skipModal ? launchPortal() : setOpen(true))}
+        onClick={launchPortal}
         disabled={generatePortalLink.isPending}
       >
         {generatePortalLink.isPending && (
@@ -133,61 +136,12 @@ function SSOConfigureButton({ skipModal }: { skipModal?: boolean }) {
         )}
         Configure
       </Button>
-      {!skipModal && (
-        <Dialog
-          open={open}
-          onOpenChange={(next) => {
-            if (!generatePortalLink.isPending) {
-              setOpen(next);
-            }
-          }}
-        >
-          <Dialog.Content className="sm:max-w-lg">
-            <Dialog.Header>
-              <Dialog.Title>Set up Single Sign-On</Dialog.Title>
-              <Dialog.Description>
-                Connecting SSO lets your team sign in to Speakeasy using your
-                identity provider. Once configured, members will authenticate
-                through your IdP instead of using email and password.
-              </Dialog.Description>
-            </Dialog.Header>
-            <div className="space-y-3 pt-2">
-              <Type muted small>
-                You&apos;ll be redirected to configure your identity provider
-                connection.
-              </Type>
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                variant="secondary"
-                onClick={() => setOpen(false)}
-                disabled={generatePortalLink.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={launchPortal}
-                disabled={generatePortalLink.isPending}
-              >
-                {generatePortalLink.isPending && (
-                  <Button.LeftIcon>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>Continue to setup</Button.Text>
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog>
-      )}
     </RequireScope>
   );
 }
 
-function DirectorySyncConfigureButton({ skipModal }: { skipModal?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const captureOpened = useDirectorySyncPortalTelemetry();
-
+/** Launches the WorkOS admin portal to manage an existing Directory Sync link. */
+function DirectorySyncConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -209,10 +163,8 @@ function DirectorySyncConfigureButton({ skipModal }: { skipModal?: boolean }) {
       },
       {
         onSuccess: (data) => {
-          captureOpened();
           window.open(data.url, "_blank", "noopener,noreferrer");
           toast.info("Continue setup in the WorkOS portal");
-          setOpen(false);
         },
       },
     );
@@ -223,7 +175,7 @@ function DirectorySyncConfigureButton({ skipModal }: { skipModal?: boolean }) {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => (skipModal ? launchPortal() : setOpen(true))}
+        onClick={launchPortal}
         disabled={generatePortalLink.isPending}
       >
         {generatePortalLink.isPending && (
@@ -233,61 +185,41 @@ function DirectorySyncConfigureButton({ skipModal }: { skipModal?: boolean }) {
         )}
         Configure
       </Button>
-      {!skipModal && (
-        <Dialog
-          open={open}
-          onOpenChange={(next) => {
-            if (!generatePortalLink.isPending) {
-              setOpen(next);
-            }
-          }}
-        >
-          <Dialog.Content className="sm:max-w-lg">
-            <Dialog.Header>
-              <Dialog.Title>Set up Directory Sync</Dialog.Title>
-              <Dialog.Description>
-                Connecting Directory Sync lets your identity provider manage who
-                belongs to this workspace and which role each directory user
-                has. You&apos;ll still create roles and grants in Speakeasy, but
-                role assignments for synced users will be controlled by your
-                identity provider&apos;s groups.
-              </Dialog.Description>
-            </Dialog.Header>
-            <div className="space-y-3 pt-2">
-              <Type muted small>
-                Members you invite outside of your directory will continue to be
-                managed here.
-              </Type>
-              <Type muted small>
-                You&apos;ll be redirected to your identity provider to complete
-                setup.
-              </Type>
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                variant="secondary"
-                onClick={() => setOpen(false)}
-                disabled={generatePortalLink.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={launchPortal}
-                disabled={generatePortalLink.isPending}
-              >
-                {generatePortalLink.isPending && (
-                  <Button.LeftIcon>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>Continue to setup</Button.Text>
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog>
-      )}
     </RequireScope>
   );
+}
+
+/**
+ * Picks the SSO configure control: upsell when the feature is not entitled, the
+ * WorkOS portal launcher once a connection exists, otherwise the in-product
+ * setup wizard for first-run configuration.
+ */
+function SSOConfigureControl({
+  featureEnabled,
+  active,
+}: {
+  featureEnabled: boolean;
+  active: boolean;
+}) {
+  if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
+  if (active) return <SSOConfigureButton />;
+  return <SetupStepButton step="connect-idp" />;
+}
+
+/**
+ * Picks the Directory Sync configure control, mirroring {@link SSOConfigureControl}:
+ * upsell, WorkOS portal launcher, or the in-product setup wizard.
+ */
+function DirectorySyncConfigureControl({
+  featureEnabled,
+  active,
+}: {
+  featureEnabled: boolean;
+  active: boolean;
+}) {
+  if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
+  if (active) return <DirectorySyncConfigureButton />;
+  return <SetupStepButton step="directory-sync" />;
 }
 
 function IdentitySection({
@@ -309,7 +241,7 @@ function IdentitySection({
         <Heading variant="h5" className="mb-1">
           {heading}
         </Heading>
-        <Type muted small className="mb-4">
+        <Type as="div" muted small className="mb-4">
           {description}
         </Type>
         <div className="border-border overflow-hidden rounded-lg border">
@@ -390,18 +322,29 @@ function OrgIdentityInner() {
           learnMoreHref="https://www.speakeasy.com/docs"
           active={ssoActive}
           configureButton={
-            ssoFeatureEnabled ? (
-              <SSOConfigureButton skipModal={ssoActive} />
-            ) : (
-              <ConfigureButton sectionId="sso" />
-            )
+            <SSOConfigureControl
+              featureEnabled={ssoFeatureEnabled}
+              active={ssoActive}
+            />
           }
         />
 
         <IdentitySection
           sectionId="directory_sync"
           heading="Directory Sync"
-          description="Automatically provision and deprovision users from your identity provider."
+          description={
+            <>
+              Sync members and roles directly from your identity provider:
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                <li>
+                  Members are provisioned automatically from your directory
+                </li>
+                <li>Roles are assigned from your IDP group mappings</li>
+                <li>Members can&apos;t be invited manually</li>
+                <li>Roles can&apos;t be assigned to members manually</li>
+              </ul>
+            </>
+          }
           providerIcon={
             <FolderSync className="text-muted-foreground h-5 w-5" />
           }
@@ -415,11 +358,10 @@ function OrgIdentityInner() {
           learnMoreHref="https://www.speakeasy.com/docs"
           active={scimActive}
           configureButton={
-            scimFeatureEnabled ? (
-              <DirectorySyncConfigureButton skipModal={scimActive} />
-            ) : (
-              <ConfigureButton sectionId="directory_sync" />
-            )
+            <DirectorySyncConfigureControl
+              featureEnabled={scimFeatureEnabled}
+              active={scimActive}
+            />
           }
         />
       </div>

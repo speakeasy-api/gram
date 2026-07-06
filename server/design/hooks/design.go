@@ -115,6 +115,7 @@ var CodexHookPayload = Type("CodexHookPayload", func() {
 	})
 	Attribute("session_id", String, "The Codex session ID")
 	Attribute("user_email", String, "Email of the authenticated Codex user, if available")
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
 	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("cwd", String, "The working directory when the event fired")
 	Attribute("model", String, "The model identifier")
@@ -135,6 +136,129 @@ var CodexHookResult = Type("CodexHookResult", func() {
 	Description("Result for Codex hook events")
 	Attribute("decision", String, "Permission decision for blocking events: allow or deny")
 	Attribute("reason", String, "Reason for the decision, shown to the user")
+})
+
+var HookIngestSource = Type("HookIngestSource", func() {
+	Description("Metadata about the local hook adapter that translated a provider event into the Gram hook contract.")
+	Required("adapter")
+	Attribute("adapter", String, "Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.")
+	Attribute("adapter_version", String, "Adapter implementation version.")
+	Attribute("raw_event_name", String, "Provider-native event name, if one exists.")
+	Attribute("hostname", String, "Hostname of the machine that emitted the hook event.")
+})
+
+var HookIngestSession = Type("HookIngestSession", func() {
+	Description("Agent session and turn identity, independent of provider naming.")
+	Attribute("id", String, "Stable conversation or session identifier.")
+	Attribute("turn_id", String, "Generation, request, or turn identifier.")
+	Attribute("cwd", String, "Current working directory when the event fired.")
+	Attribute("model", String, "Model identifier reported by the local agent.")
+})
+
+var HookIngestEvent = Type("HookIngestEvent", func() {
+	Description("Canonical Gram feature event.")
+	Required("type")
+	Attribute("type", String, "Canonical Gram hook event type.", func() {
+		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
+			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
+			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
+	})
+	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var HookPromptData = Type("HookPromptData", func() {
+	Description("Prompt feature payload.")
+	Attribute("text", String, "User prompt text.")
+})
+
+var HookToolCallData = Type("HookToolCallData", func() {
+	Description("Tool call feature payload.")
+	Attribute("id", String, "Provider tool call identifier.")
+	Attribute("name", String, "Tool name.")
+	Attribute("input", Any, "Tool input payload.")
+	Attribute("output", Any, "Tool output payload.")
+	Attribute("error", Any, "Tool error payload.")
+	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption.")
+	Attribute("permission_type", String, "Permission type requested by the agent, when applicable.")
+	Attribute("duration_ms", Float64, "Tool execution duration in milliseconds, when reported.")
+	Attribute("status", String, "Provider-reported tool call status, when available.")
+})
+
+var HookMCPData = Type("HookMCPData", func() {
+	Description("MCP feature payload.")
+	Attribute("server_name", String, "Provider-reported MCP server name.")
+	Attribute("server_identity", String, "Stable server identity inferred by the hook adapter.")
+	Attribute("url", String, "MCP server URL, when available.")
+	Attribute("command", String, "MCP server command, when available.")
+	Attribute("result_json", String, "JSON-encoded MCP tool result, when reported as a string.")
+})
+
+var HookUsageData = Type("HookUsageData", func() {
+	Description("Token and cost usage payload.")
+	Attribute("input_tokens", Int, "Input token count.")
+	Attribute("output_tokens", Int, "Output token count.")
+	Attribute("cache_read_tokens", Int, "Cache read token count.")
+	Attribute("cache_write_tokens", Int, "Cache write token count.")
+	Attribute("cost", Float64, "Reported cost.")
+	Attribute("loop_count", Int, "Agent loop count, when reported.")
+	Attribute("status", String, "Provider-reported usage or session status, when available.")
+})
+
+var HookMessageData = Type("HookMessageData", func() {
+	Description("Assistant/user message payload.")
+	Attribute("text", String, "Message text.")
+	Attribute("role", String, "Message role, e.g. assistant or user.")
+	Attribute("duration_ms", Float64, "Message or thinking-block duration in milliseconds, when reported.")
+})
+
+var HookSkillData = Type("HookSkillData", func() {
+	Description("Skill activation payload.")
+	Required("name")
+	Attribute("name", String, "Activated skill name.")
+	Attribute("source", String, "Skill source or namespace, if available.")
+})
+
+var HookNotificationData = Type("HookNotificationData", func() {
+	Description("Local agent notification payload.")
+	Attribute("type", String, "Notification type.")
+	Attribute("title", String, "Notification title.")
+	Attribute("message", String, "Notification message.")
+})
+
+var HookIngestData = Type("HookIngestData", func() {
+	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
+	Attribute("prompt", HookPromptData)
+	Attribute("tool_call", HookToolCallData)
+	Attribute("mcp", HookMCPData)
+	Attribute("usage", HookUsageData)
+	Attribute("message", HookMessageData)
+	Attribute("skill", HookSkillData)
+	Attribute("notification", HookNotificationData)
+})
+
+var IngestHookPayload = Type("IngestHookPayload", func() {
+	Description("Feature-first unified hook event payload.")
+	Required("schema_version", "source", "event")
+	Attribute("schema_version", String, "Contract version. The current version is hook.ingest.v1.")
+	Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
+	Attribute("source", HookIngestSource)
+	Attribute("session", HookIngestSession)
+	Attribute("event", HookIngestEvent)
+	Attribute("data", HookIngestData)
+	Attribute("raw", Any, "Original provider payload for debugging. The backend does not use this for feature behavior.")
+})
+
+var IngestHookResult = Type("IngestHookResult", func() {
+	Description("Provider-neutral decision returned by the unified hook endpoint.")
+	Required("decision")
+	Attribute("decision", String, "Whether the local hook should allow or deny the action.", func() {
+		Enum("allow", "deny")
+	})
+	Attribute("reason", String, "Machine-readable decision reason.")
+	Attribute("message", String, "User-facing decision message.")
+	Attribute("effects", MapOf(String, Any), "Optional side-effect hints for hook SDKs.")
 })
 
 // Server name override types
@@ -167,6 +291,7 @@ var _ = Service("hooks", func() {
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
@@ -174,6 +299,7 @@ var _ = Service("hooks", func() {
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
 	})
 
@@ -189,6 +315,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 
 		Result(CursorHookResult)
@@ -198,6 +325,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
 	})
 
@@ -213,6 +341,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 
 		Result(CodexHookResult)
@@ -222,7 +351,35 @@ var _ = Service("hooks", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
+	})
+
+	Method("ingest", func() {
+		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(IngestHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(IngestHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.ingest")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Header("idempotency_key:Idempotency-Key")
+		})
+
+		Meta("openapi:operationId", "ingestHookEvent")
+		Meta("openapi:extension:x-speakeasy-name-override", "ingest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IngestHookEvent"}`)
 	})
 
 	Method("logs", func() {
@@ -241,7 +398,8 @@ var _ = Service("hooks", func() {
 		Result(Empty)
 
 		HTTP(func() {
-			POST("/rpc/hooks.otel/v1/logs")
+			// OTLP ingestion path must match OpenTelemetry's /v1/logs convention.
+			POST("/rpc/hooks.otel/v1/logs") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)
@@ -264,7 +422,8 @@ var _ = Service("hooks", func() {
 		Result(Empty)
 
 		HTTP(func() {
-			POST("/rpc/hooks.otel/v1/metrics")
+			// OTLP ingestion path must match OpenTelemetry's /v1/metrics convention.
+			POST("/rpc/hooks.otel/v1/metrics") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)

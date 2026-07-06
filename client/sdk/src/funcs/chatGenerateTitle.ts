@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -31,7 +32,7 @@ import { Result } from "../types/fp.js";
  * generateTitle chat
  *
  * @remarks
- * Generate a title for a chat based on its messages
+ * Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
  */
 export function chatGenerateTitle(
   client: GramCore,
@@ -91,7 +92,9 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.ServeImageForm, { explode: true });
+  const body = encodeJSON("body", payload.GenerateTitleRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/chat.generateTitle")();
 
@@ -167,19 +170,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

@@ -28,16 +28,19 @@ type Client struct {
 	GetClientDeletePreflightEndpoint  goa.Endpoint
 	ListClientMcpServersEndpoint      goa.Endpoint
 	ListClientSessionsEndpoint        goa.Endpoint
+	CreateClientEndpoint              goa.Endpoint
+	CreateCimdClientEndpoint          goa.Endpoint
 	UpdateClientEndpoint              goa.Endpoint
 	DeleteClientEndpoint              goa.Endpoint
 	RemoveClientFromMcpServerEndpoint goa.Endpoint
 	RevokeSessionEndpoint             goa.Endpoint
+	RefreshSessionEndpoint            goa.Endpoint
 	RevokeAllClientSessionsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, updateIssuer, deleteIssuer, moveIssuer, listClients, getClient, getClientDeletePreflight, listClientMcpServers, listClientSessions, updateClient, deleteClient, removeClientFromMcpServer, revokeSession, revokeAllClientSessions goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, updateIssuer, deleteIssuer, moveIssuer, listClients, getClient, getClientDeletePreflight, listClientMcpServers, listClientSessions, createClient, createCimdClient, updateClient, deleteClient, removeClientFromMcpServer, revokeSession, refreshSession, revokeAllClientSessions goa.Endpoint) *Client {
 	return &Client{
 		CreateIssuerEndpoint:              createIssuer,
 		ListIssuersEndpoint:               listIssuers,
@@ -51,10 +54,13 @@ func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, u
 		GetClientDeletePreflightEndpoint:  getClientDeletePreflight,
 		ListClientMcpServersEndpoint:      listClientMcpServers,
 		ListClientSessionsEndpoint:        listClientSessions,
+		CreateClientEndpoint:              createClient,
+		CreateCimdClientEndpoint:          createCimdClient,
 		UpdateClientEndpoint:              updateClient,
 		DeleteClientEndpoint:              deleteClient,
 		RemoveClientFromMcpServerEndpoint: removeClientFromMcpServer,
 		RevokeSessionEndpoint:             revokeSession,
+		RefreshSessionEndpoint:            refreshSession,
 		RevokeAllClientSessionsEndpoint:   revokeAllClientSessions,
 	}
 }
@@ -331,6 +337,52 @@ func (c *Client) ListClientSessions(ctx context.Context, p *ListClientSessionsPa
 	return ires.(*ListOrganizationRemoteSessionsResult), nil
 }
 
+// CreateClient calls the "createClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// CreateClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateClient(ctx context.Context, p *CreateClientPayload) (res *types.RemoteSessionClient, err error) {
+	var ires any
+	ires, err = c.CreateClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionClient), nil
+}
+
+// CreateCimdClient calls the "createCimdClient" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// CreateCimdClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateCimdClient(ctx context.Context, p *CreateCimdClientPayload) (res *types.RemoteSessionClient, err error) {
+	var ires any
+	ires, err = c.CreateCimdClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionClient), nil
+}
+
 // UpdateClient calls the "updateClient" endpoint of the
 // "organizationRemoteSessionIssuers" service.
 // UpdateClient may return the following errors:
@@ -409,6 +461,29 @@ func (c *Client) RemoveClientFromMcpServer(ctx context.Context, p *RemoveClientF
 func (c *Client) RevokeSession(ctx context.Context, p *RevokeSessionPayload) (err error) {
 	_, err = c.RevokeSessionEndpoint(ctx, p)
 	return
+}
+
+// RefreshSession calls the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// RefreshSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RefreshSession(ctx context.Context, p *RefreshSessionPayload) (res *types.RemoteSession, err error) {
+	var ires any
+	ires, err = c.RefreshSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSession), nil
 }
 
 // RevokeAllClientSessions calls the "revokeAllClientSessions" endpoint of the

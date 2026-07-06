@@ -422,6 +422,10 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
 	// Scopes held by this session.
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1259,6 +1263,9 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	}
 	if body.AccessExpiresAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
 	}
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))

@@ -381,12 +381,6 @@ func (s *Service) callPlatformToolsetTool(
 		if chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = chatID
 		}
-		if authCtx.UserID != "" {
-			logAttrs[attr.UserIDKey] = authCtx.UserID
-		}
-		if gramEmail != "" {
-			logAttrs[attr.UserEmailKey] = gramEmail
-		}
 		logAttrs.RecordToolsetSlug(platformToolsetSlug)
 		logAttrs.RecordMCPURL(mcpURL)
 		s.telemLogger.Log(ctx, tm.LogParams{
@@ -400,6 +394,7 @@ func (s *Service) callPlatformToolsetTool(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
+			UserInfo:   tm.UserInfoByID(authCtx.UserID),
 			Attributes: logAttrs,
 		})
 	}()
@@ -409,7 +404,7 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
@@ -417,8 +412,9 @@ func (s *Service) callPlatformToolsetTool(
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: structured,
+			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
 	if err != nil {

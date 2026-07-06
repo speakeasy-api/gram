@@ -21,8 +21,6 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
-	// Get server-side risk analysis capabilities for the current project.
-	GetRiskCapabilities(context.Context, *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -39,6 +37,10 @@ type Service interface {
 	// `match` value — a non-sensitive server URL or command identifier — is passed
 	// through verbatim.
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
+	// Return the plaintext match for a single risk result, on demand. Gated on the
+	// chat:read scope for the result's chat (not org:admin) — reveal is a
+	// discrete, audited access event distinct from listing redacted results.
+	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get risk overview metrics and trend data for the current project.
@@ -48,6 +50,11 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Compile a single CEL expression (a detection predicate or a policy scope
+	// predicate) without evaluating it, so the editor can validate as the author
+	// types. Returns ok=true when it compiles, otherwise ok=false with the
+	// compiler error message. An empty expression is valid (ok=true).
+	CompileExpr(context.Context, *CompileExprPayload) (res *ExprCompileResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
 	// window. Powers the user drill-down on /risk-overview.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
@@ -60,6 +67,11 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Get a tool call block by its risk result ID for the durable block page.
+	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
+	// Record thumbs-up/thumbs-down feedback for a tool call block from the block
+	// page.
+	SubmitRiskBlockFeedback(context.Context, *SubmitRiskBlockFeedbackPayload) (res *RiskBlock, err error)
 	// List current risk policy bypass request workflow records.
 	ListRiskPolicyBypassRequests(context.Context, *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error)
 	// Approve a risk policy bypass request for the requested policy target.
@@ -124,7 +136,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -139,6 +151,16 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	GrantedPrincipalUrns []string
 }
 
+// CompileExprPayload is the payload type of the risk service compileExpr
+// method.
+type CompileExprPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The CEL expression to compile. Empty is valid and compiles to ok=true.
+	Expr string
+}
+
 // CreateCustomDetectionRulePayload is the payload type of the risk service
 // createCustomDetectionRule method.
 type CreateCustomDetectionRulePayload struct {
@@ -151,8 +173,12 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -201,17 +227,27 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier').
+	// baseline.
 	PromptInjectionRules []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -273,6 +309,14 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
+// ExprCompileResult is the result type of the risk service compileExpr method.
+type ExprCompileResult struct {
+	// True when the expression compiled successfully.
+	OK bool
+	// Compiler error message when ok is false; empty otherwise.
+	Error string
+}
+
 // GetCustomDetectionRulePayload is the payload type of the risk service
 // getCustomDetectionRule method.
 type GetCustomDetectionRulePayload struct {
@@ -283,12 +327,12 @@ type GetCustomDetectionRulePayload struct {
 	ID string
 }
 
-// GetRiskCapabilitiesPayload is the payload type of the risk service
-// getRiskCapabilities method.
-type GetRiskCapabilitiesPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
+// GetRiskBlockPayload is the payload type of the risk service getRiskBlock
+// method.
+type GetRiskBlockPayload struct {
+	SessionToken *string
+	// The block ID (the underlying risk result ID).
+	ID string
 }
 
 // GetRiskOverviewPayload is the payload type of the risk service
@@ -546,11 +590,22 @@ type RevokeRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
-// RiskCapabilitiesResult is the result type of the risk service
-// getRiskCapabilities method.
-type RiskCapabilitiesResult struct {
-	// Whether the prompt-injection ML classifier is configured on this server.
-	PiClassifierEnabled bool
+// RiskBlock is the result type of the risk service getRiskBlock method.
+type RiskBlock struct {
+	// The block ID (the underlying risk result ID).
+	ID string
+	// The project the block belongs to.
+	ProjectID string
+	// Human-readable reason the tool call was blocked.
+	Reason string
+	// Name of the risk policy that blocked the call.
+	PolicyName string
+	// Name of the tool that was blocked, when known.
+	ToolName *string
+	// When the block occurred.
+	CreatedAt string
+	// Existing feedback sentiment recorded for this block, when any.
+	Feedback *string
 }
 
 // RiskCategoriesResult is the result type of the risk service
@@ -694,6 +749,16 @@ type RiskRuleBreakdownResult struct {
 	Total int64
 }
 
+// RiskUnmaskResultResult is the result type of the risk service
+// unmaskRiskResult method.
+type RiskUnmaskResultResult struct {
+	// The risk result ID.
+	ID string
+	// The plaintext matched secret or sensitive data for this result. Empty string
+	// when the finding has no top-level match (e.g. a spans-only finding).
+	Match string
+}
+
 // RiskUserBreakdownResult is the result type of the risk service
 // getRiskUserBreakdown method.
 type RiskUserBreakdownResult struct {
@@ -709,6 +774,16 @@ type RiskUserBreakdownResult struct {
 	Categories []*RiskOverviewCategory
 	// Rule_id breakdown for this user, ordered by finding count descending.
 	Rules []*RiskRuleBreakdownEntry
+}
+
+// SubmitRiskBlockFeedbackPayload is the payload type of the risk service
+// submitRiskBlockFeedback method.
+type SubmitRiskBlockFeedbackPayload struct {
+	SessionToken *string
+	// The block ID (the underlying risk result ID).
+	ID string
+	// Feedback sentiment.
+	Sentiment string
 }
 
 // SuggestCustomDetectionRulePayload is the payload type of the risk service
@@ -733,7 +808,10 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// RE2-compatible regex pattern the rule should match against.
+	// Suggested CEL detection predicate.
+	DetectionExpr *string
+	// Deprecated legacy regex suggestion; superseded by detection_expr. Present
+	// for backward compatibility.
 	Regex string
 	// Suggested severity level.
 	Severity string
@@ -770,9 +848,9 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -801,6 +879,16 @@ type TriggerRiskAnalysisPayload struct {
 	Limit int32
 }
 
+// UnmaskRiskResultPayload is the payload type of the risk service
+// unmaskRiskResult method.
+type UnmaskRiskResultPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk result ID.
+	ID string
+}
+
 // UpdateCustomDetectionRulePayload is the payload type of the risk service
 // updateCustomDetectionRule method.
 type UpdateCustomDetectionRulePayload struct {
@@ -813,8 +901,12 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -856,18 +948,27 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
+	// Omit/null applies the default (0.5).
+	PresidioScoreThreshold *float64
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier').
+	// baseline.
 	PromptInjectionRules []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -28,7 +29,7 @@ use tokio::sync::{OnceCell, oneshot};
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::{PersistingCompactor, build_compactor};
+use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -58,7 +59,11 @@ pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
-    pub assistant_id: String,
+    /// The assistant this VM serves, surfaced in /state. Set from the
+    /// GRAM_ASSISTANT_ID boot env when present (Fly, GKE cold-start), or
+    /// stamped by the first turn that carries one (GKE warm-pool sandbox).
+    /// Set-once: boot env wins.
+    pub assistant_id: OnceLock<String>,
     pub started_at: Instant,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
@@ -94,6 +99,11 @@ pub enum McpCmd {
         server_id: McpServerId,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    /// Sent by `/threads/{id}/turn` when the server-side toolset has
+    /// drifted from the snapshot the runner bootstrapped with. The actor
+    /// diffs `desired` against currently-registered servers, connects
+    /// any new ones, and disconnects ones that no longer apply.
+    Reconcile { desired: Vec<McpServer> },
 }
 
 impl ConfiguredThread {
@@ -118,7 +128,7 @@ impl ConfiguredThread {
 }
 
 pub async fn build_host(
-    assistant_id: String,
+    assistant_id: Option<String>,
     server_url: String,
     initial_token: String,
     thread_idle_ttl: Duration,
@@ -138,8 +148,14 @@ pub async fn build_host(
 
     let gram_client =
         GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
+    let assistant_id_cell = OnceLock::new();
+    // Ignore an empty/whitespace boot env so warm-pool pods stay unbound and
+    // can learn their assistant from the first turn.
+    if let Some(id) = assistant_id.filter(|id| !id.trim().is_empty()) {
+        let _ = assistant_id_cell.set(id);
+    }
     let host = Arc::new(RuntimeHost {
-        assistant_id,
+        assistant_id: assistant_id_cell,
         started_at: Instant::now(),
         seen: DashMap::new(),
         threads: DashMap::new(),
@@ -285,8 +301,16 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) =
-        build_thread_mcp(host, &thread_id, &bootstrap.mcp_servers, &tokens).await?;
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
+
+    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) = build_thread_mcp(
+        host,
+        &thread_id,
+        &bootstrap.mcp_servers,
+        &tokens,
+        inbox_tx.clone(),
+    )
+    .await?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -342,7 +366,7 @@ async fn spawn_thread(
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
-    let compactor = build_compactor(
+    let compaction = build_compactor(
         &bootstrap.compaction,
         &bootstrap.chat_id,
         &thread_id,
@@ -351,14 +375,6 @@ async fn spawn_thread(
         host.gram_client.clone(),
         tokens.clone(),
     )?;
-    // An inline agent compactor runs right before the next model request, so
-    // OnTurnEnd's persistence-only output would be sent upstream. Run it
-    // terminally instead (see `run_loop`); Threshold shrinks-to-fit, so inline.
-    let (inline_compactor, turn_end_compactor) = if bootstrap.compaction.runs_at_turn_end() {
-        (None, compactor)
-    } else {
-        (compactor, None)
-    };
 
     let mut transcript = Vec::new();
     if !bootstrap.instructions.is_empty() {
@@ -379,25 +395,46 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host), mcp_server_ids),
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
     );
 
-    let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
+        .with_source(native_tools.merge(agentkit_tool_fs::registry()));
+    let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
+
     let mut builder = Agent::builder()
         .model(adapter)
-        .add_tool_source(native_tools)
-        .add_tool_source(agentkit_tool_fs::registry())
-        .add_tool_source(mcp_source)
+        .add_tool_source(clipped_source)
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    if let Some(compactor) = inline_compactor {
-        builder = builder.compactor(compactor);
-    }
+    // Register the loop mutator(s): the policy's own compactor (Threshold's
+    // shrink-to-fit, or OnTurnEnd's cache-replay mutator) plus the universal
+    // mid-turn safety fallback when present. The OnTurnEnd `terminal` pass runs
+    // explicitly at turn end in `run_loop`.
+    let turn_end_compactor = match compaction {
+        Some(Compaction { primary, fallback }) => {
+            let terminal = match primary {
+                Some(PrimaryCompaction::Inline(compactor)) => {
+                    builder = builder.compactor(compactor);
+                    None
+                }
+                Some(PrimaryCompaction::TurnEnd { mutator, terminal }) => {
+                    builder = builder.compactor(mutator);
+                    Some(terminal)
+                }
+                None => None,
+            };
+            if let Some(fallback) = fallback {
+                builder = builder.compactor(fallback);
+            }
+            terminal
+        }
+        None => None,
+    };
 
     let agent = builder
         .build()
@@ -411,7 +448,6 @@ async fn spawn_thread(
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
     let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
     let loop_idle = Arc::clone(&idle_since);
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
@@ -459,10 +495,13 @@ async fn build_thread_mcp(
     thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
+    inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, Vec<String>), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
     let mut auth_notices = Vec::new();
+    let mut known = BTreeSet::new();
+    let configured: BTreeSet<String> = servers.iter().map(|s| s.id.clone()).collect();
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
@@ -480,6 +519,7 @@ async fn build_thread_mcp(
             action = "register",
             "mcp connect ok"
         );
+        known.insert(handle.server_id().0.clone());
     }
     for failure in settled.failed() {
         let server_id = &failure.server_id;
@@ -489,41 +529,190 @@ async fn build_thread_mcp(
             action = "register",
             "mcp connect failed"
         );
+        // Non-auth failures are transient transport errors: leave them out of
+        // `known` so the next /turn reconcile retries instead of silently
+        // dropping the integration for the rest of the thread.
         if !matches!(failure.error, McpError::AuthRequired(_)) {
             continue;
         }
         let Some(server) = servers.iter().find(|s| s.id == server_id.0) else {
             continue;
         };
-        match host
-            .gram_client
-            .create_mcp_auth_flow(thread_id, &server.id, &server.url, tokens)
-            .await
+        // Mark auth-pending as known only once the prompt is created, so a
+        // transient auth-flow failure leaves the server out of `known` and the
+        // next /turn reconcile retries the prompt instead of stranding the
+        // integration unprompted for the thread's lifetime.
+        if let Some(notice) =
+            create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
         {
-            Ok(flow) => auth_notices.push(format!(
-                "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
-                server_id = flow.server_id,
-                mcp_slug = flow.mcp_slug,
-                auth_url = flow.auth_url,
-            )),
-            Err(flow_err) => tracing::warn!(
+            known.insert(server_id.0.clone());
+            auth_notices.push(notice);
+        } else {
+            tracing::warn!(
                 server_id = %server_id,
-                error = %flow_err,
-                "failed to create assistant mcp auth flow"
-            ),
+                "auth prompt creation failed; will retry on next reconcile"
+            );
         }
     }
 
     let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    tokio::spawn(run_mcp_actor(manager, cmd_rx));
+    let actor_ctx = McpActorContext {
+        host: Arc::clone(host),
+        thread_id: thread_id.to_string(),
+        tokens: tokens.clone(),
+        inbox_tx,
+        known,
+        configured,
+    };
+    tokio::spawn(run_mcp_actor(manager, cmd_rx, actor_ctx));
     Ok((cmd_tx, catalog, auth_notices))
+}
+
+struct McpActorContext {
+    host: Arc<RuntimeHost>,
+    thread_id: String,
+    tokens: TokenRegistry,
+    inbox_tx: UnboundedSender<String>,
+    // Servers currently connected or auth-pending. Drives reconcile's
+    // add/remove diff and is mutated as connections come and go.
+    known: BTreeSet<String>,
+    // Server ids in the assistant's current configuration (the latest
+    // reconcile's desired set). Gates ForceReconnect so a configured but
+    // not-yet-connected server can still be retried, while a server detached
+    // from the configuration cannot be resurrected.
+    configured: BTreeSet<String>,
+}
+
+async fn create_auth_notice(
+    host: &Arc<RuntimeHost>,
+    thread_id: &str,
+    server_id: &str,
+    server_url: &str,
+    tokens: &TokenRegistry,
+) -> Option<String> {
+    match host
+        .gram_client
+        .create_mcp_auth_flow(thread_id, server_id, server_url, tokens)
+        .await
+    {
+        Ok(flow) => Some(format!(
+            "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
+            server_id = flow.server_id,
+            mcp_slug = flow.mcp_slug,
+            auth_url = flow.auth_url,
+        )),
+        Err(flow_err) => {
+            tracing::warn!(
+                server_id,
+                error = %flow_err,
+                "failed to create assistant mcp auth flow"
+            );
+            None
+        }
+    }
+}
+
+async fn reconcile_servers(
+    manager: &mut McpServerManager,
+    ctx: &mut McpActorContext,
+    desired: Vec<McpServer>,
+) {
+    let desired_ids: BTreeSet<String> = desired.iter().map(|s| s.id.clone()).collect();
+    ctx.configured = desired_ids.clone();
+
+    for server in &desired {
+        if ctx.known.contains(&server.id) {
+            continue;
+        }
+        let config = match build_mcp_server_config(server, &ctx.host.http_client, &ctx.tokens) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                tracing::warn!(
+                    server_id = %server.id,
+                    error = %err,
+                    "skip reconcile-added mcp server: config build failed"
+                );
+                continue;
+            }
+        };
+        manager.register_server_with_options(
+            config,
+            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
+        );
+        let server_uid = McpServerId::new(server.id.clone());
+        match connect_and_log(manager, &server_uid, "reconcile_add").await {
+            Ok(()) => {
+                ctx.known.insert(server.id.clone());
+            }
+            Err(err) if err.auth_required => {
+                // Mark known only once the auth prompt is created, so a
+                // transient auth-flow failure leaves the server out of `known`
+                // and the next reconcile retries the prompt instead of
+                // stranding the integration unprompted for the thread.
+                match create_auth_notice(
+                    &ctx.host,
+                    &ctx.thread_id,
+                    &server.id,
+                    &server.url,
+                    &ctx.tokens,
+                )
+                .await
+                {
+                    Some(notice) => {
+                        ctx.known.insert(server.id.clone());
+                        if ctx.inbox_tx.send(notice).is_err() {
+                            tracing::warn!(
+                                server_id = %server.id,
+                                "drop reconcile auth notice: thread inbox closed"
+                            );
+                        }
+                    }
+                    None => {
+                        tracing::warn!(
+                            server_id = %server.id,
+                            "reconcile auth prompt failed; will retry on next reconcile"
+                        );
+                    }
+                }
+            }
+            Err(_) => {
+                // Transient transport failure on connect: leave out of `known`
+                // so a later reconcile re-attempts the connect. The server
+                // stays in `configured`, so a manual mcp_force_reconnect is
+                // still allowed to retry it immediately.
+            }
+        }
+    }
+
+    let removed: Vec<String> = ctx
+        .known
+        .iter()
+        .filter(|id| !desired_ids.contains(*id))
+        .cloned()
+        .collect();
+    for id in removed {
+        let server_uid = McpServerId::new(id.clone());
+        if let Err(err) = manager.disconnect_server(&server_uid).await {
+            // Keep the id in `known` so the next reconcile retries the detach;
+            // dropping it now would remove it from the `removed` diff forever,
+            // leaving the server connected for the thread's lifetime.
+            tracing::warn!(server_id = %id, error = %err, "reconcile disconnect failed; will retry");
+            continue;
+        }
+        ctx.known.remove(&id);
+    }
+}
+
+struct McpConnectFailure {
+    message: String,
+    auth_required: bool,
 }
 
 async fn connect_and_log(
     manager: &mut McpServerManager,
     server_id: &McpServerId,
     action: &'static str,
-) -> Result<(), String> {
+) -> Result<(), McpConnectFailure> {
     match manager.connect_server(server_id).await {
         Ok(handle) => {
             tracing::info!(
@@ -535,8 +724,12 @@ async fn connect_and_log(
             Ok(())
         }
         Err(e) => {
+            let auth_required = matches!(e, McpError::AuthRequired(_));
             tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
-            Err(e.to_string())
+            Err(McpConnectFailure {
+                message: e.to_string(),
+                auth_required,
+            })
         }
     }
 }
@@ -575,15 +768,37 @@ fn build_mcp_server_config(
     ))
 }
 
-async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
+async fn run_mcp_actor(
+    mut manager: McpServerManager,
+    mut cmd_rx: mpsc::Receiver<McpCmd>,
+    mut ctx: McpActorContext,
+) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             McpCmd::ForceReconnect { server_id, reply } => {
+                // Reject ids that aren't part of the assistant's current
+                // configuration. `disconnect_server` only clears `connections`;
+                // the underlying config lingers in the manager for the thread's
+                // lifetime (agentkit-mcp exposes no unregister path). Gating on
+                // `configured` (not `known`) lets a user retry a configured
+                // server that is not yet connected, while still refusing to
+                // resurrect one that has been detached from the configuration.
+                if !ctx.configured.contains(server_id.0.as_str()) {
+                    let _ = reply.send(Err(format!(
+                        "mcp server {server_id} is not part of this assistant's current configuration"
+                    )));
+                    continue;
+                }
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = connect_and_log(&mut manager, &server_id, "force_reconnect").await;
+                let result = connect_and_log(&mut manager, &server_id, "force_reconnect")
+                    .await
+                    .map_err(|err| err.message);
                 let _ = reply.send(result);
+            }
+            McpCmd::Reconcile { desired } => {
+                reconcile_servers(&mut manager, &mut ctx, desired).await;
             }
         }
     }
@@ -751,8 +966,10 @@ mod tests {
             "http://localhost".to_string(),
             build_bootstrap_client(http_client.clone()),
         );
+        let assistant_id = OnceLock::new();
+        let _ = assistant_id.set("asst".to_string());
         Arc::new(RuntimeHost {
-            assistant_id: "asst".to_string(),
+            assistant_id,
             started_at: Instant::now(),
             seen: DashMap::new(),
             threads: DashMap::new(),

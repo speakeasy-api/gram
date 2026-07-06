@@ -5,7 +5,7 @@ import {
 } from "@gram/client/models/components";
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
 import {
@@ -160,13 +160,13 @@ export const useUser = (): User => {
   return user;
 };
 
-const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 
-export const useIsAdmin = (): boolean => {
+export const useIsPlatformAdmin = (): boolean => {
   const { isAdmin } = useUser();
   if (import.meta.env.DEV) {
     try {
-      const override = localStorage.getItem(SUPER_ADMIN_KEY);
+      const override = localStorage.getItem(PLATFORM_ADMIN_KEY);
       if (override === "1") return true;
       if (override === "0") return false;
     } catch {
@@ -219,8 +219,35 @@ export function useFermatPixel(
 ): void {
   const location = useLocation();
 
+  // Fermat requires identifiers (`setProperties`) to be attached before any
+  // `track` event so views are attributed. We can't rely on effect ordering
+  // alone — identifiers hydrate asynchronously — so we gate `page_view` behind
+  // this flag. Flipping it re-runs the page_view effect, flushing the first
+  // view immediately after identification.
+  const [identified, setIdentified] = useState(false);
+
+  // Attach stable identifiers once both the user and their active workspace
+  // are hydrated so Fermat can attribute activity to the user and their
+  // workspace across sessions.
   useEffect(() => {
-    if (!import.meta.env.PROD) {
+    // Clear identification if the user/workspace goes away so we never emit
+    // a `page_view` attributed to a stale identity.
+    if (!import.meta.env.PROD || !user?.id || !accountId) {
+      setIdentified(false);
+      return;
+    }
+    initializeFermat();
+    setFermatProperties({
+      dashboard_user_id: user.id,
+      account_id: accountId,
+    });
+    setIdentified(true);
+  }, [user?.id, accountId]);
+
+  // Emit a `page_view` on each route change, but only once identifiers have
+  // been attached so `setProperties` is always queued ahead of the event.
+  useEffect(() => {
+    if (!import.meta.env.PROD || !identified) {
       return;
     }
     initializeFermat();
@@ -228,18 +255,5 @@ export function useFermatPixel(
       dashboard_route: location.pathname,
       page_title: document.title,
     });
-  }, [location.pathname]);
-
-  // Attach stable identifiers once the user is hydrated so Fermat can
-  // attribute activity to the user and their workspace across sessions.
-  useEffect(() => {
-    if (!import.meta.env.PROD || !user?.id) {
-      return;
-    }
-    initializeFermat();
-    setFermatProperties({
-      dashboard_user_id: user.id,
-      ...(accountId && { account_id: accountId }),
-    });
-  }, [user?.id, accountId]);
+  }, [location.pathname, identified]);
 }

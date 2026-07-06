@@ -307,6 +307,56 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectOverview", "type": "query"}`)
 	})
 
+	Method("query", func() {
+		Description("Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).")
+
+		// Org-scoped: the query spans every project in the caller's
+		// organization. project_id is an optional filter, not the auth scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(QueryPayload)
+			security.SessionPayload()
+		})
+
+		Result(QueryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.query")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "query")
+		Meta("openapi:extension:x-speakeasy-name-override", "query")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
+	})
+
+	Method("listSessions", func() {
+		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
+
+		// Org-scoped: the query spans every project in the caller's
+		// organization. project_id is an optional filter, not the auth scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ListSessionsPayload)
+			security.SessionPayload()
+		})
+
+		Result(ListSessionsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listSessions")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSessions", "type": "query"}`)
+	})
+
 	Method("listFilterOptions", func() {
 		Description("List available filter options (API keys or users) for the observability overview")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -779,6 +829,79 @@ var ChatSummaryType = Type("ChatSummary", func() {
 	)
 })
 
+var ListSessionsPayload = Type("ListSessionsPayload", func() {
+	Description("Payload for listing org-scoped chat sessions")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
+	Attribute("sort_by", String, "Measure used to rank sessions. Defaults to total_cost.", func() {
+		Enum("total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds")
+		Default("total_cost")
+	})
+	Attribute("limit", Int, "Number of sessions to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+	Attribute("cursor", String, "Opaque cursor for pagination")
+
+	Required("from", "to")
+})
+
+var ListSessionsResult = Type("ListSessionsResult", func() {
+	Description("Result of listing org-scoped chat sessions")
+
+	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+
+	Required("sessions")
+})
+
+var SessionSummaryType = Type("SessionSummary", func() {
+	Description("Org-scoped summary information for a chat session")
+
+	Attribute("gram_chat_id", String, "Chat session ID")
+	Attribute("project_id", String, "Project ID that emitted this chat session")
+	Attribute("user_email", String, "User email associated with this chat session")
+	Attribute("hook_source", String, "Client or agent surface associated with this chat session")
+	Attribute("model", String, "LLM model used in this chat session")
+	Attribute("title", String, "Chat title, when the session resolves to a named chat")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("duration_seconds", Float64, "Chat session duration in seconds")
+	Attribute("message_count", Int64, "Number of LLM completion messages in this chat session")
+	Attribute("tool_call_count", Int64, "Number of tool calls in this chat session")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used")
+	Attribute("total_cost", Float64, "Total cost in USD")
+	Attribute("status", String, "Chat session status", func() {
+		Enum("success", "error")
+	})
+
+	Required(
+		"gram_chat_id",
+		"project_id",
+		"start_time_unix_nano",
+		"end_time_unix_nano",
+		"duration_seconds",
+		"message_count",
+		"tool_call_count",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"total_cost",
+		"status",
+	)
+})
+
 var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Description("Filter criteria for searching user usage summaries")
 
@@ -796,6 +919,8 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code').")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id (the per-account discriminator); scopes results to that one account.")
 
 	Required("from", "to")
 })
@@ -865,6 +990,7 @@ var UserSummaryType = Type("UserSummary", func() {
 	Description("Aggregated usage summary for a single user")
 
 	Attribute("user_id", String, "User identifier (user_id or external_user_id depending on group_by)")
+	Attribute("user_email", String, "User email associated with this usage, when present")
 
 	// Activity timestamps (string for JS int64 precision)
 	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
@@ -894,8 +1020,20 @@ var UserSummaryType = Type("UserSummary", func() {
 	Attribute("tools", ArrayOf(ToolUsage), "Per-tool usage breakdown")
 	Attribute("hook_sources", ArrayOf(HookSourceUsage), "Per-hook-source usage breakdown")
 
+	// Distinct AI account types observed for this user in the window ('team',
+	// 'personal'). Lets the employees list flag who is also driving
+	// personal-account usage. Empty for older telemetry without the dimension.
+	Attribute("account_types", ArrayOf(String), "Distinct account types observed for this user ('team', 'personal')")
+
+	// Registered AI accounts for this user from the user_accounts directory
+	// (identity, not windowed telemetry). Each (provider, email) is a distinct
+	// account, so a user can hold several across providers. Drives the per-user
+	// accounts breakdown on the employees list.
+	Attribute("accounts", ArrayOf(UserAccountType), "Linked AI accounts for this user (team and personal, across providers)")
+
 	Required(
 		"user_id",
+		"user_email",
 		"first_seen_unix_nano",
 		"last_seen_unix_nano",
 		"total_chats",
@@ -972,6 +1110,19 @@ var HookSourceUsage = Type("HookSourceUsage", func() {
 	Attribute("event_count", Int64, "Total hook events for this source")
 
 	Required("source", "event_count")
+})
+
+var UserAccountType = Type("UserAccount", func() {
+	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
+
+	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
+	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
+	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
+	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
+	Attribute("external_org_id", String, "Provider org id for this account; the per-account discriminator used to scope telemetry to this one account")
+	Attribute("last_seen_unix_nano", String, "Latest activity timestamp for this account in Unix nanoseconds")
+
+	Required("provider")
 })
 
 var ProjectSummaryType = Type("ProjectSummary", func() {
@@ -1093,6 +1244,8 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 	Attribute("external_user_id", String, "External user ID to get metrics for (mutually exclusive with user_id)")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes metrics to that one account")
 
 	Required("from", "to")
 })
@@ -1120,6 +1273,8 @@ var GetEmployeeDataFlowGraphPayload = Type("GetEmployeeDataFlowGraphPayload", fu
 	})
 	Attribute("user_id", String, "User ID to get the graph for (mutually exclusive with external_user_id)")
 	Attribute("external_user_id", String, "External user ID to get the graph for (mutually exclusive with user_id)")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the graph to that one account")
 
 	Required("from", "to")
 })
@@ -1164,6 +1319,150 @@ var EmployeeDataFlowEdge = Type("EmployeeDataFlowEdge", func() {
 
 // Observability Overview types
 
+// queryDimensions is the allowlist of dimensions that telemetry.query may
+// group by or filter on. Each maps to a safe column expression in the repo
+// layer; "role"/"group" are multi-valued (arrayJoin to group, has() to
+// filter). Clients can never supply arbitrary JSON paths or SQL.
+var queryDimensions = []any{
+	"department_name",
+	"job_title",
+	"employee_type",
+	"division_name",
+	"cost_center_name",
+	"email",
+	"model",
+	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type", // AI account classification (team | personal | unclassified)
+	"provider",     // AI provider for the account (anthropic | openai | cursor)
+	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
+	"query_source",
+	"skill_name",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
+	"role",
+	"group",
+	"project_id",
+}
+
+// queryMeasures is the allowlist of measures available for ranking (sort_by).
+// Every measure is always returned in QueryMeasures regardless of this choice.
+var queryMeasures = []any{
+	"total_cost",
+	"total_tokens",
+	"total_input_tokens",
+	"total_output_tokens",
+	"cache_read_input_tokens",
+	"cache_creation_input_tokens",
+	"total_tool_calls",
+	"total_chats",
+}
+
+var QueryPayload = Type("QueryPayload", func() {
+	Description("Payload for a generic org-scoped analytics query")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("group_by", String, "Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.", func() {
+		Enum(queryDimensions...)
+		Example("department_name")
+	})
+	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
+	Attribute("granularity_seconds", Int64, "Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).")
+	Attribute("top_n", Int, "When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.", func() {
+		Default(10)
+		Minimum(1)
+	})
+	Attribute("sort_by", String, "Measure used to rank groups for top_n. Defaults to total_cost.", func() {
+		Enum(queryMeasures...)
+		Default("total_cost")
+	})
+
+	Required("from", "to")
+})
+
+var QueryFilter = Type("QueryFilter", func() {
+	Description("A single filter predicate on an allowlisted dimension")
+
+	Attribute("dimension", String, "Dimension to filter on", func() {
+		Enum(queryDimensions...)
+	})
+	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).", func() {
+		MinLength(1)
+	})
+
+	Required("dimension", "values")
+})
+
+var QueryMeasures = Type("QueryMeasures", func() {
+	Description("Aggregated measure values for a group or time bucket")
+
+	Attribute("total_cost", Float64, "Total cost in USD")
+	Attribute("total_input_tokens", Int64, "Sum of input tokens")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens")
+	Attribute("total_tokens", Int64, "Sum of all tokens")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("total_chats", Int64, "Number of distinct chat sessions")
+
+	Required(
+		"total_cost",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_tool_calls",
+		"total_chats",
+	)
+})
+
+var QueryRow = Type("QueryRow", func() {
+	Description("One row of the grouped table: measures aggregated over the full time range for a single group value.")
+
+	Attribute("group_value", String, "The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
+	Attribute("measures", QueryMeasures, "Aggregated measures for this group")
+	Attribute("dimension_values", MapOf(String, ArrayOf(String)), "Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are omitted and each list is capped.")
+
+	Required("group_value", "measures", "dimension_values")
+})
+
+var QueryPoint = Type("QueryPoint", func() {
+	Description("A single time bucket within a series")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("measures", QueryMeasures, "Aggregated measures for this bucket")
+
+	Required("bucket_time_unix_nano", "measures")
+})
+
+var QuerySeries = Type("QuerySeries", func() {
+	Description("A gap-filled timeseries for a single group value (one line on the chart).")
+
+	Attribute("group_value", String, "The dimension value for this series. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
+	Attribute("points", ArrayOf(QueryPoint), "Time buckets in ascending order, gap-filled with zeros.")
+
+	Required("group_value", "points")
+})
+
+var QueryResult = Type("QueryResult", func() {
+	Description("Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.")
+
+	Attribute("group_by", String, "Echoes the requested group_by dimension; empty when none was requested.")
+	Attribute("interval_seconds", Int64, "The timeseries bucket interval in seconds.")
+	Attribute("table", ArrayOf(QueryRow), "Grouped totals over the full time range, ordered by sort_by descending.")
+	Attribute("timeseries", ArrayOf(QuerySeries), "One series per group value (aligned with table rows), each gap-filled.")
+
+	Required("group_by", "interval_seconds", "table", "timeseries")
+})
+
 var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", func() {
 	Description("Payload for getting observability overview metrics")
 
@@ -1182,8 +1481,13 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("remote_mcp_server_id", String, "Optional Remote MCP server ID filter", func() {
 		Format(FormatUUID)
 	})
+	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the overview to that one account")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -1543,6 +1847,8 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
 
 	Required("from", "to")
 })
@@ -1577,6 +1883,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")
@@ -1626,6 +1933,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 		Enum("success", "failure", "blocked", "pending")
 	})
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
+	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 
 	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
 })
@@ -1674,9 +1982,10 @@ var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption"
 	Description("Hosted MCP server filter option with usage in the selected time window")
 
 	Attribute("toolset_slug", String, "Hosted MCP toolset slug")
+	Attribute("toolset_name", String, "Hosted MCP toolset display name")
 	Attribute("event_count", Int64, "Number of tool usage events observed for the hosted MCP server")
 
-	Required("toolset_slug", "event_count")
+	Required("toolset_slug", "toolset_name", "event_count")
 })
 
 var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {

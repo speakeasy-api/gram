@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "agentkit-adapter-completions"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ccf868fe81fc9cce7b9886e382104f8be17f7ae2c557432282256b27f01d2af"
+checksum = "36ee5114ac2d3abd09f162e10f1b08db04dc0720537a26749fa07bf185c0765b"
 dependencies = [
  "agentkit-core",
  "agentkit-http",
@@ -23,9 +23,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-capabilities"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cd0668d77c0594ca03b33e1f8e45d8266959ff08bb6b437b9a1cadfb3010361"
+checksum = "de2274ea0765023a7f03cc7b632460e9d1debb023851c704db9f271d5f4baf87"
 dependencies = [
  "agentkit-core",
  "async-trait",
@@ -36,9 +36,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-compaction"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9506ff89d2a68604f5813aede539a8ad743c7cfa54fce0d0bcc127949b04f3c"
+checksum = "080c6d884df840feb7cf9f940909f19401634e4642636d748c1ca1c3930e5aac"
 dependencies = [
  "agentkit-core",
  "agentkit-loop",
@@ -49,9 +49,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-core"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f183e70bd23e6662e4c6ebe6b0775c76a024c223153af188934e17c3b1401ca7"
+checksum = "3d32fb51605632f98696f2903bdb123588b66497d322980f9aff129d9a036593"
 dependencies = [
  "futures-timer",
  "serde",
@@ -61,9 +61,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-http"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49de3d89a2b44934aae701ab40af56357f99b6ff9b9cb5a865b215e0c2c390e0"
+checksum = "cb7d9e8ec8299b4a30a33126aa398015f390c82b850b4fe07483d759868fc541"
 dependencies = [
  "async-trait",
  "bytes",
@@ -78,9 +78,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-loop"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f1d2ecf08e0703cf87a54e1395152038db28bf911dc72c3512a3004626b35fa"
+checksum = "3d8eacfb4eaaa88587c03601d13b2503a03a3d531fd3e473ad3c26ab7be97cc9"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-core",
@@ -95,9 +95,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-mcp"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d859a60b07c66618cb284aa833e3261fd05a8999596e01f393a8b653ee00e87"
+checksum = "90833e00a7bcdb1734f0c1ec1624c301ff56d1f8ed8a05c0a3a2925fdba28bb3"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-core",
@@ -117,9 +117,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-provider-openrouter"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27d3c3422c7f36360e2932e6f938df36a8f028767d8fc15c79ca5dd833b6e6a1"
+checksum = "3e7bc228217579322558ef97a9411b2e7b38f448e59fa8e8d57a197b44e47c8f"
 dependencies = [
  "agentkit-adapter-completions",
  "agentkit-core",
@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-reporting"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "088fcebbb834b5aced2f96b082eedacc80f765c1a73d523e25c37b37db68b992"
+checksum = "475683eba9f398acbb569f1267bba0ce3bf04fed0315b6d49b1632ed52299198"
 dependencies = [
  "agentkit-core",
  "agentkit-loop",
@@ -148,9 +148,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-task-manager"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a2b8ebcc040a673abfd4e45a0fae91827e8d69a955b6ad849bcdf73154a3dee"
+checksum = "8f6a1ac153998beb3af305c68651117746e3cdb87210ed34e90d3fb3e951d7e8"
 dependencies = [
  "agentkit-core",
  "agentkit-tools-core",
@@ -160,10 +160,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "agentkit-tool-fs"
-version = "0.8.1"
+name = "agentkit-tool-compose"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03443829a26c566be19076346a22e50d2dd73125a7a11897c761468c227299b9"
+checksum = "130f5a3f013df63d25612a784c25aee50948701042b93a4a81cc6ecc7e4c1cc4"
+dependencies = [
+ "agentkit-core",
+ "agentkit-tools-core",
+ "async-trait",
+ "mlua",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "agentkit-tool-fs"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "285ad41fe5cf99dc17904c760f5a4bf695990ef493c57ae79bf0a1a0e02af008"
 dependencies = [
  "agentkit-core",
  "agentkit-tools-core",
@@ -177,9 +192,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-tools-core"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee6bdbaed6a65d856f76bd36418ea6124031b09c3aecf82600a19d69530a0264"
+checksum = "e1c0eb1ab87e048042778d1436bf04fa6e5911c21f9b89ac9898f887387a6294"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-core",
@@ -193,9 +208,9 @@ dependencies = [
 
 [[package]]
 name = "agentkit-tools-derive"
-version = "0.8.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de650ca60c7e911840515cdf424ed1741ffef3457a6a83ab8423e84a71c2d2b7"
+checksum = "c84a5e971d23e9d463ae624ce6fb7bff1ffa933338fd292e99d182da1266ef14"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -445,6 +460,16 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
+]
+
+[[package]]
+name = "bstr"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63044e1ae8e69f3b5a92c736ca6269b8d12fa7efe39bf34ddb06d102cf0e2cab"
+dependencies = [
+ "memchr",
+ "serde",
 ]
 
 [[package]]
@@ -703,6 +728,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "erased-serde"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2add8a07dd6a8d93ff627029c51de145e12686fbc36ecb298ac22e74cf02dec"
+dependencies = [
+ "serde",
+ "serde_core",
+ "typeid",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -941,6 +977,7 @@ dependencies = [
  "agentkit-mcp",
  "agentkit-provider-openrouter",
  "agentkit-reporting",
+ "agentkit-tool-compose",
  "agentkit-tool-fs",
  "agentkit-tools-core",
  "agentkit-tools-derive",
@@ -1440,6 +1477,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
+name = "lua-src"
+version = "550.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e836dc8ae16806c9bdcf42003a88da27d163433e3f9684c52f0301258004a4fb"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "luajit-src"
+version = "210.6.6+707c12b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a86cc925d4053d0526ae7f5bc765dbd0d7a5d1a63d43974f4966cb349ca63295"
+dependencies = [
+ "cc",
+ "which",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1475,6 +1531,40 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mlua"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccd36acfa49ce6ee56d1307a061dd302c564eee757e6e4cd67eb4f7204846fab"
+dependencies = [
+ "bstr",
+ "either",
+ "erased-serde",
+ "futures-util",
+ "libc",
+ "mlua-sys",
+ "num-traits",
+ "parking_lot",
+ "rustc-hash",
+ "rustversion",
+ "serde",
+ "serde-value",
+]
+
+[[package]]
+name = "mlua-sys"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f1c3a7fc7580227ece249fd90aa2fa3b39eb2b49d3aec5e103b3e85f2c3dfc8"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "lua-src",
+ "luajit-src",
+ "pkg-config",
 ]
 
 [[package]]
@@ -1624,6 +1714,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "2.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1700,6 +1799,12 @@ dependencies = [
  "fastrand",
  "futures-io",
 ]
+
+[[package]]
+name = "pkg-config"
+version = "0.3.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "portable-atomic"
@@ -2329,6 +2434,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-value"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
+dependencies = [
+ "ordered-float",
+ "serde",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2884,6 +2999,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "typeid"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
 name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3145,6 +3266,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52f5ee44c96cf55f1b349600768e3ece3a8f26010c05265ab73f945bb1a2eb9d"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "which"
+version = "8.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c789537cf2f7f55be8e6192f92e464174ee55f91af622777f7f1ceb0dbccd03e"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

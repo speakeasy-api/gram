@@ -206,6 +206,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			FunctionID:     nil,
 			OrganizationID: args.OrgID,
 		},
+		UserInfo:   telemetry.UserInfo{},
 		Attributes: attrs,
 	})
 

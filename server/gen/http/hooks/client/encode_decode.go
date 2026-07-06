@@ -53,6 +53,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
 		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
 		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "claude", err)
@@ -290,6 +294,10 @@ func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if p.HookHostname != nil {
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
 		}
 		body := NewCursorRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -529,6 +537,10 @@ func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
 		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
 		body := NewCodexRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "codex", err)
@@ -728,6 +740,248 @@ func DecodeCodexResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("hooks", "codex", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildIngestRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "ingest" endpoint
+func (c *Client) BuildIngestRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: IngestHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "ingest", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeIngestRequest returns an encoder for requests sent to the hooks ingest
+// server.
+func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.IngestPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "ingest", "*hooks.IngestPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
+		body := NewIngestRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "ingest", err)
+		}
+		return nil
+	}
+}
+
+// DecodeIngestResponse returns a decoder for responses returned by the hooks
+// ingest endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeIngestResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeIngestResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body IngestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			res := NewIngestHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body IngestUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body IngestForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body IngestBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body IngestNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body IngestConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body IngestUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body IngestInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body IngestInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+				}
+				err = ValidateIngestInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+				}
+				return nil, NewIngestInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body IngestUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+				}
+				err = ValidateIngestUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+				}
+				return nil, NewIngestUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "ingest", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body IngestGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "ingest", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1182,6 +1436,386 @@ func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restore
 	}
 }
 
+// marshalHooksHookIngestSourceToHookIngestSourceRequestBody builds a value of
+// type *HookIngestSourceRequestBody from a value of type
+// *hooks.HookIngestSource.
+func marshalHooksHookIngestSourceToHookIngestSourceRequestBody(v *hooks.HookIngestSource) *HookIngestSourceRequestBody {
+	res := &HookIngestSourceRequestBody{
+		Adapter:        v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestSessionToHookIngestSessionRequestBody builds a value
+// of type *HookIngestSessionRequestBody from a value of type
+// *hooks.HookIngestSession.
+func marshalHooksHookIngestSessionToHookIngestSessionRequestBody(v *hooks.HookIngestSession) *HookIngestSessionRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookIngestSessionRequestBody{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestEventToHookIngestEventRequestBody builds a value of
+// type *HookIngestEventRequestBody from a value of type *hooks.HookIngestEvent.
+func marshalHooksHookIngestEventToHookIngestEventRequestBody(v *hooks.HookIngestEvent) *HookIngestEventRequestBody {
+	res := &HookIngestEventRequestBody{
+		Type:       v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// marshalHooksHookIngestDataToHookIngestDataRequestBody builds a value of type
+// *HookIngestDataRequestBody from a value of type *hooks.HookIngestData.
+func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestData) *HookIngestDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookIngestDataRequestBody{}
+	if v.Prompt != nil {
+		res.Prompt = marshalHooksHookPromptDataToHookPromptDataRequestBody(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = marshalHooksHookToolCallDataToHookToolCallDataRequestBody(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
+	}
+	if v.Usage != nil {
+		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = marshalHooksHookMessageDataToHookMessageDataRequestBody(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = marshalHooksHookSkillDataToHookSkillDataRequestBody(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v.Notification)
+	}
+
+	return res
+}
+
+// marshalHooksHookPromptDataToHookPromptDataRequestBody builds a value of type
+// *HookPromptDataRequestBody from a value of type *hooks.HookPromptData.
+func marshalHooksHookPromptDataToHookPromptDataRequestBody(v *hooks.HookPromptData) *HookPromptDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookPromptDataRequestBody{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// marshalHooksHookToolCallDataToHookToolCallDataRequestBody builds a value of
+// type *HookToolCallDataRequestBody from a value of type
+// *hooks.HookToolCallData.
+func marshalHooksHookToolCallDataToHookToolCallDataRequestBody(v *hooks.HookToolCallData) *HookToolCallDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookToolCallDataRequestBody{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// marshalHooksHookMCPDataToHookMCPDataRequestBody builds a value of type
+// *HookMCPDataRequestBody from a value of type *hooks.HookMCPData.
+func marshalHooksHookMCPDataToHookMCPDataRequestBody(v *hooks.HookMCPData) *HookMCPDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMCPDataRequestBody{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// marshalHooksHookUsageDataToHookUsageDataRequestBody builds a value of type
+// *HookUsageDataRequestBody from a value of type *hooks.HookUsageData.
+func marshalHooksHookUsageDataToHookUsageDataRequestBody(v *hooks.HookUsageData) *HookUsageDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookUsageDataRequestBody{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// marshalHooksHookMessageDataToHookMessageDataRequestBody builds a value of
+// type *HookMessageDataRequestBody from a value of type *hooks.HookMessageData.
+func marshalHooksHookMessageDataToHookMessageDataRequestBody(v *hooks.HookMessageData) *HookMessageDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMessageDataRequestBody{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// marshalHooksHookSkillDataToHookSkillDataRequestBody builds a value of type
+// *HookSkillDataRequestBody from a value of type *hooks.HookSkillData.
+func marshalHooksHookSkillDataToHookSkillDataRequestBody(v *hooks.HookSkillData) *HookSkillDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookSkillDataRequestBody{
+		Name:   v.Name,
+		Source: v.Source,
+	}
+
+	return res
+}
+
+// marshalHooksHookNotificationDataToHookNotificationDataRequestBody builds a
+// value of type *HookNotificationDataRequestBody from a value of type
+// *hooks.HookNotificationData.
+func marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v *hooks.HookNotificationData) *HookNotificationDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookNotificationDataRequestBody{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
+// type *hooks.HookIngestSource from a value of type
+// *HookIngestSourceRequestBody.
+func marshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSourceRequestBody) *hooks.HookIngestSource {
+	res := &hooks.HookIngestSource{
+		Adapter:        v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+	}
+
+	return res
+}
+
+// marshalHookIngestSessionRequestBodyToHooksHookIngestSession builds a value
+// of type *hooks.HookIngestSession from a value of type
+// *HookIngestSessionRequestBody.
+func marshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSessionRequestBody) *hooks.HookIngestSession {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestSession{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// marshalHookIngestEventRequestBodyToHooksHookIngestEvent builds a value of
+// type *hooks.HookIngestEvent from a value of type *HookIngestEventRequestBody.
+func marshalHookIngestEventRequestBodyToHooksHookIngestEvent(v *HookIngestEventRequestBody) *hooks.HookIngestEvent {
+	res := &hooks.HookIngestEvent{
+		Type:       v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// marshalHookIngestDataRequestBodyToHooksHookIngestData builds a value of type
+// *hooks.HookIngestData from a value of type *HookIngestDataRequestBody.
+func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequestBody) *hooks.HookIngestData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestData{}
+	if v.Prompt != nil {
+		res.Prompt = marshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = marshalHookToolCallDataRequestBodyToHooksHookToolCallData(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.Usage != nil {
+		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = marshalHookMessageDataRequestBodyToHooksHookMessageData(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = marshalHookSkillDataRequestBodyToHooksHookSkillData(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+
+	return res
+}
+
+// marshalHookPromptDataRequestBodyToHooksHookPromptData builds a value of type
+// *hooks.HookPromptData from a value of type *HookPromptDataRequestBody.
+func marshalHookPromptDataRequestBodyToHooksHookPromptData(v *HookPromptDataRequestBody) *hooks.HookPromptData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptData{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// marshalHookToolCallDataRequestBodyToHooksHookToolCallData builds a value of
+// type *hooks.HookToolCallData from a value of type
+// *HookToolCallDataRequestBody.
+func marshalHookToolCallDataRequestBodyToHooksHookToolCallData(v *HookToolCallDataRequestBody) *hooks.HookToolCallData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookToolCallData{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// marshalHookMCPDataRequestBodyToHooksHookMCPData builds a value of type
+// *hooks.HookMCPData from a value of type *HookMCPDataRequestBody.
+func marshalHookMCPDataRequestBodyToHooksHookMCPData(v *HookMCPDataRequestBody) *hooks.HookMCPData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPData{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// marshalHookUsageDataRequestBodyToHooksHookUsageData builds a value of type
+// *hooks.HookUsageData from a value of type *HookUsageDataRequestBody.
+func marshalHookUsageDataRequestBodyToHooksHookUsageData(v *HookUsageDataRequestBody) *hooks.HookUsageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookUsageData{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// marshalHookMessageDataRequestBodyToHooksHookMessageData builds a value of
+// type *hooks.HookMessageData from a value of type *HookMessageDataRequestBody.
+func marshalHookMessageDataRequestBodyToHooksHookMessageData(v *HookMessageDataRequestBody) *hooks.HookMessageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMessageData{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// marshalHookSkillDataRequestBodyToHooksHookSkillData builds a value of type
+// *hooks.HookSkillData from a value of type *HookSkillDataRequestBody.
+func marshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequestBody) *hooks.HookSkillData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookSkillData{
+		Name:   v.Name,
+		Source: v.Source,
+	}
+
+	return res
+}
+
+// marshalHookNotificationDataRequestBodyToHooksHookNotificationData builds a
+// value of type *hooks.HookNotificationData from a value of type
+// *HookNotificationDataRequestBody.
+func marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNotificationDataRequestBody) *hooks.HookNotificationData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookNotificationData{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
+}
+
 // marshalHooksOTELResourceLogToOTELResourceLogRequestBody builds a value of
 // type *OTELResourceLogRequestBody from a value of type *hooks.OTELResourceLog.
 func marshalHooksOTELResourceLogToOTELResourceLogRequestBody(v *hooks.OTELResourceLog) *OTELResourceLogRequestBody {
@@ -1313,6 +1947,8 @@ func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord)
 	res := &OTELLogRecordRequestBody{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {
@@ -1492,6 +2128,8 @@ func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequest
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

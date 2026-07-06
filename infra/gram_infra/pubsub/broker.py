@@ -32,13 +32,13 @@ from datetime import timedelta
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
+import asyncer
 import structlog
+from gcp.pubsub.v1 import options_pb2
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.message import Message
-
-from gcp.pubsub.v1 import options_pb2
 
 from .discover import (
     require_subscription_for_message,
@@ -49,12 +49,12 @@ from .discover import (
 )
 
 __all__ = [
-    "PublisherHandle",
-    "SubscriberHandle",
-    "PublisherBroker",
-    "SubscriberBroker",
-    "PubSubBroker",
     "EmulatedPubSubBroker",
+    "PubSubBroker",
+    "PublisherBroker",
+    "PublisherHandle",
+    "SubscriberBroker",
+    "SubscriberHandle",
 ]
 
 
@@ -105,7 +105,8 @@ class PublisherHandle:
 
 @dataclass(frozen=True)
 class SubscriberHandle:
-    """A subscriber client paired with the fully-qualified subscription path to receive from."""
+    """A subscriber client paired with the fully-qualified subscription path to
+    receive from."""
 
     client: SubscriberClient
     subscription_path: str
@@ -115,10 +116,18 @@ class SubscriberHandle:
 class PublisherBroker(Protocol):
     def publisher_for_message(self, message_type: type[Message]) -> PublisherHandle: ...
 
+    async def publisher_for_message_async(
+        self, message_type: type[Message]
+    ) -> PublisherHandle: ...
+
 
 @runtime_checkable
 class SubscriberBroker(Protocol):
     def subscriber_for_message(
+        self, message_type: type[Message], subscription_type: type[Message]
+    ) -> SubscriberHandle: ...
+
+    async def subscriber_for_message_async(
         self, message_type: type[Message], subscription_type: type[Message]
     ) -> SubscriberHandle: ...
 
@@ -209,7 +218,7 @@ class PubSubBroker:
             self._closed = True
 
     def _drain_publisher(self) -> None:
-        """Flush batched publishes and wait for those commits before the transport closes.
+        """Flush batched publishes, awaiting their commits before transport close.
 
         ``PublisherClient`` inherits the generated client's ``__exit__``, which
         only calls ``transport.close()`` — it never stops the batching layer. So a
@@ -258,10 +267,38 @@ class PubSubBroker:
         created the resource.
         """
 
+    async def _reconcile_publisher_async(self, topic_id, options) -> None:
+        """Async counterpart of :meth:`_reconcile_publisher`.
+
+        No-op here too: production reconcile does nothing, so there is nothing to
+        keep off the event loop. The emulator broker overrides this to run its
+        blocking provisioning RPCs on a worker thread.
+        """
+
+    async def _reconcile_subscriber_async(self, sub_id, topic_id, binding) -> None:
+        """Async counterpart of :meth:`_reconcile_subscriber`. See above."""
+
     def publisher_for_message(self, message_type: type[Message]) -> PublisherHandle:
         descriptor, options = require_topic_options(message_type)
         topic_id = resolve_topic_name(descriptor, options)
         self._reconcile_publisher(topic_id, options)
+        return PublisherHandle(
+            self._publisher, self._topic_path(topic_id), self._inflight
+        )
+
+    async def publisher_for_message_async(
+        self, message_type: type[Message]
+    ) -> PublisherHandle:
+        """Async :meth:`publisher_for_message` that keeps reconcile off the loop.
+
+        Resolution is pure in-memory work; only the reconcile hook may block, so
+        that is the part the emulator broker offloads to a worker thread. Call
+        this from async wiring (e.g. ``pystreams``) so a one-time provisioning RPC
+        against the local emulator does not stall the event loop at startup.
+        """
+        descriptor, options = require_topic_options(message_type)
+        topic_id = resolve_topic_name(descriptor, options)
+        await self._reconcile_publisher_async(topic_id, options)
         return PublisherHandle(
             self._publisher, self._topic_path(topic_id), self._inflight
         )
@@ -276,6 +313,30 @@ class PubSubBroker:
         topic_id = resolve_topic_name(binding.message_descriptor, binding.topic_options)
         self._reconcile_subscriber(sub_id, topic_id, binding)
         return SubscriberHandle(self._subscriber, self._sub_path(sub_id))
+
+    async def subscriber_for_message_async(
+        self, message_type: type[Message], subscription_type: type[Message]
+    ) -> SubscriberHandle:
+        """Async :meth:`subscriber_for_message` that keeps reconcile off the loop."""
+        binding = require_subscription_for_message(message_type, subscription_type)
+        sub_id = resolve_subscription_name(
+            binding.subscription_descriptor, binding.subscription_options
+        )
+        topic_id = resolve_topic_name(binding.message_descriptor, binding.topic_options)
+        await self._reconcile_subscriber_async(sub_id, topic_id, binding)
+        return SubscriberHandle(self._subscriber, self._sub_path(sub_id))
+
+
+# The local emulator, unlike real Pub/Sub, does not support high message
+# retention periods and rejects anything beyond a few days with
+# "message_retention_duration out of bounds". Clamp the configured retention
+# down to this value for the emulator only — production resources go through
+# Config Connector, not this code path.
+_EMULATOR_MAX_RETENTION = timedelta(hours=72)
+
+
+def _clamp_emulator_retention(value: timedelta) -> timedelta:
+    return min(value, _EMULATOR_MAX_RETENTION)
 
 
 class EmulatedPubSubBroker(PubSubBroker):
@@ -315,6 +376,15 @@ class EmulatedPubSubBroker(PubSubBroker):
         self._reconcile_topic(topic_id, binding.topic_options)
         self._reconcile_subscription(sub_id, topic_id, binding.subscription_options)
 
+    async def _reconcile_publisher_async(self, topic_id, options) -> None:
+        # Reconcile issues synchronous gRPC create RPCs against the emulator;
+        # run them on a worker thread so the create round-trip does not block the
+        # event loop (the event-loop blocking monitor flags it otherwise).
+        await asyncer.asyncify(self._reconcile_publisher)(topic_id, options)
+
+    async def _reconcile_subscriber_async(self, sub_id, topic_id, binding) -> None:
+        await asyncer.asyncify(self._reconcile_subscriber)(sub_id, topic_id, binding)
+
     def _reconcile_topic(self, topic_id: str, options=None) -> None:
         if topic_id in self._reconciled_topics:
             return
@@ -333,7 +403,7 @@ class EmulatedPubSubBroker(PubSubBroker):
                 and options.retention_hint.ToNanoseconds() != 0
             ):
                 _validate_retention(options.retention_hint, topic_id)
-                request["message_retention_duration"] = (
+                request["message_retention_duration"] = _clamp_emulator_retention(
                     options.retention_hint.ToTimedelta()
                 )
 
@@ -362,7 +432,9 @@ class EmulatedPubSubBroker(PubSubBroker):
         # which the Go generation path accepts; negative values must validate.
         if options.HasField("retention") and options.retention.ToNanoseconds() != 0:
             _validate_retention(options.retention, sub_id)
-            request["message_retention_duration"] = options.retention.ToTimedelta()
+            request["message_retention_duration"] = _clamp_emulator_retention(
+                options.retention.ToTimedelta()
+            )
         labels = dict(options.labels)
         if labels:
             request["labels"] = labels

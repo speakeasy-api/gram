@@ -37,9 +37,11 @@ var (
 	infra *testenv.Environment
 )
 
-type noopFeatureCacheWriter struct{}
+type noopProductFeatures struct{}
 
-func (noopFeatureCacheWriter) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
+func (noopProductFeatures) EnableRBAC(context.Context, string) error { return nil }
+
+func (noopProductFeatures) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
 }
 
 func TestMain(m *testing.M) {
@@ -105,7 +107,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	noopEmailSvc := email.NewService(logger, loops.New(ctx, logger, nil, ""))
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore, noopEmailSvc, url.URL{})
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, "test-jwt-secret", accessStore, noopEmailSvc, url.URL{})
 
 	return ctx, &testInstance{
 		service: svc,
@@ -143,6 +145,14 @@ func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl t
 		return fmt.Errorf("set prefixed test cache: %w", err)
 	}
 	return nil
+}
+
+func (p prefixedTestCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	ok, err := p.cache.Add(ctx, p.key(key), ttl)
+	if err != nil {
+		return false, fmt.Errorf("add prefixed test cache: %w", err)
+	}
+	return ok, nil
 }
 
 func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {

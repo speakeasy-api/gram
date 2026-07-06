@@ -86,7 +86,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	var err error
 
 	if payload.Enabled {
-		_, err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
+		err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FeatureName:    payload.FeatureName,
 		})
@@ -182,6 +182,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		Webhooks:                     isEnabled(FeatureWebhooks),
 		SsoEnabled:                   isEnabled(FeatureSSO),
 		ScimEnabled:                  isEnabled(FeatureSCIM),
+		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 	}, nil
 }
 

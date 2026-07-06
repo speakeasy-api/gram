@@ -3,6 +3,8 @@ export type ToolBehavior = "readonly" | "write";
 export type PopularityThreshold = 0 | 100 | 1000 | 10000;
 export type UpdatedRange = "any" | "week" | "month" | "year";
 export type ToolCountThreshold = 0 | 5 | 10;
+/** "auto" = supports DCR (one-click setup); "manual" = needs manual auth setup. */
+export type SetupType = "auto" | "manual";
 
 export interface FilterValues {
   authTypes: AuthType[];
@@ -10,12 +12,5 @@ export interface FilterValues {
   minUsers: PopularityThreshold;
   updatedRange: UpdatedRange;
   minTools: ToolCountThreshold;
+  setupTypes: SetupType[];
 }
-
-export const defaultFilterValues: FilterValues = {
-  authTypes: [],
-  toolBehaviors: [],
-  minUsers: 0,
-  updatedRange: "any",
-  minTools: 0,
-};

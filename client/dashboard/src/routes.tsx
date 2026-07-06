@@ -13,9 +13,11 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -32,13 +34,13 @@ import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
-  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
+import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -47,7 +49,6 @@ import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
-import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -185,6 +186,22 @@ const ROUTE_STRUCTURE = {
     icon: "house",
     component: Home,
   },
+  chat: {
+    title: "Project Assistant",
+    url: "chat",
+    icon: "message-circle",
+    stage: "beta",
+    // Layout route: renders the index (ChatHome) or a conversation subpage.
+    component: ChatRoot,
+    indexComponent: ChatHome,
+    subPages: {
+      conversation: {
+        title: "Chat",
+        url: ":chatId",
+        component: ChatConversation,
+      },
+    },
+  },
   playground: {
     title: "Playground",
     url: "playground",
@@ -295,7 +312,7 @@ const ROUTE_STRUCTURE = {
     title: "Assistants",
     url: "assistants",
     icon: "bot",
-    stage: "preview",
+    stage: "beta",
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
     subPages: {
@@ -343,6 +360,14 @@ const ROUTE_STRUCTURE = {
           overview: {
             title: "MCP Server Overview",
             url: "overview",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
+          },
+          analytics: {
+            title: "MCP Server Analytics",
+            url: "analytics",
           },
           // Legacy route. MCPServerDetails redirects this to
           // settings#authentication now that authentication lives under
@@ -398,7 +423,7 @@ const ROUTE_STRUCTURE = {
     indexComponent: InsightsHooksPage,
   },
   employees: {
-    title: "Employees",
+    title: "Employee Enrollment",
     url: "employees",
     icon: "users",
     component: InsightsEmployeesLayout,
@@ -415,7 +440,17 @@ const ROUTE_STRUCTURE = {
     title: "Costs",
     url: "costs",
     icon: "credit-card",
-    component: InsightsAgentsPage,
+    component: Costs,
+    subPages: {
+      // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
+      // renders the same explorer at any depth. CostsExplorer reads the drill
+      // levels from the pathname; no per-depth route definition is needed.
+      drill: {
+        title: "Costs",
+        url: "*",
+        component: Costs,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -576,6 +611,18 @@ export const useRoutes = (overrides?: {
   const matchesCurrent = (url: string) => {
     const urlParts = url.split("/").filter(Boolean);
     const currentParts = location.pathname.split("/").filter(Boolean);
+
+    // Splat routes (trailing `*`, e.g. the costs drill) match any deeper path
+    // that shares their prefix — keeps the sidebar item active while drilling.
+    if (urlParts[urlParts.length - 1] === "*") {
+      const prefix = urlParts.slice(0, -1);
+      return (
+        currentParts.length >= prefix.length &&
+        prefix.every(
+          (part, index) => part === currentParts[index] || part.startsWith(":"),
+        )
+      );
+    }
 
     if (urlParts.length !== currentParts.length) {
       return false;
@@ -761,8 +808,14 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  userSessions: {
+    title: "MCP Connections",
+    url: "user-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
   identity: {
-    title: "Identity",
+    title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
@@ -852,12 +905,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "settings",
     component: SetupWizard,
     outsideMainLayout: true,
-  },
-  adminSettings: {
-    title: "Super Admin",
-    url: "admin-settings",
-    icon: "shield-alert",
-    component: OrgAdminSettings,
   },
 } satisfies Record<string, RouteEntry>;
 

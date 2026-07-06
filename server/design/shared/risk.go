@@ -71,10 +71,17 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
-	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.")
+	Attribute("presidio_score_threshold", Float64, "Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface. Omit/null applies the default (0.5).", func() {
+		Minimum(0)
+		Maximum(1)
+		Example(0.75)
+	})
+	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
-	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids enabled for this policy.")
+	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
+	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
+	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
@@ -111,7 +118,8 @@ var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Human-readable title for the rule.")
 	Attribute("description", String, "Description of what the rule detects.")
-	Attribute("regex", String, "RE2-compatible regex pattern.")
+	Attribute("regex", String, "Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_expr is empty. New rules author detection_expr instead.")
+	Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.")
 	Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
@@ -170,6 +178,9 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
 		Format(FormatUUID)
 	})
@@ -181,16 +192,45 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("source", String, "Detection source (e.g. gitleaks).")
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")
-	Attribute("match", String, "The matched secret or sensitive data.")
+	Attribute("match", String, "The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).")
 	Attribute("start_pos", Int, "Start byte position within the message content.")
 	Attribute("end_pos", Int, "End byte position within the message content.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span. Null alongside match when the result is redacted.")
+	Attribute("match_redacted", String, "Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
 
 	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+})
+
+// RiskSpan is one matched span attributed to a finding.
+var RiskSpan = Type("RiskSpan", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("match", String, "The matched secret or sensitive data for this span.")
+	Attribute("field", String, "The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).")
+	Attribute("path", String, "The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.")
+	Attribute("start_pos", Int, "Start byte position within the message content.")
+	Attribute("end_pos", Int, "End byte position within the message content.")
+
+	Required("match")
+})
+
+// RiskSpanRedacted mirrors RiskSpan with the raw match replaced by an opaque
+// fingerprint, for agent / MCP consumption. The field/path attribution is
+// structural (not secret content) so it passes through unredacted.
+var RiskSpanRedacted = Type("RiskSpanRedacted", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("match_redacted", String, "Opaque fingerprint of this span's match, in the same form as RiskResultRedacted.match_redacted.")
+	Attribute("field", String, "The message field this span matched (see RiskSpan.field).")
+	Attribute("path", String, "The JSON sub-path within the field for a `.get(...)` match (see RiskSpan.path).")
+	Attribute("position_known", Boolean, "Whether this span carried byte-position information.")
+
+	Required("match_redacted", "position_known")
 })
 
 // RiskResultRedacted mirrors RiskResult but replaces the raw `match` content
@@ -227,6 +267,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 	Attribute("position_known", Boolean, "Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("spans_redacted", ArrayOf(RiskSpanRedacted), "All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})

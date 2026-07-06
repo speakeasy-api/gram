@@ -57,13 +57,14 @@ export function ModifyRemoteIdentityProviderSheet({
       { enabled: open },
     );
   const primaryClient: RemoteSessionClient | undefined = allClients.find(
-    (clientRow) => clientRow.userSessionIssuerId === userSessionIssuer.id,
+    (clientRow) =>
+      clientRow.userSessionIssuerIds.includes(userSessionIssuer.id),
   );
   const otherUserSessionIssuerIds = useMemo(
     () =>
       new Set(
         allClients
-          .map((clientRow) => clientRow.userSessionIssuerId)
+          .flatMap((clientRow) => clientRow.userSessionIssuerIds)
           .filter((id) => id !== userSessionIssuer.id),
       ),
     [allClients, userSessionIssuer.id],
@@ -141,6 +142,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
+    clientIdMetadataDocumentSupported: issuer.clientIdMetadataDocumentSupported,
   });
   const {
     issuerUrl,
@@ -211,6 +213,10 @@ function ModifyRemoteIdentityProviderSheetBody({
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
+          // undefined when no snapshot — the server COALESCEs to keep the
+          // stored CIMD-support value; a fresh discovery overwrites it.
+          clientIdMetadataDocumentSupported:
+            discoveredSnapshot?.clientIdMetadataDocumentSupported,
         },
       });
 

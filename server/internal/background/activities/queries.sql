@@ -87,6 +87,29 @@ WHERE d.organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
 
+-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
+-- Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
+-- row to detect whether another drain pass is needed.
+SELECT id, seq, content, created_at
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND role = 'user'
+  AND content != ''
+  AND (message_id IS NULL OR message_id = '')
+  AND seq > @after_message_seq
+ORDER BY seq ASC, created_at ASC
+LIMIT @limit_count;
+
+-- name: BackfillClaudeUserMessagePromptID :exec
+UPDATE chat_messages
+SET message_id = @prompt_id
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND role = 'user'
+  AND (message_id IS NULL OR message_id = '');
+
 -- name: FetchPendingOutboxIDs :many
 -- Fetch the next batch of outbox row IDs (across all organizations) that the
 -- Svix relay has not finished processing. A row is "pending" when no relay

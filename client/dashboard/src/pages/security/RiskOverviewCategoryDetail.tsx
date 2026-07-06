@@ -240,7 +240,7 @@ function RiskOverviewCategoryDetailContent() {
         chatId={selectedChatId}
         onClose={() => setSelectedChatId(null)}
         onDelete={() => setSelectedChatId(null)}
-        collapseNonRisk
+        riskFocus
       />
     </RevealAllProvider>
   );
@@ -349,7 +349,10 @@ function ResultsTable({
                 {result.userId ?? "-"}
               </td>
               <td className="px-4 py-3">
-                <MaskedMatch value={result.match} />
+                <MaskedMatch
+                  resultId={result.id}
+                  matchRedacted={result.matchRedacted}
+                />
               </td>
               <td className="px-4 py-3 text-right">
                 {result.chatId && (

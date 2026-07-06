@@ -147,14 +147,20 @@ interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
+# Use local:start if it's defined, otherwise fall back to the default start task.
+start_task="start"
+if mise tasks info local:start &>/dev/null; then
+    start_task="local:start"
+fi
+
 if $auto_yes; then
-    exec mise run start
+    exec mise run "$start_task"
 elif ! $agent_mode; then
-    echo "Want me to start the server and dashboard (\`mise run start\`)?"
+    echo "Want me to start the server and dashboard (\`mise run $start_task\`)?"
     echo -n "[y/N] "
     read -r answer
     answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     if [ "$answer" = "y" ]; then
-    exec mise run start
+    exec mise run "$start_task"
     fi
 fi

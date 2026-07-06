@@ -21,8 +21,8 @@ export interface ProjectNavRoute {
  * Single source of truth shared by the sidebar (`AppSidebar`) and the command
  * palette so the two never drift — the palette only lists pages a user can
  * actually reach from the nav, in the same order, behind the same scopes.
- * Honors the same feature flags the sidebar uses to gate Deployments and
- * Assistants.
+ * Honors the same feature flags the sidebar uses to gate Deployments,
+ * Assistants, and demo pages.
  *
  * The returned array is memoized so consumers can safely use it as a `useEffect`
  * dependency without re-running every render (this hook feeds the command
@@ -42,6 +42,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     const readWrite: Scope[] = ["project:read", "project:write"];
     return [
       { route: routes.home, scope: read },
+      { route: routes.chat, scope: read },
       { route: routes.sources, scope: readWrite },
       { route: routes.catalog, scope: ["project:read", "mcp:write"] },
       {

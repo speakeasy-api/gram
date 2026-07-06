@@ -13,15 +13,14 @@ The full topology validation / kcc.yaml generation stays in Go.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
-
-from google.protobuf.descriptor import Descriptor
-from google.protobuf.message import Message
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 # Importing the generated options module registers the ``topic`` and
 # ``subscription`` extensions in the default descriptor pool, which is what makes
 # them readable off a message's options below.
 from gcp.pubsub.v1 import options_pb2
+from google.protobuf.descriptor import Descriptor
+from google.protobuf.message import Message
 
 if TYPE_CHECKING:
     # types-protobuf types ``type[Message].DESCRIPTOR`` as a union of the upb (C)
@@ -29,22 +28,22 @@ if TYPE_CHECKING:
     # descriptor is passed in. Resolved only by the type checker.
     from google._upb._message import Descriptor as _CDescriptor
 
-    MessageDescriptor = Union[Descriptor, _CDescriptor]
+    MessageDescriptor = Descriptor | _CDescriptor
 else:
     MessageDescriptor = Descriptor
 
 __all__ = [
     "DLQ_SUFFIX",
-    "topic_options_from_message",
-    "subscription_options_from_message",
-    "require_topic_options",
-    "require_subscription_options",
-    "require_subscription_for_message",
     "SubscriptionBinding",
-    "resolve_topic_name",
-    "resolve_subscription_name",
+    "require_subscription_for_message",
+    "require_subscription_options",
+    "require_topic_options",
     "resolve_dead_letter_topic_name",
+    "resolve_subscription_name",
+    "resolve_topic_name",
+    "subscription_options_from_message",
     "to_kebab",
+    "topic_options_from_message",
 ]
 
 # Suffix appended to a subscription name to derive its dead-letter topic when no
@@ -70,7 +69,8 @@ def _message_options_extension(descriptor: MessageDescriptor, extension: Any):
 def topic_options_from_message(
     descriptor: MessageDescriptor,
 ) -> options_pb2.TopicOptions | None:
-    """Return the TopicOptions declared on a message, or None if it declares no topic."""
+    """Return the TopicOptions declared on a message, or None if it declares no
+    topic."""
     return cast(
         "options_pb2.TopicOptions | None",
         _message_options_extension(descriptor, options_pb2.topic),
@@ -80,7 +80,8 @@ def topic_options_from_message(
 def subscription_options_from_message(
     descriptor: MessageDescriptor,
 ) -> options_pb2.SubscriptionOptions | None:
-    """Return the SubscriptionOptions declared on a message, or None if it declares no subscription."""
+    """Return the SubscriptionOptions declared on a message, or None if it
+    declares no subscription."""
     return cast(
         "options_pb2.SubscriptionOptions | None",
         _message_options_extension(descriptor, options_pb2.subscription),
@@ -90,7 +91,8 @@ def subscription_options_from_message(
 def require_topic_options(
     message_type: type[Message],
 ) -> tuple[MessageDescriptor, options_pb2.TopicOptions]:
-    """Return ``(descriptor, TopicOptions)`` for a message type, raising if it declares no topic."""
+    """Return ``(descriptor, TopicOptions)`` for a message type, raising if it
+    declares no topic."""
     descriptor = message_type.DESCRIPTOR
     options = topic_options_from_message(descriptor)
     if options is None:
@@ -103,12 +105,14 @@ def require_topic_options(
 def require_subscription_options(
     subscription_type: type[Message],
 ) -> tuple[MessageDescriptor, options_pb2.SubscriptionOptions]:
-    """Return ``(descriptor, SubscriptionOptions)`` for a marker type, raising if it declares no subscription."""
+    """Return ``(descriptor, SubscriptionOptions)`` for a marker type, raising if
+    it declares no subscription."""
     descriptor = subscription_type.DESCRIPTOR
     options = subscription_options_from_message(descriptor)
     if options is None:
         raise ValueError(
-            f"proto message {descriptor.full_name} does not declare a pubsub subscription"
+            f"proto message {descriptor.full_name} does not declare a pubsub "
+            "subscription"
         )
     return descriptor, options
 
@@ -169,7 +173,8 @@ def _require_ascii(name: str, context: str) -> None:
 
 
 def _resolve_name(descriptor: MessageDescriptor, explicit: str) -> str:
-    """Resolve a resource ID: the explicit name when set, else the kebab-cased proto full name."""
+    """Resolve a resource ID: the explicit name when set, else the kebab-cased
+    proto full name."""
     name = (explicit or "").strip()
     if not name:
         name = descriptor.full_name
@@ -180,21 +185,24 @@ def _resolve_name(descriptor: MessageDescriptor, explicit: str) -> str:
 def resolve_topic_name(
     descriptor: MessageDescriptor, options: options_pb2.TopicOptions
 ) -> str:
-    """Resolve a topic ID: the explicit name when set, else the kebab-cased proto full name."""
+    """Resolve a topic ID: the explicit name when set, else the kebab-cased proto
+    full name."""
     return _resolve_name(descriptor, options.name)
 
 
 def resolve_subscription_name(
     descriptor: MessageDescriptor, options: options_pb2.SubscriptionOptions
 ) -> str:
-    """Resolve a subscription ID: the explicit name when set, else the kebab-cased proto full name."""
+    """Resolve a subscription ID: the explicit name when set, else the kebab-cased
+    proto full name."""
     return _resolve_name(descriptor, options.name)
 
 
 def resolve_dead_letter_topic_name(
     subscription_name: str, dead_letter: options_pb2.DeadLetterPolicy
 ) -> str:
-    """Resolve a DLQ topic ID: the kebab-cased explicit name when set, else ``<sub>-dlq``."""
+    """Resolve a DLQ topic ID: the kebab-cased explicit name when set, else
+    ``<sub>-dlq``."""
     explicit = (dead_letter.name or "").strip()
     if not explicit:
         return subscription_name + DLQ_SUFFIX
@@ -254,7 +262,7 @@ def to_kebab(value: str) -> str:
     """Lower-case kebab-case a string, mirroring ettle/strcase ToKebab.
 
     Used to derive Pub/Sub resource IDs from proto full names, e.g.
-    ``gram.ping.v1.Message`` -> ``gram-ping-v1-message``. Must stay byte-for-byte
+    ``gram.ping.v2.Message`` -> ``gram-ping-v2-message``. Must stay byte-for-byte
     compatible with the Go layer or the two languages will resolve different
     names; ``tests/test_naming.py`` guards this against the known proto names.
 

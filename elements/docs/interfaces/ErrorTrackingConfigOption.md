@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -12,7 +12,7 @@ Configuration for error tracking.
 
 ### enabled?
 
-> `optional` **enabled**: `boolean`
+> `optional` **enabled?**: `boolean`
 
 Set to false to disable error reporting.
 

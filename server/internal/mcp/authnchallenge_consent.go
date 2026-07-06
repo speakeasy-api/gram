@@ -81,6 +81,10 @@ type consentTemplateData struct {
 	// remote-session challenges, or when at least one challenge has been
 	// completed (a card is Connected). Cancel is always available.
 	ConsentEnabled bool
+	// FirstParty swaps the approve/deny client-grant footer for a terminal
+	// "you can close this tab" message: a first-party challenge has no MCP
+	// client to grant to, so linking the cards is the whole job.
+	FirstParty bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -180,15 +184,23 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
 
-	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            challengeState.ClientID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
+	// First-party challenges (minted by ServeFirstPartyConnect) have no
+	// DCR-registered client; the connect page is the dashboard linking the
+	// user's own upstream sessions. Skip the client lookup and label the page
+	// generically.
+	clientName := "Gram"
+	if !challengeState.FirstParty {
+		client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			ClientID:            challengeState.ClientID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
+		clientName = client.ClientName
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
@@ -211,7 +223,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	data := consentTemplateData{
-		ClientName:         client.ClientName,
+		ClientName:         clientName,
 		MCPSlug:            endpoint.Slug,
 		MCPRouteBase:       endpoint.RouteBase,
 		State:              stateID,
@@ -221,6 +233,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ScriptURL:          consentScriptURL,
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
+		FirstParty:         challengeState.FirstParty,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -271,6 +284,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
+	}
+
+	// First-party challenges have no MCP client to grant to: linking the cards
+	// is terminal, so there is no approve/deny POST. The template omits the
+	// form; reject any crafted submission rather than falling into the
+	// client-grant path with an empty ClientID.
+	if challengeState.FirstParty {
+		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step").LogError(ctx, logger)
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so
@@ -426,7 +447,7 @@ func (s *Service) buildRemoteSessionCards(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -449,11 +470,13 @@ func (s *Service) buildRemoteSessionCards(
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Subject:             challengeState.Subject,
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
 		FinalRedirectURI:    "",
+		Resource:            endpoint.UpstreamResource,
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))

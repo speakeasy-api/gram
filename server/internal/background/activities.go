@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -36,6 +38,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -46,6 +50,12 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
+type Publishers struct {
+	PresidioAnalysis    gcp.Publisher[*riskv1.PresidioAnalysis]
+	GitleaksAnalysis    gcp.Publisher[*riskv1.GitleaksAnalysis]
+	CustomRulesAnalysis gcp.Publisher[*riskv1.CustomRulesAnalysis]
+}
+
 type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
@@ -53,9 +63,9 @@ type Activities struct {
 	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
-	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
+	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	processDeployment               *activities.ProcessDeployment
@@ -85,6 +95,7 @@ type Activities struct {
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
+	reapStoppedAssistantRuntimes    *activities.ReapStoppedAssistantRuntimes
 	recycleAssistantRuntimeImages   *activities.RecycleAssistantRuntimeImages
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
@@ -139,9 +150,10 @@ func NewActivities(
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
 	chatWriter *chat.ChatMessageWriter,
+	publishers *Publishers,
+	celEng *celenv.Engine,
+	judgeRateLimiter *ratelimit.Limiter,
 ) *Activities {
-	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
-
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -149,9 +161,9 @@ func NewActivities(
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
-		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
+		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
@@ -172,7 +184,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter), features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.CustomRulesAnalysis, celEng),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
@@ -181,6 +193,7 @@ func NewActivities(
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
+		reapStoppedAssistantRuntimes:    activities.NewReapStoppedAssistantRuntimes(logger, assistantsCore),
 		recycleAssistantRuntimeImages:   activities.NewRecycleAssistantRuntimeImages(logger, assistantsCore),
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
@@ -298,12 +311,12 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 	return a.reapFlyApps.Do(ctx, req)
 }
 
-func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activities.FallbackModelUsageTrackingArgs) error {
-	return a.fallbackModelUsageTracking.Do(ctx, input)
-}
-
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
+}
+
+func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
+	return a.correlateClaudePrompts.Do(ctx, input)
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {
@@ -406,6 +419,10 @@ func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activitie
 
 func (a *Activities) ReapInactiveAssistantRuntimes(ctx context.Context, req activities.ReapInactiveAssistantRuntimesRequest) (*activities.ReapInactiveAssistantRuntimesResult, error) {
 	return a.reapInactiveAssistantRuntimes.Do(ctx, req)
+}
+
+func (a *Activities) ReapStoppedAssistantRuntimes(ctx context.Context, req activities.ReapStoppedAssistantRuntimesRequest) (*activities.ReapStoppedAssistantRuntimesResult, error) {
+	return a.reapStoppedAssistantRuntimes.Do(ctx, req)
 }
 
 func (a *Activities) RecycleAssistantRuntimeImages(ctx context.Context) (*activities.RecycleAssistantRuntimeImagesResult, error) {

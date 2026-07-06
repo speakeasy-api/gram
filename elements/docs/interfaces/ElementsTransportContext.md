@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@ Live chat context handed to a [ElementsTransportFactory](../type-aliases/Element
 
 ## Properties
 
-### getChatId()
+### getChatId
 
 > **getChatId**: () => `string` \| `null`
 
@@ -25,7 +25,7 @@ switches conversations.
 
 ***
 
-### adoptChatId()
+### adoptChatId
 
 > **adoptChatId**: () => (`chatId`) => `void`
 
@@ -38,14 +38,4 @@ thread during the round-trip can't mis-associate the id.
 
 #### Returns
 
-> (`chatId`): `void`
-
-##### Parameters
-
-###### chatId
-
-`string`
-
-##### Returns
-
-`void`
+(`chatId`) => `void`

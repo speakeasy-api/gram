@@ -24,6 +24,7 @@ type getObservabilityOverviewInput struct {
 	APIKeyID          *string `json:"api_key_id,omitempty" jsonschema:"Optional API key ID filter."`
 	ToolsetSlug       *string `json:"toolset_slug,omitempty" jsonschema:"Optional toolset/MCP server slug filter."`
 	RemoteMcpServerID *string `json:"remote_mcp_server_id,omitempty" jsonschema:"Optional remote MCP server ID filter."`
+	McpServerID       *string `json:"mcp_server_id,omitempty" jsonschema:"Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)."`
 	EventSource       *string `json:"event_source,omitempty" jsonschema:"Optional event source filter (e.g. 'hook')."`
 	HookSource        *string `json:"hook_source,omitempty" jsonschema:"Optional hook source filter (e.g. 'cursor', 'claude-code')."`
 	IncludeTimeSeries bool    `json:"include_time_series,omitempty" jsonschema:"Whether to include time series data. Defaults to true."`
@@ -66,6 +67,7 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		APIKeyID:          nil,
 		ToolsetSlug:       nil,
 		RemoteMcpServerID: nil,
+		McpServerID:       nil,
 		EventSource:       nil,
 		HookSource:        nil,
 		IncludeTimeSeries: true,
@@ -86,8 +88,11 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		APIKeyID:          input.APIKeyID,
 		ToolsetSlug:       input.ToolsetSlug,
 		RemoteMcpServerID: input.RemoteMcpServerID,
+		McpServerID:       input.McpServerID,
 		EventSource:       input.EventSource,
 		HookSource:        input.HookSource,
+		AccountType:       nil,
+		ExternalOrgID:     nil,
 		IncludeTimeSeries: input.IncludeTimeSeries,
 	})
 	if err != nil {

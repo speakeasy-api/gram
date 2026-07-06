@@ -1,15 +1,14 @@
 import { LogWorkbench } from "@/components/log-workbench";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
+import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   useRiskListPolicies,
@@ -18,16 +17,8 @@ import {
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { RefreshCw, Share2 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { History, Share2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -41,15 +32,49 @@ import {
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
+// Strongly-typed filter schema for Risk Events. `policy_id` and the date range
+// are pinned (always visible in the bar); the rest live behind "More filters".
+// `listRiskResults` already accepts from/to, so the date range needs no backend
+// change. (Source isn't a list param, so it's intentionally omitted here.)
+const RISK_FILTERS = defineFilters([
+  { id: "policy_id", label: "Policy", kind: "select", pinned: true },
+  { id: "date", label: "Date range", kind: "daterange", pinned: true },
+  {
+    id: "rule_id",
+    label: "Rule ID",
+    kind: "text",
+    placeholder: "Rule ID contains...",
+  },
+  {
+    id: "user_id",
+    label: "User",
+    kind: "text",
+    placeholder: "User contains...",
+  },
+  { id: "unique", label: "Unique matches only", kind: "boolean" },
+]);
+
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
-  const policyFilter = searchParams.get("policy_id") ?? "";
-  const ruleFilter = searchParams.get("rule_id") ?? "";
-  const userFilter = searchParams.get("user_id") ?? "";
-  const uniqueOnly = searchParams.get("unique") === "1";
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(RISK_FILTERS);
+  const policyFilter = values.policy_id ?? "";
+  const ruleFilter = values.rule_id;
+  const userFilter = values.user_id;
+  const uniqueOnly = values.unique;
+
+  // The date range maps to the endpoint's from/to. A null preset with no custom
+  // range means "all time" (no from/to sent) — Risk Events' previous behavior.
+  const { from, to } = useMemo(() => {
+    const d = values.date;
+    if (d.customRange) return d.customRange;
+    if (d.preset) return getPresetRange(d.preset);
+    return { from: undefined, to: undefined };
+  }, [values.date]);
 
   const setSelectedChatId = useCallback(
     (chatId: string | null) => {
@@ -62,81 +87,6 @@ export default function RiskEvents(): JSX.Element {
             next.delete("chat_id");
           }
           return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const setPolicyFilter = useCallback(
-    (policyId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (policyId) {
-            next.set("policy_id", policyId);
-          } else {
-            next.delete("policy_id");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      containerRef.current?.scrollTo({ top: 0 });
-    },
-    [setSearchParams],
-  );
-
-  const setRuleFilter = useCallback(
-    (ruleId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (ruleId) {
-            next.set("rule_id", ruleId);
-          } else {
-            next.delete("rule_id");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      containerRef.current?.scrollTo({ top: 0 });
-    },
-    [setSearchParams],
-  );
-
-  const setUserFilter = useCallback(
-    (userId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (userId) {
-            next.set("user_id", userId);
-          } else {
-            next.delete("user_id");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      containerRef.current?.scrollTo({ top: 0 });
-    },
-    [setSearchParams],
-  );
-
-  const setUniqueOnly = useCallback(
-    (next: boolean) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (next) {
-            params.set("unique", "1");
-          } else {
-            params.delete("unique");
-          }
-          return params;
         },
         { replace: true },
       );
@@ -170,6 +120,40 @@ export default function RiskEvents(): JSX.Element {
     return m;
   }, [policies]);
 
+  // The policy currently selected in the filter, if any. When it's disabled the
+  // list still returns its historical findings (the backend drops the
+  // enabled-only filter for explicit policy selections), so we surface a notice
+  // that the user is viewing data for an inactive policy.
+  const selectedPolicy = useMemo(
+    () => policies.find((p) => p.id === policyFilter),
+    [policies, policyFilter],
+  );
+  const viewingInactivePolicy =
+    selectedPolicy != null && selectedPolicy.enabled === false;
+
+  // Page-supplied option lists for the schema's select/text dimensions.
+  // Disabled policies stay selectable — they hold historical findings — but are
+  // labelled "(inactive)" so the distinction is clear in the dropdown.
+  const filterOptions = useMemo(
+    () => ({
+      policy_id: policies.map((p) => ({
+        label: p.enabled === false ? `${p.name} (inactive)` : p.name,
+        value: p.id,
+      })),
+      rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+    }),
+    [policies, ruleSuggestions],
+  );
+
+  const fromIso = from?.toISOString();
+  const toIso = to?.toISOString();
+
+  // Reset the virtualized list to the top whenever a filter changes, so users
+  // don't stay at a stale offset and miss the newly filtered results.
+  useEffect(() => {
+    containerRef.current?.scrollTo({ top: 0 });
+  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
+
   const resultsQuery = useInfiniteQuery({
     queryKey: [
       "risk",
@@ -179,6 +163,8 @@ export default function RiskEvents(): JSX.Element {
       ruleFilter,
       userFilter,
       uniqueOnly,
+      fromIso,
+      toIso,
     ],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
@@ -188,6 +174,8 @@ export default function RiskEvents(): JSX.Element {
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
+        from,
+        to,
       });
     },
     initialPageParam: undefined as string | undefined,
@@ -223,79 +211,34 @@ export default function RiskEvents(): JSX.Element {
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
-        actions={
-          <div className="flex items-center gap-2">
-            <RevealAllToggle />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                void resultsQuery.refetch();
-              }}
-              disabled={resultsQuery.isFetching}
-              aria-label="Refresh risk events"
-            >
-              <Button.LeftIcon>
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    resultsQuery.isFetching && "animate-spin",
-                  )}
-                />
-              </Button.LeftIcon>
-              <Button.Text>Refresh</Button.Text>
-            </Button>
-          </div>
-        }
+        actions={<RevealAllToggle />}
         filters={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={policyFilter || "all"}
-              onValueChange={(value) =>
-                setPolicyFilter(value === "all" ? "" : value)
-              }
-            >
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="Filter by policy" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All policies</SelectItem>
-                {policies.map((policy) => (
-                  <SelectItem key={policy.id} value={policy.id}>
-                    {policy.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DebouncedTextFilter
-              value={ruleFilter}
-              onChange={setRuleFilter}
-              placeholder="Rule ID contains..."
-              ariaLabel="Filter by rule ID"
-              suggestions={ruleSuggestions}
+          <Page.Toolbar>
+            <Page.Toolbar.Filters
+              schema={RISK_FILTERS}
+              values={values}
+              optionsById={filterOptions}
+              onChange={setValue as (id: string, value: FilterValue) => void}
+              onClear={clearValue as (id: string) => void}
+              onClearAll={clearAll}
             />
-            <DebouncedTextFilter
-              value={userFilter}
-              onChange={setUserFilter}
-              placeholder="User contains..."
-              ariaLabel="Filter by user"
+            <Page.Toolbar.Refresh
+              onRefresh={() => void resultsQuery.refetch()}
+              isRefreshing={resultsQuery.isFetching}
             />
-            <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
-              <Checkbox
-                checked={uniqueOnly}
-                onCheckedChange={(next) => setUniqueOnly(next === true)}
-                aria-label="Unique matches only"
-              />
-              <span>Unique matches only</span>
-            </label>
-          </div>
+          </Page.Toolbar>
         }
         status={
-          resultsQuery.isFetching && results.length > 0 ? (
-            <div className="bg-primary/20 h-1 shrink-0">
-              <div className="bg-primary h-full animate-pulse" />
-            </div>
-          ) : null
+          <>
+            {viewingInactivePolicy ? (
+              <InactivePolicyNotice policyName={selectedPolicy?.name} />
+            ) : null}
+            {resultsQuery.isFetching && results.length > 0 ? (
+              <div className="bg-primary/20 h-1 shrink-0">
+                <div className="bg-primary h-full animate-pulse" />
+              </div>
+            ) : null}
+          </>
         }
         header={
           <div className="min-w-[1120px]">
@@ -320,8 +263,7 @@ export default function RiskEvents(): JSX.Element {
             chatId={selectedChatId}
             onClose={() => setSelectedChatId(null)}
             onDelete={() => setSelectedChatId(null)}
-            collapseNonRisk
-            initialRiskOnly
+            riskFocus
           />
         }
         scrollRef={containerRef}
@@ -342,70 +284,29 @@ export default function RiskEvents(): JSX.Element {
   );
 }
 
-// A debounced free-text filter input with optional <datalist> autocomplete.
-// Used for both the rule_id and user_id risk-event filters; both do
-// case-insensitive substring matching server-side.
-function DebouncedTextFilter({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  suggestions,
+// Shown when the active policy filter points at a disabled ("turned off")
+// policy. Those policies no longer produce new findings, so the list is purely
+// historical — make that explicit rather than leaving users to assume the data
+// is current.
+function InactivePolicyNotice({
+  policyName,
 }: {
-  value: string;
-  onChange: (next: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  suggestions?: string[];
+  policyName: string | undefined;
 }) {
-  const [local, setLocal] = useState(value);
-  const listId = useId();
-  useEffect(() => {
-    setLocal(value);
-  }, [value]);
-  useEffect(() => {
-    if (local === value) return;
-    const t = setTimeout(() => onChange(local), 350);
-    return () => clearTimeout(t);
-  }, [local, value, onChange]);
-
-  // Dedup and only include non-empty suggestions. Browser-native <datalist>
-  // does the substring matching client-side using these as candidates.
-  const options = useMemo(
-    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
-    [suggestions],
-  );
-
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
-      <input
-        type="text"
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        placeholder={placeholder}
-        className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
-        aria-label={ariaLabel}
-        list={options.length > 0 ? listId : undefined}
-        autoComplete="off"
-      />
-      {options.length > 0 && (
-        <datalist id={listId}>
-          {options.map((opt) => (
-            <option key={opt} value={opt} />
-          ))}
-        </datalist>
-      )}
-      {local && (
-        <button
-          type="button"
-          onClick={() => setLocal("")}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="Clear filter"
-        >
-          <Icon name="x" className="size-3.5" />
-        </button>
-      )}
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-8 py-2 text-sm text-amber-700 dark:text-amber-400">
+      <History className="size-4 shrink-0" />
+      <span>
+        {policyName ? (
+          <>
+            <span className="font-medium">{policyName}</span> is no longer
+            active.
+          </>
+        ) : (
+          "This policy is no longer active."
+        )}{" "}
+        You're viewing historical findings from when it was enabled.
+      </span>
     </div>
   );
 }
@@ -583,12 +484,15 @@ function RiskEventsRow({
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
       <div className="min-w-0 truncate">
-        {isShadowMCP && result.match ? (
-          <span className="font-mono text-xs" title={result.match}>
-            {result.match}
+        {isShadowMCP && result.matchRedacted ? (
+          <span className="font-mono text-xs" title={result.matchRedacted}>
+            {result.matchRedacted}
           </span>
         ) : (
-          <MaskedMatch value={result.match} />
+          <MaskedMatch
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         )}
       </div>
       <div className="min-w-0 truncate" title={policyName}>

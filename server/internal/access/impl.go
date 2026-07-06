@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -44,26 +42,28 @@ import (
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
-// FeatureCacheWriter updates the Redis cache entry for a feature flag after a
-// direct DB write, keeping the cache consistent with the authoritative state.
-type FeatureCacheWriter interface {
+// ProductFeatures is the subset of *productfeatures.Client the access service
+// needs: enabling RBAC for an org (seed grants + flag, atomically) and keeping
+// the feature cache consistent after a direct DB write.
+type ProductFeatures interface {
+	EnableRBAC(ctx context.Context, organizationID string) error
 	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	chConn       driver.Conn
-	auth         *auth.Auth
-	authz        *authz.Engine
-	roleMgr      *RoleManager
-	featureCache FeatureCacheWriter
-	audit        *audit.Logger
-	jwtSecret    string
-	accessStore  accesscontrol.Store
-	emailSvc     *email.Service
-	siteURL      url.URL
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	chConn          driver.Conn
+	auth            *auth.Auth
+	authz           *authz.Engine
+	roleMgr         *RoleManager
+	productFeatures ProductFeatures
+	audit           *audit.Logger
+	jwtSecret       string
+	accessStore     accesscontrol.Store
+	emailSvc        *email.Service
+	siteURL         url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,7 +77,7 @@ func NewService(
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
-	featureCache FeatureCacheWriter,
+	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
 	jwtSecret string,
 	accessStore accesscontrol.Store,
@@ -87,19 +87,19 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:       logger,
-		db:           db,
-		chConn:       chConn,
-		auth:         auth.New(logger, db, sessions, authz),
-		authz:        authz,
-		roleMgr:      roleMgr,
-		featureCache: featureCache,
-		audit:        auditLogger,
-		jwtSecret:    jwtSecret,
-		accessStore:  accessStore,
-		emailSvc:     emailSvc,
-		siteURL:      siteURL,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:          logger,
+		db:              db,
+		chConn:          chConn,
+		auth:            auth.New(logger, db, sessions, authz),
+		authz:           authz,
+		roleMgr:         roleMgr,
+		productFeatures: productFeatures,
+		audit:           auditLogger,
+		jwtSecret:       jwtSecret,
+		accessStore:     accessStore,
+		emailSvc:        emailSvc,
+		siteURL:         siteURL,
 	}
 }
 
@@ -230,8 +230,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-// ListScopes exposes the stable set of grantable scopes so clients can build
-// role editing UX without hardcoding permission definitions.
+// ListScopes exposes the stable scope catalog so clients can build role editing
+// UX without hardcoding permission definitions. Clients should use visibility
+// to decide whether a scope is shown directly or only used as storage metadata.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -245,19 +246,61 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
-		{Slug: string(authz.ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
-		{Slug: string(authz.ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(authz.ScopeProjectRead), Description: "View projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeProjectWrite), Description: "Create and modify projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
-		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
-	}}, nil
+	scopes := []scopeDefinitionInput{
+		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
+		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
+		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
+		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
+		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
+		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
+		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+	}
+	result := make([]*gen.ScopeDefinition, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, scopeDefinition(scope))
+	}
+
+	return &gen.ListScopesResult{Scopes: result}, nil
+}
+
+type scopeDefinitionInput struct {
+	scope        authz.Scope
+	description  string
+	resourceType string
+}
+
+func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+	var exclusionScope *string
+	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+		exclusionScopeValue := string(exclusion)
+		exclusionScope = &exclusionScopeValue
+	}
+	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	if !ok {
+		visibility = authz.ScopeVisibilityInternal
+	}
+
+	return &gen.ScopeDefinition{
+		Slug:           string(input.scope),
+		Description:    input.description,
+		ResourceType:   input.resourceType,
+		Visibility:     visibility,
+		ExclusionScope: exclusionScope,
+	}
 }
 
 // ListMembers follows the original access API contract by returning WorkOS user
@@ -292,7 +335,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, err
 	}
 	if !enforce {
-		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -305,7 +348,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// the MembershipSyncGuard doesn't block the dashboard.
 	if ac.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 		}
 	}
 
@@ -425,13 +468,9 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
-		effect := authz.PolicyEffect(grant.Effect)
-		if effect == "" {
-			effect = authz.PolicyEffectAllow
-		}
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    effect,
+			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -488,12 +527,12 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	for _, sel := range g.Selectors {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
-	return &gen.RoleGrant{Scope: g.Scope, Effect: string(g.Effect), Selectors: selectors}
+	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
 }
 
-// allScopesGrants returns unrestricted grants for every known scope.
-// Used when RBAC is not enforced or for admin impersonation.
-func allScopesGrants() []*gen.ListRoleGrant {
+// userVisibleScopeGrants returns unrestricted grants for every first-class
+// permission scope. Used when RBAC is not enforced or for admin impersonation.
+func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
 		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
@@ -506,6 +545,7 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
+		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 	}
 }
 
@@ -517,7 +557,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, Effect: string(g.Effect), SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }
@@ -543,7 +583,7 @@ func connectedUser(ctx context.Context, db database.DBTX, organizationID string,
 }
 
 func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -560,35 +600,19 @@ func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload
 }
 
 func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
-
-	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "seed system role grants").LogError(ctx, logger)
+	if err := s.productFeatures.EnableRBAC(ctx, ac.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC").LogError(ctx, s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID)))
 	}
 
-	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
-			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").LogError(ctx, logger)
-	}
-
-	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
 	return nil
 }
 
 func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
-	ac, err := s.requireSuperAdmin(ctx)
+	ac, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
@@ -605,17 +629,17 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
 	}
 
-	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
+	s.productFeatures.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
 	return nil
 }
 
-// requireSuperAdmin returns the auth context and an error if the caller is not
-// a Speakeasy employee. Mirrors the exact condition used by the super-admin
+// requirePlatformAdmin returns the auth context and an error if the caller is not
+// a Speakeasy employee. Mirrors the exact condition used by the platform-admin
 // impersonation feature in auth/impl.go: email domain OR admin DB flag.
 // Email is read from the auth context (session cache). Admin is read from the
 // DB because AuthContext does not carry it; the DB value is synced from the
 // Speakeasy provider on every login so it matches the session cache.
-func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
@@ -640,6 +664,22 @@ func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthCon
 type challengeUserInfo struct {
 	email    string
 	photoURL *string
+}
+
+// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// organization. The challenge UI uses it to suppress challenges raised by users
+// outside the organization — e.g. Speakeasy staff impersonating a customer org,
+// whose entries otherwise clutter the list while they switch accounts. Always
+// returns a non-nil slice so callers unconditionally apply the suppression.
+func (s *Service) activeOrgMemberUserIDs(ctx context.Context, orgID string) ([]string, error) {
+	ids, err := orgrepo.New(s.db).ListActiveOrganizationUserIDs(ctx, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active org member ids").LogError(ctx, s.logger)
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, nil
 }
 
 func (s *Service) fetchChallengeUserInfo(ctx context.Context, userIDs []string) map[string]challengeUserInfo {
@@ -695,6 +735,13 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	// apply the resolved filter in Go, then slice for the requested page.
 	skipPagination := payload.Resolved != nil
 
+	// Suppress challenges from users outside the org so counts and pagination
+	// stay correct (filtering happens in ClickHouse, before grouping/paging).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      payload.ProjectID,
@@ -704,6 +751,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
@@ -898,6 +946,12 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	skipPagination := payload.Resolved != nil
 
+	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      payload.ProjectID,
@@ -907,6 +961,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	chQueries := chrepo.New(s.chConn)

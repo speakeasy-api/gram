@@ -3,22 +3,12 @@ on:
   pull_request:
     branches:
       - main
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
   merge_group:
   workflow_dispatch:
-    inputs:
-      risk_accuracy_l1:
-        description: "Run prompt-injection risk accuracy with the L1 classifier sidecar"
-        required: false
-        default: false
-        type: boolean
-      pr_number:
-        description: "PR number to update with the risk accuracy comment when manually dispatched"
-        required: false
-        type: string
 
 permissions:
   id-token: write
@@ -49,11 +39,11 @@ jobs:
       pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
-      risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
-      pi_classifier: ${{ steps.gates.outputs.pi_classifier }}
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
+      preview-retag-components: ${{ steps.preview-retag.outputs.components }}
+      preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
       - name: Checkout source code
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -65,18 +55,16 @@ jobs:
       - id: gates
         name: Set outputs
         env:
-          HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
-          HAS_MANUAL_RISK_L1: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
@@ -132,7 +120,7 @@ jobs:
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
@@ -146,25 +134,11 @@ jobs:
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
             echo "SDK generation check will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.risk_accuracy }}" == "true" || "$HAS_MANUAL_RISK_L1" == "true" ]]; then
-            echo "risk_accuracy=true" >> $GITHUB_OUTPUT
-            echo "Risk accuracy comment job will run."
-          else
-            echo "Risk accuracy comment job will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.pi_classifier }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
-            echo "pi_classifier=true" >> $GITHUB_OUTPUT
-            echo "Prompt-injection classifier image build will run."
-          else
-            echo "Prompt-injection classifier image build will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.webhooks-catalog }}" == "true" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -180,11 +154,96 @@ jobs:
           else
             echo "OTel collector jobs will be skipped."
           fi
+      - id: preview-retag
+        name: Compute preview images to retag
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          SERVER: ${{ steps.gates.outputs.server }}
+          CLIENT: ${{ steps.gates.outputs.client }}
+          PYSTREAMS: ${{ steps.gates.outputs.pystreams }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$IS_PR" != "true" ]]; then
+            echo "components=[]" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "tag=pr-${PR_NUMBER}-$(cut -c1-8 <<< "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
+
+          # Components whose docker build jobs are skipped this run still need
+          # a preview image tag; each entry names the image and the
+          # .github/filters.yaml keys whose paths gate its builds. The
+          # dashboard image is built by docker-build-client whenever client OR
+          # server changes.
+          components='[]'
+          add() {
+            components=$(jq -c --arg component "$1" --arg filters "$2" '. + [{component: $component, filters: $filters}]' <<< "$components")
+          }
+          [[ "$SERVER" == "true" ]] || add gram server
+          [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-dashboard "server client"
+          [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
+          echo "components=$components" >> "$GITHUB_OUTPUT"
       - id: list-elements-examples
         name: List elements examples
         run: |
           examples=$(ls -d elements/examples/*/package.json 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "examples=$examples" >> $GITHUB_OUTPUT
+
+  preview-image-tags:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    # Preview environments deploy images tagged pr-<number>-<8-char head sha>
+    # for every PR head commit. Components with changes get that tag from
+    # their docker build jobs; unchanged components reuse an existing image
+    # from main by aliasing it with the preview tag. This keeps preview tags
+    # available for every head commit without rebuilding anything, which is
+    # also why adding the preview label does not need to re-run this workflow.
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.head.repo.fork &&
+      needs.changes.outputs.preview-retag-components != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.preview-retag-components) }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        with:
+          # Full history so the retag step can compare against main commits.
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          # The retag action only needs yq; skip the rest of the toolset and
+          # keep this job's cache separate from the full-install caches.
+          install_args: yq
+          cache: true
+          cache_key_prefix: mise-yq-v1
+          env: false
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Tag preview image
+        uses: ./.github/workflows/composite/tag-preview-images
+        with:
+          registry: ${{ env.REGISTRY }}
+          image-owner: ${{ env.DOCKER_REPOSITORY_OWNER }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          component: ${{ matrix.component }}
+          filters: ${{ matrix.filters }}
+          preview-tag: ${{ needs.changes.outputs.preview-tag }}
 
   format-check:
     name: Check formatting with hk
@@ -197,7 +256,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -207,7 +266,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -287,6 +346,8 @@ jobs:
         id: build
         uses: ./.github/workflows/composite/build-push
         with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
           registry: ${{ env.REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
@@ -302,51 +363,6 @@ jobs:
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
-
-  docker-build-pi-classifier:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes]
-    if: needs.changes.outputs.pi_classifier == 'true'
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
-        with:
-          token_format: "access_token"
-          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
-          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
-      - name: Login to GCR
-        env:
-          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
-        run: |
-          max_attempts=3
-          for ((i=1; i<=max_attempts; i++)); do
-            echo "Docker login attempt $i/$max_attempts..."
-            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
-              echo "Login successful"
-              exit 0
-            fi
-            if [ $i -lt $max_attempts ]; then
-              echo "Login failed, waiting 5s before retry..."
-              sleep 5
-            fi
-          done
-          echo "All login attempts failed"
-          exit 1
-      - name: Build and Push Registry image to GCR
-        id: build
-        uses: ./.github/workflows/composite/build-push
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-pi-classifier
-          context: ./services/pi-classifier
-          file: services/pi-classifier/Dockerfile
-          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -385,6 +401,8 @@ jobs:
         id: build
         uses: ./.github/workflows/composite/build-push
         with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
           registry: ${{ env.REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
@@ -411,7 +429,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -471,6 +489,64 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: assistantGcrAuth
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+
+      - name: Extract assistant runtime metadata for GCR
+        id: assistantMetaGcr
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
+            type=schedule,pattern=nightly
+            type=sha
+            type=sha,format=long
+
+      - name: Build and push assistant runtime image to GCR
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: ./agents/runtime-image/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.assistantMetaGcr.outputs.tags }}
+          labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
       - name: "[DEV] Login to Fly registry"
         env:
@@ -541,7 +617,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -576,6 +652,12 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: "[DEV] Login to Fly registry"
         env:
@@ -788,7 +870,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -850,7 +932,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -860,7 +942,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -888,7 +970,7 @@ jobs:
         run: mise run build:server --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
           working-directory: server
@@ -940,7 +1022,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -950,7 +1032,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -961,7 +1043,7 @@ jobs:
             ${{ env.GOMODCACHE }}
 
       - name: Cache uv
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_UV_KEY }}
           restore-keys: |
@@ -1006,7 +1088,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1016,7 +1098,7 @@ jobs:
         run: mise run github
 
       - name: Cache uv
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_UV_KEY }}
           restore-keys: |
@@ -1061,7 +1143,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1071,7 +1153,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1085,7 +1167,7 @@ jobs:
         run: mise run build:cli --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
           working-directory: cli
@@ -1115,7 +1197,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1125,7 +1207,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1143,7 +1225,7 @@ jobs:
         run: mise run build:plog --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
           working-directory: plog
@@ -1172,7 +1254,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1182,7 +1264,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1197,181 +1279,6 @@ jobs:
 
       - name: Test
         run: mise run test:server
-
-  risk_accuracy:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.risk_accuracy == 'true'
-    env:
-      GOMAXPROCS: 8
-      TESTCONTAINERS_RYUK_DISABLED: true
-      RUN_L1_RISK_ACCURACY: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
-      PI_CLASSIFIER_PORT: 5051
-      PI_CLASSIFIER_URL: http://127.0.0.1:5051
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-
-      - name: Install Go deps
-        run: mise run install:go
-
-      - name: Start prompt-injection classifier
-        if: env.RUN_L1_RISK_ACCURACY == 'true'
-        run: |
-          set -euo pipefail
-          docker compose up -d --build gram-pi-classifier
-          for _ in $(seq 1 120); do
-            if curl -fsS "$PI_CLASSIFIER_URL/health" >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs gram-pi-classifier
-          exit 1
-
-      - name: Generate risk accuracy report
-        run: |
-          set -euo pipefail
-          if [[ "$RUN_L1_RISK_ACCURACY" == "true" ]]; then
-            mise run risk:report --classifier-url "$PI_CLASSIFIER_URL"
-          else
-            mise run risk:report --no-classifier
-          fi
-
-      - name: Stop prompt-injection classifier
-        if: always() && env.RUN_L1_RISK_ACCURACY == 'true'
-        run: |
-          docker compose stop gram-pi-classifier || true
-          docker compose rm -f gram-pi-classifier || true
-
-      - name: Upload risk accuracy metrics
-        if: always() && hashFiles('server/risk_accuracy_metrics.json') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: risk-accuracy-metrics
-          path: server/risk_accuracy_metrics.json
-          retention-days: 365
-
-  risk-accuracy-comment:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [changes, risk_accuracy]
-    if: |
-      !cancelled() &&
-      needs.changes.outputs.risk_accuracy == 'true' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
-      (needs.risk_accuracy.result == 'success' || needs.risk_accuracy.result == 'failure')
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Download PR metrics artifact
-        id: download-pr
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        continue-on-error: true
-        with:
-          name: risk-accuracy-metrics
-          path: ./pr-metrics
-
-      - name: Skip if PR artifact missing
-        id: gate
-        run: |
-          if [ ! -f ./pr-metrics/risk_accuracy_metrics.json ]; then
-            echo "no PR artifact (server-test likely failed before producing one); skipping comment"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download main baseline metrics
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          set -uo pipefail
-          mkdir -p ./main-metrics
-          MAIN_RUN_ID=$(gh run list \
-            --branch main \
-            --workflow pr.yaml \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId // empty')
-          if [ -z "$MAIN_RUN_ID" ]; then
-            echo "no successful main run found; will report without baseline"
-            exit 0
-          fi
-          if ! gh run download "$MAIN_RUN_ID" -n risk-accuracy-metrics -D ./main-metrics 2>/dev/null; then
-            echo "main run $MAIN_RUN_ID has no risk-accuracy-metrics artifact (likely a run before this feature shipped); will report without baseline"
-            rm -rf ./main-metrics
-            mkdir -p ./main-metrics
-          fi
-
-      - name: Render comment body
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          set -euo pipefail
-          MAIN_FILE=""
-          if [ -f ./main-metrics/risk_accuracy_metrics.json ]; then
-            MAIN_FILE=./main-metrics/risk_accuracy_metrics.json
-          fi
-          .github/scripts/risk-metrics-comment.sh \
-            ./pr-metrics/risk_accuracy_metrics.json \
-            "$MAIN_FILE" > body.md
-
-      - name: Post or update sticky comment
-        if: steps.gate.outputs.skip != 'true'
-        env:
-          PR_NUMBER_INPUT: ${{ github.event.pull_request.number || inputs.pr_number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          PR_NUMBER="${PR_NUMBER_INPUT:-}"
-          if [ -z "$PR_NUMBER" ]; then
-            PR_NUMBER=$(gh pr view --json number --jq '.number // empty')
-          fi
-          if [ -z "$PR_NUMBER" ]; then
-            echo "no PR number found for sticky risk accuracy comment; pass workflow_dispatch input pr_number"
-            exit 1
-          fi
-          MARKER='<!-- risk-accuracy-metrics -->'
-          EXISTING=$(gh api -X GET \
-            "repos/$REPO/issues/$PR_NUMBER/comments" \
-            --paginate \
-            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
-            | head -1 || true)
-          if [ -n "${EXISTING:-}" ]; then
-            echo "updating existing comment $EXISTING"
-            jq -Rs '{body: .}' body.md \
-              | gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" --input -
-          else
-            echo "creating new comment"
-            gh pr comment "$PR_NUMBER" --body-file body.md
-          fi
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1388,7 +1295,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1398,7 +1305,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1449,6 +1356,8 @@ jobs:
         id: build
         uses: ./.github/workflows/composite/build-push
         with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
           registry: ${{ env.REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
@@ -1473,7 +1382,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1483,7 +1392,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1527,7 +1436,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1537,7 +1446,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1578,7 +1487,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1588,7 +1497,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1624,7 +1533,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1634,7 +1543,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1645,7 +1554,7 @@ jobs:
             ${{ env.GOMODCACHE }}
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1673,7 +1582,7 @@ jobs:
         run: pnpm type-check
 
       - name: Lint Go server
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
           working-directory: functions
@@ -1724,7 +1633,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1734,7 +1643,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1804,6 +1713,12 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
@@ -1864,7 +1779,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1874,7 +1789,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1907,7 +1822,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1917,7 +1832,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1954,7 +1869,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -1964,7 +1879,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1997,7 +1912,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install: true
           cache: true
@@ -2007,7 +1922,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -2046,6 +1961,7 @@ jobs:
     if: always()
     needs:
       - changes
+      - format-check
       - server-build-lint
       - server-test
       - docker-build-server

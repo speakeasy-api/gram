@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +50,19 @@ const (
 	// payloads when authInput.gramEmail is enabled and Gram has authenticated
 	// the identity accessing the MCP server.
 	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
+)
+
+const (
+	// httpToolCallTimeout bounds a single outbound HTTP-tool request attempt.
+	httpToolCallTimeout = 60 * time.Second
+
+	// functionRunnerCallTimeout bounds a single function-runner request attempt.
+	// It sits above the runner's 5-minute per-tool-call execution budget (see
+	// functions/internal/runner/handle_tool_call.go) plus slack so the runner's
+	// own timeout fires first and returns a proper response, rather than the
+	// caller cancelling mid-execution (which yields a non-retryable
+	// context.DeadlineExceeded and a PP03 at the Fly edge).
+	functionRunnerCallTimeout = 6 * time.Minute
 )
 
 var proxiedHeaders = []string{
@@ -165,6 +177,14 @@ func (tp *ToolProxy) Do(
 		}
 		span.End()
 	}()
+
+	// Capture the trace/span context onto the shared log attributes now, while the
+	// gateway.toolCall span is active. The callers (mcp tool-call handler, instances
+	// direct path) only call RecordTraceContext from their deferred closures against
+	// the outer ctx, which has no active span — so without this, hosted/direct tool
+	// call logs land in ClickHouse with an empty trace_id and never make it into the
+	// trace_summaries materialized view that powers the tool-usage dashboards.
+	attrs.RecordTraceContext(ctx)
 
 	logger := tp.logger.With(
 		attr.SlogProjectID(plan.Descriptor.ProjectID),
@@ -459,13 +479,16 @@ func (tp *ToolProxy) doFunction(
 			}
 			return nil
 		},
-		ID:               descriptor.ID,
-		Name:             descriptor.Name,
-		DeploymentID:     descriptor.DeploymentID,
-		ProjectID:        descriptor.ProjectID,
-		ProjectSlug:      descriptor.ProjectSlug,
-		OrganizationID:   descriptor.OrganizationID,
-		OrganizationSlug: descriptor.OrganizationSlug,
+		RetryConfig:       functionRunnerRetryConfig(),
+		Timeout:           functionRunnerCallTimeout,
+		DisableKeepAlives: true,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
 }
 
@@ -727,6 +750,8 @@ func (tp *ToolProxy) doHTTP(
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
+		RetryConfig:               httpToolRetryConfig(),
+		Timeout:                   httpToolCallTimeout,
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
 		DeploymentID:              descriptor.DeploymentID,
@@ -734,6 +759,7 @@ func (tp *ToolProxy) doHTTP(
 		ProjectSlug:               descriptor.ProjectSlug,
 		OrganizationID:            descriptor.OrganizationID,
 		OrganizationSlug:          descriptor.OrganizationSlug,
+		DisableKeepAlives:         false,
 	})
 }
 
@@ -821,60 +847,6 @@ func (tp *ToolProxy) doExternalMCP(
 	return nil
 }
 
-type retryConfig struct {
-	initialInterval time.Duration
-	maxInterval     time.Duration
-	maxAttempts     int
-	backoffFactor   float64
-	statusCodes     []int
-	methods         []string
-}
-
-func retryWithBackoff(
-	ctx context.Context,
-	retryBackoff retryConfig,
-	doRequest func() (*http.Response, error),
-) (*http.Response, error) {
-	var resp *http.Response
-	var err error
-	delayInterval := retryBackoff.initialInterval
-	for attempt := 0; attempt < retryBackoff.maxAttempts; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-time.After(delayInterval):
-			case <-ctx.Done():
-				return nil, fmt.Errorf("retry context done: %w", ctx.Err())
-			}
-
-			delayInterval = min(time.Duration(float64(delayInterval)*retryBackoff.backoffFactor), retryBackoff.maxInterval)
-		}
-		resp, err = doRequest()
-		// retry by default on gateway errors
-		if err != nil {
-			continue
-		}
-		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
-			return resp, err
-		}
-
-		if retryAfter := resp.Header.Get("retry-after"); retryAfter != "" {
-			if parsedNumber, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && parsedNumber > 0 {
-				retryAfterDuration := time.Duration(parsedNumber) * time.Second
-				delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				continue
-			}
-
-			if parsedDate, err := time.Parse(time.RFC1123, retryAfter); err == nil {
-				retryAfterDuration := time.Until(parsedDate)
-				if retryAfterDuration > 0 {
-					delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				}
-			}
-		}
-	}
-	return resp, err
-}
-
 type ReverseProxyOptions struct {
 	Logger                    *slog.Logger
 	Tracer                    trace.Tracer
@@ -887,6 +859,23 @@ type ReverseProxyOptions struct {
 	ResponseStatusCodeCapture *int
 	VerifyResponse            func(*http.Response) error
 	Attributes                tm.HTTPLogAttributes
+	// RetryConfig is the retry policy applied to the proxied request. Callers
+	// pass functionRunnerRetryConfig (POST retries on the pre-execution-safe
+	// 429/503 set) for function-runner calls and httpToolRetryConfig (GET-only
+	// broad preset) for outbound HTTP tool calls.
+	RetryConfig retryConfig
+	// Timeout bounds the whole request/response (including body read) for a
+	// single attempt. It must be set per path: the outbound HTTP-tool path uses
+	// a short caller timeout, while the function-runner path must allow up to the
+	// runner's full execution budget (5 min, see handle_tool_call.go) plus slack
+	// so a legitimately long tool call is not cancelled mid-flight (which would
+	// surface as a non-retryable context.DeadlineExceeded).
+	Timeout time.Duration
+	// DisableKeepAlives turns off HTTP connection reuse for this path. The
+	// function-runner path sets this so every attempt dials a fresh connection
+	// rather than re-drawing a pooled keep-alive to a Fly machine that may have
+	// been idled/suspended out from under us (which surfaces as an instant EOF).
+	DisableKeepAlives bool
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -922,6 +911,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
+		DisableKeepAlives:     opts.DisableKeepAlives,
 	}
 
 	var baseTransport http.RoundTripper = transport
@@ -939,7 +929,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	)
 
 	client := &http.Client{
-		Timeout:   60 * time.Second,
+		Timeout:   opts.Timeout,
 		Transport: otelTransport,
 	}
 
@@ -959,28 +949,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 		return client.Do(retryReq)
 	}
-	resp, err := retryWithBackoff(ctx, retryConfig{
-		initialInterval: 500 * time.Millisecond,
-		maxInterval:     5 * time.Second,
-		maxAttempts:     3,
-		backoffFactor:   2,
-		statusCodes: []int{ // reasonable status code presets
-			408, // Request Timeout
-			429, // Rate Limit Exceeded
-			500, // Internal Server Error
-			502, // Bad Gateway
-			503, // Service Unavailable
-			504, // Gateway Timeout
-			509, // Bandwidth Limit Exceeded
-			521, // Web Server Is Down (Cloudflare)
-			522, // Connection Timed Out (Cloudflare)
-			523, // Origin Is Unreachable (Cloudflare)
-			524, // A Timeout Occurred (Cloudflare)
-		},
-		methods: []string{
-			http.MethodGet,
-		},
-	}, executeRequest)
+	resp, err := retryWithBackoff(ctx, opts.RetryConfig, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)

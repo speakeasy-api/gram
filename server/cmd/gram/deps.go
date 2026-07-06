@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -45,14 +46,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/bq"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -74,6 +78,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+func noopShutdown(context.Context) error { return nil }
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
@@ -110,7 +116,7 @@ func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (pol
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	logger = logger.With(attr.SlogComponent("clickhouse"))
-	nilFunc := func(context.Context) error { return nil }
+	nilFunc := noopShutdown
 
 	host := c.String("clickhouse-host")
 	database := c.String("clickhouse-database")
@@ -235,6 +241,14 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 		return nil, fmt.Errorf("unable to record pgx metrics: %w", err)
 	}
 
+	// Ping the database to ensure connectivity
+	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("database ping failed: %w", err)
+	}
+
 	return pool, nil
 }
 
@@ -318,7 +332,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = func(context.Context) error { return nil }
+	var nilShutdownFunc = noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -559,7 +573,7 @@ func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -627,7 +641,7 @@ func newFunctionOrchestrator(
 	tigrisStore *assets.TigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -736,6 +750,8 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	db *pgxpool.Pool,
+	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -748,7 +764,9 @@ func newTelemetryLogger(
 		return nil
 	}
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
+
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(
@@ -784,6 +802,7 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
+				UserInfo:   telemetry.UserInfo{},
 				Attributes: entry.Attributes,
 			})
 		}),
@@ -850,7 +869,7 @@ func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trac
 
 func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*svix.Svix, func(context.Context) error, error) {
 	var svixAPIURL *url.URL
-	shutdownFunc := func(context.Context) error { return nil }
+	shutdownFunc := noopShutdown
 	hasAPIKey := c.String("svix-api-key") != "" && c.String("svix-api-key") != "unset"
 	if c.String("environment") == "local" && !hasAPIKey {
 		logger.InfoContext(c.Context, "no svix api key provided in local environment, using stub svix server")
@@ -912,7 +931,7 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 
 	client, err := pubsub.NewClient(ctx, projectID, opts...)
 	if err != nil {
-		return nil, nil, func(context.Context) error { return nil }, fmt.Errorf("failed to create pubsub client: %w", err)
+		return nil, nil, noopShutdown, fmt.Errorf("failed to create pubsub client: %w", err)
 	}
 
 	var broker pubSubBroker
@@ -923,4 +942,101 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 	}
 
 	return client, broker, func(context.Context) error { return client.Close() }, nil
+}
+
+func newBigQueryClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (bq.Client, func(ctx context.Context) error, error) {
+	if c.Bool("disable-bigquery-writes") {
+		return bq.NewNoopClient(), noopShutdown, nil
+	}
+
+	// Fall back to auto-detecting the project from ADC / the GKE metadata
+	// server when the flag is unset, mirroring how the Pub/Sub client behaves.
+	// Without this, an empty project ID yields invalid table references and
+	// every insert fails with a googleapi 400.
+	projectID := conv.Default(c.String("gcp-project-id"), bigquery.DetectProjectID)
+	client, err := bigquery.NewClient(ctx, projectID, option.WithLogger(logger.With(attr.SlogComponent("gcp-bigquery-client"))))
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create bigquery client: %w", err)
+	}
+
+	shutdown := func(ctx context.Context) error {
+		return client.Close()
+	}
+
+	return bq.NewClient(client), shutdown, nil
+}
+
+type labelledStop struct {
+	label string
+	pub   interface {
+		Stop(ctx context.Context) error
+	}
+}
+
+func (l labelledStop) Stop(ctx context.Context) error {
+	err := l.pub.Stop(ctx)
+	if err != nil {
+		return fmt.Errorf("stop publisher %s: %w", l.label, err)
+	}
+	return nil
+}
+
+func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publishers, func(ctx context.Context) error, error) {
+	pubs := make([]interface {
+		Stop(ctx context.Context) error
+	}, 0, 1)
+
+	presidioAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "presidioAnalysis", pub: presidioAnalysis})
+
+	gitleaksAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.GitleaksAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for gitleaks analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
+
+	customRulesAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.CustomRulesAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for custom rules analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
+
+	shutdown := func(ctx context.Context) error {
+		var err error
+		for _, pub := range pubs {
+			if e := pub.Stop(ctx); e != nil && err == nil {
+				err = errors.Join(err, e)
+			}
+		}
+		return err
+	}
+
+	return &background.Publishers{
+		PresidioAnalysis:    presidioAnalysis,
+		GitleaksAnalysis:    gitleaksAnalysis,
+		CustomRulesAnalysis: customRulesAnalysis,
+	}, shutdown, nil
+}
+
+func parseBigQueryTableSpec(spec string) (dataset string, table string, err error) {
+	split := strings.Split(spec, ".")
+	switch len(split) {
+	case 2:
+		return split[0], split[1], nil
+	case 3:
+		return split[1], split[2], nil
+	default:
+		return "", "", fmt.Errorf("invalid BigQuery table spec: %s", spec)
+	}
+}
+
+func bqTableFromSpec(client bq.Client, spec string) (bq.TableHandle, error) {
+	dataset, table, err := parseBigQueryTableSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	return client.Dataset(dataset).Table(table), nil
 }

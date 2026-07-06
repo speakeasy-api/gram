@@ -40,6 +40,7 @@ func newApp() *cli.App {
 		Commands: []*cli.Command{
 			newDemoCommand(),
 			newGenCCCommand(),
+			newGenDiagramCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

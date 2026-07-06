@@ -10,20 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type Chat struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
 type ChatMessage struct {
 	ID                uuid.UUID
 	Seq               int64

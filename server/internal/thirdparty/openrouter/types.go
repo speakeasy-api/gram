@@ -172,11 +172,16 @@ type TraceConfig struct {
 
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
-	Model          string                             `json:"model"`
-	Messages       []or.ChatMessages                  `json:"messages"`
-	Stream         bool                               `json:"stream"`
-	Tools          []Tool                             `json:"tools,omitempty"`
-	Temperature    float32                            `json:"temperature,omitempty"`
+	Model    string            `json:"model"`
+	Messages []or.ChatMessages `json:"messages"`
+	Stream   bool              `json:"stream"`
+	Tools    []Tool            `json:"tools,omitempty"`
+	// No omitempty: temperature 0 is a meaningful value (deterministic
+	// sampling), not "unset". With omitempty a caller-requested 0 would be
+	// dropped from the wire and the provider would silently fall back to its
+	// non-zero default. initializeRequest always assigns a concrete value
+	// (defaulting to 1.0), so this field is always intentionally set.
+	Temperature    float32                            `json:"temperature"`
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
@@ -254,11 +259,31 @@ type StreamingChunk struct {
 	Usage             *Usage        `json:"usage"`
 }
 
-// Tokens used in the completion
+// Usage is OpenRouter's accounting payload on every chat completion response.
+// The `cost`, `cost_details`, and `*_tokens_details` subobjects carry the
+// fields previously fetched out-of-band from /v1/generation; consume them
+// inline instead of polling.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	Cost                    *float64                 `json:"cost,omitempty"`
+	CostDetails             *CostDetails             `json:"cost_details,omitempty"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type CostDetails struct {
+	UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
+	CacheDiscount         float64 `json:"cache_discount"`
+}
+
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+type CompletionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // GramMetadata is a Gram-specific extension attached to chat completion

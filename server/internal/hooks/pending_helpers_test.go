@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // otelOnlyCtx returns a context that simulates the OTEL flow: no auth
@@ -249,13 +250,13 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	metadata := &SessionMetadata{
-		SessionID:   uuid.NewString(),
-		ServiceName: "",
-		UserEmail:   userEmail,
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     uuid.NewString(),
+		ServiceName:   "",
+		UserEmail:     userEmail,
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}
 	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -264,9 +265,57 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 		SessionID:     &metadata.SessionID,
 	}, metadata)
 
-	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
-	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	// User identity travels on LogParams.UserInfo, not the attributes map;
+	// the build call's job is to resolve the user ID onto the metadata.
+	assert.NotContains(t, attrs, attr.UserEmailKey)
+	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Equal(t, userID, metadata.UserID)
+}
+
+func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	userEmail := "smartnews-user@example.com"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		UserEmail: userEmail,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	start := time.Now().UTC()
+
+	err := ti.service.persistToolCallEvent(ctx, &hooks.ClaudePayload{
+		HookEventName: "ToolEvent",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+	require.NoError(t, err)
+	require.Empty(t, metadata.UserID, "test email should not resolve to a connected user")
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		var err error
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     start.Add(-time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramChatID:    sessionID,
+			EventSource:   "hook",
+			SortOrder:     "desc",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond)
+
+	require.Len(t, logs, 1)
+	require.Contains(t, logs[0].Attributes, userEmail)
 }
 
 func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
@@ -410,13 +459,13 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 
 	// Create session metadata
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "test@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-123",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "test@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-123",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	// Call flushPendingHooks directly
@@ -437,13 +486,13 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 
 	// Create session metadata
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "test@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-123",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "test@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-123",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
@@ -509,13 +558,13 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 
 	sessionID := uuid.NewString()
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "user@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-456",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "user@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-456",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
@@ -536,7 +585,7 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 	assert.Equal(t, metadata.GramOrgID, retrieved.GramOrgID)
 	assert.Equal(t, metadata.ProjectID, retrieved.ProjectID)
 	assert.Equal(t, metadata.ServiceName, retrieved.ServiceName)
-	assert.Equal(t, metadata.ClaudeOrgID, retrieved.ClaudeOrgID)
+	assert.Equal(t, metadata.ExternalOrgID, retrieved.ExternalOrgID)
 }
 
 // TestListAppend_TTLBehavior tests that TTL is only set once for new keys
@@ -611,4 +660,44 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	assert.Equal(t, "PostToolUse", retrieved[1].HookEventName)
 	assert.Equal(t, "tool1", *retrieved[0].ToolName)
 	assert.Equal(t, "tool2", *retrieved[1].ToolName)
+}
+
+// TestMetrics_StampsAnthropicProviderOnUsage drives the Claude usage-metrics
+// path end-to-end (Metrics -> writeMetricsToClickHouse) and asserts the
+// persisted usage row carries provider=anthropic.
+func TestMetrics_StampsAnthropicProviderOnUsage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	name := "claude_code.token.usage"
+	payload := &hooks.MetricsPayload{
+		ResourceMetrics: []*hooks.OTELResourceMetrics{{
+			ScopeMetrics: []*hooks.OTELScopeMetrics{{
+				Metrics: []*hooks.OTELMetric{{
+					Name: &name,
+					Sum: &hooks.OTELSum{
+						AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+						DataPoints: []*hooks.OTELNumberDataPoint{{
+							TimeUnixNano: new(nanoString(now)),
+							AsInt:        "100",
+							Attributes: []*hooks.OTELAttribute{
+								strAttr("session.id", "claude-metrics-session"),
+								strAttr("model", "claude-opus-4-8"),
+								strAttr("type", "input"),
+								strAttr("user.email", "metrics-user@example.com"),
+							},
+						}},
+					},
+				}},
+			}},
+		}},
+	}
+
+	require.NoError(t, ti.service.Metrics(ctx, payload))
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "claude-code:usage:metrics", now, 1)
+	require.Contains(t, logs[0].Attributes, providerAnthropic)
 }

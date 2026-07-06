@@ -18,6 +18,26 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi
+. "$script_dir/http.sh"
+
+api_key="${GRAM_HOOKS_API_KEY:-}"
+project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
+gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
+
+# No env key: fall back to the credentials the browser login flow cached
+# (auth_preflight.sh / login.sh) so authenticated policy enforcement still
+# applies. auth.sh installs an EXIT trap when sourced; the trap set below
+# deliberately replaces it and covers the only resource created here (the
+# curl auth config).
+if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
+  # shellcheck source=/dev/null
+  if . "$script_dir/auth.sh" 2>/dev/null && type gram_hooks_read_auth >/dev/null 2>&1; then
+    if gram_hooks_read_auth "$server_url" 2>/dev/null; then
+      api_key="$GRAM_HOOKS_CACHED_API_KEY"
+      [ -n "$project_slug" ] || project_slug="$GRAM_HOOKS_CACHED_PROJECT"
+    fi
+  fi
+fi
 
 payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
@@ -37,36 +57,54 @@ cleanup_auth_config() {
   fi
 }
 trap cleanup_auth_config EXIT
-if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
-  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit 2
-  chmod 600 "$auth_config" || true
-  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
-    printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
+if [ -n "$api_key" ] || [ -n "$project_slug" ]; then
+  if ! auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX"); then
+    # Fail closed (exit 2) like every other failure path, but say why —
+    # otherwise Claude shows a blocked tool call with an empty reason.
+    echo "Speakeasy hooks: could not create a temporary auth file on this machine, so the tool call was blocked. Check that ${TMPDIR:-/tmp} is writable." >&2
+    exit 2
   fi
-  if [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
-    printf 'header = "Gram-Project: %s"\n' "$GRAM_HOOKS_PROJECT_SLUG" >>"$auth_config"
+  chmod 600 "$auth_config" || true
+  # curl config quoted strings treat backslash and double quote specially, and
+  # the config file is line-oriented; escape the metacharacters and strip CR/LF
+  # so a corrupted value cannot break out of the directive or inject additional
+  # config lines.
+  api_key="${api_key//\\/\\\\}"
+  api_key="${api_key//\"/\\\"}"
+  api_key="${api_key//$'\n'/}"
+  api_key="${api_key//$'\r'/}"
+  project_slug="${project_slug//\\/\\\\}"
+  project_slug="${project_slug//\"/\\\"}"
+  project_slug="${project_slug//$'\n'/}"
+  project_slug="${project_slug//$'\r'/}"
+  if [ -n "$api_key" ]; then
+    printf 'header = "Gram-Key: %s"\n' "$api_key" >>"$auth_config"
+  fi
+  if [ -n "$project_slug" ]; then
+    printf 'header = "Gram-Project: %s"\n' "$project_slug" >>"$auth_config"
   fi
   auth_config_arg=(--config "$auth_config")
 fi
 
-response=$(printf '%s' "$payload" | curl -s -w "\n%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# Retries transient resets (see http.sh) so a single reset no longer blocks
+# the tool call; the server still decides allow/block from the HTTP code.
+gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.claude")
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 # Forward the body to stdout so Claude can read PreToolUse decisions from it.
 echo "$body"
 
-# Only treat real 2xx/3xx as allow. curl returns 000 on connection failure,
-# DNS error, or timeout — that must NOT silently allow the call, otherwise
-# blocking policies are bypassed any time the Gram server is unreachable.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Only treat a real 2xx as allow. curl returns 000 on connection failure, DNS
+# error, or timeout, and a 3xx (e.g. an http->https redirect, which curl does
+# not follow here) carries no decision body — neither must silently allow the
+# call, otherwise blocking policies are bypassed when the server is unreachable
+# or misconfigured. The 2>/dev/null guards keep a non-numeric code from leaking
+# a shell error before we fall through to the block path below.
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   exit 0
 fi
 

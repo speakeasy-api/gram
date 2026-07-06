@@ -144,6 +144,9 @@ export function useFilterState(): UseFilterStateReturn {
         minUsers,
         updatedRange,
         minTools,
+        // The granular filters (incl. setup) flow through the unified filter
+        // system in Catalog.tsx; this legacy hook only supplies category/sort.
+        setupTypes: [],
       },
     };
   }, [searchParams]);
@@ -239,7 +242,10 @@ export function useFilterState(): UseFilterStateReturn {
         const params = new URLSearchParams(prev);
         params.delete("category");
         params.delete("sort");
+        // Keep in sync with CATALOG_FILTERS dimension ids — every granular
+        // filter param must be cleared here or it survives "Clear filters".
         params.delete("auth");
+        params.delete("setup");
         params.delete("behavior");
         params.delete("minUsers");
         params.delete("updated");

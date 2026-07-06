@@ -113,6 +113,13 @@ type AuthnChallengeState struct {
 	// MarshalJSON refuses to serialise a zero-value SessionSubject).
 	Subject   *urn.SessionSubject `json:"subject,omitempty"`
 	CreatedAt time.Time           `json:"created_at"`
+	// FirstParty marks a challenge minted by the dashboard for its own user
+	// (via ServeFirstPartyConnect) rather than by a DCR-registered MCP client's
+	// /authorize. First-party challenges carry no ClientID/RedirectURI: the
+	// consent page renders the remote-session cards so the user can link
+	// upstream providers, but there is no client to approve or redirect back to
+	// — completing the connections is terminal.
+	FirstParty bool `json:"first_party,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -269,19 +276,21 @@ func (s *Service) BaseURLForRequest(r *http.Request) string {
 // the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
 // paths. It validates the bearer token as a user-session JWT, falls back
 // to an assistant-runtime JWT scoped to the endpoint's project, and on
-// success resolves the upstream remote-session access token configured
+// success resolves the upstream remote-session access tokens configured
 // for the issuer.
 //
 // On success: returns the request context stamped with the resolved
-// principal plus the upstream access token. The token is "" when the
-// issuer has no remote_session_clients bound; today the inv.Check in
-// remotesessions.ResolveOneAccessToken caps the upstream to exactly 0 or
-// 1, so the return type is a single string rather than a slice. Callers
-// wrap the non-empty value into an oauthTokenInputs as needed for
-// downstream tool-dispatch chains.
+// principal plus a remote_session_issuer_id -> upstream access token map.
+// The map is nil/empty when the issuer has no remote_session_clients
+// bound; otherwise it holds one token per remote_session_issuer the
+// subject has linked. Callers wrap each entry into an oauthTokenInputs,
+// tagged with its remote_session_issuer_id, for downstream tool-dispatch
+// chains.
 //
 // On failure: writes a 401 + WWW-Authenticate to w and returns the
-// CodeUnauthorized error from WriteAuthenticateChallenge. The
+// CodeUnauthorized error from WriteAuthenticateChallenge. A re-auth
+// challenge is issued when any attached remote session is missing or
+// invalid (ResolveAccessTokens returns ErrNoValidToken). The
 // resource_metadata URL is built from baseURL + endpoint.RouteBase +
 // endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
 // protected-resource metadata, not /mcp's.
@@ -294,10 +303,10 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, string, error) {
+) (context.Context, map[uuid.UUID]string, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
-		return ctx, "", oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
 	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
@@ -312,28 +321,29 @@ func (s *Service) ApplyIssuerGate(
 		}
 	}
 	if !ok {
-		return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
-	// Resolve the upstream remote_session for this subject before
+	// Resolve the upstream remote_sessions for this subject before
 	// running the legacy auth chain. The resolver short-circuits to
 	// no-op when the issuer has no remote_session_clients bound;
-	// otherwise it either supplies the upstream access token (fed
-	// into tokenInputs so it satisfies the endpoint's oauth2 scheme
-	// downstream) or fails with ErrNoValidToken — which the user
-	// resolves by re-linking via {routeBase}/{slug}/connect.
-	var upstreamToken string
+	// otherwise it supplies one upstream access token per linked
+	// remote_session_issuer (fed into tokenInputs so they satisfy the
+	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
+	// when any attached remote session is missing or invalid — which the
+	// user resolves by re-linking via {routeBase}/{slug}/connect.
+	var upstreamTokens map[uuid.UUID]string
 	if subject != nil {
-		upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
-			return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "")
+			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
-			return ctx, "", oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
+			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
 		}
-		upstreamToken = upstream
+		upstreamTokens = tokens
 	}
-	return newCtx, upstreamToken, nil
+	return newCtx, upstreamTokens, nil
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")

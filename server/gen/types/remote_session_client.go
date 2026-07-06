@@ -12,16 +12,23 @@ package types
 type RemoteSessionClient struct {
 	// The remote_session_client id.
 	ID string
-	// The owning project id.
+	// The owning project id. Empty for organization-level clients.
 	ProjectID string
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID string
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
-	ClientID         string
-	ClientIDIssuedAt string
+	ClientID string
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string
+	ClientIDIssuedAt    string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
 	// How the client authenticates at the issuer's token endpoint. Null resolves

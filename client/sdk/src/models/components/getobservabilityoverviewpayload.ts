@@ -10,6 +10,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type GetObservabilityOverviewPayload = {
   /**
+   * Optional account type filter ('team' or 'personal')
+   */
+  accountType?: string | undefined;
+  /**
    * Optional API key ID filter
    */
   apiKeyId?: string | undefined;
@@ -17,6 +21,10 @@ export type GetObservabilityOverviewPayload = {
    * Optional event source filter (e.g. 'hook')
    */
   eventSource?: string | undefined;
+  /**
+   * Optional filter to a single AI account by its provider org id; scopes the overview to that one account
+   */
+  externalOrgId?: string | undefined;
   /**
    * Optional external user ID filter
    */
@@ -33,6 +41,10 @@ export type GetObservabilityOverviewPayload = {
    * Whether to include time series data (default: true)
    */
   includeTimeSeries?: boolean | undefined;
+  /**
+   * Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)
+   */
+  mcpServerId?: string | undefined;
   /**
    * Optional Remote MCP server ID filter
    */
@@ -53,12 +65,15 @@ export type GetObservabilityOverviewPayload = {
 
 /** @internal */
 export type GetObservabilityOverviewPayload$Outbound = {
+  account_type?: string | undefined;
   api_key_id?: string | undefined;
   event_source?: string | undefined;
+  external_org_id?: string | undefined;
   external_user_id?: string | undefined;
   from: string;
   hook_source?: string | undefined;
   include_time_series: boolean;
+  mcp_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   to: string;
   toolset_slug?: string | undefined;
@@ -71,12 +86,15 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
   GetObservabilityOverviewPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     apiKeyId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    externalOrgId: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
     includeTimeSeries: z._default(z.boolean(), true),
+    mcpServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     toolsetSlug: z.optional(z.string()),
@@ -84,11 +102,14 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
       apiKeyId: "api_key_id",
       eventSource: "event_source",
+      externalOrgId: "external_org_id",
       externalUserId: "external_user_id",
       hookSource: "hook_source",
       includeTimeSeries: "include_time_series",
+      mcpServerId: "mcp_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolsetSlug: "toolset_slug",
       userId: "user_id",

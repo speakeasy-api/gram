@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     subscription_options_from_message,
     topic_options_from_message,
@@ -22,7 +23,7 @@ def test_topic_options_absent_on_subscription_marker() -> None:
 def test_subscription_options_present_on_marker() -> None:
     options = subscription_options_from_message(processor_pb2.Processor.DESCRIPTOR)
     assert options is not None
-    assert options.topic == "gram.ping.v1.Message"
+    assert options.topic == "gram.ping.v2.Message"
     assert options.ack_deadline.seconds == 30
     assert options.retention.seconds == 3600
     assert options.retain_acked_messages is True

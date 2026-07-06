@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -20,13 +19,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/time/rate"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -61,14 +60,6 @@ const (
 	// unusual number of calls. Excess calls are dropped and flagged via
 	// tool_calls_truncated.
 	maxRenderedToolCalls = 50
-	// judgeRatePerMin and judgeRateBurst cap how many judge calls a single org
-	// can drive per process. Judge calls are billable OpenRouter requests, so
-	// this is a cost/abuse guardrail against a thrashing session or runaway
-	// batch — tuned generously so only pathological runaway trips it, not normal
-	// heavy use (the batch analyzer alone fans out judgeConcurrency=8). These are
-	// per-process backstop values: the effective org cap is value × replica count.
-	judgeRatePerMin = 600
-	judgeRateBurst  = 120
 )
 
 // SystemPrompt is the judge's system message. It frames the policy and message
@@ -107,72 +98,22 @@ type Judge struct {
 	tracer  trace.Tracer
 	metrics *judgeMetrics
 	client  openrouter.CompletionClient
-	limiter *judgeRateLimiter
+	limiter *ratelimit.Limiter
 }
 
 var _ ra.PromptJudge = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns nil, so callers can wire it unconditionally.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient) *Judge {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
 		logger:  logger,
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/riskjudge"),
 		metrics: newJudgeMetrics(meterProvider, logger),
 		client:  client,
-		limiter: newJudgeRateLimiter(),
+		limiter: limiter,
 	}
-}
-
-// judgeRateLimiter is a per-org, in-memory token-bucket limiter guarding the
-// billable judge call. It mirrors the assistant bootstrap limiter: lazy GC of
-// idle buckets every 5 minutes, bounded memory without a background goroutine.
-type judgeRateLimiter struct {
-	mu        sync.Mutex
-	state     map[string]*rateLimiterEntry
-	limit     rate.Limit
-	burst     int
-	lastSweep time.Time
-}
-
-type rateLimiterEntry struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func newJudgeRateLimiter() *judgeRateLimiter {
-	return &judgeRateLimiter{
-		mu:        sync.Mutex{},
-		state:     map[string]*rateLimiterEntry{},
-		limit:     rate.Limit(float64(judgeRatePerMin) / 60.0),
-		burst:     judgeRateBurst,
-		lastSweep: time.Now(),
-	}
-}
-
-func (l *judgeRateLimiter) allow(org string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Lazy GC: every 5 minutes, drop limiters idle long enough to have refilled
-	// to full. Bounds memory across many orgs without paying a goroutine.
-	if now.Sub(l.lastSweep) > 5*time.Minute {
-		for k, e := range l.state {
-			if now.Sub(e.lastSeen) > 5*time.Minute {
-				delete(l.state, k)
-			}
-		}
-		l.lastSweep = now
-	}
-
-	e, ok := l.state[org]
-	if !ok {
-		e = &rateLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst), lastSeen: now}
-		l.state[org] = e
-	}
-	e.lastSeen = now
-	return e.limiter.AllowN(now, 1)
 }
 
 // Evaluate runs the judge and returns a non-nil verdict when the message
@@ -197,9 +138,20 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	))
 	defer span.End()
 
-	// Org-scoped guardrail on the billable judge call. A throttled call is
-	// treated like a judge error: the policy's fail-mode decides the verdict.
-	if !j.limiter.allow(in.OrgID, time.Now()) {
+	// A throttled call is treated like a judge error: the policy's fail-mode
+	// decides. A Store outage is not a throttle — proceed rather than let limiter
+	// infra disable the guardrail.
+	model := in.Config.Model
+	if model == "" {
+		model = defaultJudgeModel
+	}
+	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, model)); {
+	case err != nil:
+		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(in.OrgID),
+		)
+	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		j.logger.WarnContext(ctx, "llm judge rate limited",
@@ -339,30 +291,30 @@ func VerdictSchema() map[string]any {
 // quoted string in a known field — and lets the system prompt say "evaluate only
 // the fields of this object".
 type judgePromptPayload struct {
-	Policy  string              `json:"policy"`
-	Message judgeMessagePayload `json:"message"`
+	Policy  string         `json:"policy"`
+	Message MessagePayload `json:"message"`
 }
 
-type judgeMessagePayload struct {
-	ProducedBy         string                 `json:"produced_by"`
-	Tool               *judgeToolPayload      `json:"tool,omitempty"`
-	BodyKind           string                 `json:"body_kind"`
-	Body               string                 `json:"body,omitempty"`
-	BodyTruncated      bool                   `json:"body_truncated,omitempty"`
-	ToolCalls          []judgeToolCallPayload `json:"tool_calls,omitempty"`
-	ToolCallsTruncated bool                   `json:"tool_calls_truncated,omitempty"`
+type MessagePayload struct {
+	ProducedBy         string            `json:"produced_by"`
+	Tool               *ToolPayload      `json:"tool,omitempty"`
+	BodyKind           string            `json:"body_kind"`
+	Body               string            `json:"body,omitempty"`
+	BodyTruncated      bool              `json:"body_truncated,omitempty"`
+	ToolCalls          []ToolCallPayload `json:"tool_calls,omitempty"`
+	ToolCallsTruncated bool              `json:"tool_calls_truncated,omitempty"`
 }
 
-type judgeToolPayload struct {
+type ToolPayload struct {
 	MCPServer   string `json:"mcp_server,omitempty"`
 	MCPFunction string `json:"mcp_function,omitempty"`
 	Name        string `json:"name,omitempty"`
 }
 
-type judgeToolCallPayload struct {
-	Tool               *judgeToolPayload `json:"tool,omitempty"`
-	Arguments          string            `json:"arguments"`
-	ArgumentsTruncated bool              `json:"arguments_truncated,omitempty"`
+type ToolCallPayload struct {
+	Tool               *ToolPayload `json:"tool,omitempty"`
+	Arguments          string       `json:"arguments"`
+	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
 }
 
 // BuildJudgePrompt renders the policy plus the message under evaluation as the
@@ -372,7 +324,7 @@ type judgeToolCallPayload struct {
 func BuildJudgePrompt(in ra.JudgeInput) string {
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
-		Message: renderJudgeMessage(in.Message),
+		Message: RenderMessage(in.Message),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -385,10 +337,10 @@ func BuildJudgePrompt(in ra.JudgeInput) string {
 	return string(b)
 }
 
-// renderJudgeMessage maps a JudgeMessage onto the JSON payload the judge reads.
+// RenderMessage maps a JudgeMessage onto the JSON payload the judge reads.
 // A multi-call tool request renders each call with its own attribution under
 // tool_calls; every other shape carries a single type-appropriate body.
-func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
+func RenderMessage(m ra.JudgeMessage) MessagePayload {
 	if len(m.ToolCalls) > 0 {
 		calls := m.ToolCalls
 		truncatedCalls := false
@@ -396,16 +348,16 @@ func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
 			calls = calls[:maxRenderedToolCalls]
 			truncatedCalls = true
 		}
-		rendered := make([]judgeToolCallPayload, 0, len(calls))
+		rendered := make([]ToolCallPayload, 0, len(calls))
 		for _, c := range calls {
 			args, argsTruncated := truncateBody(c.Arguments, maxBodyLen)
-			rendered = append(rendered, judgeToolCallPayload{
+			rendered = append(rendered, ToolCallPayload{
 				Tool:               toolPayload(c.ToolName, c.MCPServer, c.MCPFunction),
 				Arguments:          args,
 				ArgumentsTruncated: argsTruncated,
 			})
 		}
-		return judgeMessagePayload{
+		return MessagePayload{
 			ProducedBy:         "ai_assistant_tool_call",
 			Tool:               nil,
 			BodyKind:           "tool_calls",
@@ -418,7 +370,7 @@ func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
 
 	producedBy, bodyKind := messageDescriptors(m.Type)
 	body, truncated := truncateBody(m.Body, maxBodyLen)
-	return judgeMessagePayload{
+	return MessagePayload{
 		ProducedBy:         producedBy,
 		Tool:               toolPayload(m.ToolName, m.MCPServer, m.MCPFunction),
 		BodyKind:           bodyKind,
@@ -450,12 +402,12 @@ func messageDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 // toolPayload describes the tool a call/result targets: destructured MCP server
 // + function when known, otherwise the raw tool name. Returns nil when there is
 // no tool attribution.
-func toolPayload(name, mcpServer, mcpFunction string) *judgeToolPayload {
+func toolPayload(name, mcpServer, mcpFunction string) *ToolPayload {
 	if mcpServer != "" || mcpFunction != "" {
-		return &judgeToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
+		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
 	}
 	if name != "" {
-		return &judgeToolPayload{MCPServer: "", MCPFunction: "", Name: name}
+		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name}
 	}
 	return nil
 }
@@ -469,9 +421,13 @@ func truncateBody(s string, maxLen int) (string, bool) {
 		return s, false
 	}
 	runes := []rune(s)
-	dropped := len(runes) - maxLen
-	head := maxLen * 3 / 5
-	tail := maxLen - head
+	// Reserve room for the truncation marker so the returned text — marker
+	// included — stays within maxLen runes, rather than maxLen + marker. (cubic)
+	const markerBudget = 40
+	budget := max(maxLen-markerBudget, 0)
+	dropped := len(runes) - budget
+	head := budget * 3 / 5
+	tail := budget - head
 	var b strings.Builder
 	b.WriteString(string(runes[:head]))
 	fmt.Fprintf(&b, "\n…[%d characters truncated]…\n", dropped)

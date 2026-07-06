@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -19,7 +19,7 @@ The general flow of a plugin is:
 
 ### id?
 
-> `optional` **id**: `string`
+> `optional` **id?**: `string`
 
 Unique identifier for the plugin. Used by `recommended.except()` to
 selectively exclude plugins. Defaults to `language` if not set.
@@ -74,7 +74,7 @@ The component to use for the syntax highlighter.
 
 ### Header?
 
-> `optional` **Header**: `ComponentType`\<`CodeHeaderProps`\>
+> `optional` **Header?**: `ComponentType`\<`CodeHeaderProps`\>
 
 The component to use for the code header.
 Will be rendered above the code block.
@@ -89,7 +89,7 @@ Will be rendered above the code block.
 
 ### overrideExisting?
 
-> `optional` **overrideExisting**: `boolean`
+> `optional` **overrideExisting?**: `boolean`
 
 Whether to override existing plugins with the same language.
 

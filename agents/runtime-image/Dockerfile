@@ -1,13 +1,13 @@
-FROM rust:1.95-bookworm@sha256:503651ea31e66ecb74623beabde781059a5978df1595a9e8ed03974d5fec1bf0 AS runner-builder
+FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
 COPY agents/runner/src ./agents/runner/src
 RUN cargo build --manifest-path ./agents/runner/Cargo.toml --release --bin gram-assistant-runner
 
-FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS bun
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
 
-FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS sandbox-deps
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
 WORKDIR /sandbox
 COPY agents/runtime-image/sandbox/package.json ./
 RUN bun install --production
@@ -30,7 +30,7 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3 AS lightpanda
+FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
@@ -47,7 +47,7 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3
+FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

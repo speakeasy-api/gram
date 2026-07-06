@@ -80,8 +80,11 @@ const (
 	ScopeEnvironmentWrite   Scope = "environment:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
+	ScopeChatRead           Scope = "chat:read"
 )
 ```
+
+`chat:read` protects reading _other members'_ agent session transcripts (`chat.load`). It is **not** a default for any system role — not even `admin` — because session transcripts are sensitive; it must be granted explicitly via a custom role grant. Everyone (members and admins alike) can always read sessions they own: the `chat.load` handler bypasses the scope check when the caller owns the session (`chat.user_id == caller`), and the session list filters to the caller's own sessions when they lack `chat:read`. Reading another user's session — or an ownerless/external session — requires an unrestricted `chat:read` grant.
 
 That is deliberate. Adding a scope changes the product contract: it affects role management, the access API, generated SDK types, the dashboard, and tests. Prefer the small action vocabulary we already use: `read` for viewing or listing, `write` for mutation, and `connect` for runtime connection surfaces. New verbs should be rare. If an action needs multiple words, or describes a very specific operation, that is usually a sign that the behavior should be modeled with an existing scope plus selector dimensions instead of a new scope.
 
@@ -103,6 +106,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentWrite:   nil,
 	ScopeRiskPolicyEvaluate: nil,
 	ScopeRiskPolicyBypass:   nil,
+	ScopeChatRead:           nil,
 }
 ```
 
@@ -219,6 +223,131 @@ authz.Check{
 ```
 
 A grant lives in data. A check lives in code. Authorization succeeds when at least one loaded grant satisfies the check.
+
+## Grant Expressions and Set Difference
+
+Some authorization questions are not answered by one grant. They are answered by
+starting with a base grant set and subtracting an exclusion set:
+
+```text
+effective result = base - exclusion
+```
+
+This is the same shape as a Zanzibar-style userset difference such as:
+
+```text
+viewer = allowed - blocked
+```
+
+In Gram, the main example today is risk policy evaluation:
+
+```text
+risk_policy_applies =
+  risk_policy:evaluate(policy_id)
+  - risk_policy:bypass(policy_id, runtime_dimensions)
+```
+
+Read that as:
+
+> Apply the policy if the user can evaluate the policy, unless the user also has
+> a bypass grant for this exact policy and this exact runtime target.
+
+The most important rule: **exclusion grants do not create access by themselves**.
+They only subtract from something that the base side already proved.
+
+### Risk Policy Example
+
+Assume the user has these grants:
+
+```text
+1. risk_policy:evaluate
+   selector: {resource_kind: "risk_policy", resource_id: "policy_123"}
+
+2. risk_policy:bypass
+   selector: {
+     resource_kind: "risk_policy",
+     resource_id: "policy_123",
+     server_url: "https://abc.com"
+   }
+```
+
+There are two related questions, and their answers point in opposite directions:
+
+```text
+Question A: Does the bypass grant match this request?
+Question B: Does the policy still apply after subtracting bypass?
+```
+
+| Request being evaluated                    | Bypass grant matches?                                 | `risk_policy:evaluate - risk_policy:bypass` result                              |
+| ------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `policy_123`, `server_url=https://bcd.com` | No. The bypass is only for `https://abc.com`.         | Policy applies. Base evaluate grant matches, and nothing subtracts it.          |
+| `policy_123`, `server_url=https://abc.com` | Yes. Same policy and same server URL.                 | Policy does not apply. The bypass subtracts the exact policy/server instance.   |
+| `policy_345`, `server_url=https://abc.com` | No. The bypass is for `policy_123`, not `policy_345`. | Policy does not apply because there is no base evaluate grant for `policy_345`. |
+
+The second row is the core set-difference case:
+
+```text
+base set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+exclusion set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+base - exclusion:
+  {}
+```
+
+The expression result is empty, so the policy is not applied for that request.
+
+The first row keeps the base result:
+
+```text
+base set:
+  {policy_id: policy_123, server_url: https://bcd.com}
+
+exclusion set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+base - exclusion:
+  {policy_id: policy_123, server_url: https://bcd.com}
+```
+
+The exclusion grant is real, but it is for a different concrete permission instance.
+It does not subtract the `https://bcd.com` decision.
+
+### MCP Example
+
+The same model can express "allow broad access except a narrow blocklisted target."
+For example:
+
+```text
+mcp_tool_call_allowed =
+  mcp:connect(toolset_id, tool)
+  - mcp:blocked_connect(toolset_id, tool)
+```
+
+Assume the user has:
+
+```text
+1. mcp:connect
+   selector: {resource_kind: "mcp", resource_id: "toolset_123"}
+
+2. mcp:blocked_connect
+   selector: {
+     resource_kind: "mcp",
+     resource_id: "toolset_123",
+     tool: "delete_database"
+   }
+```
+
+| Tool call being evaluated             | Blocklist grant matches?                               | `mcp:connect - mcp:blocked_connect` result                                             |
+| ------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `toolset_123`, `tool=search_docs`     | No. The blocklist grant is only for `delete_database`. | Tool call is allowed.                                                                  |
+| `toolset_123`, `tool=delete_database` | Yes. Same toolset and same tool.                       | Tool call is not allowed. The blocklist grant subtracts the exact tool-call instance.  |
+| `toolset_456`, `tool=delete_database` | No. The blocklist grant is for `toolset_123`.          | Tool call is not allowed unless another base `mcp:connect` grant covers `toolset_456`. |
+
+Again, the exclusion side only subtracts. A blocklist/bypass grant without a
+matching base grant never grants anything.
 
 ## Scopes vs Grants
 
@@ -366,34 +495,35 @@ Use this table when answering "what grant is required to use this dashboard feat
 
 Selectors matter. A project-scoped feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
 
-| Dashboard feature or question                                                       | Required grant(s)                           | Selector target                                                       | Notes                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Open organization home and see project entry points                                 | `org:read` OR `project:read` OR `org:admin` | Org or project selector, depending on grant                           | The page can render for org readers, project readers, or admins. Project visibility still depends on backend filtering and loaded organization data.                                                             |
-| Create a project                                                                    | `org:admin`                                 | Organization ID                                                       | The `/rpc/projects.create` handler requires `org:admin`. `project:write` is not enough because the project does not exist yet.                                                                                   |
-| Invite members, change member roles, create/update/delete roles                     | `org:admin`                                 | Organization ID                                                       | Access management mutations are organization administration.                                                                                                                                                     |
-| Open Access / RBAC page                                                             | `org:read` OR `org:admin`                   | Organization ID                                                       | Viewing access state can be read-only; role, grant, member-role, and challenge-resolution actions are `org:admin`.                                                                                               |
-| Open Team page and manage members                                                   | `org:admin`                                 | Organization ID                                                       | The current Team page is page-gated on `org:admin`.                                                                                                                                                              |
-| Open Billing                                                                        | `org:read` OR `org:admin`                   | Organization ID                                                       | Billing management sections and portal actions are `org:admin`.                                                                                                                                                  |
-| Manage organization API keys or generate agent tokens                               | `org:admin`                                 | Organization ID                                                       | API key listing and creation are admin-only in the dashboard.                                                                                                                                                    |
-| View organization domains, org logs, webhooks, identity, audit logs, device agent   | `org:read` OR `org:admin`                   | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`.                                                          |
-| View organization collections                                                       | `org:read` OR `org:admin`                   | Organization ID                                                       | Collection create/update/delete and MCP server attach/detach actions require `org:admin`. Adding collection content to a project can additionally require `project:write` for that project.                      |
-| Open project home                                                                   | `project:read`                              | Project ID                                                            | `project:write` also opens it through scope expansion.                                                                                                                                                           |
-| Open Sources and source detail pages                                                | `project:read` OR `project:write`           | Project ID                                                            | Creating, importing, reconnecting, deleting, or editing sources requires `project:write`. Creating custom remote MCP servers is gated by `mcp:write`.                                                            |
-| Add OpenAPI, add Function, or add from Catalog through Sources                      | `project:write`                             | Project ID                                                            | These routes create project-owned resources.                                                                                                                                                                     |
-| Open Catalog                                                                        | `project:read` OR `mcp:write`               | Project ID or MCP selector, depending on entry point                  | Browsing from the main nav can be available to project readers. Adding a catalog server to a project is a write action and is gated at the add flow.                                                             |
-| Open Playground                                                                     | `mcp:connect` OR `mcp:read` OR `mcp:write`  | MCP server or toolset ID                                              | Runtime calls should use `mcp:connect`; editing saved playground/server configuration requires `mcp:write`.                                                                                                      |
-| Open MCP server/toolset pages                                                       | `mcp:read` OR `mcp:write`                   | MCP server or toolset ID                                              | Creating, editing, deleting, publishing, authentication, team-access, prompt/resource, OAuth, tool filtering, and settings actions generally require `mcp:write`; collection publishing can require `org:admin`. |
-| Create a custom remote MCP server                                                   | `mcp:write`                                 | MCP selector, usually unrestricted or target server ID after creation | The create route is page-gated on `mcp:write`.                                                                                                                                                                   |
-| Open Deployments                                                                    | `project:read` OR `project:write`           | Project ID                                                            | Deployment-triggering and failed-source retry actions require `project:write`.                                                                                                                                   |
-| Open Assistants                                                                     | `project:read`                              | Project ID                                                            | Creating or editing assistants is gated by `project:write` OR `mcp:write`; admin-only assistant management sections are `org:admin`.                                                                             |
-| Open Skills / CLIs                                                                  | `project:read`                              | Project ID                                                            | This is a read-only project surface.                                                                                                                                                                             |
-| Open Plugins                                                                        | `project:read` OR `project:write`           | Project ID                                                            | Plugin install, update, delete, or configuration actions require `project:write`.                                                                                                                                |
-| Open Environments list                                                              | `project:read` OR `project:write`           | Project ID                                                            | Creating a new environment is currently `project:write`; environment card clone actions are `environment:write`.                                                                                                 |
-| Open an Environment detail page                                                     | `project:read`                              | Project ID                                                            | Adding, editing, deleting, or filling variables is currently `project:write`. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.               |
-| Open Insights                                                                       | `project:read`                              | Project ID                                                            | Some nested insights routes accept `project:write` too, but `project:read` is the intended read grant.                                                                                                           |
-| Open Logs / Agent Sessions                                                          | `project:read`                              | Project ID                                                            | Project log tabs are read surfaces. Risk-event logs are `org:admin`.                                                                                                                                             |
-| Open Project Settings                                                               | `project:write`                             | Project ID                                                            | Settings are treated as project mutation/admin surface.                                                                                                                                                          |
-| Open Secure pages: Risk Overview, Risk Policies, Approval Requests, Detection Rules | `org:admin`                                 | Organization ID                                                       | The dashboard pages are admin-only today. `risk_policy:evaluate` and `risk_policy:bypass` are policy runtime/request-flow scopes, not general dashboard page grants.                                             |
+| Dashboard feature or question                                                       | Required grant(s)                           | Selector target                                                       | Notes                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open organization home and see project entry points                                 | `org:read` OR `project:read` OR `org:admin` | Org or project selector, depending on grant                           | The page can render for org readers, project readers, or admins. Project visibility still depends on backend filtering and loaded organization data.                                                                                                                                                                               |
+| Create a project                                                                    | `org:admin`                                 | Organization ID                                                       | The `/rpc/projects.create` handler requires `org:admin`. `project:write` is not enough because the project does not exist yet.                                                                                                                                                                                                     |
+| Invite members, change member roles, create/update/delete roles                     | `org:admin`                                 | Organization ID                                                       | Access management mutations are organization administration.                                                                                                                                                                                                                                                                       |
+| Open Access / RBAC page                                                             | `org:read` OR `org:admin`                   | Organization ID                                                       | Viewing access state can be read-only; role, grant, member-role, and challenge-resolution actions are `org:admin`.                                                                                                                                                                                                                 |
+| Open Team page and manage members                                                   | `org:admin`                                 | Organization ID                                                       | The current Team page is page-gated on `org:admin`.                                                                                                                                                                                                                                                                                |
+| Open Billing                                                                        | `org:read` OR `org:admin`                   | Organization ID                                                       | Billing management sections and portal actions are `org:admin`.                                                                                                                                                                                                                                                                    |
+| Manage organization API keys or generate agent tokens                               | `org:admin`                                 | Organization ID                                                       | API key listing and creation are admin-only in the dashboard.                                                                                                                                                                                                                                                                      |
+| View organization domains, org logs, webhooks, identity, audit logs, device agent   | `org:read` OR `org:admin`                   | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`.                                                                                                                                                                            |
+| View organization collections                                                       | `org:read` OR `org:admin`                   | Organization ID                                                       | Collection create/update/delete and MCP server attach/detach actions require `org:admin`. Adding collection content to a project can additionally require `project:write` for that project.                                                                                                                                        |
+| Open project home                                                                   | `project:read`                              | Project ID                                                            | `project:write` also opens it through scope expansion.                                                                                                                                                                                                                                                                             |
+| Open Sources and source detail pages                                                | `project:read` OR `project:write`           | Project ID                                                            | Creating, importing, reconnecting, deleting, or editing sources requires `project:write`. Creating custom remote MCP servers is gated by `mcp:write`.                                                                                                                                                                              |
+| Add OpenAPI, add Function, or add from Catalog through Sources                      | `project:write`                             | Project ID                                                            | These routes create project-owned resources.                                                                                                                                                                                                                                                                                       |
+| Open Catalog                                                                        | `project:read` OR `mcp:write`               | Project ID or MCP selector, depending on entry point                  | Browsing from the main nav can be available to project readers. Adding a catalog server to a project is a write action and is gated at the add flow.                                                                                                                                                                               |
+| Open Playground                                                                     | `mcp:connect` OR `mcp:read` OR `mcp:write`  | MCP server or toolset ID                                              | Runtime calls should use `mcp:connect`; editing saved playground/server configuration requires `mcp:write`.                                                                                                                                                                                                                        |
+| Open MCP server/toolset pages                                                       | `mcp:read` OR `mcp:write`                   | MCP server or toolset ID                                              | Creating, editing, deleting, publishing, authentication, team-access, prompt/resource, OAuth, tool filtering, and settings actions generally require `mcp:write`; collection publishing can require `org:admin`.                                                                                                                   |
+| Create a custom remote MCP server                                                   | `mcp:write`                                 | MCP selector, usually unrestricted or target server ID after creation | The create route is page-gated on `mcp:write`.                                                                                                                                                                                                                                                                                     |
+| Open Deployments                                                                    | `project:read` OR `project:write`           | Project ID                                                            | Deployment-triggering and failed-source retry actions require `project:write`.                                                                                                                                                                                                                                                     |
+| Open Assistants                                                                     | `project:read`                              | Project ID                                                            | Creating or editing assistants is gated by `project:write` OR `mcp:write`; admin-only assistant management sections are `org:admin`.                                                                                                                                                                                               |
+| Open Skills / CLIs                                                                  | `project:read`                              | Project ID                                                            | This is a read-only project surface.                                                                                                                                                                                                                                                                                               |
+| Open Plugins                                                                        | `project:read` OR `project:write`           | Project ID                                                            | Plugin install, update, delete, or configuration actions require `project:write`.                                                                                                                                                                                                                                                  |
+| Open Environments list                                                              | `project:read` OR `project:write`           | Project ID                                                            | Creating a new environment is currently `project:write`; environment card clone actions are `environment:write`.                                                                                                                                                                                                                   |
+| Open an Environment detail page                                                     | `project:read`                              | Project ID                                                            | Adding, editing, deleting, or filling variables is currently `project:write`. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.                                                                                                                                 |
+| Open Insights                                                                       | `project:read`                              | Project ID                                                            | Some nested insights routes accept `project:write` too, but `project:read` is the intended read grant.                                                                                                                                                                                                                             |
+| Open Logs / Agent Sessions                                                          | `project:read`                              | Project ID                                                            | Project log tabs are read surfaces. Risk-event logs are `org:admin`. The list itself is `project:read`; which sessions are listed and which can be opened is further scoped by `chat:read` (next row).                                                                                                                             |
+| Open an individual agent session transcript (`chat.load`)                           | `chat:read` (or owner)                      | Chat session                                                          | Anyone can always open sessions they own (owner-bypass: `chat.user_id == caller`), with no `chat:read` grant. Opening another user's session requires an explicit unrestricted `chat:read` — not a default of any system role, so even admins must be granted it. Every open is recorded in the audit log (`chat_session:access`). |
+| Open Project Settings                                                               | `project:write`                             | Project ID                                                            | Settings are treated as project mutation/admin surface.                                                                                                                                                                                                                                                                            |
+| Open Secure pages: Risk Overview, Risk Policies, Approval Requests, Detection Rules | `org:admin`                                 | Organization ID                                                       | The dashboard pages are admin-only today. `risk_policy:evaluate` and `risk_policy:bypass` are policy runtime/request-flow scopes, not general dashboard page grants.                                                                                                                                                               |
 
 ## Enforcing RBAC in Code
 
@@ -407,7 +537,7 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 `authz.Engine.ShouldEnforce` decides whether checks should actually be applied. Today, RBAC is enforced for authenticated enterprise requests when the RBAC feature flag is enabled for the active organization, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
 
-Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only superadmins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
+Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
 That means RBAC is not currently enforced for API key requests, non-enterprise accounts, or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 

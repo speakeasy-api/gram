@@ -116,7 +116,7 @@ func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, 
 		idp.OAuth21URL,
 		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
 		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 		cache.SuffixNone,
 	)
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
@@ -172,7 +172,7 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter))
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,

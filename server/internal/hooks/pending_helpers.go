@@ -13,12 +13,64 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
+
+// hookDuplicateContextKey marks a request whose idempotency token was already
+// claimed by an earlier delivery (a retry). Write side-effects that run outside
+// the persistence path — block-reason telemetry, shadow-MCP findings — check it
+// so a retried *blocked* hook doesn't duplicate dashboard rows even though it
+// still re-derives and returns the same block decision.
+type hookDuplicateContextKey struct{}
+
+// withHookDuplicate tags ctx as a redelivery so downstream write side-effects
+// can skip themselves.
+func withHookDuplicate(ctx context.Context) context.Context {
+	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
+}
+
+// isHookDuplicate reports whether ctx was tagged as a redelivery.
+func (s *Service) isHookDuplicate(ctx context.Context) bool {
+	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
+	return dup
+}
+
+// claimHookIdempotency reports whether this delivery should be persisted. The
+// sender stamps one idempotency token per hook invocation and reuses it across
+// retries, so a transient reset that triggers a retry re-sends the same token.
+// The first delivery wins the set-if-absent guard and persists; every repeat
+// is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
+// there is nothing to dedupe on. A cache error fails open: dropping a hook is
+// worse than the rare duplicate a backend blip might cause.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return true
+	}
+	// The claim must outlive the request: a transient reset cancels the request
+	// context, and the retry that re-sends the same token would otherwise also
+	// find an unwritten marker (the canceled SETNX returns an error → fail open
+	// → true) and persist a second time. WithoutCancel keeps the marker write
+	// running so the retry actually loses the guard.
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
+			attr.SlogEvent("hook_idempotency_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
+			attr.SlogEvent("hook_idempotency_duplicate"),
+		)
+	}
+	return claimed
+}
 
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
@@ -88,6 +140,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
 
@@ -129,17 +182,17 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
 	}
-	if metadata.UserID == "" {
+	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
-	if metadata.UserID != "" {
-		attrs[attr.UserIDKey] = metadata.UserID
-	}
+	// Carry the account attribution (provider, external_org_id, account_type,
+	// device_id) onto every hook event row so per-tool-call telemetry can be
+	// split by personal vs team account, not just the OTEL log stream.
+	stampAccountAttribution(attrs, *metadata)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -151,7 +204,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	// Parse MCP tool names
-	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
 	}
@@ -286,7 +339,30 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    urn,
 			attr.HookSourceKey:     "claude-code",
+			attr.ProviderKey:       providerAnthropic,
 		}
+
+		// Stamp the account attribution (account_type, provider, external_org_id,
+		// device_id) the OTEL Logs endpoint computed for this session, so cost and
+		// token metric rows carry the same personal/team classification as the log
+		// rows. Without this, cost rows land unclassified and a personal (Claude
+		// Max) session's spend can't be told apart from billed team usage in the
+		// cost rollup (DNO-384). The metric datapoints carry session.id; the logs
+		// path seeds SessionMetadata under sessionCacheKey. A cache miss (metrics
+		// arriving before logs seed the session) leaves the columns empty and
+		// self-heals on the session's later metric batches.
+		// The session cache is keyed by session id alone, so only trust cached
+		// metadata that the same org+project seeded — a colliding or spoofed
+		// session id must not stamp another tenant's attribution or user identity
+		// onto this org's rows.
+		var sessionMeta SessionMetadata
+		if m.SessionID != "" {
+			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&
+				meta.GramOrgID == orgID && meta.ProjectID == projectID {
+				sessionMeta = meta
+			}
+		}
+		stampAccountAttribution(attrs, sessionMeta)
 
 		// Only include non-zero values
 		if m.InputTokens > 0 {
@@ -307,12 +383,6 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if m.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = m.Model
 		}
-		if m.UserEmail != "" {
-			attrs[attr.UserEmailKey] = m.UserEmail
-			if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID
 		}
@@ -327,9 +397,23 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		// Attribute usage to the owning employee. Team accounts resolve by email;
+		// a personal account's email won't resolve, but the device bridge may have
+		// supplied the owner on the OTEL Logs path — prefer it so personal spend
+		// still rolls up under the employee while account_type=personal preserves
+		// the split.
+		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+		if sessionMeta.UserID != "" {
+			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

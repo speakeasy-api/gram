@@ -15,7 +15,7 @@
 # ---- Builder ----------------------------------------------------------------
 # Resolve dependencies and the workspace into a self-contained virtualenv. None
 # of this stage's source code ends up in the final image.
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Pin uv to a specific version for reproducible builds (matches the uv_build
 # floor in pystreams/pyproject.toml). Copied from the official distroless image
@@ -34,7 +34,7 @@ WORKDIR /app
 # self-contained and relocatable, so it can be lifted into a distroless runtime
 # that has no Python of its own. `only-managed` above forces every uv sync below
 # to build the venv against THIS interpreter, not the slim base's /usr/local one.
-RUN uv python install 3.12
+RUN uv python install 3.14
 
 # Layer 1: install ONLY the third-party dependencies of pystreams (and its
 # workspace dep gram-infra), isolated from the source so this expensive layer
@@ -77,9 +77,25 @@ FROM gcr.io/distroless/cc-debian12:nonroot@sha256:b0ae8e989418b458e0f25489bc3be5
 COPY --from=builder /python /python
 COPY --from=builder /app/.venv /app/.venv
 
+# numpy (pulled in transitively via presidio-analyzer -> spacy -> thinc) ships
+# manylinux wheels whose C extensions dynamically link libz.so.1. The manylinux
+# policy treats zlib as a system-provided library, so the wheel does NOT bundle
+# it — and distroless/cc ships only glibc + libstdc++/libgcc, not zlib. Copy the
+# shared object from the builder's Debian base so numpy can import at runtime.
+COPY --from=builder /usr/lib/*-linux-gnu/libz.so.1 /usr/lib/
+
 # Put the venv's bin on PATH so the `multi` console script and python resolve to
 # the project environment without activation.
 ENV PATH="/app/.venv/bin:$PATH"
+
+# The CI build-push composite injects GIT_SHA=$GITHUB_SHA as a build arg into
+# every image. Surface it as GRAM_GIT_SHA so the `pystream` entrypoint's
+# --git-sha flag (envvar GRAM_GIT_SHA) stamps the build commit onto OTel traces
+# and metrics for Datadog's source-code links. A plain local `docker build`
+# leaves it empty, which is fine: the git.commit.sha resource attribute is then
+# simply omitted.
+ARG GIT_SHA=""
+ENV GRAM_GIT_SHA=${GIT_SHA}
 
 # Kubernetes liveness/readiness probes hit GET /healthz and /readyz on this port
 # (override with --control-port / GRAM_PYSTREAMS_CONTROL_PORT). EXPOSE is purely

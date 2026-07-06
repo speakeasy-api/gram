@@ -204,7 +204,7 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	{
 		err = json.Unmarshal([]byte(telemetrySearchUsersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"account_type\": \"abc123\",\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_org_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
 		}
 		if body.Filter == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
@@ -403,7 +403,7 @@ func BuildGetUserMetricsSummaryPayload(telemetryGetUserMetricsSummaryBody string
 	{
 		err = json.Unmarshal([]byte(telemetryGetUserMetricsSummaryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -436,6 +436,8 @@ func BuildGetUserMetricsSummaryPayload(telemetryGetUserMetricsSummaryBody string
 		ExternalUserID: body.ExternalUserID,
 		EventSource:    body.EventSource,
 		HookSource:     body.HookSource,
+		AccountType:    body.AccountType,
+		ExternalOrgID:  body.ExternalOrgID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -452,7 +454,7 @@ func BuildGetEmployeeDataFlowGraphPayload(telemetryGetEmployeeDataFlowGraphBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetEmployeeDataFlowGraphBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -483,6 +485,8 @@ func BuildGetEmployeeDataFlowGraphPayload(telemetryGetEmployeeDataFlowGraphBody 
 		To:             body.To,
 		UserID:         body.UserID,
 		ExternalUserID: body.ExternalUserID,
+		AccountType:    body.AccountType,
+		ExternalOrgID:  body.ExternalOrgID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -499,12 +503,15 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -536,8 +543,11 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		APIKeyID:          body.APIKeyID,
 		ToolsetSlug:       body.ToolsetSlug,
 		RemoteMcpServerID: body.RemoteMcpServerID,
+		McpServerID:       body.McpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
+		AccountType:       body.AccountType,
+		ExternalOrgID:     body.ExternalOrgID,
 		IncludeTimeSeries: body.IncludeTimeSeries,
 	}
 	{
@@ -594,6 +604,153 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildQueryPayload builds the payload for the telemetry query endpoint from
+// CLI flags.
+func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken string) (*telemetry.QueryPayload, error) {
+	var err error
+	var body QueryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.GroupBy != nil {
+			if !(*body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "model" || *body.GroupBy == "hook_source" || *body.GroupBy == "account_type" || *body.GroupBy == "provider" || *body.GroupBy == "billing_mode" || *body.GroupBy == "query_source" || *body.GroupBy == "skill_name" || *body.GroupBy == "agent_name" || *body.GroupBy == "mcp_server_name" || *body.GroupBy == "mcp_tool_name" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
+			}
+		}
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.TopN < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "cache_read_input_tokens" || body.SortBy == "cache_creation_input_tokens" || body.SortBy == "total_tool_calls" || body.SortBy == "total_chats") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQuerySessionToken != "" {
+			sessionToken = &telemetryQuerySessionToken
+		}
+	}
+	v := &telemetry.QueryPayload{
+		From:               body.From,
+		To:                 body.To,
+		GroupBy:            body.GroupBy,
+		GranularitySeconds: body.GranularitySeconds,
+		TopN:               body.TopN,
+		SortBy:             body.SortBy,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero int
+		if v.TopN == zero {
+			v.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "total_cost"
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListSessionsPayload builds the payload for the telemetry listSessions
+// endpoint from CLI flags.
+func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSessionsSessionToken string) (*telemetry.ListSessionsPayload, error) {
+	var err error
+	var body ListSessionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListSessionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "tool_call_count" || body.SortBy == "message_count" || body.SortBy == "duration_seconds") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds"}))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListSessionsSessionToken != "" {
+			sessionToken = &telemetryListSessionsSessionToken
+		}
+	}
+	v := &telemetry.ListSessionsPayload{
+		From:   body.From,
+		To:     body.To,
+		SortBy: body.SortBy,
+		Limit:  body.Limit,
+		Cursor: body.Cursor,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "total_cost"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
@@ -774,7 +931,7 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageSummaryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -813,8 +970,9 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 		}
 	}
 	v := &telemetry.GetToolUsageSummaryPayload{
-		From: body.From,
-		To:   body.To,
+		From:        body.From,
+		To:          body.To,
+		AccountType: body.AccountType,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -844,6 +1002,12 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -859,7 +1023,7 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryListToolUsageTracesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -914,12 +1078,13 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 		}
 	}
 	v := &telemetry.ListToolUsageTracesPayload{
-		From:   body.From,
-		To:     body.To,
-		Query:  body.Query,
-		Cursor: body.Cursor,
-		Sort:   body.Sort,
-		Limit:  body.Limit,
+		From:        body.From,
+		To:          body.To,
+		AccountType: body.AccountType,
+		Query:       body.Query,
+		Cursor:      body.Cursor,
+		Sort:        body.Sort,
+		Limit:       body.Limit,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))

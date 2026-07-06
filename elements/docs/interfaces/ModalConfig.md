@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -14,7 +14,7 @@
 
 ### expandable?
 
-> `optional` **expandable**: `boolean`
+> `optional` **expandable?**: `boolean`
 
 Whether the modal or sidecar can be expanded
 
@@ -26,7 +26,7 @@ Whether the modal or sidecar can be expanded
 
 ### defaultExpanded?
 
-> `optional` **defaultExpanded**: `boolean`
+> `optional` **defaultExpanded?**: `boolean`
 
 Whether the modal or sidecar should be expanded by default.
 
@@ -44,7 +44,7 @@ false
 
 ### dimensions?
 
-> `optional` **dimensions**: [`Dimensions`](Dimensions.md)
+> `optional` **dimensions?**: [`Dimensions`](Dimensions.md)
 
 The dimensions for the modal or sidecar window.
 
@@ -56,7 +56,7 @@ The dimensions for the modal or sidecar window.
 
 ### defaultOpen?
 
-> `optional` **defaultOpen**: `boolean`
+> `optional` **defaultOpen?**: `boolean`
 
 Whether to open the modal window by default.
 
@@ -64,7 +64,7 @@ Whether to open the modal window by default.
 
 ### title?
 
-> `optional` **title**: `string`
+> `optional` **title?**: `string`
 
 The title displayed in the modal header.
 
@@ -78,7 +78,7 @@ The title displayed in the modal header.
 
 ### position?
 
-> `optional` **position**: [`ModalTriggerPosition`](../type-aliases/ModalTriggerPosition.md)
+> `optional` **position?**: [`ModalTriggerPosition`](../type-aliases/ModalTriggerPosition.md)
 
 The position of the modal trigger
 
@@ -90,9 +90,9 @@ The position of the modal trigger
 
 ***
 
-### icon()?
+### icon?
 
-> `optional` **icon**: (`state`) => `ReactNode`
+> `optional` **icon?**: (`state`) => `ReactNode`
 
 The icon to use for the modal window.
 Receives the current state of the modal window.
@@ -101,7 +101,7 @@ Receives the current state of the modal window.
 
 ##### state
 
-`"open"` | `"closed"` | `undefined`
+`"open"` \| `"closed"` \| `undefined`
 
 #### Returns
 

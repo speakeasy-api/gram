@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -97,15 +98,21 @@ async function $do(
   const path = pathToFunc("/rpc/chat.list")();
 
   const query = encodeFormQuery({
+    "account_type": payload?.account_type,
     "assistant_id": payload?.assistant_id,
+    "exclude_source_kind": payload?.exclude_source_kind,
     "external_user_id": payload?.external_user_id,
     "from": payload?.from,
     "has_risk": payload?.has_risk,
     "limit": payload?.limit,
+    "min_risk_score": payload?.min_risk_score,
     "offset": payload?.offset,
+    "pinned": payload?.pinned,
     "search": payload?.search,
     "sort_by": payload?.sort_by,
     "sort_order": payload?.sort_order,
+    "source": payload?.source,
+    "source_kind": payload?.source_kind,
     "to": payload?.to,
   });
 
@@ -181,19 +188,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

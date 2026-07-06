@@ -24,7 +24,7 @@ type ListRegistriesResponseBody struct {
 // "listCatalog" endpoint HTTP response body.
 type ListCatalogResponseBody struct {
 	// List of available MCP servers
-	Servers []*ExternalMCPServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	Servers []*ExternalMCPServerEntryResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Pagination cursor for the next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -818,9 +818,9 @@ type MCPRegistryResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 }
 
-// ExternalMCPServerResponseBody is used to define fields on response body
+// ExternalMCPServerEntryResponseBody is used to define fields on response body
 // types.
-type ExternalMCPServerResponseBody struct {
+type ExternalMCPServerEntryResponseBody struct {
 	// Server specifier used to look up in the registry (e.g.,
 	// 'io.github.user/server')
 	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
@@ -844,22 +844,16 @@ type ExternalMCPServerResponseBody struct {
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Tools available on the server
-	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Number of tools the server exposes
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// Whether every tool on the server is read-only
+	IsReadOnly bool `form:"is_read_only" json:"is_read_only" xml:"is_read_only"`
+	// Whether the server's OAuth authorization server advertises a dynamic client
+	// registration endpoint (RFC 7591). When false, connecting requires manual
+	// setup (static OAuth client credentials or API keys).
+	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
-}
-
-// ExternalMCPToolResponseBody is used to define fields on response body types.
-type ExternalMCPToolResponseBody struct {
-	// Name of the tool
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Description of the tool
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Input schema for the tool
-	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
-	// Annotations for the tool
-	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
 // ExternalMCPRemoteResponseBody is used to define fields on response body
@@ -906,6 +900,18 @@ type ExternalMCPRemoteVariableResponseBody struct {
 	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
+// ExternalMCPToolResponseBody is used to define fields on response body types.
+type ExternalMCPToolResponseBody struct {
+	// Name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Input schema for the tool
+	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
+	// Annotations for the tool
+	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
 // NewListRegistriesResponseBody builds the HTTP response body from the result
 // of the "listRegistries" endpoint of the "mcpRegistries" service.
 func NewListRegistriesResponseBody(res *mcpregistries.ListRegistriesResult) *ListRegistriesResponseBody {
@@ -932,16 +938,16 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 		NextCursor: res.NextCursor,
 	}
 	if res.Servers != nil {
-		body.Servers = make([]*ExternalMCPServerResponseBody, len(res.Servers))
+		body.Servers = make([]*ExternalMCPServerEntryResponseBody, len(res.Servers))
 		for i, val := range res.Servers {
 			if val == nil {
 				body.Servers[i] = nil
 				continue
 			}
-			body.Servers[i] = marshalTypesExternalMCPServerToExternalMCPServerResponseBody(val)
+			body.Servers[i] = marshalTypesExternalMCPServerEntryToExternalMCPServerEntryResponseBody(val)
 		}
 	} else {
-		body.Servers = []*ExternalMCPServerResponseBody{}
+		body.Servers = []*ExternalMCPServerEntryResponseBody{}
 	}
 	return body
 }

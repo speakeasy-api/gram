@@ -30,9 +30,17 @@ export type TargetTypes = ClosedEnum<typeof TargetTypes>;
  */
 export type GetToolUsageSummaryPayload = {
   /**
+   * Optional account type filter ('team' or 'personal').
+   */
+  accountType?: string | undefined;
+  /**
    * Start time in ISO 8601 format
    */
   from: Date;
+  /**
+   * Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.
+   */
+  hookSources?: Array<string> | undefined;
   /**
    * Hosted MCP toolset slugs to include
    */
@@ -61,7 +69,9 @@ export const TargetTypes$outboundSchema: z.ZodMiniEnum<typeof TargetTypes> = z
 
 /** @internal */
 export type GetToolUsageSummaryPayload$Outbound = {
+  account_type?: string | undefined;
   from: string;
+  hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
   shadow_server_names?: Array<string> | undefined;
   target_types?: Array<string> | undefined;
@@ -75,7 +85,9 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   GetToolUsageSummaryPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
     shadowServerNames: z.optional(z.array(z.string())),
     targetTypes: z.optional(z.array(TargetTypes$outboundSchema)),
@@ -84,6 +96,8 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
+      hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",

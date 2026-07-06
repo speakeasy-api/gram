@@ -12,11 +12,20 @@ import {
   HookSourceUsage$inboundSchema,
 } from "./hooksourceusage.js";
 import { ToolUsage, ToolUsage$inboundSchema } from "./toolusage.js";
+import { UserAccount, UserAccount$inboundSchema } from "./useraccount.js";
 
 /**
  * Aggregated usage summary for a single user
  */
 export type UserSummary = {
+  /**
+   * Distinct account types observed for this user ('team', 'personal')
+   */
+  accountTypes?: Array<string> | undefined;
+  /**
+   * Linked AI accounts for this user (team and personal, across providers)
+   */
+  accounts?: Array<UserAccount> | undefined;
   /**
    * Average tokens per chat request
    */
@@ -82,6 +91,10 @@ export type UserSummary = {
    */
   totalToolCalls: number;
   /**
+   * User email associated with this usage, when present
+   */
+  userEmail: string;
+  /**
    * User identifier (user_id or external_user_id depending on group_by)
    */
   userId: string;
@@ -91,6 +104,8 @@ export type UserSummary = {
 export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
   .pipe(
     z.object({
+      account_types: z.optional(z.array(z.string())),
+      accounts: z.optional(z.array(UserAccount$inboundSchema)),
       avg_tokens_per_request: z.number(),
       cache_creation_input_tokens: z.int(),
       cache_read_input_tokens: z.int(),
@@ -107,10 +122,12 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
       total_output_tokens: z.int(),
       total_tokens: z.int(),
       total_tool_calls: z.int(),
+      user_email: z.string(),
       user_id: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        "account_types": "accountTypes",
         "avg_tokens_per_request": "avgTokensPerRequest",
         "cache_creation_input_tokens": "cacheCreationInputTokens",
         "cache_read_input_tokens": "cacheReadInputTokens",
@@ -126,6 +143,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
         "total_output_tokens": "totalOutputTokens",
         "total_tokens": "totalTokens",
         "total_tool_calls": "totalToolCalls",
+        "user_email": "userEmail",
         "user_id": "userId",
       });
     }),

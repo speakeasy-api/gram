@@ -6,31 +6,32 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
-"github:speakeasy-api/openapi" = "1.19.2"
-"github:speakeasy-api/speakeasy" = "1.761.5"
+"github:speakeasy-api/openapi" = "1.24.0"
+"github:speakeasy-api/speakeasy" = "1.788.0"
 "github:FiloSottile/mkcert" = "1.4.4"
-apko = "1.1.3"
-flyctl = "0.4.6"
-go = "1.26.3"
-golangci-lint = "2.11.2"
+apko = "1.2.20"
+flyctl = "0.4.62"
+go = "1.26.4"
+golangci-lint = "2.12.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
-jq = "1.8.1"
-melange = "0.40.4"
+jq = "1.8.2"
+melange = "0.55.0"
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.3.0"
-watchexec = "2.5.0"
-uv = "0.11.21"
-yq = "4.52.4"
+"github:pnpm/pnpm" = "11.9.0"
+watchexec = "2.5.1"
+uv = "0.11.25"
+yq = "4.53.3"
 hk = "1.46.0"
-pkl = "0.31.0"
+pkl = "0.31.1"
 "github:speakeasy-api/madprocs" = "0.1.33"
-"github:temporalio/cli" = "1.6.1"
-"github:pb33f/openapi-changes" = "0.2.7"
+"github:temporalio/cli" = "1.7.2"
+"github:pb33f/openapi-changes" = "0.2.9"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
-buf = "1.69.0"
-ruff = "0.15.16"
+buf = "1.71.0"
+ruff = "0.15.20"
+"github:ast-grep/ast-grep" = "0.44.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -54,6 +55,7 @@ DB_PORT = "5439"
 ## static connection string. In this case, we use interpolation to point to the
 ## local development database configured above.
 GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}?sslmode=disable&search_path=public"
+GRAM_DATABASE_READ_REPLICA_URL = "{{env.GRAM_DATABASE_URL}}"
 
 ##############################
 ## ClickHouse configuration ##
@@ -85,12 +87,6 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 ##############################
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
-
-###########################################
-## Prompt-injection ML classifier (L1)   ##
-###########################################
-PI_CLASSIFIER_PORT = "5051"
-PI_CLASSIFIER_URL = "http://127.0.0.1:{{env.PI_CLASSIFIER_PORT}}"
 
 ##########################################
 ## Gram server, admin and worker config ##
@@ -168,6 +164,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 GRAM_PYSTREAMS_CONTROL_PORT = "8089"
 GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
+## Raise on blocking code detected on the pystreams event loop (aiocop). On by
+## default locally; unset in production. Set to "" in mise.local.toml to disable.
+GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 
 ##########################
 ## Observability config ##
@@ -202,6 +201,9 @@ TEMPORAL_WEB_PORT = "8233"
 GRAM_DISABLE_AIR = 0
 PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
+## During local development, you can disable BigQuery writes to avoid the extra
+## dependency on a GCP project.
+DISABLE_BIGQUERY_WRITES = 1
 
 ####################################
 ## Gram Functions runner settings ##
@@ -240,10 +242,16 @@ PULSE_REGISTRY_KEY = "unset"
 
 ##############
 ## Elements ##
+##############
 ## Used for local development only
 ## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
 ELEMENTS_STORYBOOK_PORT = "6007"
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+
+##########
+## Risk ##
+##########
+GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
 
 #########################
 ## Polar configuration ##

@@ -4651,9 +4651,6 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -4684,6 +4681,11 @@ type ScopeDefinitionResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// The type of resource this scope applies to.
 	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The scope used to store exception rules for this scope.
+	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
 // AccessMemberResponseBody is used to define fields on response body types.
@@ -4708,9 +4710,6 @@ type AccessMemberResponseBody struct {
 type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
@@ -4892,9 +4891,6 @@ type ChallengeResolutionResponseBody struct {
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorRequestBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -9262,13 +9258,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
-		}
-	}
-	if body.Effect != nil {
-		if !(*body.Effect == "allow" || *body.Effect == "deny") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "chat:read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -9291,8 +9282,8 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "risk_policy", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "risk_policy", "chat", "*"}))
 		}
 	}
 	if body.Disposition != nil {

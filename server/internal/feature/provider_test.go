@@ -13,8 +13,8 @@ func TestOrgProjectGroups_OrgAndProject(t *testing.T) {
 
 	got := feature.OrgProjectGroups("speakeasy-team", "default")
 	require.Equal(t, map[string]string{
-		"organization_slug": "speakeasy-team",
-		"slug":              "speakeasy-team/default",
+		"organization": "speakeasy-team",
+		"slug":         "speakeasy-team/default",
 	}, got)
 }
 
@@ -22,7 +22,7 @@ func TestOrgProjectGroups_OrgOnly(t *testing.T) {
 	t.Parallel()
 
 	got := feature.OrgProjectGroups("speakeasy-team", "")
-	require.Equal(t, map[string]string{"organization_slug": "speakeasy-team"}, got)
+	require.Equal(t, map[string]string{"organization": "speakeasy-team"}, got)
 }
 
 func TestOrgProjectGroups_NoOrgReturnsNil(t *testing.T) {

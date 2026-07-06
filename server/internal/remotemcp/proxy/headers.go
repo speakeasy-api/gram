@@ -19,11 +19,18 @@ const (
 // hop-by-hop headers (RFC 7230 § 6.1) and Host (set by the HTTP client
 // from the remote URL).
 //
+// Accept-Encoding is dropped so the Go transport owns content-encoding
+// negotiation: when the client forwards its own Accept-Encoding the transport
+// declines to transparently decompress the response, leaving a gzipped body
+// that fails JSON-RPC decode and bypasses response interception. Letting the
+// transport add and unwind its own encoding keeps the buffered body decodable.
+//
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
 func isSkippedRequestHeader(name string) bool {
 	switch strings.ToLower(name) {
 	case
+		"accept-encoding",
 		"authorization",
 		"connection",
 		"content-length",
@@ -114,6 +121,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		}
 		remoteReq.Header.Set(h.Name, value)
 	}
+
+	// Strip last so configured headers can't reintroduce Accept-Encoding after
+	// the user-header filter: the Go transport must own content-encoding
+	// negotiation, otherwise a gzipped upstream body reaches readJSONRPCBody
+	// undecoded and bypasses response interception.
+	remoteReq.Header.Del("Accept-Encoding")
 
 	return nil
 }

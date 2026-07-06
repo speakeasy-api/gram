@@ -6,6 +6,7 @@ import type { RemoteSession } from "@gram/client/models/components";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
   useOrganizationRemoteSessionClientSessions,
+  useRefreshOrganizationRemoteSessionMutation,
   useRevokeOrganizationRemoteSessionMutation,
 } from "@gram/client/react-query/index.js";
 import {
@@ -42,6 +43,20 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
     onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Failed to revoke session",
+      );
+    },
+  });
+
+  const refresh = useRefreshOrganizationRemoteSessionMutation({
+    onSuccess: async () => {
+      await invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Session refreshed");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh session",
       );
     },
   });
@@ -120,6 +135,20 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {session.hasRefreshToken && (
+                          <DropdownMenuItem
+                            disabled={refresh.isPending}
+                            onClick={() =>
+                              refresh.mutate({
+                                request: {
+                                  riskIDRequestBody: { id: session.id },
+                                },
+                              })
+                            }
+                          >
+                            Refresh now
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={() =>
                             revoke.mutate({

@@ -7,14 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type MintUserSessionRequestBody = {
   /**
-   * The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+   * Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
    */
-  toolsetId: string;
+  mcpServerId?: string | undefined;
+  /**
+   * Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+   */
+  toolsetId?: string | undefined;
 };
 
 /** @internal */
 export type MintUserSessionRequestBody$Outbound = {
-  toolset_id: string;
+  mcp_server_id?: string | undefined;
+  toolset_id?: string | undefined;
 };
 
 /** @internal */
@@ -23,10 +28,12 @@ export const MintUserSessionRequestBody$outboundSchema: z.ZodMiniType<
   MintUserSessionRequestBody
 > = z.pipe(
   z.object({
-    toolsetId: z.string(),
+    mcpServerId: z.optional(z.string()),
+    toolsetId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpServerId: "mcp_server_id",
       toolsetId: "toolset_id",
     });
   }),

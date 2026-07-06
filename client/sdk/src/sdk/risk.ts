@@ -3,10 +3,11 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
-import { Capabilities } from "./capabilities.js";
+import { Blocks } from "./blocks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
 import { Exclusions } from "./exclusions.js";
+import { Expr } from "./expr.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
@@ -21,19 +22,9 @@ export class Risk extends ClientSDK {
     ));
   }
 
-  private _capabilities?: Capabilities;
-  get capabilities(): Capabilities {
-    return (this._capabilities ??= new Capabilities(this._options));
-  }
-
-  private _categories?: Categories;
-  get categories(): Categories {
-    return (this._categories ??= new Categories(this._options));
-  }
-
-  private _exclusions?: Exclusions;
-  get exclusions(): Exclusions {
-    return (this._exclusions ??= new Exclusions(this._options));
+  private _expr?: Expr;
+  get expr(): Expr {
+    return (this._expr ??= new Expr(this._options));
   }
 
   private _customRules?: CustomRules;
@@ -41,14 +32,29 @@ export class Risk extends ClientSDK {
     return (this._customRules ??= new CustomRules(this._options));
   }
 
-  private _overview?: Overview;
-  get overview(): Overview {
-    return (this._overview ??= new Overview(this._options));
+  private _exclusions?: Exclusions;
+  get exclusions(): Exclusions {
+    return (this._exclusions ??= new Exclusions(this._options));
   }
 
   private _policies?: Policies;
   get policies(): Policies {
     return (this._policies ??= new Policies(this._options));
+  }
+
+  private _blocks?: Blocks;
+  get blocks(): Blocks {
+    return (this._blocks ??= new Blocks(this._options));
+  }
+
+  private _overview?: Overview;
+  get overview(): Overview {
+    return (this._overview ??= new Overview(this._options));
+  }
+
+  private _categories?: Categories;
+  get categories(): Categories {
+    return (this._categories ??= new Categories(this._options));
   }
 
   private _results?: Results;

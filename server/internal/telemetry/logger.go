@@ -36,7 +36,18 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 type LogParams struct {
 	Timestamp  time.Time
 	ToolInfo   ToolInfo
+	UserInfo   UserInfo
 	Attributes map[attr.Key]any
+
+	observedTimestamp  time.Time
+	resourceAttributes map[attr.Key]any
+	userSnapshot       userInfoSnapshot
+}
+
+func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAttributes map[attr.Key]any) LogParams {
+	params.observedTimestamp = observedTimestamp
+	params.resourceAttributes = resourceAttributes
+	return params
 }
 
 type Logger struct {
@@ -45,6 +56,7 @@ type Logger struct {
 	chConn            clickhouse.Conn
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
+	users             *UserInfoResolver
 }
 
 func NewLogger(
@@ -53,6 +65,7 @@ func NewLogger(
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
+	users *UserInfoResolver,
 ) *Logger {
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
@@ -60,6 +73,7 @@ func NewLogger(
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
+		users:             users,
 	}
 }
 
@@ -73,6 +87,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		chConn:            nil,
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
+		users:             nil,
 	}
 }
 
@@ -133,6 +148,8 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
 		}
 
+		param = l.hydrateUserInfo(shutdownCtx, param)
+
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
 			l.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
@@ -150,6 +167,23 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	return nil
 }
 
+// hydrateUserInfo fills the directory-derived parts of the row's UserInfo
+// (allowlisted WorkOS predefined attributes, current group names, role
+// slugs) when the caller provided a Gram user ID. Telemetry rows are
+// append-only: the snapshot reflects state at write time and is never
+// rewritten. Empty snapshot parts (directory-deleted users, orgs without
+// Directory Sync, lingering API keys) are omitted rather than stamped as
+// empty payloads. Caller-provided parts win, and the caller's attribute map
+// is never touched.
+func (l *Logger) hydrateUserInfo(ctx context.Context, param LogParams) LogParams {
+	if l.users == nil || param.ToolInfo.OrganizationID == "" || (param.UserInfo.userID == "" && param.UserInfo.email == "") {
+		return param
+	}
+
+	param.UserInfo, param.userSnapshot = l.users.Hydrate(ctx, param.ToolInfo.OrganizationID, param.UserInfo)
+	return param
+}
+
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
 func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, error) {
 	id, err := uuid.NewV7()
@@ -157,18 +191,24 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
-	// we want the core tool info data to also be added as attributes to our
-	// attributes object
+	// we want the core tool info and user info data to also be added as
+	// attributes to our attributes object
 	allAttrs := make(map[attr.Key]any)
 	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
+	maps.Copy(allAttrs, params.UserInfo.AsAttributes())
+	maps.Copy(allAttrs, params.userSnapshot.AsAttributes())
 
-	observedTimeUnixNano := time.Now().UnixNano()
+	observedTimestamp := params.observedTimestamp
+	if observedTimestamp.IsZero() {
+		observedTimestamp = time.Now()
+	}
+	observedTimeUnixNano := observedTimestamp.UnixNano()
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
 
-	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)
+	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
 	}
@@ -198,11 +238,10 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	}, nil
 }
 
-// parseAttributes splits attributes into resource and span attributes
-// based on ResourceAttributeKeys, and returns their json string representation.
-func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
+func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResourceAttrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
+	maps.Copy(resourceAttrs, explicitResourceAttrs)
 
 	for k, v := range attrs {
 		// if there's an attribute related to a Gen AI request we want
@@ -214,7 +253,9 @@ func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON s
 		}
 
 		if _, ok := ResourceAttributeKeys[k]; ok {
-			resourceAttrs[k] = v
+			if _, explicit := resourceAttrs[k]; !explicit {
+				resourceAttrs[k] = v
+			}
 			continue
 		}
 

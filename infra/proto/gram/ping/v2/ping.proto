@@ -1,0 +1,20 @@
+edition = "2024";
+
+package gram.ping.v2;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2;pingv2";
+
+message Message {
+  string id = 1;
+  string type = 2;
+  string created_at = 3;
+  bytes payload = 4;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 86400 /* 1 day */
+    }
+  };
+}

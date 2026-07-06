@@ -110,6 +110,17 @@ type RecentHookEvent struct {
 	Status        string  `ch:"status"`      // "blocked" if hook_block_reason set, else "received"
 }
 
+// ClaudeUserPromptCandidate represents a ranked Claude OTEL user_prompt event
+// candidate for correlating a captured chat message with a Claude prompt ID.
+type ClaudeUserPromptCandidate struct {
+	PromptID      string  `ch:"prompt_id"`
+	Prompt        string  `ch:"prompt"`
+	EventSequence int64   `ch:"event_sequence"`
+	TimeUnixNano  int64   `ch:"time_unix_nano"`
+	Similarity    float64 `ch:"similarity"`
+	IsExact       bool    `ch:"is_exact"`
+}
+
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {
@@ -186,7 +197,8 @@ type MetricsSummaryRow struct {
 // The UserID field holds whichever identifier was used for grouping; the caller
 // knows which one it represents based on the group_by parameter.
 type UserSummary struct {
-	UserID string `ch:"user_id"`
+	UserID    string `ch:"user_id"`
+	UserEmail string `ch:"user_email"`
 
 	// Activity timestamps
 	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`
@@ -219,6 +231,9 @@ type UserSummary struct {
 
 	// Hook source breakdowns (maps of hook source -> count)
 	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
+
+	// Distinct AI account types observed for this user ('team', 'personal').
+	AccountTypes []string `ch:"account_types"`
 }
 
 // EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.

@@ -320,6 +320,42 @@ func (q *Queries) ExpireStaleInvitations(ctx context.Context, arg ExpireStaleInv
 	return err
 }
 
+const filterOrganizationMemberUserIDs = `-- name: FilterOrganizationMemberUserIDs :many
+SELECT user_id::text AS user_id
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted_at IS NULL
+`
+
+type FilterOrganizationMemberUserIDsParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+// Returns the subset of the given Gram user IDs that are active members of
+// the organization. Used to mask Speakeasy staff identities in customer-facing
+// audit feeds.
+func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg FilterOrganizationMemberUserIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, filterOrganizationMemberUserIDs, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations
@@ -747,6 +783,38 @@ type LinkRoleAssignmentsToUserParams struct {
 func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAssignmentsToUserParams) error {
 	_, err := q.db.Exec(ctx, linkRoleAssignmentsToUser, arg.UserID, arg.WorkosUserID)
 	return err
+}
+
+const listActiveOrganizationUserIDs = `-- name: ListActiveOrganizationUserIDs :many
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+`
+
+// Returns the Gram user IDs of active members of the organization. Used to
+// suppress challenges raised by users outside the organization (e.g. Speakeasy
+// staff impersonating a customer org) from the Challenge UI.
+func (q *Queries) ListActiveOrganizationUserIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveOrganizationUserIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveRoleAssignmentsByOrganization = `-- name: ListActiveRoleAssignmentsByOrganization :many
@@ -1254,10 +1322,34 @@ resolved AS (
     FROM input_memberships
     JOIN organization_metadata ON organization_metadata.workos_id = input_memberships.workos_org_id
 ),
+claimed_placeholders AS (
+    UPDATE organization_user_relationships pending
+    SET user_id = $1,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    FROM resolved
+    WHERE pending.workos_membership_id = resolved.workos_membership_id
+      AND pending.user_id IS NULL
+      AND pending.deleted_at IS NULL
+      AND $1::text IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM organization_user_relationships existing
+          WHERE existing.organization_id = pending.organization_id
+            AND existing.user_id = $1
+            AND existing.deleted_at IS NULL
+      )
+    RETURNING pending.organization_id, pending.workos_membership_id
+),
 upserted AS (
     INSERT INTO organization_user_relationships (organization_id, user_id, workos_membership_id)
     SELECT resolved.organization_id, $1, resolved.workos_membership_id
     FROM resolved
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM claimed_placeholders
+        WHERE claimed_placeholders.workos_membership_id = resolved.workos_membership_id
+    )
     ON CONFLICT (organization_id, user_id) DO UPDATE SET
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,

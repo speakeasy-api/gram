@@ -97,6 +97,20 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 				ProjectSlugInput: nil,
 			})
 		},
+		"getManaged": func(ctx context.Context) error {
+			_, err := svc.GetManagedAssistant(ctx, &gen.GetManagedAssistantPayload{
+				SessionToken:     nil,
+				ProjectSlugInput: nil,
+			})
+			return err
+		},
+		"ensureManaged": func(ctx context.Context) error {
+			_, err := svc.EnsureManagedAssistant(ctx, &gen.EnsureManagedAssistantPayload{
+				SessionToken:     nil,
+				ProjectSlugInput: nil,
+			})
+			return err
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -113,6 +127,16 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
+	// getManaged is read-scoped — with project:read but no managed assistant
+	// provisioned yet, it must surface NotFound (so the dashboard can decide
+	// whether to call ensureManaged or show the viewer notice) rather than
+	// 403, which would conflate "missing" with "no permission".
+	_, err = svc.GetManagedAssistant(readCtx, &gen.GetManagedAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
@@ -275,7 +299,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 

@@ -2,8 +2,10 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +30,45 @@ var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
+
+// withAccountTypeFilter applies the shared account-type filter semantics:
+// "personal" is an exact match, while "team" matches everything not personal —
+// unclassified (empty) rows count as team so the team view keeps
+// pre-classification and non-attributed data (same convention as the chats
+// list filter and the schema comment on attribute_metrics_summaries). An empty
+// filter is a no-op.
+func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirrel.SelectBuilder {
+	switch accountType {
+	case "":
+		return sb
+	case "team":
+		// ifNull is a no-op on the non-nullable String columns and keeps
+		// NULL-projected CTE paths counting as team.
+		return sb.Where("ifNull(account_type, '') != 'personal'")
+	default:
+		return sb.Where(squirrel.Eq{"account_type": accountType})
+	}
+}
+
+// SearchUsers powers employee enrollment lists, so internal users are grouped by
+// email first to collapse rows that mix email-only and opaque user.id identity.
+func searchUsersGroupExpr(groupBy string) string {
+	if groupBy == "external_user_id" {
+		return userIdentifierExpr("external_user_id")
+	}
+	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+}
+
+// totalTokensExpr is a grouped-aggregate expression that yields a reliable total
+// token count. AI-coding providers like Claude Code report
+// gen_ai.usage.input_tokens and gen_ai.usage.output_tokens but never emit
+// gen_ai.usage.total_tokens, so rows that lack an explicit total fall back to
+// input + output. Rows that do carry an explicit total keep using it (our native
+// chat completions already set total = input + output), so the two row shapes
+// stay consistent. Without the fallback, Claude Code sessions surface "0 tokens"
+// in the costs/session views (DNO-323).
+const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
+	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
 
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
@@ -606,8 +647,11 @@ type GetTimeSeriesMetricsParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -666,11 +710,18 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
@@ -717,8 +768,11 @@ type GetToolMetricsBreakdownParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -757,11 +811,18 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -812,8 +873,11 @@ type GetOverviewSummaryParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -822,7 +886,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -935,11 +999,18 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	return sb
@@ -985,7 +1056,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') as model",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1069,19 +1140,17 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		return make(map[string]ChatMetricsRow), nil
 	}
 
-	println("\n\n\n", strings.Join(arg.ChatIDs, ", "), "\n\n\n")
-
 	sb := sq.Select(
-		"gram_chat_id",
+		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
-		GroupBy("gram_chat_id")
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		GroupBy("chat_id")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1108,6 +1177,181 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	}
 
 	return metricsMap, nil
+}
+
+// GetClaudeTurnUsageByChatIDsParams contains the parameters for getting Claude
+// Code per-turn usage for specific chat IDs.
+type GetClaudeTurnUsageByChatIDsParams struct {
+	GramProjectID string
+	ChatIDs       []string
+}
+
+// ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
+type ClaudeTurnUsageRow struct {
+	GramChatID          string   `ch:"gram_chat_id"`
+	PromptID            string   `ch:"prompt_id"`
+	StartTimeUnixNano   int64    `ch:"start_time_unix_nano"`
+	EndTimeUnixNano     int64    `ch:"end_time_unix_nano"`
+	RequestCount        uint64   `ch:"request_count"`
+	InputTokens         int64    `ch:"input_tokens"`
+	OutputTokens        int64    `ch:"output_tokens"`
+	CacheReadTokens     int64    `ch:"cache_read_tokens"`
+	CacheCreationTokens int64    `ch:"cache_creation_tokens"`
+	TotalTokens         int64    `ch:"total_tokens"`
+	CostUSD             float64  `ch:"cost_usd"`
+	CostMicros          int64    `ch:"cost_micros"`
+	Models              []string `ch:"models"`
+	QuerySources        []string `ch:"query_sources"`
+}
+
+// ClaudeToolUsageRow represents serialized input/result sizes for one Claude Code tool use.
+type ClaudeToolUsageRow struct {
+	GramChatID      string `ch:"gram_chat_id"`
+	ToolUseID       string `ch:"tool_use_id"`
+	PromptID        string `ch:"prompt_id"`
+	ToolName        string `ch:"tool_name"`
+	InputSizeBytes  int64  `ch:"input_size_bytes"`
+	ResultSizeBytes int64  `ch:"result_size_bytes"`
+}
+
+// GetClaudeTurnUsageByChatIDs retrieves ordered Claude Code usage turns grouped
+// by gram_chat_id and attributes.prompt.id. It initializes each requested chat
+// ID to an empty slice so callers can best-effort enrich chat responses without
+// special-casing missing ClickHouse rows.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaudeTurnUsageByChatIDsParams) (map[string][]ClaudeTurnUsageRow, error) {
+	usageByChatID := make(map[string][]ClaudeTurnUsageRow, len(arg.ChatIDs))
+	for _, chatID := range arg.ChatIDs {
+		usageByChatID[chatID] = []ClaudeTurnUsageRow{}
+	}
+	if len(arg.ChatIDs) == 0 {
+		return usageByChatID, nil
+	}
+
+	promptIDExpr := "toString(attributes.prompt.id)"
+	isAPIRequestExpr := "(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')"
+	isClaudeCodeExpr := "(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))"
+	inputTokensExpr := "sumIf(toInt64OrZero(toString(attributes.input_tokens)), " + isAPIRequestExpr + ")"
+	outputTokensExpr := "sumIf(toInt64OrZero(toString(attributes.output_tokens)), " + isAPIRequestExpr + ")"
+	cacheReadTokensExpr := "sumIf(toInt64OrZero(toString(attributes.cache_read_tokens)), " + isAPIRequestExpr + ")"
+	cacheCreationTokensExpr := "sumIf(toInt64OrZero(toString(attributes.cache_creation_tokens)), " + isAPIRequestExpr + ")"
+
+	sb := sq.Select(
+		"gram_chat_id",
+		promptIDExpr+" AS prompt_id",
+		"min(time_unix_nano) AS start_time_unix_nano",
+		"max(time_unix_nano) AS end_time_unix_nano",
+		"countIf("+isAPIRequestExpr+") AS request_count",
+		inputTokensExpr+" AS input_tokens",
+		outputTokensExpr+" AS output_tokens",
+		cacheReadTokensExpr+" AS cache_read_tokens",
+		cacheCreationTokensExpr+" AS cache_creation_tokens",
+		"("+inputTokensExpr+" + "+outputTokensExpr+" + "+cacheReadTokensExpr+" + "+cacheCreationTokensExpr+") AS total_tokens",
+		"sumIf(toFloat64OrZero(toString(attributes.cost_usd)), "+isAPIRequestExpr+") AS cost_usd",
+		"sumIf(toInt64OrZero(toString(attributes.cost_usd_micros)), "+isAPIRequestExpr+") AS cost_micros",
+		"arraySort(groupUniqArrayIf(toString(attributes.model), "+isAPIRequestExpr+" AND toString(attributes.model) != '')) AS models",
+		"arraySort(groupUniqArrayIf(toString(attributes.query_source), "+isAPIRequestExpr+" AND toString(attributes.query_source) != '')) AS query_sources",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
+		Where("gram_chat_id IS NOT NULL").
+		Where("gram_chat_id != ''").
+		Where(promptIDExpr+" != ''").
+		Where(isClaudeCodeExpr).
+		GroupBy("gram_chat_id", promptIDExpr).
+		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get Claude turn usage by chat IDs query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var usage ClaudeTurnUsageRow
+		if err = rows.ScanStruct(&usage); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		usageByChatID[usage.GramChatID] = append(usageByChatID[usage.GramChatID], usage)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return usageByChatID, nil
+}
+
+// GetClaudeToolUsageByChatIDs retrieves Claude Code tool input/result byte sizes
+// grouped by chat ID and tool_use_id. Claude Code emits these fields on
+// tool_result events after the tool completes.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaudeTurnUsageByChatIDsParams) (map[string][]ClaudeToolUsageRow, error) {
+	usageByChatID := make(map[string][]ClaudeToolUsageRow, len(arg.ChatIDs))
+	for _, chatID := range arg.ChatIDs {
+		usageByChatID[chatID] = []ClaudeToolUsageRow{}
+	}
+	if len(arg.ChatIDs) == 0 {
+		return usageByChatID, nil
+	}
+
+	toolUseIDExpr := "toString(attributes.tool_use_id)"
+	promptIDExpr := "toString(attributes.prompt.id)"
+	isToolResultExpr := "(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')"
+	isClaudeCodeExpr := "(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))"
+
+	sb := sq.Select(
+		"gram_chat_id",
+		toolUseIDExpr+" AS tool_use_id",
+		promptIDExpr+" AS prompt_id",
+		"anyIf(toString(attributes.tool_name), toString(attributes.tool_name) != '') AS tool_name",
+		"max(toInt64OrZero(toString(attributes.tool_input_size_bytes))) AS input_size_bytes",
+		"max(toInt64OrZero(toString(attributes.tool_result_size_bytes))) AS result_size_bytes",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
+		Where("gram_chat_id IS NOT NULL").
+		Where("gram_chat_id != ''").
+		Where(toolUseIDExpr+" != ''").
+		Where(promptIDExpr+" != ''").
+		Where(isToolResultExpr).
+		Where(isClaudeCodeExpr).
+		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
+		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get Claude tool usage by chat IDs query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var usage ClaudeToolUsageRow
+		if err = rows.ScanStruct(&usage); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		usageByChatID[usage.GramChatID] = append(usageByChatID[usage.GramChatID], usage)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return usageByChatID, nil
 }
 
 // toolCallExpressions returns the SQL fragments used to count tool calls for a
@@ -1182,6 +1426,8 @@ type SearchUsersParams struct {
 	GramDeploymentID string // optional
 	EventSource      string // optional; e.g. "hook"
 	HookSource       string // optional; e.g. "cursor"
+	AccountType      string // optional; e.g. "personal"
+	ExternalOrgID    string // optional; scopes to a single account by provider org id
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1191,8 +1437,8 @@ type SearchUsersParams struct {
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
-// Groups telemetry logs by user_id or external_user_id and computes per-user
-// metrics including tokens, chats, and tool call breakdowns.
+// Groups telemetry logs by internal email/user_id or external_user_id and
+// computes per-user metrics including tokens, chats, and tool call breakdowns.
 // Pagination uses last_seen_unix_nano + the group column for stable cursor ordering.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -1201,12 +1447,13 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
-	groupExpr := userIdentifierExpr(groupCol)
+	groupExpr := searchUsersGroupExpr(arg.GroupBy)
 
 	tc := toolCallExprsFor(arg.EventSource)
 
 	sb := sq.Select(
 		groupExpr+" AS user_id",
+		"anyIf(user_email, user_email != '') AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -1219,7 +1466,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
@@ -1237,6 +1484,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Hook source breakdowns (maps of hook source -> count)
 		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
+
+		// Distinct account types observed (powers the employees personal-account indicator)
+		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1254,8 +1504,19 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
+	}
 	if len(arg.UserIDs) > 0 {
-		sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		} else {
+			sb = sb.Where(squirrel.Or{
+				squirrel.Eq{groupExpr: arg.UserIDs},
+				squirrel.Eq{userIdentifierExpr(groupCol): arg.UserIDs},
+			})
+		}
 	}
 
 	sb = sb.GroupBy(groupExpr)
@@ -1304,6 +1565,8 @@ type GetUserMetricsSummaryParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 	EventSource    string // Optional filter - filters by event_source
 	HookSource     string // Optional filter - filters by hook_source
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -1326,7 +1589,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
 		// Chat request metrics
@@ -1374,6 +1637,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1464,6 +1731,8 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeEnd        int64
 	UserID         string // user_id (mutually exclusive with ExternalUserID)
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -1562,6 +1831,10 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
@@ -1750,6 +2023,7 @@ type ToolUsageUserFilter struct {
 // HostedMCPMatcher maps hook-observed hosted MCP identifiers to a hosted toolset.
 type HostedMCPMatcher struct {
 	ToolsetSlug string
+	ToolsetName string
 	McpSlug     string
 }
 
@@ -1764,6 +2038,8 @@ type GetToolUsageSummaryParams struct {
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
+	HookSources        []string
+	AccountType        string // Optional filter - filters by account_type (team|personal)
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -1782,6 +2058,7 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -1822,6 +2099,7 @@ type ToolUsageTraceSummary struct {
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
+	AccountType       *string `ch:"account_type"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -1992,6 +2270,8 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
+		HookSources:        nil,
+		AccountType:        "", // filter options enumerate all values, never scoped
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2052,6 +2332,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"http_status_code",
 		"hook_status",
 		"block_reason",
+		"account_type",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -2078,6 +2359,11 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	if len(arg.HookSources) > 0 {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
 	}
+
+	// account_type is carried on trace_summaries (fast path) and materialized on
+	// telemetry_logs (raw path), so this filters on the projected column either
+	// way.
+	sb = withAccountTypeFilter(sb, arg.AccountType)
 
 	if len(arg.UserFilters) > 0 {
 		userFilters := squirrel.Or{}
@@ -2622,6 +2908,15 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(userFilters)
 	}
 
+	// Direct hosted MCP calls have no hook source (empty string), so requiring a
+	// specific hook source naturally excludes them — matching the Tool Logs page.
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
+	// account_type is carried on trace_summaries and projected through the CTE.
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+
 	return sb, nil
 }
 
@@ -2650,7 +2945,187 @@ func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 	)
 }
 
+// toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
+// trace_summaries materialized view (one row per trace) for the common case where no
+// free-text query or arbitrary attribute filters are active. It emits the same output
+// columns as the raw-log path so ListToolUsageTraces selects from it unchanged. Tool
+// calls carry a real trace_id (recorded by the gateway in ToolProxy.Do), so hosted
+// MCP, shadow MCP, skill, and local tool events are all present in the view; only
+// free-text/custom-attribute search and traceless trigger events need the raw scan.
+func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, []any, error) {
+	groupedSB := sq.Select(
+		"toString(trace_id) AS g_trace_id",
+		"min(start_time_unix_nano) AS event_time_ns",
+		"sum(log_count) AS g_log_count",
+		"any(gram_urn) AS g_gram_urn",
+		"any(tool_name) AS g_tool_name",
+		"any(tool_source) AS g_tool_source",
+		"max(toolset_slug) AS g_toolset_slug",
+		"any(skill_name) AS g_skill_name",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"any(hook_source) AS g_hook_source",
+		"any(event_source) AS g_event_source",
+		"max(mcp_match) AS g_mcp_match",
+		"max(mcp_server_url) AS g_mcp_server_url",
+		"anyIfMerge(http_status_code) AS g_http_status_code",
+		// Reconstruct the hook status deterministically from the highest-severity
+		// rank across the trace's summary rows (mirrors the raw-log path), rather
+		// than max()-ing each boolean independently.
+		"max(hook_status_rank) AS g_hook_status_rank",
+		"max(block_reason) AS g_block_reason",
+		"max(account_type) AS g_account_type",
+	).
+		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("((startsWith(g_gram_urn, 'tools:') AND g_toolset_slug != '') OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+
+	groupedSQL, groupedArgs, err := groupedSB.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building tool usage trace summaries source: %w", err)
+	}
+
+	sourceSQL := groupedSQL
+	sourceArgs := groupedArgs
+	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	hasMatchers := len(hostedToolsetSlugs) > 0
+	if hasMatchers {
+		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, groupedSQL)
+		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+		sourceArgs = append(sourceArgs, groupedArgs...)
+	}
+
+	isSkillCall := "g_skill_name != ''"
+	skillLabel := "g_skill_name"
+	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
+
+	var targetType, targetKind, targetID, targetLabel string
+	if hasMatchers {
+		hostedMatch := "hosted_match_index > 0"
+		targetType = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'",
+			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		targetKind = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
+			hostedMatch, "'"+toolUsageTargetKindServer+"'",
+			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"'"+toolUsageTargetKindLocalTools+"'",
+		)
+		targetID = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			hostedMatch, "arrayElement(?, hosted_match_index)",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		targetLabel = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			hostedMatch, "arrayElement(?, hosted_match_index)",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	} else {
+		targetType = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		targetKind = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
+			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"'"+toolUsageTargetKindLocalTools+"'",
+		)
+		targetID = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		targetLabel = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	}
+
+	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKind := chMultiIf(
+		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"'"+toolUsageUserKindUnknown+"'",
+	)
+	hookStatus := "if(g_event_source = 'hook', multiIf(g_hook_status_rank = 3, CAST('blocked' AS Nullable(String)), g_hook_status_rank = 2, CAST('failure' AS Nullable(String)), g_hook_status_rank = 1, CAST('success' AS Nullable(String)), CAST('pending' AS Nullable(String))), CAST(NULL AS Nullable(String)))"
+
+	tracesSQL := fmt.Sprintf(`
+SELECT
+	g_trace_id AS id,
+	g_trace_id AS trace_id,
+	'trace_id' AS log_group_kind,
+	g_trace_id AS log_group_value,
+	event_time_ns AS start_time_unix_nano,
+	g_log_count AS log_count,
+	g_gram_urn AS gram_urn,
+	%s AS tool_name,
+	%s AS target_type,
+	%s AS target_kind,
+	%s AS target_id,
+	%s AS target_label,
+	%s AS user_key,
+	%s AS user_label,
+	%s AS user_kind,
+	nullIf(g_hook_source, '') AS hook_source,
+	g_event_source AS event_source,
+	g_http_status_code AS http_status_code,
+	%s AS hook_status,
+	nullIf(g_block_reason, '') AS block_reason,
+	nullIf(g_account_type, '') AS account_type
+FROM (%s)`,
+		toolName,
+		targetType,
+		targetKind,
+		targetID,
+		targetLabel,
+		userKey,
+		userKey,
+		userKind,
+		hookStatus,
+		sourceSQL,
+	)
+
+	finalArgs := make([]any, 0, 2+len(sourceArgs))
+	if hasMatchers {
+		// arrayElement(?, hosted_match_index) appears in target_id and target_label.
+		finalArgs = append(finalArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+	}
+	finalArgs = append(finalArgs, sourceArgs...)
+
+	return "WITH normalized_traces AS (" + tracesSQL + ")", finalArgs, nil
+}
+
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
+	// Fast path: when no free-text query or arbitrary attribute filters are active,
+	// serve the trace list from the trace_summaries materialized view. Free-text
+	// search, custom-attribute filters, and (traceless) trigger events fall through
+	// to the raw telemetry_logs scan below.
+	if arg.Query == "" && len(arg.Filters) == 0 {
+		return toolUsageTraceRowsFromSummariesCTE(arg)
+	}
+
 	conversationID := chFirstNonEmpty(chAttr("gen_ai.conversation.id"), "toString(attributes.`genai.conversation.id`)")
 	triggerInstanceID := chAttr("gram.trigger.instance_id")
 	toolCallArguments := chFirstNonEmpty(
@@ -2672,6 +3147,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		"account_type",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -2837,7 +3313,8 @@ SELECT
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
-	nullIf(block_reason, '') AS block_reason
+	nullIf(block_reason, '') AS block_reason,
+	account_type
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
@@ -2875,7 +3352,8 @@ normalized_traces AS (
 			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
-		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason
+		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
+		nullIf(any(account_type), '') AS account_type
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
@@ -2884,67 +3362,99 @@ normalized_traces AS (
 }
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
-	httpStatus := "toInt32OrZero(" + chAttr("http.response.status_code") + ")"
-	toolCallArguments := chFirstNonEmpty(
-		chAttr("gen_ai.tool.call.arguments"),
-		"toString(attributes.`gen_ai.tool.call.arguments`)",
-		"JSONExtractString(toString(attributes), 'gen_ai.tool.call.arguments')",
-	)
-	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString("+toolCallArguments+", 'skill')")
+	// Served from the trace_summaries materialized view (one row per trace) instead
+	// of scanning raw telemetry_logs. Tool calls carry a real trace_id (recorded by
+	// the gateway in ToolProxy.Do), so hosted MCP, shadow MCP, skill, and local tool
+	// events all land in trace_summaries and can be classified here without a full
+	// log scan. This path never carries free-text/arbitrary-attribute filters, so it
+	// always reads from the summary view.
+	// Each branch GROUPs BY trace_id over the AggregatingMergeTree, then a wrapping
+	// SELECT classifies the per-trace row. The grouped aggregate columns are aliased
+	// with a "g_" prefix that does NOT collide with the underlying trace_summaries
+	// column names. This matters: ClickHouse merges a subquery whose aggregate alias
+	// shadows a base column (e.g. `any(gram_urn) AS gram_urn`) back into the enclosing
+	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
+	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
-		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
-		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
-		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
-	hostedSB := sq.Select(
-		"time_unix_nano AS event_time_ns",
-		"'"+ToolUsageTargetTypeHostedMCP+"' AS target_type",
-		"'"+toolUsageTargetKindServer+"' AS target_kind",
-		"toolset_slug AS target_id",
-		"toolset_slug AS target_label",
-		chFirstNonEmpty("tool_name", "gram_urn")+" AS tool_name",
-		userKey+" AS user_key",
-		userKey+" AS user_label",
-		userKind+" AS user_kind",
-		"toUInt8("+httpStatus+" >= 200 AND "+httpStatus+" < 400) AS success",
-		"toUInt8("+httpStatus+" >= 400) AS failure",
+	hostedGroupedSB := sq.Select(
+		"min(start_time_unix_nano) AS event_time_ns",
+		"max(toolset_slug) AS g_toolset_slug",
+		"any(tool_name) AS g_tool_name",
+		"any(gram_urn) AS g_gram_urn",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		"max(account_type) AS g_account_type",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("startsWith(gram_urn, 'tools:')").
-		Where("toolset_slug != ''")
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("any(event_source) != 'hook'").
+		Having("startsWith(g_gram_urn, 'tools:')").
+		Having("g_toolset_slug != ''")
 
 	hookGroupedSB := sq.Select(
-		"min(time_unix_nano) AS event_time_ns",
-		"any(tool_name) AS tool_name",
-		"any(tool_source) AS tool_source",
-		"any(user_email) AS user_email",
-		"any(external_user_id) AS external_user_id",
-		"any(user_id) AS user_id",
-		"anyIf("+eventSkillName+", "+eventSkillName+" != '') AS skill_name",
-		"any("+chAttr("gram.mcp.match")+") AS mcp_match",
-		"any("+chAttr("gram.mcp.server_url")+") AS mcp_server_url",
-		"max(if("+chAttr("gen_ai.tool.call.result")+" != '', 1, 0)) AS has_result",
-		"max(if("+chAttr("gram.hook.error")+" != '', 1, 0)) AS has_error",
+		"min(start_time_unix_nano) AS event_time_ns",
+		"any(tool_name) AS g_tool_name",
+		"any(tool_source) AS g_tool_source",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"any(skill_name) AS g_skill_name",
+		"max(mcp_match) AS g_mcp_match",
+		"max(mcp_server_url) AS g_mcp_server_url",
+		"any(hook_source) AS g_hook_source",
+		"max(has_result) AS g_has_result",
+		"max(has_error) AS g_has_error",
+		"max(account_type) AS g_account_type",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("telemetry_logs.event_source = 'hook'").
-		Where("trace_id IS NOT NULL AND trace_id != ''").
-		Where("(telemetry_logs.tool_name != '' OR telemetry_logs.skill_name != '' OR JSONExtractString(" + toolCallArguments + ", 'skill') != '')").
-		GroupBy("trace_id")
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("any(event_source) = 'hook'").
+		Having("(g_tool_name != '' OR g_skill_name != '')")
 
-	hostedSQL, hostedArgs, err := hostedSB.ToSql()
+	hostedGroupedSQL, hostedArgs, err := hostedGroupedSB.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building hosted tool usage source: %w", err)
 	}
+	hostedSQL := fmt.Sprintf(`
+SELECT
+	event_time_ns,
+	'%s' AS target_type,
+	'%s' AS target_kind,
+	g_toolset_slug AS target_id,
+	g_toolset_slug AS target_label,
+	%s AS tool_name,
+	%s AS user_key,
+	%s AS user_label,
+	%s AS user_kind,
+	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
+	toUInt8(g_http_status_code >= 400) AS failure,
+	'' AS hook_source,
+	g_account_type AS account_type
+FROM (%s)`,
+		ToolUsageTargetTypeHostedMCP,
+		toolUsageTargetKindServer,
+		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
+		userKey,
+		userKey,
+		userKind,
+		hostedGroupedSQL,
+	)
+
 	hookGroupedSQL, hookGroupedArgs, err := hookGroupedSB.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building hook tool usage source: %w", err)
@@ -2954,60 +3464,60 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	hookSourceArgs := hookGroupedArgs
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
+		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
 		hookSourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, hookGroupedSQL)
 		hookSourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
 		hookSourceArgs = append(hookSourceArgs, hookGroupedArgs...)
 	}
 
 	hookTargetType := chMultiIf(
-		"skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
-		"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+		"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
+		"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 		"'"+ToolUsageTargetTypeLocalTool+"'",
 	)
 	hookTargetKind := chMultiIf(
-		"skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
-		"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+		"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
+		"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 		"'"+toolUsageTargetKindLocalTools+"'",
 	)
 	hookTargetID := chMultiIf(
-		"skill_name != ''", "skill_name",
-		"tool_source != ''", "tool_source",
+		"g_skill_name != ''", "g_skill_name",
+		"g_tool_source != ''", "g_tool_source",
 		"'local'",
 	)
 	hookTargetLabel := chMultiIf(
-		"skill_name != ''", "skill_name",
-		"tool_source != ''", "tool_source",
+		"g_skill_name != ''", "g_skill_name",
+		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
 	)
 	if len(hostedToolsetSlugs) > 0 {
 		hostedMatchCondition := "hosted_match_index > 0"
 		hookTargetType = chMultiIf(
 			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
-			"skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
-			"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
 		hookTargetKind = chMultiIf(
 			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
-			"skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
-			"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
 		hookTargetID = chMultiIf(
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			"skill_name != ''", "skill_name",
-			"tool_source != ''", "tool_source",
+			"g_skill_name != ''", "g_skill_name",
+			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
 		hookTargetLabel = chMultiIf(
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			"skill_name != ''", "skill_name",
-			"tool_source != ''", "tool_source",
+			"g_skill_name != ''", "g_skill_name",
+			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
 	}
-	hookToolName := chMultiIf("skill_name != ''", "skill_name", "tool_name")
+	hookToolName := chMultiIf("g_skill_name != ''", "g_skill_name", "g_tool_name")
 
 	hookSQL := fmt.Sprintf(`
 SELECT
@@ -3020,8 +3530,10 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
-	toUInt8(has_result = 1 AND has_error = 0) AS success,
-	toUInt8(has_error = 1) AS failure
+	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
+	toUInt8(g_has_error = 1) AS failure,
+	g_hook_source AS hook_source,
+	g_account_type AS account_type
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
@@ -3740,7 +4252,7 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -3876,7 +4388,7 @@ func (q *Queries) GetLLMClientBreakdown(ctx context.Context, arg GetLLMClientBre
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -3955,7 +4467,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	var userCountCondition string
 	if arg.SessionMode {
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND if(external_user_id != '', external_user_id, user_id) != '')"
+		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
 	} else {
 		// Count users with tool calls
 		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"
@@ -4077,6 +4589,132 @@ func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg Lis
 		events = append(events, ev)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+type ListClaudeUserPromptCandidatesForCorrelationParams struct {
+	GramProjectID          string
+	GramChatID             string
+	SessionID              string
+	MessagePrompt          string
+	MessageTimeUnixNano    int64
+	AfterEventSequence     int64
+	AfterEventTimeUnixNano int64
+	MinFuzzyLength         int
+	MaxTimeDeltaNanos      int64
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Context, arg ListClaudeUserPromptCandidatesForCorrelationParams) ([]ClaudeUserPromptCandidate, error) {
+	if arg.MessagePrompt == "" {
+		return nil, nil
+	}
+
+	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
+		"gram_project_id":               arg.GramProjectID,
+		"gram_chat_id":                  arg.GramChatID,
+		"session_id":                    arg.SessionID,
+		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
+		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
+		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
+		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
+		"min_fuzzy_length":              strconv.Itoa(arg.MinFuzzyLength),
+		"max_time_delta_nanos":          strconv.FormatInt(arg.MaxTimeDeltaNanos, 10),
+		"negative_max_time_delta_nanos": strconv.FormatInt(-arg.MaxTimeDeltaNanos, 10),
+	}))
+
+	rawEvents := sq.Select(
+		"toString(attributes.prompt.id) AS prompt_id",
+		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
+		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
+		"time_unix_nano",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = {gram_project_id:String}").
+		Where("gram_chat_id = {gram_chat_id:String}").
+		Where("toString(attributes.session.id) = {session_id:String}").
+		Where("toString(attributes.event.name) = 'user_prompt'").
+		Where("toString(attributes.prompt.id) != ''").
+		Where("toString(attributes.prompt) != ''").
+		Where(squirrel.Or{
+			squirrel.Expr("event_sequence > {after_event_sequence:Int64}"),
+			squirrel.Expr(`(
+				event_sequence = {after_event_sequence:Int64}
+				AND time_unix_nano > {after_event_time_unix_nano:Int64}
+			)`),
+		}).
+		Where(`time_unix_nano BETWEEN message_time_unix_nano + {negative_max_time_delta_nanos:Int64}
+			AND message_time_unix_nano + max_time_delta_nanos`)
+
+	scoredCandidates := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"prompt = message_prompt AS is_exact",
+		`if(
+			prompt = message_prompt,
+			1.0,
+			1.0 - (
+				toFloat64(editDistanceUTF8(prompt, message_prompt))
+				/ toFloat64(greatest(lengthUTF8(prompt), message_len, 1))
+			)
+		) AS similarity,
+		abs(time_unix_nano - message_time_unix_nano) AS time_delta`,
+	).
+		FromSelect(rawEvents, "raw_events")
+
+	sb := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"similarity",
+		"is_exact",
+	).
+		Prefix(`WITH
+			replaceRegexpAll(trimBoth(base64Decode({message_prompt_b64:String})), '\\s+', ' ') AS message_prompt,
+			lengthUTF8(message_prompt) AS message_len,
+			{message_time_unix_nano:Int64} AS message_time_unix_nano,
+			{max_time_delta_nanos:Int64} AS max_time_delta_nanos`).
+		FromSelect(scoredCandidates, "scored_candidates").
+		Where(squirrel.Or{
+			squirrel.Expr("is_exact"),
+			squirrel.And{
+				squirrel.Expr("message_len >= {min_fuzzy_length:UInt64}"),
+				squirrel.Expr("lengthUTF8(prompt) >= {min_fuzzy_length:UInt64}"),
+				squirrel.Expr("time_delta <= max_time_delta_nanos"),
+			},
+		}).
+		OrderBy("is_exact DESC", "similarity DESC", "time_delta ASC", "event_sequence ASC", "time_unix_nano ASC").
+		Limit(2)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list Claude user prompt candidates query: %w", err)
+	}
+	if len(args) > 0 {
+		return nil, fmt.Errorf("building list Claude user prompt candidates query: unexpected positional arguments")
+	}
+
+	rows, err := q.conn.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []ClaudeUserPromptCandidate
+	for rows.Next() {
+		var event ClaudeUserPromptCandidate
+		if err = rows.ScanStruct(&event); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		events = append(events, event)
+	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}

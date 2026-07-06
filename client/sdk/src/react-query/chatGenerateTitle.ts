@@ -52,7 +52,7 @@ export type ChatGenerateTitleMutationError =
  * generateTitle chat
  *
  * @remarks
- * Generate a title for a chat based on its messages
+ * Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
  */
 export function useChatGenerateTitleMutation(
   options?: MutationHookOptions<

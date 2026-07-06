@@ -4,6 +4,7 @@ import {
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
 import { Sparkles } from "lucide-react";
+import { ReleaseStageBadge } from "./release-stage-badge";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 
 /**
@@ -25,6 +26,12 @@ export function InsightsDockResumeButton(): JSX.Element | null {
       label="Project Assistant"
       className={INSIGHTS_DOCK_VT_CLASS}
       contentClassName={INSIGHTS_DOCK_CONTENT_VT_CLASS}
+      trailing={
+        <ReleaseStageBadge
+          stage="beta"
+          className="group-data-[collapsible=icon]:hidden"
+        />
+      }
     />
   );
 }

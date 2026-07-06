@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -13,19 +12,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// FallbackModelUsageTracker schedules fallback model usage tracking when inline tracking fails.
-type FallbackModelUsageTracker interface {
-	ScheduleFallbackModelUsageTracking(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
-}
-
-// DefaultUsageTrackingStrategy implements usage tracking with fallback support.
-// It tries to track usage immediately, and schedules a fallback if the initial attempt fails.
+// DefaultUsageTrackingStrategy emits billing events from an already-decoded
+// ModelUsage. OpenRouter returns the full usage payload inline on every chat
+// completion, so no out-of-band lookup is required.
 type DefaultUsageTrackingStrategy struct {
-	logger          *slog.Logger
-	provisioner     openrouter.Provisioner
-	tracking        billing.Tracker
-	fallbackTracker FallbackModelUsageTracker
-	orgRepo         *orgRepo.Queries
+	logger   *slog.Logger
+	tracking billing.Tracker
+	orgRepo  *orgRepo.Queries
 }
 
 var _ openrouter.UsageTrackingStrategy = (*DefaultUsageTrackingStrategy)(nil)
@@ -34,65 +27,25 @@ var _ openrouter.UsageTrackingStrategy = (*DefaultUsageTrackingStrategy)(nil)
 func NewDefaultUsageTrackingStrategy(
 	db *pgxpool.Pool,
 	logger *slog.Logger,
-	provisioner openrouter.Provisioner,
 	tracking billing.Tracker,
-	fallbackTracker FallbackModelUsageTracker,
 ) *DefaultUsageTrackingStrategy {
 	orgRepo := orgRepo.New(db)
 
 	return &DefaultUsageTrackingStrategy{
-		logger:          logger,
-		provisioner:     provisioner,
-		tracking:        tracking,
-		fallbackTracker: fallbackTracker,
-		orgRepo:         orgRepo,
+		logger:   logger,
+		tracking: tracking,
+		orgRepo:  orgRepo,
 	}
 }
 
-// TrackUsage attempts to track model usage immediately, with fallback support.
+// TrackUsage emits a billing event for an inline ModelUsage payload.
 func (s *DefaultUsageTrackingStrategy) TrackUsage(
 	ctx context.Context,
-	generationID, orgID, projectID string,
+	usage *openrouter.ModelUsage,
+	orgID, projectID string,
 	source billing.ModelUsageSource,
 	chatID string,
 ) error {
-	usage, err := s.provisioner.GetModelUsage(ctx, generationID, orgID)
-	if err != nil {
-		// Check if generation not found (404)
-		if errors.Is(err, openrouter.ErrGenerationNotFound) {
-			s.logger.WarnContext(ctx, "generation not found, scheduling fallback tracking",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-			)
-
-			// Schedule fallback tracking
-			if s.fallbackTracker != nil {
-				if scheduleErr := s.fallbackTracker.ScheduleFallbackModelUsageTracking(
-					ctx,
-					generationID,
-					orgID,
-					projectID,
-					source,
-					chatID,
-				); scheduleErr != nil {
-					s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
-						attr.SlogError(scheduleErr),
-						attr.SlogOrganizationID(orgID),
-					)
-					return fmt.Errorf("schedule fallback model usage tracking: %w", scheduleErr)
-				}
-			}
-		} else {
-			// Other errors
-			s.logger.ErrorContext(ctx, "failed to track model usage",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-			)
-			return fmt.Errorf("track model usage: %w", err)
-		}
-	}
-
-	// This (hopefully) means we scheduled fallback tracking above
 	if usage == nil {
 		return nil
 	}
@@ -100,6 +53,12 @@ func (s *DefaultUsageTrackingStrategy) TrackUsage(
 	org, err := s.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("get organization: %w", err)
+	}
+
+	if usage.TotalCost == nil {
+		s.logger.WarnContext(ctx, "openrouter response carried no cost",
+			attr.SlogOrganizationID(orgID),
+		)
 	}
 
 	event := billing.ModelUsageEvent{
@@ -136,7 +95,8 @@ func NewNoOpUsageTrackingStrategy() *NoOpUsageTrackingStrategy {
 // TrackUsage does nothing and always returns nil.
 func (s *NoOpUsageTrackingStrategy) TrackUsage(
 	_ context.Context,
-	_, _, _ string,
+	_ *openrouter.ModelUsage,
+	_, _ string,
 	_ billing.ModelUsageSource,
 	_ string,
 ) error {

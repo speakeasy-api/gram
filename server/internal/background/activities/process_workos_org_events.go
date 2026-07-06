@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -301,6 +302,15 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		}
 	}
 
+	// Ensure RBAC is enabled for any org this event touches, new or existing.
+	// The login-time provisioning path (auth/identity) enables RBAC best-effort
+	// and can leave a freshly created org unseeded if that call fails; once that
+	// row exists this backstop would otherwise resolve it as existing and skip
+	// seeding forever. EnableRBACTx is idempotent, so re-asserting here is safe.
+	if err := productfeatures.EnableRBACTx(ctx, dbtx, resolved.organizationID); err != nil {
+		return nil, fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
+	}
+
 	if resolved.needsExternalIDUpdate {
 		// The WorkOS write happens after commit in handleEvent so the remote
 		// external_id never points at an org row that failed to persist locally.
@@ -387,6 +397,7 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 	if err != nil {
 		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
 	}
+
 	return nil
 }
 

@@ -1,7 +1,6 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import {
   PageTabsTrigger,
@@ -11,9 +10,9 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/index.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
+import { ScopeBadge } from "./ScopeBadge";
 import { issuerDisplayName } from "./issuerDisplay";
 import { ClientsTab } from "./tabs/issuer/ClientsTab";
 import { OverviewTab } from "./tabs/issuer/OverviewTab";
@@ -59,7 +58,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
             <Type small muted>
               Remote Identity Provider
             </Type>
-            {issuer && <IssuerScopeBadge issuer={issuer} />}
+            {issuer && <ScopeBadge projectScoped={Boolean(issuer.projectId)} />}
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {label}
@@ -89,7 +88,8 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                 {issuer && <OverviewTab issuer={issuer} />}
               </TabsContent>
               <TabsContent value="clients" className="mt-0">
-                <ClientsTab issuerId={issuerId} />
+                {issuer && <ClientsTab issuer={issuer} />}
+                {isLoading && <Type muted>Loading…</Type>}
               </TabsContent>
               <TabsContent value="settings" className="mt-0">
                 {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
@@ -100,15 +100,5 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
         </RequireScope>
       </Page.Body>
     </Page>
-  );
-}
-
-// IssuerScopeBadge labels an issuer as organization-wide or scoped to a single
-// project, based on whether it carries an owning project id.
-function IssuerScopeBadge({ issuer }: { issuer: RemoteSessionIssuer }) {
-  return issuer.projectId ? (
-    <Badge variant="outline">Project-Specific</Badge>
-  ) : (
-    <Badge variant="secondary">Organizational</Badge>
   );
 }

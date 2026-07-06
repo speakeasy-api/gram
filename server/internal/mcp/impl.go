@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -136,9 +137,65 @@ type Service struct {
 	remoteProxyManager *remotemcp.ProxyManager
 }
 
+// oauthTokenInputs is one upstream OAuth access token collected during MCP
+// request setup, paired with the tool security schemes it may satisfy.
+// ServeToolsetResolved gathers these from the request's auth sources and tool
+// dispatch (rpc_tools_call.go / rpc_tools_list.go) injects each token into the
+// tools whose oauth2 / openIdConnect security scheme it covers.
 type oauthTokenInputs struct {
-	securityKeys []string // can be empty if a single token applies to the whole server
-	Token        string
+	// remoteSessionIssuerID identifies the remote_session_issuer whose
+	// upstream this token authorizes, when the token came from the
+	// issuer-gated remote-session resolver. Invalid for tokens that aren't
+	// remote-session-backed. Dispatch selects a token by securityKeys; the
+	// issuer id is carried for per-tool routing (AIS-152), which will
+	// populate securityKeys from it.
+	remoteSessionIssuerID uuid.NullUUID
+
+	// securityKeys lists the tool security-scheme keys this token satisfies.
+	// Empty means the token applies to every matching oauth2 / openIdConnect
+	// tool on the server (one token covering the whole server); when
+	// populated, dispatch injects the token only into tools whose security
+	// scheme key is in the list.
+	securityKeys []string
+
+	// Token is the upstream bearer access token value. Dispatch writes it into
+	// the matching tool's *_ACCESS_TOKEN env var, which the gateway forwards
+	// as the Authorization header on the outgoing upstream request.
+	Token string
+}
+
+// appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
+// map (resolved by ApplyIssuerGate / ResolveAccessTokens) into oauthTokenInputs
+// entries, tagging each with its remote_session_issuer_id. securityKeys is
+// left empty, so dispatch injects a remote-session token into every matching
+// oauth2 tool — correct only when a single remote issuer is bound.
+//
+// Fails closed when more than one token resolves: without per-tool routing
+// (AIS-152) we cannot tell which tool needs which issuer's token, and
+// injecting all of them with empty securityKeys could forward the wrong
+// bearer upstream. This mirrors singleUpstreamToken's fail-closed posture for
+// the remote-MCP backend. The state is unreachable while the
+// remote_session_client_user_session_issuers one_per_issuer index caps a
+// user_session_issuer at one client; it becomes reachable once AIS-137 drops
+// that index, at which point AIS-152 must land to route per tool.
+func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]string) ([]oauthTokenInputs, error) {
+	if len(tokens) > 1 {
+		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing required to dispatch (AIS-152)", len(tokens))
+	}
+	for issuerID, token := range tokens {
+		// Defensive: ResolveAccessTokens never maps an issuer to an empty
+		// token (it returns ErrNoValidToken instead), so this skip should not
+		// fire; it guards against a caller passing an empty-valued entry.
+		if token == "" {
+			continue
+		}
+		dst = append(dst, oauthTokenInputs{
+			securityKeys:          nil,
+			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+			Token:                 token,
+		})
+	}
+	return dst, nil
 }
 
 type mcpInputs struct {
@@ -157,6 +214,10 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
+	// mcpServerID is the fronting mcp_servers row id when the request arrived
+	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
+	// internal (agent-workflow) callers, which have no fronting server.
+	mcpServerID *uuid.UUID
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -278,6 +339,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
+	// (not slug-scoped): clients are addressed by their globally unique id.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -311,6 +375,14 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
+// HandleClientMetadataDocument is the public outbound-CIMD document endpoint at
+// `GET /.well-known/oauth-client/{id}`. Thin passthrough to
+// remotesessions.ChallengeManager so the route mounts alongside the other
+// remote-session handlers without reaching into the unexported manager field.
+func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
 // and delegating to metadata service, or returning method not allowed for others.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
@@ -337,7 +409,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 // if marshaling fails or the result kind is unrecognized, the caller's error
 // handler middleware needs an unwritten ResponseWriter so it can emit the real
 // error status — Go's net/http silently drops a second WriteHeader call.
-func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -352,32 +424,20 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
 // resource metadata body and only commits the 200 OK status once the body is
 // ready. See writeOAuthServerMetadataResponse for the rationale behind the
 // ordering.
-func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
@@ -445,9 +505,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Legacy toolset-by-slug path has no mcp_server, so there is no
-	// server-level variation group override; ServeToolsetResolved falls back to
-	// the toolset's own column.
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "", nil)
+	// server-level variation group override (ServeToolsetResolved falls back to
+	// the toolset's own column) and no fronting mcp_servers id to record.
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil)
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -465,11 +525,12 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // gate keyed on mcp_servers.user_session_issuer_id, so the same request
 // isn't gated twice. /mcp callers always pass false.
 //
-// extraUpstreamToken is the upstream remote-session access token collected
-// by a caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate
-// run). When non-empty it satisfies the toolset's oauth2 security scheme so
-// the downstream tool dispatch doesn't 401 when the in-toolset gate is
-// skipped. /mcp callers pass "".
+// extraUpstreamTokens are the upstream remote-session access tokens
+// collected by a caller-side issuer gate (today: /x/mcp's pre-dispatch
+// ApplyIssuerGate run), keyed by remote_session_issuer_id. When non-empty
+// they satisfy the toolset's oauth2 security schemes so the downstream tool
+// dispatch doesn't 401 when the in-toolset gate is skipped. /mcp callers
+// pass nil.
 //
 // mcpServerVariationsGroupID is the variation group resolved from the
 // mcp_servers row, when this request arrived via an mcp_endpoint that maps to
@@ -478,8 +539,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // project-default group applies. /mcp's legacy toolset-by-slug path has no
 // mcp_server and passes nil.
 //
+// mcpServerID is the fronting mcp_servers row id when this request arrived via
+// an mcp_endpoint, recorded on the tools/call telemetry row so toolset-backed
+// activity can be sliced from the fronting-server perspective. /mcp's legacy
+// toolset-by-slug path has no mcp_server and passes nil, leaving the attribute
+// off the row.
+//
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamToken string, mcpServerVariationsGroupID *uuid.UUID) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 
@@ -519,11 +586,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	authToken := AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
-	if extraUpstreamToken != "" {
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        extraUpstreamToken,
-		})
+	tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, extraUpstreamTokens)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
 	}
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
@@ -576,16 +641,14 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// all need to match the caller's surface, not the toolset's
 		// canonical /mcp surface.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
-		newCtx, gateToken, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
+		newCtx, gateTokens, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
 			return err
 		}
 		ctx = newCtx
-		if gateToken != "" {
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        gateToken,
-			})
+		tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, gateTokens)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
 		}
 	}
 
@@ -600,8 +663,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			// External OAuth server flow — collect token if present
 			if authToken != "" {
 				tokenInputs = append(tokenInputs, oauthTokenInputs{
-					securityKeys: []string{},
-					Token:        authToken,
+					securityKeys:          []string{},
+					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					Token:                 authToken,
 				})
 			}
 		case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
@@ -632,8 +696,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
 					for _, externalSecret := range oauthToken.ExternalSecrets {
 						tokenInputs = append(tokenInputs, oauthTokenInputs{
-							securityKeys: externalSecret.SecurityKeys,
-							Token:        externalSecret.Token,
+							securityKeys:          externalSecret.SecurityKeys,
+							remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+							Token:                 externalSecret.Token,
 						})
 					}
 				}
@@ -758,6 +823,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		externalUserID:        externalUserID,
 		apiKeyID:              apiKeyID,
 		toolVariationsGroupID: toolVariationsGroupID,
+		mcpServerID:           mcpServerID,
 		tags:                  tags,
 	}
 

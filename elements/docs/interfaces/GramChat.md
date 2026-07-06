@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -49,3 +49,9 @@ Represents a chat from the Gram API.
 ### updatedAt
 
 > **updatedAt**: `string` \| `Date`
+
+***
+
+### has\_more\_before?
+
+> `optional` **has\_more\_before?**: `boolean`

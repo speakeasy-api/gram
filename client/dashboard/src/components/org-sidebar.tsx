@@ -13,7 +13,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
@@ -66,34 +65,40 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const isAdmin = useIsAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isUserSessionsEnabled =
+    telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
-    orgRoutes.remoteIdentityProviders,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
   ].some((r) => r.active);
 
   const secureActive = [
     orgRoutes.auditLogs,
-    orgRoutes.identity,
     orgRoutes.deviceAgent,
     orgRoutes.access,
+  ].some((r) => r.active);
+
+  const identityActive = [
+    orgRoutes.userSessions,
+    orgRoutes.identity,
+    orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
   const activeGroup = settingsActive
     ? "Settings"
     : secureActive
       ? "Secure"
-      : undefined;
+      : identityActive
+        ? "Identity"
+        : undefined;
 
   const allOrgNavRoutes = [
     orgRoutes.home,
@@ -104,11 +109,11 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
     orgRoutes.auditLogs,
-    orgRoutes.identity,
     orgRoutes.deviceAgent,
     orgRoutes.access,
+    orgRoutes.userSessions,
+    orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
@@ -134,7 +139,7 @@ export function OrgSidebar({
         ) : (
           <NavGroupProvider
             activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Secure"]}
+            defaultOpenGroups={["Settings", "Secure", "Identity"]}
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2">
@@ -176,16 +181,9 @@ export function OrgSidebar({
                   scope={["org:read", "org:admin"]}
                 />
                 <ScopeGatedNavItem
-                  item={orgRoutes.remoteIdentityProviders}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem
                   item={orgRoutes.webhooks}
                   scope={["org:read", "org:admin"]}
                 />
-                {isAdmin && (
-                  <CollapsibleNavItem item={orgRoutes.adminSettings} />
-                )}
               </CollapsibleNavGroup>
 
               {/* Secure group */}
@@ -196,10 +194,6 @@ export function OrgSidebar({
               >
                 <ScopeGatedNavItem
                   item={orgRoutes.auditLogs}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem
-                  item={orgRoutes.identity}
                   scope={["org:read", "org:admin"]}
                 />
                 {isDeviceAgentEnabled && (
@@ -214,6 +208,28 @@ export function OrgSidebar({
                     scope={["org:read", "org:admin"]}
                   />
                 )}
+              </CollapsibleNavGroup>
+
+              {/* Identity group */}
+              <CollapsibleNavGroup
+                label="Identity"
+                Icon={(p) => <Icon {...p} name="fingerprint" />}
+                defaultHref={orgRoutes.identity.href()}
+              >
+                {isUserSessionsEnabled && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.userSessions}
+                    scope={["org:read", "org:admin"]}
+                  />
+                )}
+                <ScopeGatedNavItem
+                  item={orgRoutes.identity}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.remoteIdentityProviders}
+                  scope={["org:read", "org:admin"]}
+                />
               </CollapsibleNavGroup>
             </SidebarMenu>
           </NavGroupProvider>

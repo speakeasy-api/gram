@@ -171,6 +171,7 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    codexUsageMetricsURN,
 			attr.HookSourceKey:     "codex",
+			attr.ProviderKey:       providerOpenAI,
 		}
 
 		// Only include non-zero values, matching the Claude usage writer.
@@ -194,12 +195,6 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 		if p.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = p.Model
 		}
-		if p.UserEmail != "" {
-			attrs[attr.UserEmailKey] = p.UserEmail
-			if userID := emailToUserID[conv.NormalizeEmail(p.UserEmail)]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if p.ConversationID != "" {
 			attrs[attr.GenAIConversationIDKey] = p.ConversationID
 		}
@@ -219,9 +214,15 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			ts = time.Unix(0, p.TimestampNano)
 		}
 
+		userInfo := telemetry.UserInfoByEmail(p.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(p.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  ts,
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

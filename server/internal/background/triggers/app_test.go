@@ -2,10 +2,32 @@ package triggers
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestBoundAssistantKey(t *testing.T) {
+	t.Parallel()
+
+	// Within the limit: returned unchanged so keys stay readable.
+	short := "github:octocat/Hello-World/pr:42"
+	require.Equal(t, short, boundAssistantKey(short))
+
+	// A long key (e.g. a GitHub push to a repo + branch with long names)
+	// exceeds the assistant tables' 300-char CHECK; it must be bounded, keep a
+	// readable prefix, and stay deterministic and distinct from other long keys.
+	long := "github:octocat/Hello-World/branch:" + strings.Repeat("a", 400)
+	bounded := boundAssistantKey(long)
+	require.LessOrEqual(t, utf8.RuneCountInString(bounded), maxAssistantKeyLen)
+	require.True(t, strings.HasPrefix(bounded, "github:octocat/Hello-World/branch:"))
+	require.Equal(t, bounded, boundAssistantKey(long))
+
+	other := "github:octocat/Hello-World/branch:" + strings.Repeat("b", 400)
+	require.NotEqual(t, bounded, boundAssistantKey(other))
+}
 
 type fakeDispatcher struct {
 	kind   string

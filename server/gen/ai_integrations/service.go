@@ -62,6 +62,10 @@ type AIIntegrationConfig struct {
 	// Provider organization identifier. Required for anthropic_compliance; omitted
 	// for providers that do not need one.
 	ExternalOrganizationID *string
+	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
+	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
+	// 'unknown'. Empty/omitted when not declared.
+	BillingMode *string
 	// Whether the provider integration is active.
 	Enabled bool
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -120,6 +124,9 @@ type UpsertConfigPayload struct {
 	APIKey string
 	// Provider organization identifier. Required for anthropic_compliance.
 	ExternalOrganizationID *string
+	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
+	// Free-form; omit to leave the existing value unchanged.
+	BillingMode *string
 	// Whether the integration should be active.
 	Enabled bool
 }

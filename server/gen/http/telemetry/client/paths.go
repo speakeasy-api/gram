@@ -57,6 +57,16 @@ func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"
 }
 
+// QueryTelemetryPath returns the URL path to the telemetry service query HTTP endpoint.
+func QueryTelemetryPath() string {
+	return "/rpc/telemetry.query"
+}
+
+// ListSessionsTelemetryPath returns the URL path to the telemetry service listSessions HTTP endpoint.
+func ListSessionsTelemetryPath() string {
+	return "/rpc/telemetry.listSessions"
+}
+
 // ListFilterOptionsTelemetryPath returns the URL path to the telemetry service listFilterOptions HTTP endpoint.
 func ListFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.listFilterOptions"

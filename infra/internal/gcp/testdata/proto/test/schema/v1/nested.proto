@@ -1,0 +1,20 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// Envelope declares and uses a nested message, which is supported.
+message Envelope {
+  message Header {
+    string key = 1;
+    string value = 2;
+  }
+
+  string id = 1;
+  Header header = 2;
+
+  option (gcp.pubsub.v1.topic) = {};
+}

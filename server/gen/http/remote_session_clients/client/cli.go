@@ -25,10 +25,12 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsCreateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		for _, e := range body.UserSessionIssuerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -72,11 +74,89 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	}
 	v := &remotesessionclients.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
-		UserSessionIssuerID:     body.UserSessionIssuerID,
 		ClientID:                body.ClientID,
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+	}
+	if body.UserSessionIssuerIds != nil {
+		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+		for i, val := range body.UserSessionIssuerIds {
+			v.UserSessionIssuerIds[i] = val
+		}
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateCimdPayload builds the payload for the remoteSessionClients
+// createCimd endpoint from CLI flags.
+func BuildCreateCimdPayload(remoteSessionClientsCreateCimdBody string, remoteSessionClientsCreateCimdSessionToken string, remoteSessionClientsCreateCimdApikeyToken string, remoteSessionClientsCreateCimdProjectSlugInput string) (*remotesessionclients.CreateCimdPayload, error) {
+	var err error
+	var body CreateCimdRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsCreateCimdBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		for _, e := range body.UserSessionIssuerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+		}
+		for _, e := range body.Scope {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if body.Audience != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+		}
+		if body.Audience != nil {
+			if utf8.RuneCountInString(*body.Audience) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsCreateCimdSessionToken != "" {
+			sessionToken = &remoteSessionClientsCreateCimdSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsCreateCimdApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsCreateCimdApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsCreateCimdProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsCreateCimdProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.CreateCimdPayload{
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Audience:              body.Audience,
+	}
+	if body.UserSessionIssuerIds != nil {
+		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+		for i, val := range body.UserSessionIssuerIds {
+			v.UserSessionIssuerIds[i] = val
+		}
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -100,11 +180,13 @@ func BuildCloneClientFromOAuthProxyProviderPayload(remoteSessionClientsCloneClie
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsCloneClientFromOAuthProxyProviderBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_provider_id", body.OauthProxyProviderID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		for _, e := range body.UserSessionIssuerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -149,9 +231,14 @@ func BuildCloneClientFromOAuthProxyProviderPayload(remoteSessionClientsCloneClie
 	v := &remotesessionclients.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:    body.OauthProxyProviderID,
 		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
-		UserSessionIssuerID:     body.UserSessionIssuerID,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+	}
+	if body.UserSessionIssuerIds != nil {
+		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+		for i, val := range body.UserSessionIssuerIds {
+			v.UserSessionIssuerIds[i] = val
+		}
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -174,12 +261,9 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsUpdateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -224,7 +308,6 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 	v := &remotesessionclients.UpdateRemoteSessionClientPayload{
 		ID:                      body.ID,
 		ClientSecret:            body.ClientSecret,
-		UserSessionIssuerID:     body.UserSessionIssuerID,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
 	}
@@ -233,6 +316,96 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 		for i, val := range body.Scope {
 			v.Scope[i] = val
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildAttachUserSessionIssuerPayload builds the payload for the
+// remoteSessionClients attachUserSessionIssuer endpoint from CLI flags.
+func BuildAttachUserSessionIssuerPayload(remoteSessionClientsAttachUserSessionIssuerBody string, remoteSessionClientsAttachUserSessionIssuerSessionToken string, remoteSessionClientsAttachUserSessionIssuerApikeyToken string, remoteSessionClientsAttachUserSessionIssuerProjectSlugInput string) (*remotesessionclients.AttachUserSessionIssuerPayload, error) {
+	var err error
+	var body AttachUserSessionIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsAttachUserSessionIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsAttachUserSessionIssuerSessionToken != "" {
+			sessionToken = &remoteSessionClientsAttachUserSessionIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsAttachUserSessionIssuerApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsAttachUserSessionIssuerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsAttachUserSessionIssuerProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsAttachUserSessionIssuerProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.AttachUserSessionIssuerPayload{
+		ID:                  body.ID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachUserSessionIssuerPayload builds the payload for the
+// remoteSessionClients detachUserSessionIssuer endpoint from CLI flags.
+func BuildDetachUserSessionIssuerPayload(remoteSessionClientsDetachUserSessionIssuerBody string, remoteSessionClientsDetachUserSessionIssuerSessionToken string, remoteSessionClientsDetachUserSessionIssuerApikeyToken string, remoteSessionClientsDetachUserSessionIssuerProjectSlugInput string) (*remotesessionclients.DetachUserSessionIssuerPayload, error) {
+	var err error
+	var body DetachUserSessionIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsDetachUserSessionIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsDetachUserSessionIssuerSessionToken != "" {
+			sessionToken = &remoteSessionClientsDetachUserSessionIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsDetachUserSessionIssuerApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsDetachUserSessionIssuerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsDetachUserSessionIssuerProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsDetachUserSessionIssuerProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.DetachUserSessionIssuerPayload{
+		ID:                  body.ID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

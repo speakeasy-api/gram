@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 type Service struct {
@@ -35,31 +37,37 @@ type Service struct {
 	authz            *authz.Engine
 	core             *ServiceCore
 	signaler         WorkflowSignaler
-	bootstrapLimiter *assistantRateLimiter
+	bootstrapLimiter *ratelimit.Limiter
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
-var _ bgtriggers.Dispatcher = (*Service)(nil)
+var (
+	_ gen.Service           = (*Service)(nil)
+	_ gen.Auther            = (*Service)(nil)
+	_ bgtriggers.Dispatcher = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	core *ServiceCore,
 	signaler WorkflowSignaler,
+	bootstrapStore ratelimit.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		logger:           logger,
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		core:             core,
-		signaler:         signaler,
-		bootstrapLimiter: newAssistantRateLimiter(),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		logger:   logger,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		core:     core,
+		signaler: signaler,
+		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
+			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 	}
 }
 
@@ -223,7 +231,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// Sending a message is gated on project:read: it does not mutate project
+	// configuration, and viewers must be able to talk to a project's assistants.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	// Messages are sent as the calling user, so a user identity is required.
@@ -281,6 +291,29 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		ThreadID: threadID,
 		Accepted: result.Accepted,
 	}, nil
+}
+
+func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssistantPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	record, err := s.core.GetManagedAssistant(ctx, *authCtx.ProjectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "project assistant not provisioned")
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
+	}
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
+	}
+	return view, nil
 }
 
 func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManagedAssistantPayload) (*types.Assistant, error) {

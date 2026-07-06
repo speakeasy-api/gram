@@ -117,6 +117,10 @@ func (t *telemetryRuntimeBackend) ImageRef() string {
 	return t.inner.ImageRef()
 }
 
+func (t *telemetryRuntimeBackend) ReusesIdleRuntimes() bool {
+	return t.inner.ReusesIdleRuntimes()
+}
+
 func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	result, err := t.inner.RecycleImage(ctx, runtime)
 	if err != nil {
@@ -138,9 +142,10 @@ func (t *telemetryRuntimeBackend) RunTurn(
 	idempotencyKey string,
 	authToken string,
 	prompt string,
+	mcpServers []runtimeMCPServer,
 ) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}
@@ -176,6 +181,16 @@ func (t *telemetryRuntimeBackend) Reap(ctx context.Context, runtime assistantRun
 		return fmt.Errorf("runtime reap: %w", err)
 	}
 	t.emit(ctx, runtime, "runtime_reap", "runtime reaped", "INFO", nil)
+	return nil
+}
+
+func (t *telemetryRuntimeBackend) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	err := t.inner.ReapStoppedMachine(ctx, runtime)
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_reap_machine", "runtime machine reap failed", "ERROR", err)
+		return fmt.Errorf("runtime reap machine: %w", err)
+	}
+	t.emit(ctx, runtime, "runtime_reap_machine", "runtime machine reaped", "INFO", nil)
 	return nil
 }
 
@@ -227,13 +242,14 @@ func (t *telemetryRuntimeBackend) emit(
 		Timestamp: time.Now().UTC(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             runtime.AssistantID.String(),
-			URN:            "urn:uuid:" + runtime.AssistantID.String(),
+			URN:            assistantRuntimeTelemetryURN,
 			Name:           name,
 			ProjectID:      runtime.ProjectID.String(),
 			DeploymentID:   "",
 			FunctionID:     nil,
 			OrganizationID: lc.OrganizationID,
 		},
+		UserInfo:   telemetry.UserInfo{},
 		Attributes: attrs,
 	})
 }

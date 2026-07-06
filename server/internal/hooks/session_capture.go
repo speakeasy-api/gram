@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
@@ -153,9 +154,13 @@ func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult 
 // or exit-code-2) is what makes the block reason render — stderr-only
 // blocks don't carry the reason field at all.
 // https://code.claude.com/docs/en/hooks#decision-control
-func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
-		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.UserPromptSubmit) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
+	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
@@ -166,24 +171,24 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
-	return makeHookResult(payload.HookEventName), nil
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // handleStop captures the assistant's final response text.
 // Note: If the Stop event includes tool calls, those are handled separately by PreToolUse events,
 // so we skip creating duplicate messages here.
-func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handleStop(ctx context.Context, ev *hookevents.Stop) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // handleSessionEnd finalizes the session by updating the timestamp.
-func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handleSessionEnd(ctx context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)
-func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handleNotification(ctx context.Context, ev *hookevents.Notification) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // insertMessageWithFallbackUpsert inserts a chat message, creating the chat if needed.
@@ -233,6 +238,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		OrganizationID: metadata.GramOrgID,
 		UserID:         conv.ToPGTextEmpty(metadata.UserID),
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(defaultTitle),
 	})
 	if upsertErr != nil {
@@ -263,6 +269,13 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
 	case "Stop":
+		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
+			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+				attr.SlogProjectID(metadata.ProjectID),
+			)
+		}
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
@@ -323,6 +336,33 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, payload *gen.ClaudePayload) error {
+	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(payload.AdditionalData)
+	if lastUserPromptID == "" {
+		return nil
+	}
+
+	_, err := s.repo.BackfillLatestClaudeUserMessagePromptID(ctx, repo.BackfillLatestClaudeUserMessagePromptIDParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		MessageID: conv.ToPGText(lastUserPromptID),
+	})
+	if err != nil {
+		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
+	}
+	return nil
+}
+
+func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
+	if additionalData == nil {
+		return ""
+	}
+	if v, ok := additionalData["LastUserPromptID"].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

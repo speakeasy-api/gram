@@ -1,5 +1,5 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -17,6 +17,8 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
+  if (scope.startsWith("risk_policy:")) return "risk_policy";
+  if (scope.startsWith("chat:")) return "chat";
   return "*";
 }
 
@@ -50,7 +52,7 @@ export function selectorMatches(
  */
 function useRBACImpl() {
   const telemetry = useTelemetry();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const productTier = useProductTier();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   // Toolbar is accessible in dev or for admins; pass the flag into the getter

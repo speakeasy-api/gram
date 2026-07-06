@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 )
 
 type Key = attribute.Key
@@ -19,8 +19,14 @@ const (
 	ErrorMessageKey        = attribute.Key("error.message")
 	ErrorIDKey             = attribute.Key("gram.error.id")
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
+	ProcessSignalKey       = attribute.Key("process.signal")
 	ServerAddressKey       = semconv.ServerAddressKey
 	DurationKey            = attribute.Key("duration")
+
+	SpawnDurationKey  = attribute.Key("gram.function.spawn_duration")
+	InFlightKey       = attribute.Key("gram.function.in_flight")
+	MaxConcurrencyKey = attribute.Key("gram.function.max_concurrency")
+	RetryAfterKey     = attribute.Key("gram.function.retry_after")
 
 	ComponentKey = attribute.Key("gram.component")
 
@@ -67,6 +73,25 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 
 func ProcessExitCode(v int) attribute.KeyValue { return ProcessExitCodeKey.Int(v) }
 func SlogProcessExitCode(v int) slog.Attr      { return slog.Int(string(ProcessExitCodeKey), v) }
+
+func ProcessSignal(v string) attribute.KeyValue { return ProcessSignalKey.String(v) }
+func SlogProcessSignal(v string) slog.Attr      { return slog.String(string(ProcessSignalKey), v) }
+
+func SpawnDuration(v time.Duration) attribute.KeyValue { return SpawnDurationKey.Float64(v.Seconds()) }
+func SlogSpawnDuration(v time.Duration) slog.Attr {
+	return slog.Float64(string(SpawnDurationKey), v.Seconds())
+}
+
+func InFlight(v int) attribute.KeyValue { return InFlightKey.Int(v) }
+func SlogInFlight(v int) slog.Attr      { return slog.Int(string(InFlightKey), v) }
+
+func MaxConcurrency(v int) attribute.KeyValue { return MaxConcurrencyKey.Int(v) }
+func SlogMaxConcurrency(v int) slog.Attr      { return slog.Int(string(MaxConcurrencyKey), v) }
+
+func RetryAfter(v time.Duration) attribute.KeyValue { return RetryAfterKey.Float64(v.Seconds()) }
+func SlogRetryAfter(v time.Duration) slog.Attr {
+	return slog.Float64(string(RetryAfterKey), v.Seconds())
+}
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }

@@ -1,8 +1,13 @@
 import { type DateRangePreset } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { type ReactNode, useMemo } from "react";
-import { MultiSelect } from "@/components/ui/multi-select";
-import { cn } from "@/lib/utils";
+import { type ReactNode, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router";
+import {
+  defineFilters,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
+import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type {
@@ -10,7 +15,10 @@ import type {
   MultiSelectOption,
 } from "@/components/ui/multi-select";
 
+const SERVER_FILTER_PATH = "gram.tool_call.source";
+const USER_EMAIL_FILTER_PATH = "user.email";
 const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
+const DEFAULT_PRESET: DateRangePreset = "7d";
 
 export interface FilterChip {
   display: string;
@@ -31,6 +39,61 @@ const SERVER_TYPES: Array<{ label: string; value: ObserveTypeFilterValue }> = [
   { label: "Local Tools", value: "local" },
   { label: "Skills", value: "skill" },
 ];
+
+// Server, User and the date range are the most-used dimensions, so they pin as
+// always-visible pills. Role and Agent appear as pills once active; Type is
+// sheet-only (it always carries a default value and would otherwise pill).
+const OBSERVE_FILTER_BASE = [
+  {
+    id: "server",
+    label: "Server",
+    kind: "multiselect",
+    pinned: true,
+    placeholder: "Filter by server name",
+  },
+  {
+    id: "user",
+    label: "User",
+    kind: "multiselect",
+    pinned: true,
+    placeholder: "Filter by user email",
+  },
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: DEFAULT_PRESET,
+  },
+  {
+    id: "role",
+    label: "Role",
+    kind: "multiselect",
+    placeholder: "Filter by role",
+  },
+  {
+    id: "source",
+    label: "Agent",
+    kind: "multiselect",
+    placeholder: "Filter by agent",
+  },
+  { id: "type", label: "Type", kind: "multiselect", hideChip: true },
+] as const;
+
+const OBSERVE_FILTERS = defineFilters(OBSERVE_FILTER_BASE);
+
+// Account-type is opt-in: only consumers whose data source can filter on the
+// account_type dimension (e.g. the raw-logs path) pass account-type props, so
+// the control isn't shown where it can't be served.
+const OBSERVE_FILTERS_WITH_ACCOUNT_TYPE = defineFilters([
+  ...OBSERVE_FILTER_BASE,
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
+] as const);
 
 export function ObserveFilterBar({
   serverOptions,
@@ -57,6 +120,10 @@ export function ObserveFilterBar({
   className,
   serverNameMappings,
   attributeSearchControl,
+  accountType,
+  onAccountTypeChange,
+  onRefresh,
+  isRefreshing,
 }: {
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
@@ -82,35 +149,36 @@ export function ObserveFilterBar({
   className?: string;
   serverNameMappings?: ReturnType<typeof useServerNameMappings>;
   attributeSearchControl?: ReactNode;
+  // Opt-in account-type ("team" | "personal" | "") filter. Only wire these on
+  // pages whose data source can filter on account_type (e.g. raw logs).
+  accountType?: string;
+  onAccountTypeChange?: (value: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }): JSX.Element {
+  const valuesByPath = useCallback(
+    (path: string) =>
+      activeFilters
+        .filter((f) => f.path === path)
+        .flatMap((f) => f.filters)
+        .filter(Boolean),
+    [activeFilters],
+  );
+
   const selectedServers = useMemo(
-    () =>
-      activeFilters
-        .filter((f) => f.path === "gram.tool_call.source")
-        .flatMap((f) => f.filters)
-        .filter(Boolean),
-    [activeFilters],
+    () => valuesByPath(SERVER_FILTER_PATH),
+    [valuesByPath],
   );
-
   const selectedEmails = useMemo(
-    () =>
-      activeFilters
-        .filter((f) => f.path === "user.email")
-        .flatMap((f) => f.filters)
-        .filter(Boolean),
-    [activeFilters],
+    () => valuesByPath(USER_EMAIL_FILTER_PATH),
+    [valuesByPath],
   );
-
   const selectedSources = useMemo(
-    () =>
-      activeFilters
-        .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
-        .flatMap((f) => f.filters)
-        .filter(Boolean),
-    [activeFilters],
+    () => valuesByPath(HOOK_SOURCE_FILTER_PATH),
+    [valuesByPath],
   );
 
-  const serverOptionsWithDisplayNames = useMemo(() => {
+  const serverOptionsResolved = useMemo(() => {
     if (serverOptionGroups) return serverOptionGroups;
     const rawToDisplay = serverNameMappings?.rawToDisplay;
     return serverOptions.map((rawName) => ({
@@ -120,85 +188,219 @@ export function ObserveFilterBar({
   }, [serverOptionGroups, serverOptions, serverNameMappings?.rawToDisplay]);
 
   // The raw hook_source value (e.g. "claude-code") is shown verbatim — matching
-  // the table row — and paired with its brand icon. HookSourceIcon needs a
-  // `source` prop, so bind it per option to satisfy MultiSelect's
-  // `icon: ComponentType<{ className }>` contract.
+  // the table row — and paired with its brand icon.
   const sourceOptionsWithIcons = useMemo(
     () =>
       sourceOptions.map((source) => ({
         label: source,
         value: source,
-        icon: ({ className }: { className?: string }) => (
-          <HookSourceIcon source={source} className={className} />
+        icon: ({ className: iconClassName }: { className?: string }) => (
+          <HookSourceIcon source={source} className={iconClassName} />
         ),
       })),
     [sourceOptions],
   );
 
-  return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <MultiSelect
-          options={serverOptionsWithDisplayNames}
-          defaultValue={selectedServers}
-          onValueChange={onServerSelectionChange}
-          placeholder="Filter by server name"
-          className="min-w-16 flex-1"
-          hideSelectAll
-          singleLine
-        />
-        <MultiSelect
-          options={userEmailOptions.map((e) => ({ label: e, value: e }))}
-          defaultValue={selectedEmails}
-          onValueChange={onUserEmailSelectionChange}
-          placeholder="Filter by user email"
-          className="min-w-16 flex-1"
-          hideSelectAll
-          singleLine
-        />
-        <MultiSelect
-          options={roleOptions.map((r) => ({ label: r.name, value: r.id }))}
-          defaultValue={selectedRoleIds}
-          onValueChange={onRoleSelectionChange}
-          placeholder="Filter by role"
-          className="min-w-16 flex-1"
-          hideSelectAll
-          singleLine
-        />
-        <MultiSelect
-          options={sourceOptionsWithIcons}
-          defaultValue={selectedSources}
-          onValueChange={onSourceSelectionChange}
-          placeholder="Filter by agent"
-          className="min-w-16 flex-1"
-          hideSelectAll
-          singleLine
-        />
-        <MultiSelect
-          options={typeOptions}
-          defaultValue={selectedTypes}
-          onValueChange={(values) =>
-            onTypesChange(values as ObserveTypeFilterValue[])
+  const values = useMemo<Record<string, FilterValue>>(
+    () => ({
+      server: selectedServers,
+      user: selectedEmails,
+      date: {
+        preset: customRange ? null : dateRange,
+        customRange,
+        customLabel: customRangeLabel,
+      },
+      role: selectedRoleIds,
+      source: selectedSources,
+      type: selectedTypes,
+      account_type: accountType || null,
+    }),
+    [
+      selectedServers,
+      selectedEmails,
+      customRange,
+      dateRange,
+      customRangeLabel,
+      selectedRoleIds,
+      selectedSources,
+      selectedTypes,
+      accountType,
+    ],
+  );
+
+  const optionsById = useMemo<OptionsById>(
+    () => ({
+      server: serverOptionsResolved,
+      user: userEmailOptions.map((e) => ({ label: e, value: e })),
+      role: roleOptions.map((r) => ({ label: r.name, value: r.id })),
+      source: sourceOptionsWithIcons,
+      type: typeOptions,
+      account_type: ACCOUNT_TYPE_OPTIONS,
+    }),
+    [
+      serverOptionsResolved,
+      userEmailOptions,
+      roleOptions,
+      sourceOptionsWithIcons,
+      typeOptions,
+    ],
+  );
+
+  const handleChange = useCallback(
+    (id: string, value: FilterValue) => {
+      switch (id) {
+        case "server":
+          onServerSelectionChange(value as string[]);
+          return;
+        case "user":
+          onUserEmailSelectionChange(value as string[]);
+          return;
+        case "role":
+          onRoleSelectionChange(value as string[]);
+          return;
+        case "source":
+          onSourceSelectionChange(value as string[]);
+          return;
+        case "type":
+          onTypesChange(value as ObserveTypeFilterValue[]);
+          return;
+        case "account_type":
+          onAccountTypeChange?.((value as string | null) ?? "");
+          return;
+        case "date": {
+          const d = value as {
+            preset: DateRangePreset | null;
+            customRange: { from: Date; to: Date } | null;
+            customLabel: string | null;
+          };
+          if (d.customRange) {
+            onCustomRangeChange(
+              d.customRange.from,
+              d.customRange.to,
+              d.customLabel ?? undefined,
+            );
+          } else if (d.preset) {
+            onDateRangeChange(d.preset);
+          } else {
+            onClearCustomRange();
           }
-          placeholder="Filter by type"
-          className="min-w-16 flex-1"
-          searchable={false}
-          autoSize
-          hideSelectAll
-          singleLine
+          return;
+        }
+      }
+    },
+    [
+      onServerSelectionChange,
+      onUserEmailSelectionChange,
+      onRoleSelectionChange,
+      onSourceSelectionChange,
+      onTypesChange,
+      onCustomRangeChange,
+      onDateRangeChange,
+      onClearCustomRange,
+      onAccountTypeChange,
+    ],
+  );
+
+  const handleClear = useCallback(
+    (id: string) => {
+      switch (id) {
+        case "server":
+          onServerSelectionChange([]);
+          return;
+        case "user":
+          onUserEmailSelectionChange([]);
+          return;
+        case "role":
+          onRoleSelectionChange([]);
+          return;
+        case "source":
+          onSourceSelectionChange([]);
+          return;
+        case "type":
+          onTypesChange([]);
+          return;
+        case "account_type":
+          onAccountTypeChange?.("");
+          return;
+        case "date":
+          onDateRangeChange(DEFAULT_PRESET);
+          return;
+      }
+    },
+    [
+      onServerSelectionChange,
+      onUserEmailSelectionChange,
+      onRoleSelectionChange,
+      onSourceSelectionChange,
+      onTypesChange,
+      onDateRangeChange,
+      onAccountTypeChange,
+    ],
+  );
+
+  // react-router's `setSearchParams(fn)` closes over a memoized `searchParams`
+  // that only updates after a navigation commits, so firing one call per filter
+  // (as the per-field handlers do) makes every call build off the SAME baseline
+  // and the last `navigate` clobbers the rest — clearing only the date. Clearing
+  // every filter param in a single update is the only way to reset them at once.
+  // Deleting the params resets to defaults: absent `range` → 7d, absent
+  // `hookTypes` → DEFAULT_HOOK_TYPES (see useObserveFilters). The attribute
+  // search (`q`/`af`) is owned by a separate hook + local state, so it's left
+  // untouched here to avoid desyncing that control.
+  const [, setSearchParams] = useSearchParams();
+  const handleClearAll = useCallback(() => {
+    // Clear every filter param in a single update. react-router's setSearchParams
+    // reads a memoized snapshot, so a second call (e.g. onAccountTypeChange) would
+    // clobber this one — account_type is deleted here instead.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const key of [
+          "server",
+          "user",
+          "source",
+          "role",
+          "hookTypes",
+          "account_type",
+          "range",
+          "from",
+          "to",
+          "label",
+        ]) {
+          next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  // The arbitrary-attribute search/builder lives inside the sheet's "Custom
+  // attributes" section (via FilterBar's customBuilder) rather than as a second
+  // row under the bar — keeps the bar to one clean line and avoids the cramped
+  // control sitting directly beneath the filters.
+  return (
+    <Page.Toolbar className={className}>
+      <Page.Toolbar.Filters
+        schema={
+          onAccountTypeChange
+            ? OBSERVE_FILTERS_WITH_ACCOUNT_TYPE
+            : OBSERVE_FILTERS
+        }
+        values={values}
+        optionsById={optionsById}
+        onChange={handleChange}
+        onClear={handleClear}
+        onClearAll={handleClearAll}
+        projectSlug={projectSlug}
+        customBuilder={attributeSearchControl}
+      />
+      {onRefresh && (
+        <Page.Toolbar.Refresh
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
         />
-        <TimeRangePicker
-          preset={customRange ? null : dateRange}
-          customRange={customRange}
-          customRangeLabel={customRangeLabel}
-          onPresetChange={onDateRangeChange}
-          onCustomRangeChange={onCustomRangeChange}
-          onClearCustomRange={onClearCustomRange}
-          projectSlug={projectSlug}
-          className="ml-auto min-w-24 flex-1"
-        />
-      </div>
-      {attributeSearchControl}
-    </div>
+      )}
+    </Page.Toolbar>
   );
 }

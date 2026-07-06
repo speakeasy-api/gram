@@ -25,7 +25,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -47,14 +47,17 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		}
 	}
 	v := &risk.CreateRiskPolicyPayload{
-		Name:         body.Name,
-		PolicyType:   body.PolicyType,
-		Enabled:      body.Enabled,
-		Action:       body.Action,
-		AudienceType: body.AudienceType,
-		AutoName:     body.AutoName,
-		UserMessage:  body.UserMessage,
-		Prompt:       body.Prompt,
+		Name:                   body.Name,
+		PolicyType:             body.PolicyType,
+		PresidioScoreThreshold: body.PresidioScoreThreshold,
+		ScopeInclude:           body.ScopeInclude,
+		ScopeExempt:            body.ScopeExempt,
+		Enabled:                body.Enabled,
+		Action:                 body.Action,
+		AudienceType:           body.AudienceType,
+		AutoName:               body.AutoName,
+		UserMessage:            body.UserMessage,
+		Prompt:                 body.Prompt,
 	}
 	{
 		var zero string
@@ -155,35 +158,6 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 	return v, nil
 }
 
-// BuildGetRiskCapabilitiesPayload builds the payload for the risk
-// getRiskCapabilities endpoint from CLI flags.
-func BuildGetRiskCapabilitiesPayload(riskGetRiskCapabilitiesApikeyToken string, riskGetRiskCapabilitiesSessionToken string, riskGetRiskCapabilitiesProjectSlugInput string) (*risk.GetRiskCapabilitiesPayload, error) {
-	var apikeyToken *string
-	{
-		if riskGetRiskCapabilitiesApikeyToken != "" {
-			apikeyToken = &riskGetRiskCapabilitiesApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetRiskCapabilitiesSessionToken != "" {
-			sessionToken = &riskGetRiskCapabilitiesSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetRiskCapabilitiesProjectSlugInput != "" {
-			projectSlugInput = &riskGetRiskCapabilitiesProjectSlugInput
-		}
-	}
-	v := &risk.GetRiskCapabilitiesPayload{}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildGetRiskPolicyPayload builds the payload for the risk getRiskPolicy
 // endpoint from CLI flags.
 func BuildGetRiskPolicyPayload(riskGetRiskPolicyID string, riskGetRiskPolicyApikeyToken string, riskGetRiskPolicySessionToken string, riskGetRiskPolicyProjectSlugInput string) (*risk.GetRiskPolicyPayload, error) {
@@ -231,9 +205,19 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.PresidioScoreThreshold != nil {
+			if *body.PresidioScoreThreshold < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 0, true))
+			}
+		}
+		if body.PresidioScoreThreshold != nil {
+			if *body.PresidioScoreThreshold > 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
+			}
+		}
 		if body.Action != nil {
 			if !(*body.Action == "flag" || *body.Action == "block") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -267,14 +251,17 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		}
 	}
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:           body.ID,
-		Name:         body.Name,
-		Enabled:      body.Enabled,
-		Action:       body.Action,
-		AudienceType: body.AudienceType,
-		AutoName:     body.AutoName,
-		UserMessage:  body.UserMessage,
-		Prompt:       body.Prompt,
+		ID:                     body.ID,
+		Name:                   body.Name,
+		PresidioScoreThreshold: body.PresidioScoreThreshold,
+		ScopeInclude:           body.ScopeInclude,
+		ScopeExempt:            body.ScopeExempt,
+		Enabled:                body.Enabled,
+		Action:                 body.Action,
+		AudienceType:           body.AudienceType,
+		AutoName:               body.AutoName,
+		UserMessage:            body.UserMessage,
+		Prompt:                 body.Prompt,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -639,6 +626,49 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	return v, nil
 }
 
+// BuildUnmaskRiskResultPayload builds the payload for the risk
+// unmaskRiskResult endpoint from CLI flags.
+func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultBody string, riskUnmaskRiskResultApikeyToken string, riskUnmaskRiskResultSessionToken string, riskUnmaskRiskResultProjectSlugInput string) (*risk.UnmaskRiskResultPayload, error) {
+	var err error
+	var body UnmaskRiskResultRequestBody
+	{
+		err = json.Unmarshal([]byte(riskUnmaskRiskResultBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUnmaskRiskResultApikeyToken != "" {
+			apikeyToken = &riskUnmaskRiskResultApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUnmaskRiskResultSessionToken != "" {
+			sessionToken = &riskUnmaskRiskResultSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUnmaskRiskResultProjectSlugInput != "" {
+			projectSlugInput = &riskUnmaskRiskResultProjectSlugInput
+		}
+	}
+	v := &risk.UnmaskRiskResultPayload{
+		ID: body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRiskResultsByChatPayload builds the payload for the risk
 // listRiskResultsByChat endpoint from CLI flags.
 func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
@@ -772,6 +802,42 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 		}
 	}
 	v := &risk.ListRiskCategoriesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCompileExprPayload builds the payload for the risk compileExpr endpoint
+// from CLI flags.
+func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {
+	var expr string
+	{
+		if riskCompileExprExpr != "" {
+			expr = riskCompileExprExpr
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCompileExprApikeyToken != "" {
+			apikeyToken = &riskCompileExprApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCompileExprSessionToken != "" {
+			sessionToken = &riskCompileExprSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCompileExprProjectSlugInput != "" {
+			projectSlugInput = &riskCompileExprProjectSlugInput
+		}
+	}
+	v := &risk.CompileExprPayload{}
+	v.Expr = expr
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -951,6 +1017,64 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 	}
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetRiskBlockPayload builds the payload for the risk getRiskBlock
+// endpoint from CLI flags.
+func BuildGetRiskBlockPayload(riskGetRiskBlockID string, riskGetRiskBlockSessionToken string) (*risk.GetRiskBlockPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskGetRiskBlockID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskBlockSessionToken != "" {
+			sessionToken = &riskGetRiskBlockSessionToken
+		}
+	}
+	v := &risk.GetRiskBlockPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSubmitRiskBlockFeedbackPayload builds the payload for the risk
+// submitRiskBlockFeedback endpoint from CLI flags.
+func BuildSubmitRiskBlockFeedbackPayload(riskSubmitRiskBlockFeedbackBody string, riskSubmitRiskBlockFeedbackSessionToken string) (*risk.SubmitRiskBlockFeedbackPayload, error) {
+	var err error
+	var body SubmitRiskBlockFeedbackRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSubmitRiskBlockFeedbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sentiment\": \"down\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.Sentiment == "up" || body.Sentiment == "down") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sentiment", body.Sentiment, []any{"up", "down"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSubmitRiskBlockFeedbackSessionToken != "" {
+			sessionToken = &riskSubmitRiskBlockFeedbackSessionToken
+		}
+	}
+	v := &risk.SubmitRiskBlockFeedbackPayload{
+		ID:        body.ID,
+		Sentiment: body.Sentiment,
 	}
 	v.SessionToken = sessionToken
 
@@ -1207,7 +1331,7 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskCreateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -1235,11 +1359,12 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.CreateCustomDetectionRulePayload{
-		RuleID:      body.RuleID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		RuleID:        body.RuleID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
+		Severity:      body.Severity,
 	}
 	{
 		var zero string
@@ -1330,7 +1455,7 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskUpdateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
@@ -1359,11 +1484,12 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.UpdateCustomDetectionRulePayload{
-		ID:          body.ID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		ID:            body.ID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
+		Severity:      body.Severity,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1695,7 +1821,7 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 	{
 		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.RuleID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))
@@ -1732,9 +1858,9 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 		}
 	}
 	v := &risk.TestDetectionRulePayload{
-		RuleID: body.RuleID,
-		Text:   body.Text,
-		Regex:  body.Regex,
+		RuleID:        body.RuleID,
+		Text:          body.Text,
+		DetectionExpr: body.DetectionExpr,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

@@ -276,7 +276,7 @@ var _ = Service("access", func() {
 		Result(ListShadowMCPApprovalRequestsResult)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.requests.list")
+			GET("/rpc/access.listShadowMcpRequests")
 			Param("status")
 			Param("project_id")
 			Param("limit")
@@ -302,7 +302,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalRequestModel)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.create")
+			POST("/rpc/access.createShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -324,7 +324,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalDecisionResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.approve")
+			POST("/rpc/access.approveShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -346,7 +346,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalDecisionResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.deny")
+			POST("/rpc/access.denyShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -382,7 +382,7 @@ var _ = Service("access", func() {
 		Result(ListShadowMCPAccessRulesResult)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.rules.list")
+			GET("/rpc/access.listShadowMcpRules")
 			Param("disposition")
 			Param("access_scope")
 			Param("project_id")
@@ -409,7 +409,7 @@ var _ = Service("access", func() {
 		Result(CreateShadowMCPAccessRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.rules.create")
+			POST("/rpc/access.createShadowMcpRule")
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -431,7 +431,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPAccessRuleModel)
 
 		HTTP(func() {
-			PUT("/rpc/access.shadowMcp.rules.update")
+			PUT("/rpc/access.updateShadowMcpRule")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -454,7 +454,7 @@ var _ = Service("access", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/access.shadowMcp.rules.delete")
+			DELETE("/rpc/access.deleteShadowMcpRule")
 			Param("id")
 			security.SessionHeader()
 			Response(StatusNoContent)
@@ -665,7 +665,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "risk_policy", "*")
+		Enum("project", "mcp", "org", "environment", "risk_policy", "chat", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -691,13 +691,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
-	})
-
-	Attribute("effect", String, func() {
-		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
-		Enum("allow", "deny")
-		Default("allow")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -711,19 +705,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
-	})
-
-	Attribute("effect", String, func() {
-		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
-		Enum("allow", "deny")
-		Default("allow")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
 		})
 	})
 
@@ -757,16 +745,24 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type")
+	Required("slug", "description", "resource_type", "visibility")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "risk_policy")
+		Enum("org", "project", "mcp", "environment", "risk_policy", "chat")
+	})
+	Attribute("visibility", String, func() {
+		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
+		Enum("user_visible", "internal")
+	})
+	Attribute("exclusion_scope", String, func() {
+		Description("The scope used to store exception rules for this scope.")
+		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "risk_policy:bypass")
 	})
 })
 

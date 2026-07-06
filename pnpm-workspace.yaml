@@ -14,16 +14,14 @@ packages:
   - dev-idp-dashboard
 
 catalog:
-  "@ai-sdk/openai": ^2.0.0
-  "@ai-sdk/react": ^2.0.118
-  "@ai-sdk/ui-utils": ^1.2.0
-  "@modelcontextprotocol/sdk": ^1.27.0
-  "@tanstack/react-query": 5.90.10
-  "@types/react": ^19.2.16
+  "@ai-sdk/react": ^3.0.211
+  "@modelcontextprotocol/sdk": ^1.29.0
+  "@tanstack/react-query": 5.101.1
+  "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
   "@assistant-ui/react": ^0.11.0
-  ai: 5.0.66
-  "lucide-react": ^1.8.0
+  ai: ^6.0.209
+  "lucide-react": ^1.21.0
   typescript: 5.9.3
 
 minimumReleaseAge: 10080
@@ -48,3 +46,4 @@ allowBuilds:
   cpu-features: false
   msw: false
   ssh2: false
+  "@openrouter/sdk": false

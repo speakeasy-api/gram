@@ -14,18 +14,28 @@ import (
 
 const registryCacheTTL = 24 * time.Hour
 
-// CachedListServersResponse wraps a list of external MCP servers for caching.
-type CachedListServersResponse struct {
-	Key        string
-	Servers    []*types.ExternalMCPServer
-	NextCursor *string
+// registryCacheSchemaVersion is baked into every registry cache key. Bump it
+// whenever the cached shape changes (e.g. a new field on ExternalMCPServerEntry)
+// so a deploy can't read blobs written by an older binary. The cache serializes
+// structs as field-name-keyed msgpack maps, so a missing field silently decodes
+// to its zero value rather than erroring — without this version, adding
+// `supports_dcr` made every cached server read back as supports_dcr=false (i.e.
+// "manual") for up to the 24h TTL.
+const registryCacheSchemaVersion = "v2"
+
+// CachedListServers wraps the full, deduplicated list of external MCP server
+// summaries for a registry. The catalog is small and stable, so the whole list
+// is cached under a single key per registry.
+type CachedListServers struct {
+	Key     string
+	Servers []*types.ExternalMCPServerEntry
 }
 
-var _ cache.CacheableObject[CachedListServersResponse] = (*CachedListServersResponse)(nil)
+var _ cache.CacheableObject[CachedListServers] = (*CachedListServers)(nil)
 
-func (c CachedListServersResponse) CacheKey() string              { return c.Key }
-func (c CachedListServersResponse) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedListServersResponse) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedListServers) CacheKey() string              { return c.Key }
+func (c CachedListServers) AdditionalCacheKeys() []string { return []string{} }
+func (c CachedListServers) TTL() time.Duration            { return registryCacheTTL }
 
 // CachedServerDetailsResponse wraps server details for caching.
 type CachedServerDetailsResponse struct {
@@ -57,5 +67,5 @@ func registryCacheKey(prefix string, req *http.Request) string {
 		_, _ = fmt.Fprintf(h, "%s=%s\n", k, strings.Join(vals, ","))
 	}
 
-	return fmt.Sprintf("registry:%s:%s:%x", prefix, req.URL.String(), h.Sum(nil))
+	return fmt.Sprintf("registry:%s:%s:%s:%x", prefix, registryCacheSchemaVersion, req.URL.String(), h.Sum(nil))
 }

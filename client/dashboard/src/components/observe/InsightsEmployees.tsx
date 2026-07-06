@@ -1,3 +1,9 @@
+import { AccountRow } from "@/components/observe/account-display";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
@@ -5,22 +11,10 @@ import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { SearchBar } from "@/components/ui/search-bar";
+import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -30,21 +24,21 @@ import {
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import type { UserSummary } from "@gram/client/models/components";
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
@@ -52,14 +46,12 @@ import { slugify } from "@/lib/constants";
 import {
   Badge,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
-
-type EmployeeFilterDimension = "all" | "user" | "role";
-type FilterOption = { id: string; label: string };
 
 type EmployeeView = "employees" | "unattributed";
 
@@ -70,22 +62,38 @@ const VIEW_LABELS: Record<EmployeeView, string> = {
   employees: "Employees",
   unattributed: "Unknown users",
 };
+const VIEW_TOOLTIPS: Record<EmployeeView, string> = {
+  employees: "Activity attributed to known organization members",
+  unattributed: "Activity that couldn't be matched to a member",
+};
 
-const EMPLOYEE_FILTER_DIMENSIONS: EmployeeFilterDimension[] = [
-  "all",
-  "user",
-  "role",
+// Unified filter schema for the Employees page. The date range is pinned (and
+// now URL-persisted, replacing the previous local state). Status, role and user
+// map onto the old "filter dimension" dropdown: role/user are independent
+// selects that are ANDed together, and status filters on enrollment.
+const EMPLOYEE_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "status", label: "Enrollment status", kind: "multiselect" },
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
+  { id: "role", label: "Role", kind: "select" },
+  { id: "user", label: "User", kind: "select" },
+]);
+
+const STATUS_OPTIONS = [
+  { value: "enrolled", label: "Enrolled" },
+  { value: "not_enrolled", label: "Not enrolled" },
 ];
-const EMPLOYEE_FILTER_LABELS: Record<EmployeeFilterDimension, string> = {
-  all: "All",
-  user: "User",
-  role: "Role",
-};
-const EMPLOYEE_FILTER_PLURAL_LABELS: Record<EmployeeFilterDimension, string> = {
-  all: "Items",
-  user: "Users",
-  role: "Roles",
-};
 
 const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {
   "15m": "the last 15 minutes",
@@ -104,155 +112,28 @@ function presetRangeLabel(preset: DateRangePreset): string {
   return PRESET_RANGE_LABELS[preset] ?? "the selected range";
 }
 
-function EmployeeFilterBar({
+// Right-aligned Employees vs Unknown-users toggle, rendered in the toolbar's
+// Actions slot. Reads/writes the `?view` URL param exactly as before.
+function EmployeeViewToggle({
   view,
   onViewChange,
-  dimensions,
-  dimension,
-  onDimensionChange,
-  selectedValue,
-  onValueChange,
-  options,
   disabled,
 }: {
   view: EmployeeView;
   onViewChange: (view: EmployeeView) => void;
-  dimensions: EmployeeFilterDimension[];
-  dimension: EmployeeFilterDimension;
-  onDimensionChange: (dimension: EmployeeFilterDimension) => void;
-  selectedValue: string | null;
-  onValueChange: (value: string | null) => void;
-  options: FilterOption[];
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
-  const selectedOption = options.find((o) => o.id === selectedValue);
-  const displayLabel =
-    dimension === "all"
-      ? "All"
-      : selectedOption
-        ? selectedOption.label || selectedOption.id
-        : `All ${EMPLOYEE_FILTER_PLURAL_LABELS[dimension]}`;
-
   return (
-    <div
-      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
-    >
-      <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
-        Filter by
-      </span>
-      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        {EMPLOYEE_VIEWS.map((value) => {
-          const isSelected = view === value;
-          return (
-            <button
-              key={value}
-              onClick={() => onViewChange(value)}
-              disabled={disabled}
-              className={`
-                h-8 rounded px-3 text-sm font-medium transition-all duration-150
-                ${
-                  isSelected
-                    ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-                    : "text-muted-foreground hover:text-foreground"
-                }
-                disabled:cursor-not-allowed
-              `}
-            >
-              {VIEW_LABELS[value]}
-            </button>
-          );
-        })}
-
-        <div className="bg-border/50 mx-1 h-6 w-px" />
-        {dimensions.map((value) => {
-          const isSelected = dimension === value;
-          return (
-            <button
-              key={value}
-              onClick={() => onDimensionChange(value)}
-              disabled={disabled}
-              className={`
-                h-8 rounded px-3 text-sm font-medium transition-all duration-150
-                ${
-                  isSelected
-                    ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-                    : "text-muted-foreground hover:text-foreground"
-                }
-                disabled:cursor-not-allowed
-              `}
-            >
-              {EMPLOYEE_FILTER_LABELS[value]}
-            </button>
-          );
-        })}
-
-        <div className="bg-border/50 mx-1 h-6 w-px" />
-        <Popover
-          open={dimension !== "all" && !disabled && open}
-          onOpenChange={setOpen}
-        >
-          <PopoverTrigger asChild>
-            <button
-              disabled={dimension === "all" || disabled}
-              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
-                dimension === "all" || disabled
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:bg-muted/50"
-              }`}
-            >
-              <span className="max-w-[120px] truncate">{displayLabel}</span>
-              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[220px] p-0" align="end">
-            <Command>
-              <CommandInput
-                placeholder={`Search ${EMPLOYEE_FILTER_PLURAL_LABELS[dimension].toLowerCase()}...`}
-                className="h-9"
-              />
-              <CommandList>
-                <CommandEmpty>No results found.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="__all__"
-                    onSelect={() => {
-                      onValueChange(null);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
-                    />
-                    <span>All {EMPLOYEE_FILTER_PLURAL_LABELS[dimension]}</span>
-                  </CommandItem>
-                  {options.map((option) => (
-                    <CommandItem
-                      key={option.id}
-                      value={option.label || option.id}
-                      onSelect={() => {
-                        onValueChange(option.id);
-                        setOpen(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
-                      />
-                      <span className="truncate">
-                        {option.label || option.id}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
+    <SegmentedControl
+      value={view}
+      onChange={onViewChange}
+      disabled={disabled}
+      options={EMPLOYEE_VIEWS.map((value) => ({
+        value,
+        label: VIEW_LABELS[value],
+        tooltip: VIEW_TOOLTIPS[value],
+      }))}
+    />
   );
 }
 
@@ -283,58 +164,65 @@ export function InsightsEmployeesContent(): JSX.Element {
     data: membersData,
     isLoading: membersLoading,
     error: membersError,
+    refetch: refetchMembers,
+    isFetching: membersFetching,
   } = useMembers();
-  const { data: rolesData, isLoading: rolesLoading } = useRoles();
+  const {
+    data: rolesData,
+    isLoading: rolesLoading,
+    refetch: refetchRoles,
+    isFetching: rolesFetching,
+  } = useRoles();
 
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
-  const [customRange, setCustomRange] = useState<{
-    from: Date;
-    to: Date;
-  } | null>(null);
-  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
-  const [rawFilterDimension, setFilterDimension] =
-    useState<EmployeeFilterDimension>("all");
-  const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
-    null,
-  );
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(EMPLOYEE_FILTERS);
   const [searchParams, setSearchParams] = useSearchParams();
   const view: EmployeeView =
     searchParams.get(VIEW_SEARCH_PARAM) === "unattributed"
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
-  // Unknown users have no role, so the role dimension doesn't apply there.
-  // Derived (rather than reset in the view-change handler) so it also holds
-  // when the view changes through the URL, e.g. back/forward navigation.
-  const filterDimension: EmployeeFilterDimension =
-    isUnattributedView && rawFilterDimension === "role"
-      ? "all"
-      : rawFilterDimension;
+
+  const selectedStatuses = values.status;
+  const selectedRoleId = values.role;
+  // Unknown users carry a placeholder role, so the role filter doesn't apply in
+  // that view. Derived (rather than cleared in the view-change handler) so it
+  // also holds when the view changes through the URL, e.g. back/forward nav.
+  const effectiveRoleId = isUnattributedView ? null : selectedRoleId;
+  const selectedUserId = values.user;
+  const selectedAccountType = values.account_type;
+
   const handleViewChange = useCallback(
     (next: EmployeeView) => {
-      setSearchParams((prev) => {
-        const params = new URLSearchParams(prev);
-        if (next === "employees") {
-          params.delete(VIEW_SEARCH_PARAM);
-        } else {
-          params.set(VIEW_SEARCH_PARAM, next);
-        }
-        return params;
-      });
-      // The selected user/role may not exist in the other view.
-      setSelectedFilterValue(null);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === "employees") {
+            params.delete(VIEW_SEARCH_PARAM);
+          } else {
+            params.set(VIEW_SEARCH_PARAM, next);
+          }
+          // The selected user may not exist in the other view.
+          params.delete("user");
+          return params;
+        },
+        { replace: true },
+      );
     },
     [setSearchParams],
   );
 
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
+  // Bridge the unified date range back to the from/to the usage query consumes.
+  const { from, to } = useMemo(() => {
+    const d = values.date;
+    if (d.customRange) return d.customRange;
+    return getPresetRange(d.preset ?? "30d");
+  }, [values.date]);
   const rangeLabel = useMemo(() => {
-    if (customRange) return customRangeLabel ?? "the selected range";
-    return presetRangeLabel(dateRange);
-  }, [customRange, customRangeLabel, dateRange]);
+    const d = values.date;
+    if (d.customRange) return d.customLabel ?? "the selected range";
+    return presetRangeLabel(d.preset ?? "30d");
+  }, [values.date]);
 
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData]);
@@ -372,40 +260,63 @@ export function InsightsEmployeesContent(): JSX.Element {
       ),
     [allEmployees, isUnattributedView],
   );
+  // Apply the unified status/role/user filters to the current view's employees.
+  // role/user are independent selects that are ANDed together; status filters on
+  // enrollment. role is skipped in the unattributed view (placeholder roles).
   const employees = useMemo(() => {
-    if (filterDimension === "all" || !selectedFilterValue) return viewEmployees;
-    if (filterDimension === "user") {
-      return viewEmployees.filter((item) => item.id === selectedFilterValue);
-    }
-    const roleName = roleNameById.get(selectedFilterValue);
-    return viewEmployees.filter((item) =>
-      roleName ? item.role === roleName : false,
-    );
-  }, [viewEmployees, filterDimension, roleNameById, selectedFilterValue]);
-  // Unattributed rows carry a placeholder role, so role filtering would
-  // always come back empty in that view.
-  const filterDimensions = useMemo<EmployeeFilterDimension[]>(
+    const roleName = effectiveRoleId
+      ? roleNameById.get(effectiveRoleId)
+      : undefined;
+    return viewEmployees.filter((item) => {
+      if (
+        selectedStatuses.length > 0 &&
+        !selectedStatuses.includes(item.status)
+      )
+        return false;
+      if (selectedUserId && item.id !== selectedUserId) return false;
+      if (effectiveRoleId && item.role !== roleName) return false;
+      // Each filter matches employees holding at least one account of that type;
+      // an employee with both a team and a personal account shows under either.
+      if (selectedAccountType === "personal" && !item.hasPersonalAccount)
+        return false;
+      if (
+        selectedAccountType === "team" &&
+        !item.accounts.some((a) => a.accountType === "team")
+      )
+        return false;
+      return true;
+    });
+  }, [
+    viewEmployees,
+    selectedStatuses,
+    selectedUserId,
+    effectiveRoleId,
+    selectedAccountType,
+    roleNameById,
+  ]);
+
+  // Schema for the bar: role is sheet-only in the unattributed view (its options
+  // don't apply there), so it's dropped from the rendered schema then.
+  const filterSchema = useMemo(
     () =>
       isUnattributedView
-        ? EMPLOYEE_FILTER_DIMENSIONS.filter((value) => value !== "role")
-        : EMPLOYEE_FILTER_DIMENSIONS,
+        ? EMPLOYEE_FILTERS.filter((d) => d.id !== "role")
+        : EMPLOYEE_FILTERS,
     [isUnattributedView],
   );
-  const filterOptions = useMemo<FilterOption[]>(() => {
-    if (filterDimension === "user") {
-      return viewEmployees.map((item) => ({
-        id: item.id,
-        label: item.name,
-      }));
-    }
-    if (filterDimension === "role") {
-      return roles.map((role) => ({
-        id: role.id,
-        label: role.name,
-      }));
-    }
-    return [];
-  }, [viewEmployees, filterDimension, roles]);
+
+  // Page-supplied option lists. User options reflect the current view; role
+  // options derive from the org roles (value = role id, matching the old logic).
+  const optionsById = useMemo<OptionsById>(
+    () => ({
+      status: STATUS_OPTIONS,
+      account_type: ACCOUNT_TYPE_OPTIONS,
+      role: roles.map((role) => ({ value: role.id, label: role.name })),
+      user: viewEmployees.map((item) => ({ value: item.id, label: item.name })),
+    }),
+    [roles, viewEmployees],
+  );
+
   const totalEmployees = employees.length;
   const enrolledEmployees = employees.filter(
     (item) => item.status === "enrolled",
@@ -422,27 +333,18 @@ export function InsightsEmployeesContent(): JSX.Element {
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
 
-  const handleFilterDimensionChange = (next: EmployeeFilterDimension) => {
-    setFilterDimension(next);
-    setSelectedFilterValue(null);
-  };
-  const handlePresetChange = (preset: DateRangePreset) => {
-    setDateRange(preset);
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
-  const handleCustomRangeChange = (
-    rangeFrom: Date,
-    rangeTo: Date,
-    label?: string,
-  ) => {
-    setCustomRange({ from: rangeFrom, to: rangeTo });
-    setCustomRangeLabel(label ?? null);
-  };
-  const handleClearCustomRange = () => {
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
+  // Per-table name/email search, lifted up so it can live in the toolbar's
+  // Search slot. `page` is owned by the table; resetting it on search happens
+  // there via the `search` prop changing.
+  const [search, setSearch] = useState("");
+
+  // Reset every unified filter (clearAll already does a single setSearchParams)
+  // AND the `?view` param in one shot — firing multiple synchronous
+  // setSearchParams would have react-router clobber all but the last.
+  const handleClearAll = useCallback(() => {
+    setSearch("");
+    clearAll();
+  }, [clearAll]);
 
   return (
     <>
@@ -455,14 +357,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div
-            className={cn(
-              "flex gap-4 transition-all duration-300",
-              isInsightsOpen
-                ? "flex-col items-stretch"
-                : "flex-row items-center justify-between",
-            )}
-          >
+          <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">Employee Enrollment</h1>
@@ -475,34 +370,39 @@ export function InsightsEmployeesContent(): JSX.Element {
                 not enrolled.
               </p>
             </div>
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-3",
-                isInsightsOpen ? "justify-start" : "shrink-0",
-              )}
-            >
-              <EmployeeFilterBar
-                view={view}
-                onViewChange={handleViewChange}
-                dimensions={filterDimensions}
-                dimension={filterDimension}
-                onDimensionChange={handleFilterDimensionChange}
-                selectedValue={selectedFilterValue}
-                onValueChange={setSelectedFilterValue}
-                options={filterOptions}
-                disabled={isLoading}
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search by name or email..."
               />
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={handlePresetChange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onClearCustomRange={handleClearCustomRange}
-                disabled={isLoading}
+              <Page.Toolbar.Filters
+                schema={filterSchema}
+                values={values}
+                optionsById={optionsById}
+                onChange={setValue as (id: string, value: FilterValue) => void}
+                onClear={clearValue as (id: string) => void}
+                onClearAll={handleClearAll}
                 projectSlug={projectSlug}
               />
-            </div>
+              <Page.Toolbar.Actions>
+                <EmployeeViewToggle
+                  view={view}
+                  onViewChange={handleViewChange}
+                  disabled={isLoading}
+                />
+              </Page.Toolbar.Actions>
+              <Page.Toolbar.Refresh
+                onRefresh={() => {
+                  void refetchMembers();
+                  void refetchRoles();
+                  void usageQuery.refetch();
+                }}
+                isRefreshing={
+                  membersFetching || rolesFetching || usageQuery.isFetching
+                }
+              />
+            </Page.Toolbar>
           </div>
 
           {error ? (
@@ -573,6 +473,7 @@ export function InsightsEmployeesContent(): JSX.Element {
               <EmployeeTable
                 key={view}
                 employees={employees}
+                search={search}
                 onSelectUser={openUser}
               />
               <EnrollmentLegend />
@@ -588,13 +489,14 @@ const PAGE_SIZE = 10;
 
 function EmployeeTable({
   employees,
+  search,
   onSelectUser,
 }: {
   employees: Employee[];
+  search: string;
   onSelectUser: (employee: Employee) => void;
 }) {
   const [page, setPage] = useState(0);
-  const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>(null);
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -657,6 +559,18 @@ function EmployeeTable({
         render: (item) => <StatusPill status={item.status} />,
       },
       {
+        key: "accounts",
+        header: "Accounts",
+        sortable: true,
+        sortLabel: "Accounts",
+        // Personal-holders first (ascending), then more accounts before fewer,
+        // so the rows worth a second look group at the top.
+        sortValue: (item) =>
+          (item.hasPersonalAccount ? 0 : 1_000_000) - item.accounts.length,
+        width: "1fr",
+        render: (item) => <AccountsCell employee={item} />,
+      },
+      {
         key: "tokenCount",
         header: "Token Count",
         sortable: true,
@@ -678,13 +592,13 @@ function EmployeeTable({
       },
       {
         key: "action",
-        header: <span className="block text-right">Action</span>,
+        header: "",
         width: "auto",
         render: (item) => (
           <div className="text-right">
             <button
               type="button"
-              className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+              className="flex items-center gap-1"
               aria-label={`View ${item.name}`}
               onClick={(event) => {
                 event.stopPropagation();
@@ -692,6 +606,7 @@ function EmployeeTable({
               }}
             >
               View
+              <Icon name="arrow-right" />
             </button>
           </div>
         ),
@@ -724,10 +639,11 @@ function EmployeeTable({
     safePage * PAGE_SIZE,
     (safePage + 1) * PAGE_SIZE,
   );
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
+  // Search is owned by the page (toolbar Search slot); jump back to the
+  // first page whenever the query changes.
+  useEffect(() => {
     setPage(0);
-  };
+  }, [search]);
 
   const NoResultsMessage = () => {
     return (
@@ -743,11 +659,6 @@ function EmployeeTable({
 
   return (
     <section className="bg-card flex flex-col gap-4">
-      <SearchBar
-        value={search}
-        onChange={handleSearchChange}
-        placeholder="Search by name or email..."
-      />
       <Table
         columns={columns}
         data={pageEmployees}
@@ -879,6 +790,49 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
     <Badge variant={meta.variant}>
       <Badge.Text>{meta.label}</Badge.Text>
     </Badge>
+  );
+}
+
+// Per-employee accounts cell: a clickable trigger summarizing the linked
+// accounts (count), opening a popover that lists every account with its email,
+// provider, and type. Robust to any number of accounts across providers.
+function AccountsCell({ employee }: { employee: Employee }) {
+  const { accounts } = employee;
+  if (accounts.length === 0) {
+    return <span className="text-muted-foreground/50 text-sm">—</span>;
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          // Don't let the row's navigate handler fire when opening the popover.
+          onClick={(e) => e.stopPropagation()}
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+        >
+          <span className="text-muted-foreground text-xs">
+            {accounts.length} account{accounts.length === 1 ? "" : "s"}
+          </span>
+          <Icon
+            name="chevron-down"
+            className="text-muted-foreground/60 size-3"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-xs font-medium">Linked accounts</p>
+        </div>
+        <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
+          {accounts.map((a, i) => (
+            <li key={`${a.provider}:${a.email}:${i}`} className="px-3 py-2">
+              <AccountRow account={a} />
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

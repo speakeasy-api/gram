@@ -1,5 +1,210 @@
 # server
 
+## 0.80.0
+
+### Minor Changes
+
+- 9275f02: Adjust API endpoint paths to follow existing RPC API conventions
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- 59a1029: Drop US_DRIVER_LICENSE Presidio findings at the finding level so they never surface, even when a policy pins no entities and Presidio scans its full default recognizer set.
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- 4adc65b: Disable HTTP keep-alives on function-runner calls and give that path its own timeout, so retries dial fresh connections instead of reusing pooled connections to Fly machines that were autostopped mid-flight (which surfaced as instant EOFs). The function-runner timeout now sits above the runner's 5-minute execution budget so long tool calls are no longer cancelled by the caller.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- d09b418: Fix a nil pointer panic in telemetry SearchUsers when called without a filter.
+
+## 0.79.0
+
+### Minor Changes
+
+- 57bf9af: Public well-known OAuth/MCP metadata responses now send `Cache-Control: public, max-age=60` and a strong `ETag` with `If-None-Match` 304 revalidation, so clients and proxies can cache them. The OAuth Client ID Metadata Document keeps `max-age=3600` and gains an `ETag`. This is a prerequisite for fronting these responses with an ingress cache or CDN.
+- 2186673: Support organization-level remote session clients. A `remote_session_client` can now be created with no project (organization-level) so every project in the organization can attach and use it, mirroring organization-level remote session issuers. On `organizationRemoteSessionIssuers.createClient` and `createCimdClient` an omitted `project_id` under an organization-level issuer creates an organization-level client (the same `project_id`-omission convention `createIssuer` already uses), while a supplied `project_id` scopes the client to that project. The consent/token runtime resolver, the project-scoped client reads, and the attach-time single-client invariant now resolve both a project's own clients and organization-level clients in its organization, so a project admin can attach, detach, and use an organization-level client from their own user session issuer but cannot edit or delete it (those stay on the org-admin surface). The `RemoteSessionClient` API shape adds `organization_id` and allows an empty `project_id` for organization-level clients, mirroring the issuer change.
+- 5c825a9: Default to Claude Sonnet 5 (`anthropic/claude-sonnet-5`) for in-app model usage and newly created assistants. The model is added to the allowlist and all model pickers (playground, elements, onboarding). The backend `DefaultChatModel`, the platform-managed assistant, the onboarding assistant default, and the playground/MCP chat surfaces now select Sonnet 5. Specialized models (risk/PromptIntel judges, chat segmentation, embeddings, follow-on suggestions) are unchanged.
+- fcfd78e: Add server-side controls for unmasking redacted secrets
+- 400f471: Plugin marketplaces now send a human-readable `displayName` to Claude Code, so plugins show with their admin-entered name and capitalization (e.g. "MoonPay MCP Servers") instead of the de-slugified lowercase name ("Moonpay mcp servers"). The synthesized observability plugin displays as "<Org> Observability". The plugin `name` remains the kebab-case slug used for namespacing and claude.ai marketplace sync. Older Claude Code clients ignore the field and fall back to prior behavior.
+- c8597b1: Add the unified `/rpc/hooks.ingest` endpoint for third-party hook ingestion while preserving existing provider-specific hook endpoints. Hook plugins now authenticate each developer locally through the browser callback flow and store a hooks-scoped key on the device.
+
+### Patch Changes
+
+- d7b8ec9: Gate the "click to reveal" secret action in Risk Events behind the `chat:read` scope. Users without `chat:read` now see flagged secret values as a non-interactive "Hidden" placeholder (with an explanatory tooltip) instead of a reveal control, and the page-level "Reveal all" toggle is hidden for them. The `chat:read` scope description in the role editor is updated to note that the grant also controls unmasking flagged secrets in Risk Events.
+- 98de65f: mig: add session_capture_exclusions table
+
+## 0.78.0
+
+### Minor Changes
+
+- 0d7ba58: Add outbound OAuth Client ID Metadata Document (CIMD) support to remote-session OAuth. A `remote_session_client` can now be created in CIMD mode via a dedicated `remoteSessionClients.createCimd` endpoint: Gram generates the `client_id`, hosts a public client metadata document at `/.well-known/oauth-client/{id}`, and sends that platform-canonical URL as the `client_id` on every outbound `/authorize`, `/token`, and refresh call, with no symmetric secret and `token_endpoint_auth_method=none`. Issuer discovery now parses and persists `client_id_metadata_document_supported`, which gates the createCimd endpoint. The document endpoint is pinned to the platform host (404 on custom domains) so a strict upstream AS only ever validates the canonical URL. New management surface: the `createCimd` endpoint, `client_id_metadata_uri` on the client view, and the issuer CIMD-support flag on the issuer forms/views.
+
+## 0.77.0
+
+### Minor Changes
+
+- fc47698: Allow editing the permissions of system roles (`admin`/`member`) per organization, while keeping their name and description platform-managed. The Admin role is guarded against losing the `org:admin` permission to prevent org lockout. The roles tab is reworked: the whole role row opens the edit sheet (gated on `org:admin`), scope groups no longer auto-expand and show a description when collapsed, and the members column uses a new interactive member facepile (hover focus, click to view all members) that also replaces the facepile on the org home projects list. Adds Directory Sync (SCIM) info alerts on the team, roles, and identity pages explaining that members and roles are managed by the identity provider while SCIM is enabled.
+
+### Patch Changes
+
+- 8116a4c: Improved Codex shadow MCP enforcement so calls are checked against the session MCP server inventory.
+- efe6163: Fix Cursor shadow MCP enforcement wrongly blocking Gram-hosted MCP servers when a shadow MCP risk policy is enabled — access is now decided by the server URL rather than requiring the agent to echo an internal identifier.
+- c6ddf0e: Fixed the MCP catalog listing duplicate servers (count doubling) when loading more
+
+## 0.76.0
+
+### Minor Changes
+
+- f04e8b0: Add a `chat:read` RBAC scope that gates access to other members' agent session transcripts. The `chat.load` endpoint and the dashboard agent-sessions list are scoped by `chat:read`: anyone can always read sessions they own (the handler grants owner access directly — no `chat:read` grant needed), while reading every member's session requires an unrestricted `chat:read`. The scope is not a default of any system role — not even `admin` — so it must be granted explicitly via a custom role. On the agent-sessions page, callers without `chat:read` see a banner noting they only see their own sessions (with a link to the roles page for org admins). Each dashboard session open is recorded in the audit log as a `chat_session:access` event. The scope is selectable in the role editor (Agent Sessions group) and the dev RBAC override toolbar.
+
+## 0.75.0
+
+### Minor Changes
+
+- 0cd8e96: Add an agent type filter to the Agent Sessions page, populated from the agent sources actually present in each project's chats via a new `chat.listSources` endpoint.
+- 7763a1b: Tool-call blocks are now durable, first-class entities with a stable `/blocks/<id>` URL and 👍/👎 feedback. When the risk engine blocks a tool call, the block is persisted and its reason is injected into the agent-facing response (Claude `PermissionDecisionReason`, Cursor `AgentMessage`, Codex `reason`) along with a link to the block page, so the agent can reason about the denial instead of hallucinating one. New session-scoped, org-admin-gated `getRiskBlock` and `submitRiskBlockFeedback` endpoints back an in-app `BlockDetailPage` (under `AppLayout`) and a slug-free redirect resolver for the agent's external link, with a "More Info" link from the Risk Events modal.
+
+### Patch Changes
+
+- 3464cb8: Show the assistant's creator as its owner. Assistants already recorded who created them; that attribution is now surfaced as a profile avatar (reusing the org-home member avatar treatment) on both the assistant card and the assistant setup page's overview panel. The owner resolves to one of three states: the creating member (avatar + name, full name on hover), "No owner" when the assistant was never attributed, or "Orphaned, no owner" when the creator is no longer a member of the organization. Backed by a new optional `created_by_user_id` field on the `Assistant` API type.
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+- e13497f: Claude Code prompt correlation no longer stalls on high-volume sessions. Previously a chat with a large backlog of unlinked prompts could exceed the correlation time budget and fail entirely, leaving prompts unlinked from their telemetry; correlation now bounds its work and drains the backlog incrementally so prompts stay reliably linked.
+- d3bad97: Shorten risk policy bypass ("Request access") links. The blocked-tool-call message now embeds a short cache-backed `rpbr2.<id>` token instead of a 1000+ char encrypted blob in the URL fragment. Links already issued in the legacy `rpbr1` format keep working until they expire.
+
+## 0.74.1
+
+### Patch Changes
+
+- 24b41d9: Improve tool observability filter performance by returning hosted MCP server display names from telemetry filter options, allowing the logs and insights pages to avoid hydrating full toolset resources for server filter labels.
+- 1751a59: Publish plugins straight from the plugin detail page. After adding or removing a server, or editing a plugin's metadata, a "Publish now" prompt offers a one-click republish — or opens the first-publish dialog for projects not yet connected to GitHub — so there's no need to return to the plugins list to re-publish. The detail page now also shows publish freshness: an "Unpublished changes" badge when the project's current plugin state differs from what was last published, or the last published time when up to date, alongside a durable publish button and a marketplace install banner.
+
+  This is backed by new `up_to_date` and `last_published_at` fields on the `plugins.getPublishStatus` API, which compare the project's live plugin fingerprint against the fingerprint last pushed to GitHub. Both fields are absent when the project has no GitHub connection.
+
+- bbdda53: Pinned chats: pin/unpin conversations on the /chat page. Pinned chats surface in a dedicated "Pinned" section above Recent Chats. Adds a `setPinned` chat API and a `pinned` filter on `listChats`, backed by the `chats.pinned_at` column.
+
+## 0.74.0
+
+### Minor Changes
+
+- f479a1b: Org admins can now register a standalone `remote_session_client` directly from the Remote Identity Provider details page. A new `organizationRemoteSessionIssuers.createClient` endpoint creates a client under an existing issuer with no `user_session_issuer` attachments; the client inherits a project-specific issuer's project, or the admin names a project (downscoping) when the issuer is organization-level. The dashboard surfaces a `New Client` button on the issuer's Clients tab that opens a sheet supporting Dynamic Client Registration (when the issuer advertises a `registration_endpoint`) or manual `client_id` / `client_secret` entry.
+- 9b85ddd: feat(telemetry): include the chat title on `listSessions` results (resolved from Postgres, batched per page) and show it in place of the chat id in the cost dashboard's session table
+
+### Patch Changes
+
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+- 3298a99: Add hook event processing duration metrics for Claude, Codex, and Cursor hook traffic.
+- 4a44fcb: Make the Claude hook shadow-MCP guard resilient to a missing SessionStart MCP inventory snapshot (DNO-286). The MCP inventory captured at SessionStart is now persisted to a per-session file, and the blocking PreToolUse hook replays it in its own payload so enforcement no longer depends on the server having cached the async SessionStart snapshot in time. The server prefers a payload-supplied inventory, writes it back to the cache so the telemetry path self-heals, and falls back to the cached snapshot (still failing closed) when neither is available.
+- 9349794: fix(telemetry): match `listSessions` dimension filters per-chat instead of per-row so combining a user-directory filter (e.g. department) with `hook_source` no longer returns empty when those attributes live on different rows of the same chat
+
+## 0.73.0
+
+### Minor Changes
+
+- ea9f56b: Gram Functions tool-call and resource-read POSTs now retry on a saturated runner's `429 + Retry-After` and Fly's `503` (both guaranteed before the function runs) instead of surfacing transient saturation as a hard failure, with jittered backoff to spread simultaneous retries and avoid a thundering herd. Transport errors that are transparently retried now log at `WARN` rather than `ERROR`, so recovered attempts no longer look like failures while the final unrecovered failure is still logged as an error.
+- c1ef552: `remoteSessionClients` and the org-admin client views now source the `user_session_issuer` relationship entirely from the join table. The `RemoteSessionClient` result replaces the single `user_session_issuer_id` with a `user_session_issuer_ids` array (breaking), create/clone accept zero or more `user_session_issuer_ids` so a client can be created standalone, and a client's issuer attachments are now managed through the new `attachUserSessionIssuer` / `detachUserSessionIssuer` endpoints instead of `update`. No more reads or writes of the legacy `remote_session_clients.user_session_issuer_id` column.
+- 4b45485: `chat.load` now returns a `totals` object with whole-generation trace-entry counts (`total`, `user_messages`, `assistant_messages`, `tool_calls`, `tool_results`, `risk_only`). Because the detail-sheet transcript is paginated, the filter bar previously derived its counts from the loaded page — showing e.g. "Showing 150 of 150 entries" on a 19k-message chat, and a risk count that disagreed with the (generation-scoped) risk-only transcript. The dashboard now renders these counts from the server totals. Totals are scoped to the returned generation so they stay consistent with the messages on screen.
+- 1ba5adb: feat(dashboard): search within a chat thread. The chat detail sheet gains a find-in-conversation bar backed by full-thread server-side text search (`chat.load` `query` param returns the messages matching the query plus surrounding context, mirroring the risk-windowed view). Jump between matches with the prev/next controls or Enter/Shift+Enter (wrapping at the ends), Escape clears. The active match is highlighted bright yellow and the rest pale — across message text, tool names, and tool argument/output sections — and the tool holding the active match expands, collapsing again as you navigate away.
+- 0d23d1f: Add `mcp_server_id` as an optional filter on the observability overview query surface (`getObservabilityOverview`), threaded through the ClickHouse telemetry builders, the Goa payload, and the logs platform tool. A single `mcp_server_id` scopes a fronting MCP server's activity across both remote-backed and toolset-backed sources.
+- ef2f5ef: Add an organization-level observability mode that makes generated hook plugins fully non-blocking. When enabled, hooks only observe and report and can never deny or delay a tool call. Defaults off, preserving existing behavior. Toggle it from the organization logging settings.
+- 6f3180d: chat.load now paginates a generation's messages by `seq` keyset (`limit`, `before_seq`, `after_seq`) and exposes each message's `seq` plus `has_more_before`/`has_more_after`. A new `risk_only` flag returns just the messages with active risk findings padded with surrounding context, grouped into contiguous `risk_segments` that can be expanded on demand. The chat detail sheet consumes this with a virtualized transcript (`@tanstack/react-virtual`, constant DOM node count regardless of how many pages are loaded) and infinite scroll (scroll up to load older messages, anchored so the viewport doesn't jump), and renders the risk-only view as expandable segments with load-above/below and gap-fill controls.
+- 465ac0d: Function deployments now prefer the operator-set `memory_mib_override` / `scale_override` columns over the config-driven memory and scale, and carry those overrides forward across redeploys so they are not reset by a later customer deploy.
+- a942a2a: Add a common webhook-trigger abstraction and use it to ship Slack, Linear, and GitHub webhook triggers. A new `HMACScheme` + `WebhookVendor` spec in `triggers/webhook.go` centralizes signature verification (HMAC-SHA256/SHA1, hex/base64, prefix, timestamped templates with replay window) and envelope assembly, so a new webhook source lands as a small vendor file describing its signing scheme, event types, and an ingest function. Slack is rebuilt on the abstraction (no behavior change); Linear (HMAC-SHA256 hex over the bare body, `Linear-Delivery` dedup, comments fold onto their parent issue's conversation) and GitHub (`sha256=`-prefixed hex, `X-GitHub-Delivery` dedup, PR/review/comment correlation onto the PR, pushes onto repo+branch) are added as new triggers. All three share the same default-deny event-type allowlist + CEL filter semantics.
+
+### Patch Changes
+
+- d6d459e: assistants now reap individual stopped runtime VMs once they've been idle for 14 days, instead of waiting for the entire assistant to fall silent for a week. Busy projects no longer accumulate orphaned per-thread Fly machines, and the next event on a dormant thread cold-launches into the same Fly app — keeping its IP and secrets.
+- f0b8e05: Assistants now pick up MCP server additions and removals on the next turn instead of only on a fresh runtime bootstrap. The per-turn dispatch sends the current MCP set to the runner, which reconciles its live connections without recycling the VM. Previously a newly attached integration (e.g. GitHub MCP) stayed invisible to the running assistant until the runtime was restarted, leaving the model unable to use it or to invoke `mcp_force_reconnect` for it.
+- 23000bc: Isolate Claude Code session identity per `session.id` when an OpenTelemetry Collector or gateway re-batches multiple sessions into one OTLP logs export, so a session is never cached or authorized with another session's `user.email` / `organization.id`.
+- 84df8f5: Gram Functions tool calls now size their Fly concurrency limits to real execution capacity (so memory bumps no longer inflate the request cap), return a retryable `429 + Retry-After` when a runner is saturated instead of dropping the connection, and retry tool-call POSTs only on safe pre-response transport errors.
+- 2fe346b: Public MCP and OAuth routes now start a fresh server-side trace per request and record the inbound W3C trace context as a span link, instead of adopting the client-supplied `traceparent` as the span parent. This stops third parties from merging unrelated requests into one trace or steering our trace ids, and drops client-supplied `baggage` on those routes before it reaches handlers. The trusted `/rpc` and `/admin` surfaces keep end-to-end parent-child trace continuity and their inbound baggage unchanged.
+- b0002bc: The Challenge UI now suppresses challenges raised by users outside the organization. Previously, when a Speakeasy staff member impersonated a customer org their authz decisions appeared as challenge entries — and because internal users switch accounts frequently, these entries repeatedly cluttered the list. `access.listChallenges` and `access.listChallengeBuckets` now only return challenges whose principal is an active member of the organization or has no Gram user identity (e.g. API keys and external end-users); challenges from Gram users who are not members of the org are filtered out in ClickHouse so counts and pagination stay correct.
+- d9604a2: fix(assistants): stop a single bad assistant turn from tearing down and recreating its runtime forever. Errors returned by a live runtime are now treated as terminal (and capped) instead of being mistaken for a dead machine, and a hard ceiling fails an event after repeated teardowns so a stuck event can no longer churn machines indefinitely.
+- 3955c10: Better performance on tool logs page
+- b968804: Exclude tools lists from registry list view to lean out the response size and make the catalog experience more reliable in flake-y network conditions
+- 44acd27: Deleting a chat that backs an active assistant is now blocked and returns a conflict. Previously the chat could be soft-deleted out from under a running assistant, which broke the assistant's ability to load its conversation and could leave it silently wedged.
+- e0da996: A chat that backs an active assistant now clears its soft-deleted state automatically when it receives another message, so an assistant whose chat was deleted out from under it recovers instead of staying wedged. Chats with no active assistant are left deleted, so this never resurrects a chat a user intentionally deleted.
+- 081259c: Costs and session views now show a correct total token count for AI-coding sessions (Claude Code, etc.). These providers report input and output tokens but never emit `gen_ai.usage.total_tokens`, which previously made per-session and per-user totals read "0 tokens". The telemetry queries now derive the total from input + output when the provider omits an explicit total, while sessions that do carry one are unchanged.
+- 9da601f: fix(assistants): stop assistant threads from getting stuck when a model response is cut off mid-tool-call. A truncated generation used to be saved with malformed tool-call arguments, which made the thread fail and retry forever (silent assistants, wedged cron digests). Such generations are now dropped at capture while the preceding messages are kept, so the thread stays usable.
+- 6453492: fix(hooks): harden hook ingest against transient connection resets. Plugin hook senders now retry a dropped request with backoff instead of blocking the tool call or silently losing the event, and the server de-duplicates redelivered events so a retry is recorded exactly once across all coding assistants.
+- 789beea: Improve failure handling and diagnostics for plugin and server-generated hooks.
+
+  - The Cursor hook now fails closed (emits a `deny` with a readable reason) when Gram is unreachable or returns an error, instead of silently allowing the call and bypassing blocking policies. Only a `2xx` is treated as a decision; a `3xx` (e.g. an unfollowed redirect) now fails closed too.
+  - Hook success is restricted to `2xx` across the Claude and Cursor hooks (previously `2xx`–`3xx`).
+  - The Cursor hook surfaces missing credentials, accepts both `GRAM_HOOKS_*` and legacy `GRAM_API_KEY`/`GRAM_PROJECT_SLUG` env vars, and passes its API key via a mode-`600` curl config file instead of the command line.
+  - The Claude hook now explains `mktemp` failures instead of blocking with an empty reason.
+  - The MCP inventory payload is sent on stdin (`--data-binary @-`) instead of as a command-line argument, so large inventories no longer risk an `ARG_MAX` failure that silently drops telemetry.
+  - The fire-and-forget MCP inventory and identity scripts gain an opt-in `GRAM_HOOKS_DEBUG=1` channel that reports why inventory or user attribution was skipped.
+
+- 365542d: fix(hooks): clearer message when an MCP tool call can't be verified. The deny reason now tells you to restart Claude or run /reload-plugins instead of suggesting the session is still initializing, and includes an error code so you can tell why the call couldn't be verified.
+- bb7592f: Add a nullable `match_config` JSONB column to `risk_custom_detection_rules`.
+  Detection rules will evaluate this structured condition config instead of the
+  single `regex` pattern; `regex` is retained (nullable) as a fallback until a
+  later backfill+contract migration. Schema-only.
+- 4576472: Rename the internal `mcpname` package to `toolref` and route the Codex hook's
+  MCP tool-name attribution through `toolref.AttributeTool` instead of a
+  hand-rolled `mcp__<server>__<tool>` split. No behavior change.
+- 3ec3917: User sessions enhancements: facet filters (status, client, user, MCP server) on the User Sessions page; a sessions panel on each MCP server's Authentication tab; revoke via right-click and ⋮ menus with brand-themed status badges; and two read-only assistant platform tools (list_user_sessions, get_user_session).
+- 3ec3917: Add user sessions feed: enrich the userSessions list API with issuer slug, client name, resolved subject identity, and a status filter; add a filterable User Sessions page (under the org Identity nav group) with revoke.
+
+## 0.72.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+- 442d05c: Codex sessions now report the user's configured MCP servers to Gram on session start, giving shadow MCP servers the same observability as Gram-managed ones and letting access approvals scope to the server URL.
+- 7c8677b: Record `mcp_server_id` across `/mcp` runtime telemetry so MCP server activity can be sliced from either the remote or the fronting-server perspective.
+- 596af3f: Add `telemetry.listSessions`, an org-scoped endpoint for listing cost-bearing chat sessions filtered by the same dimensions as `telemetry.query`.
+
+### Patch Changes
+
+- 783b5cc: Resolve multiple remote-session authorizations per user session issuer at the
+  MCP runtime, keyed by remote session issuer, and enforce at most one client per
+  (user session issuer, remote session issuer) at attach time. The runtime
+  resolves a per-issuer token map and re-auths when any attached remote session
+  is missing or invalid; an application-level attach guard plus a runtime
+  invariant replace the database one_per_issuer index. Issuer-gated dispatch
+  fails closed when it cannot route among multiple upstream tokens.
+
+## 0.71.0
+
+### Minor Changes
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+
+### Patch Changes
+
+- 7c010e9: The Codex observability plugin install script now works on machines where the `codex` CLI is not on PATH: it probes well-known install locations, including the Codex desktop app bundle, before falling back to manual instructions. It also writes feature flags inside the `[features]` table instead of as root-level dotted keys, fixing a "duplicate key" config error on machines whose `config.toml` already has a `[features]` table, and cleans up dotted keys left behind by earlier versions of the script.
+- 3b32954: Codex sessions now record the final assistant message at end of turn, matching Claude Code behavior.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- b6aafce: increase graceful-shutdown drain window to 60s
+- 2135280: MCP tool calls that return a JSON object now also include `structuredContent`, so clients can consume a parsed object instead of re-parsing the text result.
+- 5ea8559: Fix the per-tool `mcp:connect` RBAC checks in the remote MCP proxy to use the `mcp_servers` id instead of the `remote_mcp_servers` id, so they resolve grants against the same resource as the server-level check and the toolset path.
+- 0710154: Slack-connected assistants now decide whether a reply adds value before posting: ambient thread messages can be answered with silence, while @-mentions always get a reply. The `platform_slack_set_thread_status` tool accepts an empty status to clear the thread's loading indicator on silent turns.
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+
 ## 0.70.2
 
 ### Patch Changes

@@ -69,6 +69,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -95,10 +96,13 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
+	serverURL, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
 	svc := NewService(
 		logger,
 		conn,
 		tracerProvider,
+		meterProvider,
 		nil,
 		sessionManager,
 		cacheAdapter,
@@ -111,6 +115,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		policyBypass,
 		shadowMCPClient,
 		chatWriter,
+		serverURL,
 		siteURL,
 		"test-jwt-secret",
 	)

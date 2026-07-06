@@ -3,6 +3,7 @@ package auth_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
@@ -29,7 +30,7 @@ func TestService_SwitchScopes(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            uuid.NewString(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
@@ -84,7 +85,7 @@ func TestService_SwitchScopes(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            uuid.NewString(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
@@ -159,7 +160,7 @@ func TestService_SwitchScopes(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            uuid.NewString(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
@@ -214,7 +215,7 @@ func TestService_SwitchScopes(t *testing.T) {
 		}
 
 		session := sessions.Session{
-			SessionID:            "workos-session-test",
+			SessionID:            uuid.NewString(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "workos-sid-abc123",

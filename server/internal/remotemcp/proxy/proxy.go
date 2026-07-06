@@ -72,6 +72,18 @@ const (
 	DefaultMaxBufferedBodyBytes int64 = 50 * 1024 * 1024
 )
 
+// ServerIdentity bundles the two correlation ids the proxy stamps onto its
+// telemetry: RemoteMCPServerID is the remote_mcp_servers row id (the upstream
+// the proxy forwards to) and McpServerID is the fronting mcp_servers row id
+// (the server users manage). Bundling them keeps the pair from being
+// transposed across the constructors and record calls that thread them, and
+// both are omitted from emitted telemetry when empty rather than recorded as
+// empty-string labels.
+type ServerIdentity struct {
+	RemoteMCPServerID string
+	McpServerID       string
+}
+
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
 // request so the SessionID and interceptor state stay tied to a single
@@ -107,6 +119,7 @@ type Proxy struct {
 	// disables metrics recording; tests that do not care about metrics pass
 	// nil here.
 	Metrics *Metrics
+
 	// MaxBufferedBodyBytes bounds the size of any JSON body that is fully
 	// read into memory before parsing — applied to both the inbound user
 	// request and the upstream response. Streamed responses are not subject
@@ -115,12 +128,15 @@ type Proxy struct {
 	// for the package default.
 	MaxBufferedBodyBytes int64
 
-	// ServerID is the Remote MCP Server UUID. When set, it is attached to
-	// every span emitted by the proxy so traces can be correlated across the
-	// HTTP lifecycle and the proxy forward.
-	ServerID string
+	// Identity carries the two correlation ids attached to every span, log
+	// line, and metric the proxy emits: the remote_mcp_servers row id and
+	// the fronting mcp_servers row id. Both are optional and omitted when
+	// empty rather than emitted as empty-string labels.
+	Identity ServerIdentity
+
 	// RemoteURL is the upstream endpoint all requests are forwarded to.
 	RemoteURL string
+
 	// Headers are applied on top of any forwarded client headers when
 	// constructing the upstream request.
 	Headers []ConfiguredHeader
@@ -232,7 +248,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodDelete, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodDelete, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -282,7 +298,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodGet, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodGet, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -339,7 +355,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodPost, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodPost, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
 	userReq := &UserRequest{UserHTTPRequest: r, JSONRPCMessages: nil, body: nil, dirty: false}
@@ -438,7 +454,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	} else if mutated {
 		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
 			attr.SlogComponent("remotemcp.proxy"),
-			attr.SlogRemoteMCPServerID(p.ServerID))
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -468,7 +485,17 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrUndecodableJSONRPCBody):
+		// The remote returned a non-SSE body that isn't a single JSON-RPC
+		// message (observed in prod as a bare heartbeat scalar from a
+		// non-spec-compliant upstream). Mirror the SSE relay path, which skips
+		// interception for undecodable events and forwards them verbatim:
+		// relay the upstream bytes and status to the client unchanged rather
+		// than manufacturing a 5xx. msg is nil, so interceptors are skipped and
+		// bodyBytes is written through below.
+		p.Logger.WarnContext(ctx, "relaying undecodable remote mcp response to client verbatim", attr.SlogError(err))
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
 	}
 
@@ -533,7 +560,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			bodyBytes = mutated
 			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
 				attr.SlogComponent("remotemcp.proxy"),
-				attr.SlogRemoteMCPServerID(p.ServerID))
+				attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+				attr.SlogMcpServerID(p.Identity.McpServerID))
 		}
 	}
 
@@ -814,7 +842,8 @@ func (p *Proxy) relaySSEStream(
 				emit = formatSSEEventWithData(nonData, mutated)
 				p.Logger.InfoContext(ctx, "relaying mutated SSE event to client",
 					attr.SlogComponent("remotemcp.proxy"),
-					attr.SlogRemoteMCPServerID(p.ServerID))
+					attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+					attr.SlogMcpServerID(p.Identity.McpServerID))
 			}
 		}
 		if _, writeErr := w.Write(emit); writeErr != nil {
@@ -835,15 +864,18 @@ func (p *Proxy) relaySSEStream(
 }
 
 // requestSpanAttributes returns the attribute set applied to every span the proxy
-// emits for an inbound request. ServerID is optional on Proxy and is omitted
-// when empty rather than emitted as an empty-string label.
+// emits for an inbound request. Both correlation ids are optional on Proxy and
+// are omitted when empty rather than emitted as empty-string labels.
 func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
-	if p.ServerID != "" {
-		attrs = append(attrs, attr.RemoteMCPServerID(p.ServerID))
+	if p.Identity.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.RemoteMCPServerID(p.Identity.RemoteMCPServerID))
+	}
+	if p.Identity.McpServerID != "" {
+		attrs = append(attrs, attr.McpServerID(p.Identity.McpServerID))
 	}
 	return attrs
 }

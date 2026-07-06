@@ -24,15 +24,16 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Alert, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
+import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
   Ban,
   Check,
   ChevronDown,
   ChevronRight,
-  Info,
   Loader2,
   Plus,
   X,
@@ -89,7 +90,7 @@ function getAllowLevel(
   return "server";
 }
 
-/** Map an allow level to the panels available for deny rules — all levels narrower. */
+/** Map an allow level to the panels available for exception rules. */
 function getDenyPanels(allowLevel: string | null): ActivePanel[] {
   switch (allowLevel) {
     case "all":
@@ -100,7 +101,7 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
       return ["tools"];
     case null:
     default:
-      return []; // tool/annotation — already most specific, no deny possible
+      return []; // tool/annotation: already most specific, no exception possible
   }
 }
 
@@ -148,11 +149,20 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
   const { data: scopesData } = useListScopes();
+  const scopeDefinitions = scopesData?.scopes;
+  const userVisibleScopeDefinitions = useMemo(
+    () =>
+      (scopeDefinitions ?? []).filter(
+        (scope) => scope.visibility === "user_visible",
+      ),
+    [scopeDefinitions],
+  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -160,31 +170,53 @@ export function CreateRoleDialog({
   );
 
   const scopeGroups = useMemo(() => {
-    const scopes = scopesData?.scopes ?? [];
-    const groupOrder: { label: string; resourceType: string }[] = [
-      { label: "Organization", resourceType: "org" },
-      { label: "Build & Deploy", resourceType: "project" },
-      { label: "Environments", resourceType: "environment" },
-      { label: "MCP Servers", resourceType: "mcp" },
+    const groupOrder: {
+      label: string;
+      resourceType: string;
+      description: string;
+    }[] = [
+      {
+        label: "Organization",
+        resourceType: "org",
+        description: "Organization metadata, members, and access settings.",
+      },
+      {
+        label: "Build & Deploy",
+        resourceType: "project",
+        description: "Projects and their related resources.",
+      },
+      {
+        label: "Environments",
+        resourceType: "environment",
+        description: "Environments and their entries within projects.",
+      },
+      {
+        label: "MCP Servers",
+        resourceType: "mcp",
+        description: "MCP server configuration and connections.",
+      },
+      {
+        label: "Agent Sessions",
+        resourceType: "chat",
+        description: "Access to members' agent session transcripts.",
+      },
     ];
     return groupOrder.map((g) => ({
       ...g,
-      scopes: scopes.filter((s) => s.resourceType === g.resourceType),
+      scopes: userVisibleScopeDefinitions.filter(
+        (s) => s.resourceType === g.resourceType,
+      ),
     }));
-  }, [scopesData]);
+  }, [userVisibleScopeDefinitions]);
 
   // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole);
-    const grantedScopes = new Set(Object.keys(roleGrants));
-    const autoExpanded = new Set(
-      scopeGroups
-        .filter((g) => g.scopes.some((s) => grantedScopes.has(s.slug)))
-        .map((g) => g.label),
-    );
-    setExpandedGroups(autoExpanded);
+    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
+    // Keep all groups collapsed on open; auto-expanding granted groups makes
+    // the sheet scroll on load.
+    setExpandedGroups(new Set());
     setGrants(roleGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
@@ -241,21 +273,23 @@ export function CreateRoleDialog({
   );
   const grantCount = effectiveGrantCount(visibleGrants);
 
-  const saveDisabled = isSaveDisabled({
-    isMutating,
-    isEditing,
-    isSystemRole,
-    name,
-    description,
-    grants,
-    selectedMembers,
-    initial: {
-      name: initialName,
-      description: initialDescription,
-      grantKeys: initialGrantKeys,
-      members: initialMembers,
-    },
-  });
+  const saveDisabled =
+    !scopeDefinitions ||
+    isSaveDisabled({
+      isMutating,
+      isEditing,
+      isSystemRole,
+      name,
+      description,
+      grants,
+      selectedMembers,
+      initial: {
+        name: initialName,
+        description: initialDescription,
+        grantKeys: initialGrantKeys,
+        members: initialMembers,
+      },
+    });
 
   // ─── Scope / grant operations ─────────────────────────────────
 
@@ -285,12 +319,12 @@ export function CreateRoleDialog({
       // Edit existing rule — clone it as draft
       setDraftRule({ ...grant.rules[ruleIndex]! });
     } else {
-      // New deny rule — or edit existing deny if one already exists
+      // New exception rule, or edit the existing exception if one already exists.
       const existingDenyIdx = grant?.rules.findIndex(
         (r) => r.effect === "deny",
       );
       if (existingDenyIdx !== undefined && existingDenyIdx >= 0) {
-        // Edit the existing deny rule instead of creating a new one
+        // Edit the existing exception rule instead of creating a new one.
         setEditingRuleIndex(existingDenyIdx);
         setDraftRule({ ...grant!.rules[existingDenyIdx]! });
       } else {
@@ -319,7 +353,7 @@ export function CreateRoleDialog({
             // Editing existing rule — replace in place
             const originalRule = grant.rules[editingRuleIndex];
             rules[editingRuleIndex] = draftRule;
-            // Allow changed → clear deny exceptions (they were scoped to old allow)
+            // Allow changed: clear exceptions scoped to the old allow.
             const toSortedJSON = (s: Selector[] | null | undefined) =>
               JSON.stringify(
                 [...(s ?? [])].sort((a, b) =>
@@ -334,7 +368,7 @@ export function CreateRoleDialog({
               rules = rules.filter((r) => r.effect !== "deny");
             }
           } else if (draftRule.effect === "deny") {
-            // One deny per scope — replace any existing deny
+            // One exception per scope: replace any existing exception.
             rules = rules.filter((r) => r.effect !== "deny");
             rules.push(draftRule);
           } else {
@@ -434,18 +468,25 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants = sdkGrantsFromForm(grants);
+    if (!scopeDefinitions) return;
+
+    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(grantsFromRole(editingRole));
+      const initialGrants = sdkGrantsFromForm(
+        grantsFromRole(editingRole, scopeDefinitions),
+        scopeDefinitions,
+      );
       const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
 
       updateRole.mutate({
         request: {
           updateRoleForm: {
             id: editingRole.id,
+            // System role name/description are platform-managed; permissions
+            // (grants) are per-org and editable.
             ...(isSystemRole
-              ? {}
+              ? { addGrants, removeGrants }
               : { name, description, addGrants, removeGrants }),
             memberIds:
               selectedMembers.size > 0
@@ -501,7 +542,7 @@ export function CreateRoleDialog({
         .find((s) => s.slug === editingScopeSlug)
     : null;
 
-  // Deny-level constraints: deny must be one level narrower than the broadest allow.
+  // Exception constraints: an exception must be narrower than the broadest allow.
   const editingGrantRules = editingScopeSlug
     ? (grants[editingScopeSlug]?.rules ?? [])
     : [];
@@ -533,7 +574,7 @@ export function CreateRoleDialog({
                 </button>
                 <span>
                   {editingRuleIndex >= 0 ? "Edit" : "Create"}{" "}
-                  {draftRule?.effect === "allow" ? "allow" : "deny"} rule
+                  {draftRule?.effect === "allow" ? "allow" : "exception"} rule
                 </span>
               </div>
             ) : isEditing ? (
@@ -546,7 +587,7 @@ export function CreateRoleDialog({
             <SheetDescription className="text-muted-foreground mr-5 ml-7 line-clamp-2 text-xs">
               {draftRule.effect === "allow"
                 ? "Choose which resources this role can access. Start broad — you can add exceptions later to restrict specific items."
-                : "Deny access to specific resources that the allow rule would otherwise permit. Use exceptions to carve out items that this role should not access."}
+                : "Exclude specific resources that the allow rule would otherwise permit."}
             </SheetDescription>
           )}
         </SheetHeader>
@@ -560,6 +601,18 @@ export function CreateRoleDialog({
           >
             {/* ─── Panel 1: Role form ─── */}
             <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4 pt-3">
+              {organization.scimEnabled && (
+                <Alert variant="info" dismissible={false} className="text-sm">
+                  Assign this role from{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="whitespace-nowrap underline underline-offset-2"
+                  >
+                    Identity → SCIM → Configure
+                  </Link>
+                  .
+                </Alert>
+              )}
               <InputField
                 label="Name"
                 placeholder="e.g., Project Manager"
@@ -609,13 +662,6 @@ export function CreateRoleDialog({
 
                 {showPermissions && (
                   <div className="mt-3 space-y-3">
-                    {isSystemRole && (
-                      <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
-                        <Info className="h-3.5 w-3.5 shrink-0" />
-                        System role permissions are managed by the platform and
-                        cannot be changed.
-                      </div>
-                    )}
                     {scopeGroups.map((group) => {
                       const selectedInGroup = group.scopes.filter(
                         (s) => grants[s.slug],
@@ -642,11 +688,10 @@ export function CreateRoleDialog({
                                 toggleGroup(group.label);
                               }
                             }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 rounded-t-md px-3 py-2"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-start gap-2">
                               <Checkbox
-                                disabled={isSystemRole}
                                 checked={
                                   allSelected
                                     ? true
@@ -658,24 +703,33 @@ export function CreateRoleDialog({
                                   e.stopPropagation();
                                   toggleGroupCheckbox(group.label);
                                 }}
-                                className="cursor-pointer"
+                                className="mt-0.5 cursor-pointer"
                               />
-                              <Type
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {group.label}
-                              </Type>
-                              <Type
-                                variant="body"
-                                className="text-muted-foreground text-sm"
-                              >
-                                ({selectedInGroup}/{group.scopes.length})
-                              </Type>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Type
+                                    variant="body"
+                                    className="text-sm font-medium"
+                                  >
+                                    {group.label}
+                                  </Type>
+                                  <Type
+                                    variant="body"
+                                    className="text-muted-foreground text-sm"
+                                  >
+                                    ({selectedInGroup}/{group.scopes.length})
+                                  </Type>
+                                </div>
+                                {!isExpanded && (
+                                  <Type muted small className="mt-0.5 text-xs">
+                                    {group.description}
+                                  </Type>
+                                )}
+                              </div>
                             </div>
                             <ChevronRight
                               className={cn(
-                                "text-muted-foreground h-3.5 w-3.5 transition-transform",
+                                "text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform",
                                 isExpanded && "rotate-90",
                               )}
                             />
@@ -689,27 +743,15 @@ export function CreateRoleDialog({
                                 const isChecked = !!grant;
                                 const isConfigurable =
                                   scopeDef.resourceType !== "org" &&
-                                  scopeDef.resourceType !== "environment";
+                                  scopeDef.resourceType !== "environment" &&
+                                  scopeDef.resourceType !== "chat";
 
                                 const row = (
                                   <div key={scopeDef.slug}>
                                     {/* Scope checkbox row */}
-                                    <div
-                                      className={cn(
-                                        "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
-                                        isSystemRole && "cursor-default",
-                                      )}
-                                    >
-                                      <label
-                                        className={cn(
-                                          "flex min-w-0 flex-1 items-start gap-3",
-                                          isSystemRole
-                                            ? "cursor-default"
-                                            : "cursor-pointer",
-                                        )}
-                                      >
+                                    <div className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5">
+                                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                                         <Checkbox
-                                          disabled={isSystemRole}
                                           checked={isChecked}
                                           onCheckedChange={() =>
                                             toggleScope(scopeDef.slug)
@@ -738,7 +780,9 @@ export function CreateRoleDialog({
                                           {scopeDef.resourceType ===
                                           "environment"
                                             ? "All in project"
-                                            : "All"}
+                                            : scopeDef.resourceType === "chat"
+                                              ? "All sessions"
+                                              : "All"}
                                         </span>
                                       )}
                                     </div>
@@ -761,31 +805,20 @@ export function CreateRoleDialog({
                                               scopeDef.resourceType,
                                               projectList,
                                             )}
-                                            onClick={
-                                              isSystemRole
-                                                ? undefined
-                                                : () =>
-                                                    openRuleEditor(
-                                                      scopeDef.slug,
-                                                      ruleIdx,
-                                                    )
+                                            onClick={() =>
+                                              openRuleEditor(
+                                                scopeDef.slug,
+                                                ruleIdx,
+                                              )
                                             }
-                                            onRemove={
-                                              isSystemRole
-                                                ? undefined
-                                                : () =>
-                                                    removeRule(
-                                                      scopeDef.slug,
-                                                      ruleIdx,
-                                                    )
+                                            onRemove={() =>
+                                              removeRule(scopeDef.slug, ruleIdx)
                                             }
-                                            readOnly={isSystemRole}
                                           />
                                         ))}
-                                        {!isSystemRole &&
-                                          !grant.rules.some(
-                                            (r) => r.effect === "deny",
-                                          ) &&
+                                        {!grant.rules.some(
+                                          (r) => r.effect === "deny",
+                                        ) &&
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
                                           ).length > 0 && (
@@ -809,22 +842,6 @@ export function CreateRoleDialog({
                                     )}
                                   </div>
                                 );
-
-                                if (isSystemRole) {
-                                  return (
-                                    <Tooltip key={scopeDef.slug}>
-                                      <TooltipTrigger asChild>
-                                        {row}
-                                      </TooltipTrigger>
-                                      <TooltipContent
-                                        side="right"
-                                        className="max-w-48"
-                                      >
-                                        Cannot edit system role permissions
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  );
-                                }
 
                                 return row;
                               })}

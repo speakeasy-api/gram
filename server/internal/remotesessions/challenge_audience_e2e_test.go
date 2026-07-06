@@ -94,8 +94,8 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,
-				UserSessionIssuerID:     userIssuer,
 				ClientID:                "aud-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 				ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -112,7 +112,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 			require.NoError(t, err)
 			require.Len(t, clients, 1)
 

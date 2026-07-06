@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -253,10 +254,20 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(75 * time.Millisecond)
-
-	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
-	requireUnauthorized(t, err)
+	// The cached "allowed" answer is honoured until the 50ms TTL drains; once it
+	// expires the next check re-queries the DB and observes the deletion. Poll
+	// rather than sleeping a fixed duration that races the TTL.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
+		if !assert.Error(c, err) {
+			return
+		}
+		se := &oops.ShareableError{}
+		if !assert.ErrorAs(c, err, &se) {
+			return
+		}
+		assert.Equal(c, oops.CodeUnauthorized, se.Code)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func requireUnauthorized(t *testing.T, err error) {

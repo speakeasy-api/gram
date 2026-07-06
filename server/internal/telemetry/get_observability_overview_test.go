@@ -3,12 +3,14 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,33 +64,34 @@ func TestGetObservabilityOverview_WithChatResolutions(t *testing.T) {
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:petstore:listPets", 200, 0.5)
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), "tools:http:petstore:getPet", 500, 1.0)
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
-		From:              from,
-		To:                to,
-		IncludeTimeSeries: true,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: true,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Summary)
+		// Verify chat resolution metrics
+		assert.Equal(c, int64(3), res.Summary.TotalChats)
+		assert.Equal(c, int64(1), res.Summary.ResolvedChats)
+		assert.Equal(c, int64(1), res.Summary.FailedChats)
 
-	// Verify chat resolution metrics
-	require.Equal(t, int64(3), result.Summary.TotalChats)
-	require.Equal(t, int64(1), result.Summary.ResolvedChats)
-	require.Equal(t, int64(1), result.Summary.FailedChats)
+		// Verify tool metrics
+		assert.Equal(c, int64(2), res.Summary.TotalToolCalls)
+		assert.Equal(c, int64(1), res.Summary.FailedToolCalls)
 
-	// Verify tool metrics
-	require.Equal(t, int64(2), result.Summary.TotalToolCalls)
-	require.Equal(t, int64(1), result.Summary.FailedToolCalls)
-
-	// Verify time series is returned
-	require.NotEmpty(t, result.TimeSeries)
+		// Verify time series is returned
+		assert.NotEmpty(c, res.TimeSeries)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetObservabilityOverview_TimeSeriesMetrics(t *testing.T) {
@@ -109,26 +112,32 @@ func TestGetObservabilityOverview_TimeSeriesMetrics(t *testing.T) {
 	insertResolutionLog(t, ctx, projectID, deploymentID, now.Add(-50*time.Minute), chatID1, "success", 90)
 	insertResolutionLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID2, "success", 85)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
-		From:              from,
-		To:                to,
-		IncludeTimeSeries: true,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: true,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotEmpty(t, result.TimeSeries)
+		if !assert.NotEmpty(c, res.TimeSeries) {
+			return
+		}
 
-	// With 2-hour range and auto-calculated 15-min buckets, we should have 8+ buckets
-	require.GreaterOrEqual(t, len(result.TimeSeries), 8)
+		// With 2-hour range and auto-calculated 15-min buckets, we should have 8+ buckets
+		assert.GreaterOrEqual(c, len(res.TimeSeries), 8)
 
-	// Verify the first bucket has a valid timestamp
-	require.Positive(t, result.TimeSeries[0].BucketTimeUnixNano)
+		// Verify the first bucket has a valid timestamp
+		assert.Positive(c, res.TimeSeries[0].BucketTimeUnixNano)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetObservabilityOverview_UnevaluatedChats(t *testing.T) {
@@ -152,37 +161,39 @@ func TestGetObservabilityOverview_UnevaluatedChats(t *testing.T) {
 	// Insert one evaluated chat for comparison
 	insertResolutionLog(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), chatID3, "success", 90)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
-		From:              from,
-		To:                to,
-		IncludeTimeSeries: true,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: true,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Summary)
+		// All 3 chats must be counted — unevaluated chats should not be excluded
+		assert.Equal(c, int64(3), res.Summary.TotalChats)
 
-	// All 3 chats must be counted — unevaluated chats should not be excluded
-	require.Equal(t, int64(3), result.Summary.TotalChats)
+		// Only the one evaluated-as-success chat counts toward resolved
+		assert.Equal(c, int64(1), res.Summary.ResolvedChats)
+		assert.Equal(c, int64(0), res.Summary.FailedChats)
 
-	// Only the one evaluated-as-success chat counts toward resolved
-	require.Equal(t, int64(1), result.Summary.ResolvedChats)
-	require.Equal(t, int64(0), result.Summary.FailedChats)
+		// Session duration is computed from chat completion events regardless of evaluation label
+		assert.Greater(c, res.Summary.AvgSessionDurationMs, float64(0))
 
-	// Session duration is computed from chat completion events regardless of evaluation label
-	require.Greater(t, result.Summary.AvgSessionDurationMs, float64(0))
-
-	// Time series must also reflect all 3 chats in total
-	totalInTimeSeries := int64(0)
-	for _, b := range result.TimeSeries {
-		totalInTimeSeries += b.TotalChats
-	}
-	require.Equal(t, int64(3), totalInTimeSeries)
+		// Time series must also reflect all 3 chats in total
+		totalInTimeSeries := int64(0)
+		for _, b := range res.TimeSeries {
+			totalInTimeSeries += b.TotalChats
+		}
+		assert.Equal(c, int64(3), totalInTimeSeries)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetObservabilityOverview_FromAfterTo(t *testing.T) {
@@ -221,25 +232,84 @@ func TestGetObservabilityOverview_RemoteMCPServerIDFilter(t *testing.T) {
 	insertRemoteMCPToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:externalmcp:"+serverA+":createIssue", serverA, 500, 1.2)
 	insertRemoteMCPToolCallLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:externalmcp:"+serverB+":listIssues", serverB, 200, 0.3)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Without filter: all three tool calls show up.
-	all, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
-		From:              from,
-		To:                to,
-		IncludeTimeSeries: false,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(3), all.Summary.TotalToolCalls)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: false,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Equal(c, int64(3), res.Summary.TotalToolCalls)
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Filter by server A: only its two calls show up.
 	scoped, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
 		From:              from,
 		To:                to,
 		RemoteMcpServerID: &serverA,
+		IncludeTimeSeries: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), scoped.Summary.TotalToolCalls)
+	require.Equal(t, int64(1), scoped.Summary.FailedToolCalls)
+	require.Len(t, scoped.TopToolsByCount, 2)
+}
+
+func TestGetObservabilityOverview_MCPServerIDFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	serverA := uuid.New().String()
+	serverB := uuid.New().String()
+
+	// Server A spans both backings under one fronting mcp_server_id: a
+	// remote-backed tool call (also carries remote_mcp_server.id) and a
+	// toolset-backed tool call (also carries toolset.slug). Server B is a
+	// separate fronting server. Filtering by mcp_server_id must capture both
+	// of server A's calls regardless of how each was backed.
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:externalmcp:"+serverA+":listIssues", serverA, map[string]any{"gram.remote_mcp_server.id": uuid.New().String()}, 200, 0.4)
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:petstore:createPet", serverA, map[string]any{"gram.toolset.slug": "petstore"}, 500, 1.2)
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:externalmcp:"+serverB+":listIssues", serverB, nil, 200, 0.3)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Without filter: all three tool calls show up.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: false,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Equal(c, int64(3), res.Summary.TotalToolCalls)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Filter by server A: both its calls show up regardless of backing.
+	scoped, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:              from,
+		To:                to,
+		McpServerID:       &serverA,
 		IncludeTimeSeries: false,
 	})
 	require.NoError(t, err)
@@ -302,6 +372,43 @@ func insertRemoteMCPToolCallLog(t *testing.T, ctx context.Context, projectID, de
 	require.NoError(t, err)
 }
 
+// insertMCPServerToolCallLog inserts a tool call log carrying a
+// gram.mcp_server.id attribute (the fronting MCP server id) so the
+// materialized mcp_server_id column is populated. extraAttrs lets a test also
+// stamp backing-specific attributes (e.g. gram.remote_mcp_server.id or
+// gram.toolset.slug) to prove one mcp_server_id spans both backings.
+func insertMCPServerToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, toolURN, mcpServerID string, extraAttrs map[string]any, statusCode int32, durationSec float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.tool.urn":                toolURN,
+		"gram.mcp_server.id":           mcpServerID,
+		"http.server.request.duration": durationSec,
+		"http.response.status_code":    statusCode,
+	}
+	maps.Copy(attributes, extraAttrs)
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, toolURN, "gram-tools")
+	require.NoError(t, err)
+}
+
 // insertResolutionLog inserts a chat resolution event log
 func insertResolutionLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, resolution string, score int) {
 	t.Helper()
@@ -315,7 +422,7 @@ func insertResolutionLog(t *testing.T, ctx context.Context, projectID, deploymen
 	attributes := map[string]any{
 		"gen_ai.conversation.id":        chatID,
 		"gen_ai.conversation.duration":  30.0, // 30 seconds
-		"gram.resource.urn":             "agents:chat:resolution",
+		"gram.resource.urn":             "chat:resolution",
 		"evaluation.score":              score,
 		"gen_ai.evaluation.score.label": resolution, // This feeds the MATERIALIZED column
 	}
@@ -332,7 +439,7 @@ func insertResolutionLog(t *testing.T, ctx context.Context, projectID, deploymen
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat resolution",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "agents:chat:resolution", chatID,
-		"gram-agents")
+		projectID, deploymentID, "chat:resolution", chatID,
+		"gram-server")
 	require.NoError(t, err)
 }

@@ -15,18 +15,40 @@ type ScopeParts struct {
 }
 
 const (
-	ScopeRoot               Scope = "root"
-	ScopeOrgRead            Scope = "org:read"
-	ScopeOrgAdmin           Scope = "org:admin"
-	ScopeProjectRead        Scope = "project:read"
-	ScopeProjectWrite       Scope = "project:write"
-	ScopeMCPRead            Scope = "mcp:read"
-	ScopeMCPWrite           Scope = "mcp:write"
-	ScopeMCPConnect         Scope = "mcp:connect"
-	ScopeEnvironmentRead    Scope = "environment:read"
-	ScopeEnvironmentWrite   Scope = "environment:write"
-	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
-	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
+	ScopeRoot                    Scope = "root"
+	ScopeOrgRead                 Scope = "org:read"
+	ScopeOrgBlockedRead          Scope = "org:blocked_read"
+	ScopeOrgAdmin                Scope = "org:admin"
+	ScopeOrgBlockedAdmin         Scope = "org:blocked_admin"
+	ScopeProjectRead             Scope = "project:read"
+	ScopeProjectBlockedRead      Scope = "project:blocked_read"
+	ScopeProjectWrite            Scope = "project:write"
+	ScopeProjectBlockedWrite     Scope = "project:blocked_write"
+	ScopeMCPRead                 Scope = "mcp:read"
+	ScopeMCPBlockedRead          Scope = "mcp:blocked_read"
+	ScopeMCPWrite                Scope = "mcp:write"
+	ScopeMCPBlockedWrite         Scope = "mcp:blocked_write"
+	ScopeMCPConnect              Scope = "mcp:connect"
+	ScopeMCPBlockedConnect       Scope = "mcp:blocked_connect"
+	ScopeEnvironmentRead         Scope = "environment:read"
+	ScopeEnvironmentBlockedRead  Scope = "environment:blocked_read"
+	ScopeEnvironmentWrite        Scope = "environment:write"
+	ScopeEnvironmentBlockedWrite Scope = "environment:blocked_write"
+	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
+	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
+	ScopeChatRead                Scope = "chat:read"
+)
+
+type scopeVisibility int
+
+const (
+	scopeVisibilityUserVisible scopeVisibility = iota + 1
+	scopeVisibilityInternal
+)
+
+const (
+	ScopeVisibilityUserVisible = "user_visible"
+	ScopeVisibilityInternal    = "internal"
 )
 
 var adminScopes = []Scope{
@@ -39,9 +61,39 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
+	// chat:read is intentionally NOT a default for any system role: reading
+	// other members' session transcripts is sensitive, so it must be granted
+	// explicitly (via a custom role grant). Everyone reads their own sessions
+	// via owner-matching in the chat handlers regardless.
 }
 
-var allScopes = append([]Scope{ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate}, adminScopes...)
+// scopeVisibilityByScope is the source of truth for whether a scope is exposed
+// to clients as a first-class permission or only used internally for storage
+// and evaluation.
+var scopeVisibilityByScope = map[Scope]scopeVisibility{
+	ScopeRoot:                    scopeVisibilityInternal,
+	ScopeOrgRead:                 scopeVisibilityUserVisible,
+	ScopeOrgBlockedRead:          scopeVisibilityInternal,
+	ScopeOrgAdmin:                scopeVisibilityUserVisible,
+	ScopeOrgBlockedAdmin:         scopeVisibilityInternal,
+	ScopeProjectRead:             scopeVisibilityUserVisible,
+	ScopeProjectBlockedRead:      scopeVisibilityInternal,
+	ScopeProjectWrite:            scopeVisibilityUserVisible,
+	ScopeProjectBlockedWrite:     scopeVisibilityInternal,
+	ScopeMCPRead:                 scopeVisibilityUserVisible,
+	ScopeMCPBlockedRead:          scopeVisibilityInternal,
+	ScopeMCPWrite:                scopeVisibilityUserVisible,
+	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
+	ScopeMCPConnect:              scopeVisibilityUserVisible,
+	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
+	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
+	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
+	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
+	ScopeEnvironmentBlockedWrite: scopeVisibilityInternal,
+	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
+	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
+	ScopeChatRead:                scopeVisibilityUserVisible,
+}
 
 var memberScopes = []Scope{
 	ScopeOrgRead,
@@ -60,9 +112,26 @@ func (s Scope) Parts() ScopeParts {
 	return ScopeParts{Resource: resource, Action: action}
 }
 
-// scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
-// Scopes with no higher-privilege implication (admin tiers) map to nil. Expansion is
-// non-transitive: list every satisfying scope directly, since Check.expand only walks
+func ScopeVisibilityFor(scope Scope) (string, bool) {
+	visibility, ok := scopeVisibilityByScope[scope]
+	if !ok {
+		return "", false
+	}
+
+	switch visibility {
+	case scopeVisibilityUserVisible:
+		return ScopeVisibilityUserVisible, true
+	case scopeVisibilityInternal:
+		return ScopeVisibilityInternal, true
+	default:
+		return "", false
+	}
+}
+
+// scopeExpansions maps a checked scope to the other scopes that also satisfy
+// it. For allow scopes, these are higher-privilege scopes. For blocklist
+// scopes, these are broader blocklist scopes. Expansion is non-transitive: list
+// every satisfying scope directly, since Check.expand only walks
 // scopeExpansions[c.Scope] one step.
 //
 // environment:* scopes are independent of project:* in the expansion graph (analogous to
@@ -76,28 +145,81 @@ func (s Scope) Parts() ScopeParts {
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:               nil,
-	ScopeOrgRead:            {ScopeOrgAdmin},
-	ScopeOrgAdmin:           nil,
-	ScopeProjectRead:        {ScopeProjectWrite},
-	ScopeProjectWrite:       nil,
-	ScopeMCPRead:            {ScopeMCPWrite},
-	ScopeMCPWrite:           nil,
-	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
-	ScopeEnvironmentWrite:   nil,
-	ScopeRiskPolicyEvaluate: nil,
-	ScopeRiskPolicyBypass:   nil,
+	ScopeRoot:                    nil,
+	ScopeOrgRead:                 {ScopeOrgAdmin},
+	ScopeOrgBlockedRead:          nil,
+	ScopeOrgAdmin:                nil,
+	ScopeOrgBlockedAdmin:         {ScopeOrgBlockedRead},
+	ScopeProjectRead:             {ScopeProjectWrite},
+	ScopeProjectBlockedRead:      nil,
+	ScopeProjectWrite:            nil,
+	ScopeProjectBlockedWrite:     {ScopeProjectBlockedRead},
+	ScopeMCPRead:                 {ScopeMCPWrite},
+	ScopeMCPBlockedRead:          {ScopeMCPBlockedConnect},
+	ScopeMCPWrite:                nil,
+	ScopeMCPBlockedWrite:         {ScopeMCPBlockedRead, ScopeMCPBlockedConnect},
+	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
+	ScopeMCPBlockedConnect:       nil,
+	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
+	ScopeEnvironmentBlockedRead:  nil,
+	ScopeEnvironmentWrite:        nil,
+	ScopeEnvironmentBlockedWrite: {ScopeEnvironmentBlockedRead},
+	ScopeRiskPolicyEvaluate:      nil,
+	ScopeRiskPolicyBypass:        nil,
+	ScopeChatRead:                nil,
 }
 
-// scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
-// scope, the lower scopes it implies (e.g. org:admin -> org:read).
+// scopeExclusions maps a checked base scope to the direct blocklist scope that
+// stores exception grants for it. Broader blocklist scopes are handled by
+// scopeExpansions on the blocklist scope itself.
+var scopeExclusions = map[Scope]Scope{
+	ScopeRoot:                    "",
+	ScopeOrgRead:                 ScopeOrgBlockedRead,
+	ScopeOrgBlockedRead:          "",
+	ScopeOrgAdmin:                ScopeOrgBlockedAdmin,
+	ScopeOrgBlockedAdmin:         "",
+	ScopeProjectRead:             ScopeProjectBlockedRead,
+	ScopeProjectBlockedRead:      "",
+	ScopeProjectWrite:            ScopeProjectBlockedWrite,
+	ScopeProjectBlockedWrite:     "",
+	ScopeMCPRead:                 ScopeMCPBlockedRead,
+	ScopeMCPBlockedRead:          "",
+	ScopeMCPWrite:                ScopeMCPBlockedWrite,
+	ScopeMCPBlockedWrite:         "",
+	ScopeMCPConnect:              ScopeMCPBlockedConnect,
+	ScopeMCPBlockedConnect:       "",
+	ScopeEnvironmentRead:         ScopeEnvironmentBlockedRead,
+	ScopeEnvironmentBlockedRead:  "",
+	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
+	ScopeEnvironmentBlockedWrite: "",
+	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
+	ScopeRiskPolicyBypass:        "",
+	ScopeChatRead:                "",
+}
+
+// ExclusionScopeFor returns the scope that stores exception grants for the
+// provided base scope.
+func ExclusionScopeFor(scope Scope) (Scope, bool) {
+	exclusion, ok := scopeExclusions[scope]
+	return exclusion, ok && exclusion != ""
+}
+
+// scopeSubScopes is the user-visible inverse of scopeExpansions: for each
+// higher-privilege scope, the lower scopes it implies (e.g.
+// org:admin -> org:read). Internal blocklist expansions are intentionally not
+// exposed as sub_scopes.
 var scopeSubScopes map[Scope][]Scope
 
 func init() {
 	scopeSubScopes = make(map[Scope][]Scope)
 	for lower, highers := range scopeExpansions {
+		if scopeVisibilityByScope[lower] != scopeVisibilityUserVisible {
+			continue
+		}
 		for _, h := range highers {
+			if scopeVisibilityByScope[h] != scopeVisibilityUserVisible {
+				continue
+			}
 			scopeSubScopes[h] = append(scopeSubScopes[h], lower)
 		}
 	}

@@ -7,6 +7,15 @@ import type {
 
 export type EmployeeStatus = "enrolled" | "not_enrolled";
 
+// One linked AI account for an employee. Identity is (provider, email): the same
+// email on two providers is two distinct accounts, so provider is always shown.
+type EmployeeAccount = {
+  email: string;
+  provider: string;
+  // "team" | "personal" | "" (unclassified).
+  accountType: string;
+};
+
 export type Employee = {
   id: string;
   name: string;
@@ -17,7 +26,24 @@ export type Employee = {
   lastActivity: string;
   lastActivityTimestamp: number | null;
   photoUrl?: string | null;
+  // All of this user's linked AI accounts (team + personal, across providers),
+  // from the user_accounts directory.
+  accounts: EmployeeAccount[];
+  // Convenience flag: any account is personal. Drives the account-type filter.
+  hasPersonalAccount: boolean;
 };
+
+// Maps a user summary's linked accounts (from the directory) into the display
+// shape. Tolerant of the field being absent on older payloads.
+function accountsFromSummary(
+  summary: UserSummary | undefined,
+): EmployeeAccount[] {
+  return (summary?.accounts ?? []).map((a) => ({
+    email: a.email ?? "",
+    provider: a.provider,
+    accountType: a.accountType ?? "",
+  }));
+}
 
 // Unattributed identities are usage rows that matched no org member; they are
 // marked with a synthetic "usage:"-prefixed id by buildEmployees().
@@ -36,8 +62,15 @@ export function buildEmployees(
   );
   const summaryByEmail = new Map(
     summaries
-      .filter((summary) => summary.userId.includes("@"))
-      .map((summary) => [summary.userId.toLowerCase(), summary]),
+      .map((summary) => {
+        const email =
+          summary.userEmail ||
+          (summary.userId.includes("@") ? summary.userId : "");
+        return email ? ([email.toLowerCase(), summary] as const) : null;
+      })
+      .filter(
+        (entry): entry is readonly [string, UserSummary] => entry != null,
+      ),
   );
   const matchedSummaryIds = new Set<string>();
 
@@ -72,6 +105,10 @@ export function buildEmployees(
       lastActivity: summary
         ? formatUnixNano(summary.lastSeenUnixNano)
         : "No activity found",
+      accounts: accountsFromSummary(summary),
+      hasPersonalAccount: accountsFromSummary(summary).some(
+        (a) => a.accountType === "personal",
+      ),
     };
   });
 
@@ -79,10 +116,13 @@ export function buildEmployees(
     .filter((summary) => !matchedSummaryIds.has(summary.userId))
     .map((summary) => {
       const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
+      const email =
+        summary.userEmail ||
+        (summary.userId.includes("@") ? summary.userId : "");
       return {
         id: `usage:${summary.userId}`,
-        name: summary.userId,
-        email: summary.userId.includes("@") ? summary.userId : "",
+        name: email || summary.userId,
+        email,
         role: "-",
         status: "not_enrolled" as const,
         tokenCount,
@@ -91,6 +131,10 @@ export function buildEmployees(
           BigInt(summary.lastSeenUnixNano) / 1_000_000n,
         ),
         lastActivity: formatUnixNano(summary.lastSeenUnixNano),
+        accounts: accountsFromSummary(summary),
+        hasPersonalAccount: accountsFromSummary(summary).some(
+          (a) => a.accountType === "personal",
+        ),
       };
     });
 

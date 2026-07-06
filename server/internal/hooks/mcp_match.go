@@ -8,7 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -39,7 +39,7 @@ func parseClaudeToolName(rawName string) parsedClaudeToolName {
 	if !strings.HasPrefix(rawName, "mcp__") {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	server, tool, isMCP := mcpname.AttributeTool(rawName)
+	server, tool, isMCP := toolref.AttributeTool(rawName)
 	if !isMCP {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
@@ -93,17 +93,95 @@ func sanitizeMCPName(name string) string {
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
 // equals serverPrefix, or nil if none match. For Cowork-shipped entries the
 // prefix Claude derives is the connector UUID rather than a sanitized name,
-// so we also accept a ConnectorUUID match on the cached entry.
+// so we also accept a ConnectorUUID match on the cached entry. Codex entries
+// carry a pre-computed ToolPrefix because Codex's sanitizer differs from
+// Claude's (every non-alphanumeric/underscore character becomes "_").
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
+	var matched *MCPServerEntry
 	for i := range entries {
-		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
-			return &entries[i]
+		if !mcpEntryMatchesPrefix(entries[i], serverPrefix) {
+			continue
 		}
-		if mcpServerPrefix(entries[i].Source, entries[i].PluginName, entries[i].Name) == serverPrefix {
-			return &entries[i]
+		if matched != nil {
+			return nil
+		}
+		matched = &entries[i]
+	}
+	return matched
+}
+
+func mcpEntryMatchesPrefix(entry MCPServerEntry, serverPrefix string) bool {
+	if entry.ToolPrefix != "" && entry.ToolPrefix == serverPrefix {
+		return true
+	}
+	if entry.ConnectorUUID != "" && entry.ConnectorUUID == serverPrefix {
+		return true
+	}
+	return mcpServerPrefix(entry.Source, entry.PluginName, entry.Name) == serverPrefix
+}
+
+// matchCodexCachedMCPEntry resolves a raw Codex tool name
+// (mcp__<prefix>__<tool>) against the cached inventory. Codex's sanitizer
+// preserves consecutive underscores, so the server prefix itself can contain
+// "__" (e.g. "foo--bar" sanitizes to "foo__bar") and a naive 3-way split
+// truncates it — match by the longest ToolPrefix that prefixes the
+// post-mcp__ remainder, falling back to the generic single-prefix match for
+// entries without a pre-computed prefix.
+func matchCodexCachedMCPEntry(entries []MCPServerEntry, rawToolName string) *MCPServerEntry {
+	rest, ok := strings.CutPrefix(rawToolName, "mcp__")
+	if !ok {
+		return nil
+	}
+	var best *MCPServerEntry
+	ambiguous := false
+	for i := range entries {
+		p := entries[i].ToolPrefix
+		if p == "" || !strings.HasPrefix(rest, p+"__") {
+			continue
+		}
+		if best == nil || len(p) > len(best.ToolPrefix) {
+			best = &entries[i]
+			ambiguous = false
+			continue
+		}
+		if len(p) == len(best.ToolPrefix) {
+			ambiguous = true
 		}
 	}
-	return nil
+	if best != nil {
+		if ambiguous {
+			return nil
+		}
+		return best
+	}
+	return matchCachedMCPEntry(entries, mcpServerIdentityFromToolName(rawToolName))
+}
+
+// matchCodexCachedMCPServerEntry resolves the explicit server name Codex
+// sends in built-in MCP meta-tool inputs, such as list_mcp_resources. Unlike
+// mcp__ tool names, this value is the configured server name rather than a
+// sanitized prefix.
+func matchCodexCachedMCPServerEntry(entries []MCPServerEntry, serverName string) *MCPServerEntry {
+	serverName = strings.TrimSpace(serverName)
+	if serverName == "" {
+		return nil
+	}
+	var matched *MCPServerEntry
+	for i := range entries {
+		if entries[i].Name == serverName {
+			if matched != nil {
+				return nil
+			}
+			matched = &entries[i]
+		}
+	}
+	if matched != nil {
+		return matched
+	}
+	if matched := matchCachedMCPEntry(entries, codexSanitizeToolName(serverName)); matched != nil {
+		return matched
+	}
+	return matchCachedMCPEntry(entries, serverName)
 }
 
 // applyMCPInventoryAttrs decorates a telemetry attribute map with the
@@ -173,8 +251,13 @@ func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 // the given organization. It checks against the canonical host first (no DB
 // hit), then falls back to checking the org's custom domain if needed.
 func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
-	// Fast path: check canonical host first to avoid DB lookup for app.getgram.ai URLs
-	if isGramHostedMCPURL(rawURL) {
+	trustedHosts := make([]string, 0, 1)
+	if s.serverURL != nil && s.serverURL.Hostname() != "" {
+		trustedHosts = append(trustedHosts, s.serverURL.Hostname())
+	}
+
+	// Fast path: check canonical/configured hosts first to avoid DB lookup for app.getgram.ai URLs.
+	if isGramHostedMCPURL(rawURL, trustedHosts...) {
 		return true
 	}
 	if rawURL == "" || orgID == "" {

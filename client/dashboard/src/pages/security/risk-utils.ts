@@ -51,3 +51,16 @@ export function getCategoryForFinding(
   }
   return null;
 }
+
+// getCategoryCodeForFinding resolves a finding to a short, uppercase,
+// customer-safe category code (e.g. "SECRETS", "PII") for use as compact
+// fine-print or badge text. It NEVER returns the raw scanner `source`
+// (`gitleaks`, `presidio`), which is an implementation detail we don't
+// expose. Falls back to "FLAGGED" when nothing classifies.
+export function getCategoryCodeForFinding(
+  source?: string,
+  ruleId?: string,
+): string {
+  const category = getCategoryForFinding(source, ruleId);
+  return category ? category.toUpperCase() : "FLAGGED";
+}

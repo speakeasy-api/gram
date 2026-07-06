@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 const (
@@ -74,7 +74,7 @@ type JudgeToolCall struct {
 // so an MCP server/function is surfaced separately — a no-op for native tools
 // and non-tool messages, where toolName is "".
 func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
-	server, fn, _ := mcpname.AttributeTool(toolName)
+	server, fn, _ := toolref.AttributeTool(toolName)
 	return JudgeMessage{
 		Type:        messageType,
 		Body:        body,
@@ -102,7 +102,7 @@ func (m JudgeMessage) HasContent() bool {
 // NewJudgeToolCall destructures a tool name into its MCP components and pairs it
 // with the call's raw arguments, for one entry of a multi-call message.
 func NewJudgeToolCall(toolName, arguments string) JudgeToolCall {
-	server, fn, _ := mcpname.AttributeTool(toolName)
+	server, fn, _ := toolref.AttributeTool(toolName)
 	return JudgeToolCall{
 		ToolName:    toolName,
 		MCPServer:   server,
@@ -180,15 +180,18 @@ func JudgeFinding(verdict JudgeVerdict) Finding {
 		description = "Message matched the prompt-based policy."
 	}
 	return Finding{
-		Source:           SourceLLMJudge,
-		RuleID:           RuleLLMJudge,
-		Description:      description,
-		Match:            "",
-		StartPos:         0,
-		EndPos:           0,
-		Tags:             nil,
-		Confidence:       verdict.Confidence,
-		DeadLetterReason: "",
-		toolCallID:       "",
+		Source:              SourceLLMJudge,
+		RuleID:              RuleLLMJudge,
+		Description:         description,
+		Match:               "",
+		StartPos:            0,
+		EndPos:              0,
+		Tags:                []string{},
+		Confidence:          verdict.Confidence,
+		DeadLetterReason:    "",
+		mcpLookupToolCallID: "",
+		spanGroupKey:        "",
+		field:               "",
+		path:                "",
 	}
 }

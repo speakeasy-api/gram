@@ -17,8 +17,10 @@ type ListChats struct {
 type listChatsInput struct {
 	Search         *string `json:"search,omitempty" jsonschema:"Substring matched against chat ID, external user ID, and title."`
 	ExternalUserID *string `json:"external_user_id,omitempty" jsonschema:"Restrict results to chats produced by this external user ID."`
+	Source         *string `json:"source,omitempty" jsonschema:"Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter."`
 	AssistantID    *string `json:"assistant_id,omitempty" jsonschema:"Restrict results to chats produced by this assistant ID."`
 	HasRisk        *string `json:"has_risk,omitempty" jsonschema:"Restrict to chats with ('true') or without ('false') risk findings."`
+	Pinned         *string `json:"pinned,omitempty" jsonschema:"Restrict to pinned ('true') or unpinned ('false') chats."`
 	From           *string `json:"from,omitempty" jsonschema:"Filter chats created at or after this ISO 8601 timestamp."`
 	To             *string `json:"to,omitempty" jsonschema:"Filter chats created strictly before this ISO 8601 timestamp."`
 	Limit          int     `json:"limit,omitempty" jsonschema:"Page size (1-100)."`
@@ -42,6 +44,7 @@ func (s *ListChats) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("to", "date-time"),
 			core.WithPropertyFormat("assistant_id", "uuid"),
 			core.WithPropertyEnum("has_risk", "", "true", "false"),
+			core.WithPropertyEnum("pinned", "", "true", "false"),
 			core.WithPropertyEnum("sort_by", "created_at", "num_messages"),
 			core.WithPropertyEnum("sort_order", "asc", "desc"),
 			core.WithPropertyNumberRange("limit", 1, 100),
@@ -62,8 +65,10 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 	input := listChatsInput{
 		Search:         nil,
 		ExternalUserID: nil,
+		Source:         nil,
 		AssistantID:    nil,
 		HasRisk:        nil,
+		Pinned:         nil,
 		From:           nil,
 		To:             nil,
 		Limit:          50,
@@ -90,8 +95,14 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ChatSessionsToken: nil,
 		Search:            input.Search,
 		ExternalUserID:    input.ExternalUserID,
+		Source:            input.Source,
 		AssistantID:       input.AssistantID,
+		SourceKind:        nil,
+		ExcludeSourceKind: nil,
 		HasRisk:           input.HasRisk,
+		Pinned:            input.Pinned,
+		AccountType:       nil,
+		MinRiskScore:      nil,
 		From:              input.From,
 		To:                input.To,
 		Limit:             input.Limit,

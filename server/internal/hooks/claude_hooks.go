@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
@@ -24,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -36,7 +39,18 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
-const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call because the Claude session metadata is not available yet. Try again after the session initializes."
+const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
+
+// Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
+// three fail-closed branches that can't verify an MCP call all surface the
+// same generic copy, so the code is the only thing that tells a user (or
+// support) which branch denied the call from the message alone. They mirror
+// the slog event suffixes on each branch.
+const (
+	denyCodeNoSession   = "NO_SESSION"
+	denyCodeNoMetadata  = "NO_METADATA"
+	denyCodeNoUserEmail = "NO_USER_EMAIL"
+)
 
 // decoderFunc adapts a plain function to the goahttp.Decoder interface so we
 // can capture per-request context (logger, raw body, headers) in a closure
@@ -175,76 +189,6 @@ func (d *formDecoder) Decode(v any) error {
 	return nil
 }
 
-// Logs handles authenticated OTEL logs data from Claude Code
-func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
-	claudeMetadata := extractSessionMetadata(payload)
-
-	logger := s.logger.With(
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Logs"),
-		attr.SlogServiceName(claudeMetadata.ServiceName),
-		attr.SlogGenAIConversationID(claudeMetadata.SessionID),
-		attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
-	)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		// Auth middleware should have rejected this already; log here so a
-		// stray unauthenticated request is still visible per source/event
-		// when filtering hook traffic in Datadog.
-		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL logs request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_logs_unauthorized"))
-	}
-
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-	logger = logger.With(
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-	)
-
-	// Codex reports token usage on its OTEL logs stream (codex.sse_event /
-	// response.completed) rather than as metrics like Claude Code. Route those
-	// payloads to the usage writer; they carry no Claude session to seed.
-	if isCodexLogsPayload(payload) {
-		s.writeCodexUsageToClickHouse(ctx, payload, orgID, projectID)
-		return nil
-	}
-
-	if claudeMetadata.SessionID == "" {
-		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
-			attr.SlogEvent("claude_logs_no_session"),
-		)
-		return nil
-	}
-
-	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, orgID)
-
-	completeMetadata := SessionMetadata{
-		SessionID:   claudeMetadata.SessionID,
-		ServiceName: claudeMetadata.ServiceName,
-		UserEmail:   claudeMetadata.UserEmail,
-		UserID:      userID,
-		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
-	}
-
-	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-		logger.ErrorContext(ctx, "Failed to store session metadata",
-			attr.SlogEvent("claude_logs_cache_set_failed"),
-			attr.SlogError(err),
-		)
-	}
-
-	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
-
-	logger.InfoContext(ctx, "Stored session metadata",
-		attr.SlogEvent("session_validated"),
-	)
-
-	return nil
-}
-
 // Metrics handles authenticated OTEL metrics data from Claude Code
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
 	logger := s.logger.With(
@@ -272,62 +216,10 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	return nil
 }
 
-type claudeLogMetadata struct {
-	SessionID   string
-	ServiceName string
-	UserEmail   string
-	ClaudeOrgID string
-}
-
-func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
-	metadata := claudeLogMetadata{
-		SessionID:   "",
-		ServiceName: "",
-		UserEmail:   "",
-		ClaudeOrgID: "",
-	}
-
-	// Iterate through all resource logs
-	for _, resourceLog := range payload.ResourceLogs {
-		if resourceLog == nil {
-			continue
-		}
-
-		// Extract service name from resource attributes
-		metadata.ServiceName = extractResourceAttribute(resourceLog.Resource, "service.name")
-
-		// Iterate through all scope logs
-		for _, scopeLog := range resourceLog.ScopeLogs {
-			if scopeLog == nil {
-				continue
-			}
-
-			// Iterate through all log records
-			for _, logRecord := range scopeLog.LogRecords {
-				if logRecord == nil {
-					continue
-				}
-
-				// Extract session data
-				data := extractLogData(logRecord)
-
-				if data.SessionID == "" {
-					continue
-				}
-
-				// Store session metadata in Redis
-				metadata.SessionID = data.SessionID
-				metadata.UserEmail = data.UserEmail
-				metadata.ClaudeOrgID = data.ClaudeOrgID
-			}
-		}
-	}
-
-	return metadata
-}
-
 // Claude is the unified endpoint for all Claude Code hook events.
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
+	start := time.Now()
+
 	// project_slug header may be set even when the API key isn't validated
 	// yet on this optional-auth endpoint — log it as a hint up front.
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
@@ -356,6 +248,18 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	logger.InfoContext(ctx, "claude hook received",
 		attr.SlogEvent("claude_hook"),
 	)
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, orgSlug, time.Since(start))
+	}()
 
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
@@ -366,6 +270,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
 		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
+			outcome = hookMetricOutcomeUnauthorized
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
@@ -378,33 +283,53 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 			)
 		}
 	}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		orgSlug = authCtx.OrganizationSlug
+	}
+
+	// Claim the per-invocation idempotency token once, before persistence and
+	// the block side-effects in the handlers below. A retry re-sends the same
+	// token: the decision (scan) still re-runs so the user stays blocked, but
+	// tagging the context as a duplicate suppresses the duplicate writes
+	// (persistence, block-reason telemetry, shadow-MCP findings).
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
 
 	s.recordHook(ctx, payload)
+
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if hookEvent == nil {
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
+		return makeHookResult(payload.HookEventName), nil
+	}
 
 	// Route to appropriate handler based on hook type
 	var (
 		result *gen.ClaudeHookResult
-		err    error
 	)
-	switch payload.HookEventName {
-	case "SessionStart":
-		result, err = s.handleSessionStart(ctx, payload)
-	case "ConfigChange":
-		result, err = s.handleConfigChange(ctx, payload)
-	case "PreToolUse":
-		result, err = s.handlePreToolUse(ctx, payload)
-	case "PostToolUse":
-		result, err = s.handlePostToolUse(ctx, payload)
-	case "PostToolUseFailure":
-		result, err = s.handlePostToolUseFailure(ctx, payload)
-	case "UserPromptSubmit":
-		result, err = s.handleUserPromptSubmit(ctx, payload)
-	case "Stop":
-		result, err = s.handleStop(ctx, payload)
-	case "SessionEnd":
-		result, err = s.handleSessionEnd(ctx, payload)
-	case "Notification":
-		result, err = s.handleNotification(ctx, payload)
+	switch ev := hookEvent.(type) {
+	case *hookevents.SessionStart:
+		result, err = s.handleSessionStart(ctx, ev)
+	case *hookevents.ConfigChange:
+		result, err = s.handleConfigChange(ctx, ev)
+	case *hookevents.BeforeToolUse:
+		result, err = s.handlePreToolUse(ctx, ev)
+	case *hookevents.AfterToolUse:
+		result, err = s.handlePostToolUse(ctx, ev)
+	case *hookevents.AfterToolUseFailure:
+		result, err = s.handlePostToolUseFailure(ctx, ev)
+	case *hookevents.UserPromptSubmit:
+		result, err = s.handleUserPromptSubmit(ctx, ev)
+	case *hookevents.Stop:
+		result, err = s.handleStop(ctx, ev)
+	case *hookevents.SessionEnd:
+		result, err = s.handleSessionEnd(ctx, ev)
+	case *hookevents.Notification:
+		result, err = s.handleNotification(ctx, ev)
 	default:
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		result = makeHookResult(payload.HookEventName)
@@ -413,12 +338,72 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	return result, err
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	eventContext := hookevents.EventContext{
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		User: hookevents.User{
+			ID:    "",
+			Email: "",
+		},
+	}
+	if authCtx != nil && authCtx.ProjectID != nil {
+		eventContext.OrganizationID = authCtx.ActiveOrganizationID
+		eventContext.ProjectID = *authCtx.ProjectID
+		eventContext.User.ID = authCtx.UserID
+		if authCtx.Email != nil {
+			eventContext.User.Email = strings.TrimSpace(*authCtx.Email)
+		}
+	}
+
+	if payload == nil {
+		event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("normalize claude hook event: %w", err)
+		}
+		return event, nil
+	}
+
+	sessionID := conv.PtrValOr(payload.SessionID, "")
+	if sessionID != "" {
+		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")))
+		if err == nil {
+			if projectID, parseErr := uuid.Parse(metadata.ProjectID); parseErr == nil {
+				eventContext = hookevents.EventContext{
+					OrganizationID: metadata.GramOrgID,
+					ProjectID:      projectID,
+					User: hookevents.User{
+						ID:    metadata.UserID,
+						Email: strings.TrimSpace(metadata.UserEmail),
+					},
+				}
+			}
+		}
+	}
+
+	event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("normalize claude hook event: %w", err)
+	}
+	return event, nil
+}
+
+func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {
+	payload, _ := ev.Raw.(*gen.ClaudePayload)
+	return payload
+}
+
+func (s *Service) handleSessionStart(ctx context.Context, ev *hookevents.SessionStart) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
 	s.captureMCPListSnapshot(ctx, payload)
 
 	// Always allow sessions to start
 	continueVal := true
-	result := makeHookResult(payload.HookEventName)
+	result := makeHookResult(ev.RawEventType)
 	result.Continue = &continueVal
 	return result, nil
 }
@@ -429,9 +414,13 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 // it does for SessionStart, so we reuse the same capture path. ConfigChange
 // carries no allow/deny decision and must not block, so we never set a
 // blocking result.
-func (s *Service) handleConfigChange(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleConfigChange(ctx context.Context, ev *hookevents.ConfigChange) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
 	s.captureMCPListSnapshot(ctx, payload)
-	return makeHookResult(payload.HookEventName), nil
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // captureMCPListSnapshot parses the MCP inventory shipped by the
@@ -449,24 +438,45 @@ func (s *Service) handleConfigChange(ctx context.Context, payload *gen.ClaudePay
 //     .mcp.json files inside cowork (no `claude` CLI available). Parsed
 //     by ParseCoworkMCPInventory.
 func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
-	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+	if payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+	if !ok {
+		return
+	}
+	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+}
 
-	var entries []MCPServerEntry
-	var variant string
+// parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
+// payload's additional_data, returning the parsed entries, the detected agent
+// variant, and whether an inventory was present at all. It does not touch the
+// cache, so it is safe to call from both the SessionStart/ConfigChange capture
+// path and the PreToolUse enforcement path (which ships the same fields,
+// replayed from the session inventory file written at SessionStart — see
+// renderHookScript / renderClaudeMCPInventoryScript).
+//
+// Two payload shapes are supported, set by the hook script depending on the
+// execution environment it detected:
+//   - additional_data.mcp_inventory_claude_code: raw text from
+//     `claude mcp list`. Parsed by ParseClaudeMCPList.
+//   - additional_data.mcp_inventory_cowork: structured array scraped from
+//     .mcp.json files inside cowork (no `claude` CLI available). Parsed
+//     by ParseCoworkMCPInventory.
+func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen.ClaudePayload) ([]MCPServerEntry, string, bool) {
+	if payload.AdditionalData == nil {
+		return nil, "", false
+	}
 	switch {
 	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
 		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
 		if !ok || raw == "" {
-			return
+			return nil, "", false
 		}
-		entries = ParseClaudeMCPList(raw)
-		variant = agentVariantClaudeCode
+		return ParseClaudeMCPList(raw), agentVariantClaudeCode, true
 	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
 		raw := payload.AdditionalData["mcp_inventory_cowork"]
-		entries = ParseCoworkMCPInventory(raw)
-		variant = agentVariantCowork
+		entries := ParseCoworkMCPInventory(raw)
 		// Diagnostic: cmux's per-run config has evolved its field names
 		// across versions, so when the inventory ships but every entry
 		// comes out without a ConnectorUUID we'd silently fall back to
@@ -481,17 +491,28 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 			}
 		}
 		if len(entries) > 0 && !anyConnectorUUID {
+			sessionID := ""
+			if payload.SessionID != nil {
+				sessionID = *payload.SessionID
+			}
 			s.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
 				attr.SlogEvent("claude_hook_cowork_inventory_missing_uuid"),
-				attr.SlogGenAIConversationID(*payload.SessionID),
+				attr.SlogGenAIConversationID(sessionID),
 				attr.SlogValueAny(raw),
 			)
 		}
+		return entries, agentVariantCowork, true
 	default:
-		return
+		return nil, "", false
 	}
+}
 
-	key := sessionMCPListCacheKey(*payload.SessionID)
+// cacheMCPListSnapshot stores the parsed inventory and agent variant under the
+// session's cache keys. Shared by the SessionStart/ConfigChange capture path
+// and the PreToolUse enforcement resolver, so a payload-carried inventory
+// self-heals the cache that the best-effort telemetry path later reads.
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
+	key := sessionMCPListCacheKey(sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
@@ -500,13 +521,80 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 
-	variantKey := sessionAgentVariantCacheKey(*payload.SessionID)
+	variantKey := sessionAgentVariantCacheKey(sessionID)
 	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache session agent variant",
 			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
 			attr.SlogError(err),
 		)
 	}
+}
+
+// payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
+// gathered live during this PreToolUse call (additional_data.mcp_inventory_fresh)
+// rather than replayed from the per-session inventory file. hook.sh sets the
+// flag only when it shells out to gather the inventory inline because the file
+// did not exist yet; a replay from the file leaves it unset. A live gather
+// reflects the agent's current MCP configuration and supersedes the cache; a
+// replayed snapshot may lag a ConfigChange the server already cached, so it is
+// only used to fill cache misses (see resolveMCPListForEnforcement).
+func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
+	if payload.AdditionalData == nil {
+		return false
+	}
+	switch v := payload.AdditionalData["mcp_inventory_fresh"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "1"
+	default:
+		return false
+	}
+}
+
+// resolveMCPListForEnforcement returns the MCP inventory the PreToolUse
+// shadow-MCP guard should enforce against. The resolution order is:
+//
+//  1. A payload inventory gathered live this call (fresh) is authoritative —
+//     it reflects the agent's current MCP configuration — so it supersedes any
+//     cached snapshot and is written back to heal the cache.
+//  2. Otherwise the cached SessionStart/ConfigChange snapshot when present.
+//     ConfigChange refreshes the cache synchronously server-side, whereas the
+//     per-session file the payload replays is written asynchronously and can
+//     lag, so a replayed (non-fresh) inventory must not clobber a cache the
+//     server just updated.
+//  3. On a genuine cache miss (the DNO-286 window, before the async
+//     SessionStart snapshot has landed) a replayed payload inventory fills the
+//     gap and is written back so the best-effort telemetry path heals on later
+//     events. A cache transport error is NOT a miss: it fails closed rather
+//     than enforcing against a possibly-stale replay.
+//
+// Callers treat a returned error as fail-closed.
+func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+
+	if ok && payloadInventoryIsFresh(payload) {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+
+	cached, err := s.getCachedMCPList(ctx, sessionID)
+	if err == nil {
+		return cached, nil
+	}
+
+	// Only a genuine cache miss lets a non-fresh replayed inventory stand in: it
+	// means the cache is legitimately empty (the DNO-286 window before the async
+	// SessionStart snapshot lands), not that we failed to read it. On a Redis
+	// transport error we cannot establish the cache-authoritative ordering, so
+	// we fail closed exactly as the no-payload path does rather than enforce
+	// against a possibly-stale replay.
+	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+
+	return nil, err
 }
 
 // refreshMCPListTTL extends the MCP list cache TTL for the session if the
@@ -577,6 +665,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		return
 	}
 
+	// Skip persistence for a redelivery (the token was claimed in Claude()).
+	if s.isHookDuplicate(ctx) {
+		return
+	}
+
 	// Persistence outlives the request: Claude Code may close the connection
 	// the instant the hook returns (Stop especially), which would otherwise
 	// cancel the in-flight INSERT and drop the chat message.
@@ -599,22 +692,12 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// carry user_email from the device agent; use it immediately when present
 	// so Claude can attribute hooks before OTEL logs arrive. Older hooks still
 	// fall back to buffering.
+	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, payloadUserEmail)
+
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-			authMetadata := SessionMetadata{
-				SessionID:   sessionID,
-				ServiceName: "",
-				UserEmail:   payloadUserEmail,
-				UserID:      authCtx.UserID,
-				ClaudeOrgID: "",
-				GramOrgID:   authCtx.ActiveOrganizationID,
-				ProjectID:   authCtx.ProjectID.String(),
-			}
-			if authMetadata.UserID == "" && authMetadata.UserEmail != "" {
-				authMetadata.UserID = s.resolveUserByEmail(ctx, authMetadata.UserEmail, authMetadata.GramOrgID)
-			}
-			metadata = mergeClaudeAuthContextMetadata(authMetadata, metadata)
+		if hasAuthMetadata {
+			metadata = s.mergeClaudeAuthContextMetadata(ctx, authMetadata, metadata)
 		}
 		// Persistence does DB writes plus a Temporal workflow start, which
 		// can take longer than Claude Code is willing to wait for a hook
@@ -622,33 +705,105 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// immediately on the response). Run it detached so the response
 		// returns promptly and the work completes in the background.
 		go s.persistHook(ctx, payload, &metadata)
-	} else {
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil && payloadUserEmail != "" {
-			metadata := SessionMetadata{
-				SessionID:   sessionID,
-				ServiceName: "",
-				UserEmail:   payloadUserEmail,
-				UserID:      authCtx.UserID,
-				ClaudeOrgID: "",
-				GramOrgID:   authCtx.ActiveOrganizationID,
-				ProjectID:   authCtx.ProjectID.String(),
-			}
-			if metadata.UserID == "" && metadata.UserEmail != "" {
-				metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-			}
-			go s.persistHook(ctx, payload, &metadata)
-			return
-		}
-		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			logger.ErrorContext(ctx, "Failed to buffer hook",
-				attr.SlogEvent("claude_hook_buffer_failed"),
-				attr.SlogError(err),
-			)
-		}
+		return
+	}
+
+	if hasAuthMetadata && payloadUserEmail != "" {
+		go s.persistHook(ctx, payload, &authMetadata)
+		return
+	}
+
+	if err := s.bufferHook(ctx, sessionID, payload); err != nil {
+		logger.ErrorContext(ctx, "Failed to buffer hook",
+			attr.SlogEvent("claude_hook_buffer_failed"),
+			attr.SlogError(err),
+		)
 	}
 }
 
+func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, bool) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return SessionMetadata{
+			SessionID:           "",
+			ServiceName:         "",
+			UserEmail:           "",
+			UserID:              "",
+			Provider:            "",
+			ExternalOrgID:       "",
+			ExternalAccountUUID: "",
+			ExternalAccountID:   "",
+			DeviceID:            "",
+			AccountType:         "",
+			BillingMode:         "",
+			UserAccountID:       "",
+			GramOrgID:           "",
+			ProjectID:           "",
+		}, false
+	}
+
+	metadata := SessionMetadata{
+		SessionID:           sessionID,
+		ServiceName:         "",
+		UserEmail:           userEmail,
+		UserID:              "",
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}
+	if metadata.UserEmail != "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
+	return metadata, true
+}
+
+func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, error) {
+	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, strings.TrimSpace(userEmail))
+
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err == nil {
+		if hasAuthMetadata {
+			metadata = s.mergeClaudeAuthContextMetadata(ctx, authMetadata, metadata)
+		} else {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
+		return metadata, nil
+	}
+
+	if hasAuthMetadata {
+		return authMetadata, nil
+	}
+	return SessionMetadata{}, err
+}
+
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
+	if metadata.UserEmail == "" {
+		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
+			attr.SlogEvent("claude_hook_persist_no_user_email"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+		)
+		return
+	}
+
+	// Resolve the owning user from email only when it isn't already known. A
+	// personal account's email won't resolve, but mergeClaudeAuthContextMetadata
+	// may have already supplied the owner via the device bridge — don't discard
+	// it by re-resolving from the (non-resolving) personal email.
+	if metadata.UserID == "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
@@ -669,16 +824,48 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	if s.riskScanner != nil && payload.SessionID != nil {
-		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToolUse) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
+	if s.riskScanner != nil && ev.ConversationID != "" {
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+			if blockID, err := uuid.NewV7(); err == nil {
+				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				// Prefer the email from the session metadata fetched above,
+				// falling back to the raw payload when it wasn't cached.
+				userEmail := conv.PtrValOr(payload.UserEmail, "")
+				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
+					userEmail = metadata.UserEmail
+				}
+				asyncCtx := context.WithoutCancel(ctx)
+				// Resolve the owning user inside the goroutine so the DB lookup
+				// stays off the deny hot path (a plain `go s.insert(...)` would
+				// evaluate the resolveUserByEmail argument synchronously).
+				go func() {
+					s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+						Provider:       "claude",
+						OrganizationID: ev.Context.OrganizationID,
+						ProjectID:      ev.Context.ProjectID,
+						Reason:         auditReason,
+						ToolName:       ev.ToolName,
+						UserID:         s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID),
+						RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+						RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+						ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					})
+				}()
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -688,8 +875,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
-	denyUnverifiedMCP := func() (*gen.ClaudeHookResult, error) {
-		reason := claudeShadowMCPMetadataUnavailableReason
+	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
+		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
 		result.SystemMessage = &reason
 		if output != nil {
 			output.PermissionDecision = &deny
@@ -726,51 +913,39 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_session"),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoSession)
 	}
 	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
 	// org/project come from the auth context — same pattern as recordHook.
 	// This lets the shadow-MCP guard run on the very first PreToolUse of a
 	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
-	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
+	// consulted to enrich UserEmail / ServiceName / ExternalOrgID for the
 	// downstream ClickHouse row, but absence of cached fields is non-fatal.
-	var metadata SessionMetadata
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata = SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-	} else {
-		var err error
-		metadata, err = s.getSessionMetadata(ctx, sessionID)
-		if err != nil {
-			// OTEL path with no cached metadata yet. Native tools are already
-			// skipped above; MCP calls must fail closed because buffered
-			// telemetry cannot undo an already-allowed tool call.
-			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
-				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
-				attr.SlogHookSource("claude"),
-				attr.SlogHookEvent(payload.HookEventName),
-				attr.SlogGenAIConversationID(sessionID),
-				attr.SlogToolName(rawToolName),
-				attr.SlogError(err),
-			)
-			return denyUnverifiedMCP()
-		}
-		if metadata.UserID == "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
+	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
+	if err != nil {
+		// OTEL path with no cached metadata yet. Native tools are already
+		// skipped above; MCP calls must fail closed because buffered telemetry
+		// cannot undo an already-allowed tool call.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+			attr.SlogError(err),
+		)
+		return denyUnverifiedMCP(denyCodeNoMetadata)
+	}
+	if strings.TrimSpace(metadata.UserEmail) == "" {
+		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		)
+		return denyUnverifiedMCP(denyCodeNoUserEmail)
 	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
@@ -781,11 +956,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
-	// If it's missing we can't enforce the policy — deny with a retry-or-
-	// restart message so the user knows the guard is fail-closed rather
-	// than silently allowing.
-	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
+	// Resolve the `claude mcp list` inventory to enforce against. The hook
+	// script replays the SessionStart inventory file on every PreToolUse, so
+	// this normally comes straight from the request payload and is immune to
+	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
+	// snapshot only when the payload carried none. If neither is available we
+	// can't enforce the policy — deny with a retry-or-restart message so the
+	// user knows the guard is fail-closed rather than silently allowing.
+	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
@@ -911,29 +1089,80 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	// Surface the block in the Recent Findings table (risk_results)
 	// alongside batch-scanner findings, with the URL in the match
 	// column so the dashboard can filter and offer "Exclude from
-	// policy" actions against the URL itself.
-	s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
+	// policy" actions against the URL itself. The persisted row also
+	// backs the durable block page: when it is written we append a
+	// signed link to that page so the agent (and user) can open the
+	// block, read the reason, and leave feedback.
+	// Pre-mint the durable block id so its URL goes in the deny response
+	// immediately, then persist the Recent Findings row and the block row off
+	// the hot path. The page becomes valid within moments — well before a human
+	// opens the link.
+	// Only mint the durable block URL when the project id parses: an invalid id
+	// would make insertToolCallBlock (and recordShadowMCPBlockFinding) skip the
+	// write, leaving the appended /blocks/<id> link pointing at a page with no
+	// backing row.
+	if projectUUID, parseErr := uuid.Parse(metadata.ProjectID); parseErr != nil {
+		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
+			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
+	} else if blockID, err := uuid.NewV7(); err == nil {
+		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		asyncCtx := context.WithoutCancel(ctx)
+		metaCopy := metadata
+		go func() {
+			resultID, msgID, _ := s.recordShadowMCPBlockFinding(asyncCtx, payload, &metaCopy, policy, matched, serverPrefix, detail)
+			s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+				Provider:       "claude",
+				OrganizationID: metaCopy.GramOrgID,
+				ProjectID:      projectUUID,
+				Reason:         auditReason,
+				ToolName:       mcpToolName,
+				UserID:         metaCopy.UserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   conv.NilableToNullUUID(resultID),
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+				ChatMessageID:  conv.NilableToNullUUID(msgID),
+			})
+		}()
+	}
 
 	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
 
-func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
+func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
 	if cached.UserEmail != "" {
 		metadata.UserEmail = cached.UserEmail
 	}
-	if metadata.UserID == "" && cached.UserID != "" {
+	// Prefer email resolution, which is authoritative for team accounts and
+	// avoids trusting a possibly-stale cached id. Only a personal account — whose
+	// email never resolves to an org member — adopts the owner the OTEL path
+	// attributed via the device bridge.
+	switch resolved := s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID); {
+	case resolved != "":
+		metadata.UserID = resolved
+	case cached.AccountType == accountTypePersonal:
 		metadata.UserID = cached.UserID
+	default:
+		metadata.UserID = ""
 	}
-	metadata.ClaudeOrgID = cached.ClaudeOrgID
+	// Carry the provider account identity learned on the OTEL ingest path so
+	// hook-time writes (chat linking, telemetry) reflect it.
+	metadata.Provider = cached.Provider
+	metadata.ExternalOrgID = cached.ExternalOrgID
+	metadata.ExternalAccountUUID = cached.ExternalAccountUUID
+	metadata.ExternalAccountID = cached.ExternalAccountID
+	metadata.DeviceID = cached.DeviceID
+	metadata.AccountType = cached.AccountType
+	metadata.BillingMode = cached.BillingMode
+	metadata.UserAccountID = cached.UserAccountID
 	return metadata
 }
 
 // claudeMCPToolName returns the bare tool name and true if rawName follows the
 // "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
 // Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handlePostToolUse(ctx context.Context, ev *hookevents.AfterToolUse) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // recordShadowMCPBlockFinding writes a risk_results row so the Recent
@@ -950,22 +1179,22 @@ func (s *Service) recordShadowMCPBlockFinding(
 	matched *MCPServerEntry,
 	serverPrefix string,
 	detail string,
-) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
-		return
+) (uuid.UUID, uuid.UUID, bool) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	policyID, err := uuid.Parse(policy.ID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -983,7 +1212,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	// match identifies the server in the dashboard's Recent Findings row and
@@ -1020,7 +1249,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
@@ -1038,7 +1267,9 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
+		return uuid.Nil, uuid.Nil, false
 	}
+	return resultID, msgID, true
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
@@ -1048,7 +1279,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -1073,80 +1304,11 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
-}
-
-// OTELLogData contains extracted data from an OTEL log record
-type OTELLogData struct {
-	SessionID   string
-	UserEmail   string
-	ClaudeOrgID string
-}
-
-// extractResourceAttribute extracts a specific attribute from OTEL resource
-func extractResourceAttribute(resource *gen.OTELResource, key string) string {
-	if resource == nil || resource.Attributes == nil {
-		return ""
-	}
-	for _, attr := range resource.Attributes {
-		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
-			return *attr.Value.StringValue
-		}
-	}
-	return ""
-}
-
-// extractLogData extracts session data from an OTEL log record
-func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
-	data := OTELLogData{
-		SessionID:   "",
-		UserEmail:   "",
-		ClaudeOrgID: "",
-	}
-
-	if logRecord.Attributes == nil {
-		return data
-	}
-
-	for _, attr := range logRecord.Attributes {
-		if attr.Value == nil {
-			continue
-		}
-
-		var value string
-		if attr.Value.StringValue != nil {
-			value = *attr.Value.StringValue
-		}
-
-		switch attr.Key {
-		case "session.id":
-			data.SessionID = value
-		case "user.email":
-			data.UserEmail = value
-		case "organization.id":
-			data.ClaudeOrgID = value
-		}
-	}
-
-	return data
-}
-
-// extractAttributeString extracts a string attribute value by key
-func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
-	if attributes == nil {
-		return ""
-	}
-
-	for _, attr := range attributes {
-		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
-			return *attr.Value.StringValue
-		}
-	}
-
-	return ""
+func (s *Service) handlePostToolUseFailure(ctx context.Context, ev *hookevents.AfterToolUseFailure) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }

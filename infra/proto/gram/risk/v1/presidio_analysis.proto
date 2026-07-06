@@ -1,0 +1,30 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message PresidioAnalysis {
+  string request_id = 1;
+  string chat_message_id = 2;
+  string project_id = 3;
+  string organization_id = 4;
+  string risk_policy_id = 5;
+  int64 risk_policy_version = 6;
+  string created_at = 7; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+
+  string reply_urn = 8;
+  string content = 9;
+  repeated string entities = 10;
+  // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
+  // emitted. Zero/unset means the consumer applies its default threshold.
+  double score_threshold = 11;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

@@ -32,7 +32,7 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "@modelcontextprotocol/inspector": "^0.17.1",
+    "@modelcontextprotocol/inspector": "^0.22.0",
     "nodemon": "^3.1.9",
     "@types/node": "22.x",
     "typescript": "^5"

@@ -178,7 +178,7 @@ function RiskOverviewUserDetailContent() {
         chatId={selectedChatId}
         onClose={() => setSelectedChatId(null)}
         onDelete={() => setSelectedChatId(null)}
-        collapseNonRisk
+        riskFocus
       />
     </>
   );

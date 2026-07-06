@@ -169,7 +169,6 @@ export function useRegisterChatTelemetry({
     if (!chatId) return;
     if (!chatUrl) return;
 
-    telemetry.group("chat_id", chatId, {});
     telemetry.register({
       chat_id: chatId,
       chat_url: chatUrl,
@@ -201,7 +200,6 @@ export function useRegisterToolsetTelemetry({
 
   useEffect(() => {
     if (!toolsetSlug) return;
-    telemetry.group("toolset_slug", toolsetSlug, {});
     telemetry.register({
       toolset_slug: toolsetSlug,
     });
@@ -224,10 +222,11 @@ export function useRegisterProjectForTelemetry({
     if (!projectSlug) return;
     if (!organizationSlug) return;
 
-    // Register the super properties for this workspace to be sent with every event
-    telemetry.group("project_id", projectId, {});
-    telemetry.group("project_slug", projectSlug, {});
-    telemetry.group("organization_slug", organizationSlug, {});
+    // PostHog caps a project at 5 group types; "organization" and "slug" are the
+    // only org/project slots that exist, so we register just those two. Other
+    // group types (project_id, project_slug, chat_id, toolset_slug, …) are
+    // dropped at ingestion; their values still ship as register() properties.
+    telemetry.group("organization", organizationSlug, {});
     telemetry.group("slug", `${organizationSlug}/${projectSlug}`, {});
 
     telemetry.register({

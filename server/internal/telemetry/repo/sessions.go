@@ -1,0 +1,283 @@
+package repo
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/Masterminds/squirrel"
+)
+
+const (
+	// sessionClaudeAPIRequestPredicate matches Claude Code api_request rows — the
+	// authoritative source of Claude token/cost and MCP/skill/agent attribution.
+	// Mirrors attribute_metrics_summaries_mv's is_claude_api_request so the
+	// session list reconciles with the aggregate (Claude usage rows are never a
+	// token/cost source; see sessionUsageMeasureFilter below).
+	sessionClaudeAPIRequestPredicate = "(" +
+		"chat_id != '' AND " +
+		"toString(attributes.prompt.id) != '' AND " +
+		"(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request') AND " +
+		"(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))" +
+		")"
+	// sessionGenericUsageRowPredicate matches non-Claude usage rows: codex/cursor
+	// usage plus cost-bearing chat completions. Claude usage rows are excluded so
+	// Claude cost/tokens are not double-counted against the api_request rows.
+	sessionGenericUsageRowPredicate = "(" +
+		"startsWith(gram_urn, 'codex:usage') OR " +
+		"startsWith(gram_urn, 'cursor:usage') OR " +
+		"(toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '' AND NOT " +
+		sessionClaudeAPIRequestPredicate + " AND NOT startsWith(gram_urn, 'claude-code:usage'))" +
+		")"
+	sessionHookToolRowPredicate = "(" +
+		"toString(attributes.gram.tool.name) != '' AND " +
+		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')" +
+		")"
+	sessionCountedToolCallPredicate = "(" +
+		sessionHookToolRowPredicate + " AND " +
+		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
+		")"
+	// sessionUsageMeasureFilter selects the rows that carry token/cost usage:
+	// Claude api_request rows and generic usage rows. This is the sumIf guard for
+	// every token/cost measure, keeping session totals aligned with the aggregate.
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionGenericUsageRowPredicate + ")"
+	// sessionSourceRowPredicate admits every row class the session list derives
+	// from — Claude api_request, generic usage, and hook tool rows — matching the
+	// aggregate MV's WHERE clause so the two views cover the same sessions.
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionGenericUsageRowPredicate + " OR " + sessionHookToolRowPredicate + ")"
+
+	// Token/cost measures are source-aware: Claude api_request rows carry usage on
+	// flat attributes (input_tokens, cost_usd, …), while generic usage rows carry
+	// it under gen_ai.usage.*. These mirror attribute_metrics_summaries_mv exactly.
+	sessionInputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toInt64OrZero(toString(attributes.input_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), " + sessionUsageMeasureFilter + ")"
+	sessionOutputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toInt64OrZero(toString(attributes.output_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + sessionUsageMeasureFilter + ")"
+	sessionTotalTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
+		"toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), " + sessionUsageMeasureFilter + ")"
+	sessionCacheReadTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + sessionUsageMeasureFilter + ")"
+	sessionCacheCreationTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + sessionUsageMeasureFilter + ")"
+	sessionCostExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), " +
+		"toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), " +
+		"toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), " + sessionUsageMeasureFilter + ")"
+
+	// sessionModelExpr is the per-row effective model. Claude api_request rows put
+	// it on attributes.model / attributes.gen_ai.request.model; everyone else on
+	// gen_ai.response.model. Mirrors the aggregate MV's model expression so the
+	// Model dimension resolves for Claude sessions too. Shared with the model
+	// filter in dimensions.go.
+	sessionModelExpr = "multiIf(" +
+		sessionClaudeAPIRequestPredicate + " AND toString(attributes.model) != '', toString(attributes.model), " +
+		sessionClaudeAPIRequestPredicate + " AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), " +
+		"toString(attributes.gen_ai.response.model))"
+
+	// sessionMessageIDExpr identifies a distinct message/turn per row: Claude
+	// api_request rows are one turn each (unique prompt.id); generic rows key off
+	// gen_ai.response.id. Counted distinct for message_count.
+	sessionMessageIDExpr = "if(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toString(attributes.prompt.id), toString(attributes.gen_ai.response.id))"
+	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
+)
+
+// #nosec G101 -- These are allowlisted SQL measure expressions, not credentials.
+var sessionMeasureSelects = map[string]string{
+	"total_cost":                  sessionCostExpr,
+	"total_input_tokens":          sessionInputTokensExpr,
+	"total_output_tokens":         sessionOutputTokensExpr,
+	"total_tokens":                sessionTotalTokensExpr,
+	"cache_read_input_tokens":     sessionCacheReadTokensExpr,
+	"cache_creation_input_tokens": sessionCacheCreationTokensExpr,
+	"tool_call_count":             "countIf(" + sessionCountedToolCallPredicate + ")",
+	"message_count":               sessionMessageCountExpr,
+	"duration_seconds":            "toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0",
+	// Kept as a service-level compatibility alias; the public listSessions API
+	// uses tool_call_count.
+	"total_tool_calls": "countIf(" + sessionCountedToolCallPredicate + ")",
+}
+
+type ListSessionsParams struct {
+	ProjectIDs       []string
+	TimeStart        int64
+	TimeEnd          int64
+	Filters          []AttributeMetricsFilter
+	SortBy           string
+	CursorSortValue  *float64
+	CursorGramChatID string
+	Limit            int
+}
+
+type SessionSummary struct {
+	GramChatID        string  `ch:"gram_chat_id"`
+	ProjectID         string  `ch:"project_id"`
+	UserEmail         *string `ch:"session_user_email"`
+	HookSource        *string `ch:"session_hook_source"`
+	Model             *string `ch:"session_model"`
+	StartTimeUnixNano int64   `ch:"start_time_unix_nano"`
+	EndTimeUnixNano   int64   `ch:"end_time_unix_nano"`
+	DurationSeconds   float64 `ch:"duration_seconds"`
+	MessageCount      int64   `ch:"message_count"`
+	ToolCallCount     int64   `ch:"tool_call_count"`
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	TotalCost         float64 `ch:"total_cost"`
+	Status            string  `ch:"status"`
+	SortValue         float64 `ch:"sort_value"`
+}
+
+// applySessionFilters restricts the session aggregation to chats matching the
+// requested dimension filters. project_id stays a row-level WHERE because it is
+// present on every row and prunes partitions. Every other dimension is matched
+// per-chat via HAVING: a chat qualifies when ANY of its rows carries the
+// requested value. This is required because the attributes are stamped on
+// different physical rows within the same chat — user-directory attributes
+// (department_name, email, job_title, …) live on gateway-enriched rows, while
+// cost/hook_source/model live on the usage rows — so a row-level AND of those
+// filters would wrongly return nothing even when each filter matches data.
+func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+	for _, f := range filters {
+		if len(f.Values) == 0 {
+			continue
+		}
+		dim, ok := sessionDimensionRegistry[f.Dimension]
+		if !ok {
+			return sb, fmt.Errorf("unknown filter dimension %q", f.Dimension)
+		}
+		switch dim.kind {
+		case attributeDimProject:
+			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+		case attributeDimScalar:
+			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
+		case attributeDimArray:
+			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
+			if err != nil {
+				return sb, fmt.Errorf("building array filter for %q: %w", f.Dimension, err)
+			}
+			sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
+		default:
+			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
+		}
+	}
+	return sb, nil
+}
+
+// sessionScalarHaving matches a chat when any of its rows carries one of the
+// requested scalar values. A requested "" (the "(unset)" bucket) matches chats
+// that have no non-empty value for the dimension on any row, mirroring how the
+// session's effective value is computed with anyIf over non-empty values.
+func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr("countIf(" + expr + " != '') = 0")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(nonEmpty)), ",")
+	args := make([]any, len(nonEmpty))
+	for i, v := range nonEmpty {
+		args[i] = v
+	}
+	nonEmptyPred := squirrel.Expr("countIf("+expr+" IN ("+placeholders+")) > 0", args...)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+// ListSessions retrieves org-scoped session summaries grouped by chat_id from
+// the same source-event classes as attribute_metrics_summaries: usage rows for
+// tokens/cost and hook tool rows for tool counts. Pagination is based on the
+// selected sort measure plus chat_id so ordering stays stable across pages.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+
+	sortExpr, ok := sessionMeasureSelects[arg.SortBy]
+	if !ok {
+		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
+	}
+
+	sb := sq.Select(
+		"chat_id as gram_chat_id",
+		"any(toString(gram_project_id)) as project_id",
+		"anyIf(user_email, user_email != '') as session_user_email",
+		"anyIf(hook_source, hook_source != '') as session_hook_source",
+		"argMaxIf("+sessionModelExpr+", time_unix_nano, "+sessionModelExpr+" != '') as session_model",
+		"min(time_unix_nano) as start_time_unix_nano",
+		"max(time_unix_nano) as end_time_unix_nano",
+		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
+		"toInt64("+sessionMessageCountExpr+") as message_count",
+		"toInt64(countIf("+sessionCountedToolCallPredicate+")) as tool_call_count",
+		sessionInputTokensExpr+" as total_input_tokens",
+		sessionOutputTokensExpr+" as total_output_tokens",
+		sessionTotalTokensExpr+" as total_tokens",
+		sessionCostExpr+" as total_cost",
+		"if(countIf("+sessionCountedToolCallPredicate+" AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)) > 0, 'error', 'success') as status",
+		"toFloat64("+sortExpr+") as sort_value",
+	).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(sessionSourceRowPredicate).
+		Where("chat_id != ''")
+
+	sb, err := applySessionFilters(sb, arg.Filters)
+	if err != nil {
+		return nil, err
+	}
+
+	sb = sb.GroupBy("chat_id")
+
+	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
+		sb = sb.Having("(sort_value, chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
+	}
+
+	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
+		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list sessions query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []SessionSummary
+	for rows.Next() {
+		var session SessionSummary
+		if err = rows.ScanStruct(&session); err != nil {
+			return nil, fmt.Errorf("scanning session row: %w", err)
+		}
+		sessions = append(sessions, session)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -18,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -32,6 +33,12 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			externalUserID = &chatListChatsExternalUserID
 		}
 	}
+	var source *string
+	{
+		if chatListChatsSource != "" {
+			source = &chatListChatsSource
+		}
+	}
 	var assistantID *string
 	{
 		if chatListChatsAssistantID != "" {
@@ -42,12 +49,66 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			}
 		}
 	}
+	var sourceKind *string
+	{
+		if chatListChatsSourceKind != "" {
+			sourceKind = &chatListChatsSourceKind
+		}
+	}
+	var excludeSourceKind *string
+	{
+		if chatListChatsExcludeSourceKind != "" {
+			excludeSourceKind = &chatListChatsExcludeSourceKind
+		}
+	}
 	var hasRisk *string
 	{
 		if chatListChatsHasRisk != "" {
 			hasRisk = &chatListChatsHasRisk
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var accountType *string
+	{
+		if chatListChatsAccountType != "" {
+			accountType = &chatListChatsAccountType
+			if !(*accountType == "" || *accountType == "team" || *accountType == "personal") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("account_type", *accountType, []any{"", "team", "personal"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var pinned *string
+	{
+		if chatListChatsPinned != "" {
+			pinned = &chatListChatsPinned
+			if !(*pinned == "" || *pinned == "true" || *pinned == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("pinned", *pinned, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var minRiskScore *int
+	{
+		if chatListChatsMinRiskScore != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsMinRiskScore, 10, strconv.IntSize)
+			val := int(v)
+			minRiskScore = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for minRiskScore, must be INT")
+			}
+			if *minRiskScore < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_risk_score", *minRiskScore, 0, true))
 			}
 			if err != nil {
 				return nil, err
@@ -156,8 +217,14 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.Source = source
 	v.AssistantID = assistantID
+	v.SourceKind = sourceKind
+	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk
+	v.AccountType = accountType
+	v.Pinned = pinned
+	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
 	v.Limit = limit
@@ -173,7 +240,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -191,6 +258,91 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 			if *generation < 0 {
 				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatLoadChatLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatLoadChatLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var beforeSeq *int64
+	{
+		if chatLoadChatBeforeSeq != "" {
+			val, err := strconv.ParseInt(chatLoadChatBeforeSeq, 10, 64)
+			beforeSeq = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for beforeSeq, must be INT64")
+			}
+			if *beforeSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("before_seq", *beforeSeq, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var afterSeq *int64
+	{
+		if chatLoadChatAfterSeq != "" {
+			val, err := strconv.ParseInt(chatLoadChatAfterSeq, 10, 64)
+			afterSeq = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for afterSeq, must be INT64")
+			}
+			if *afterSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("after_seq", *afterSeq, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var fromStart bool
+	{
+		if chatLoadChatFromStart != "" {
+			fromStart, err = strconv.ParseBool(chatLoadChatFromStart)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for fromStart, must be BOOL")
+			}
+		}
+	}
+	var riskOnly bool
+	{
+		if chatLoadChatRiskOnly != "" {
+			riskOnly, err = strconv.ParseBool(chatLoadChatRiskOnly)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for riskOnly, must be BOOL")
+			}
+		}
+	}
+	var query *string
+	{
+		if chatLoadChatQuery != "" {
+			query = &chatLoadChatQuery
+			if utf8.RuneCountInString(*query) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 1, true))
+			}
+			if utf8.RuneCountInString(*query) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
 			}
 			if err != nil {
 				return nil, err
@@ -218,6 +370,12 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
+	v.Limit = limit
+	v.BeforeSeq = beforeSeq
+	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
+	v.RiskOnly = riskOnly
+	v.Query = query
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -233,7 +391,15 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 	{
 		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"title\": \"aaa\"\n   }'")
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -255,7 +421,8 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 		}
 	}
 	v := &chat.GenerateTitlePayload{
-		ID: body.ID,
+		ID:    body.ID,
+		Title: body.Title,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -306,6 +473,39 @@ func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken 
 	return v, nil
 }
 
+// BuildSetPinnedPayload builds the payload for the chat setPinned endpoint
+// from CLI flags.
+func BuildSetPinnedPayload(chatSetPinnedBody string, chatSetPinnedSessionToken string, chatSetPinnedProjectSlugInput string) (*chat.SetPinnedPayload, error) {
+	var err error
+	var body SetPinnedRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSetPinnedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSetPinnedSessionToken != "" {
+			sessionToken = &chatSetPinnedSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSetPinnedProjectSlugInput != "" {
+			projectSlugInput = &chatSetPinnedProjectSlugInput
+		}
+	}
+	v := &chat.SetPinnedPayload{
+		ID:     body.ID,
+		Pinned: body.Pinned,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
 // endpoint from CLI flags.
 func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {
@@ -345,6 +545,35 @@ func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbac
 		ID:       body.ID,
 		Feedback: body.Feedback,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildListSourcesPayload builds the payload for the chat listSources endpoint
+// from CLI flags.
+func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSourcesProjectSlugInput string, chatListSourcesChatSessionsToken string) (*chat.ListSourcesPayload, error) {
+	var sessionToken *string
+	{
+		if chatListSourcesSessionToken != "" {
+			sessionToken = &chatListSourcesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListSourcesProjectSlugInput != "" {
+			projectSlugInput = &chatListSourcesProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListSourcesChatSessionsToken != "" {
+			chatSessionsToken = &chatListSourcesChatSessionsToken
+		}
+	}
+	v := &chat.ListSourcesPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

@@ -402,9 +402,11 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 // (validated against the allowed-host list), and the user authenticating
 // against the dashboard already authorises the link.
 //
-// Requires the toolset's user_session_issuer to have exactly one bound
-// remote_session_client — the same invariant the runtime resolver enforces
-// at ResolveOneAccessToken time.
+// The toolset's user_session_issuer may bind multiple remote_session_clients
+// (one per remote_session_issuer). The optional remote_session_client_id
+// query param selects which upstream to connect; it may be omitted only when
+// exactly one client is bound. Each connect drives a single upstream OAuth
+// flow, so a multi-client issuer requires the caller to disambiguate.
 func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -455,25 +457,42 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		return oops.E(oops.CodeBadRequest, nil, "toolset has no mcp slug").LogError(ctx, s.logger)
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, authCtx.ActiveOrganizationID, toolset.UserSessionIssuerID.UUID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, s.logger)
 	}
-	if len(clients) != 1 {
-		return oops.E(oops.CodeInvariantViolation, nil, "issuer-gated dashboard connect requires exactly one remote_session_client, found %d", len(clients)).LogError(ctx, s.logger)
+	if len(clients) == 0 {
+		return oops.E(oops.CodeBadRequest, nil, "issuer-gated dashboard connect requires a remote_session_client, found none").LogError(ctx, s.logger)
+	}
+
+	selected := clients[0]
+	if clientIDParam := r.URL.Query().Get("remote_session_client_id"); clientIDParam != "" {
+		parsedClientID, perr := uuid.Parse(clientIDParam)
+		if perr != nil {
+			return oops.E(oops.CodeBadRequest, perr, "invalid remote_session_client_id").LogError(ctx, s.logger)
+		}
+		idx := slices.IndexFunc(clients, func(c remotesessions.Client) bool { return c.ID == parsedClientID })
+		if idx < 0 {
+			return oops.E(oops.CodeNotFound, nil, "remote_session_client not found for user session issuer").LogError(ctx, s.logger)
+		}
+		selected = clients[idx]
+	} else if len(clients) > 1 {
+		return oops.E(oops.CodeBadRequest, nil, "multiple remote_session_clients bound to user session issuer; specify remote_session_client_id").LogError(ctx, s.logger)
 	}
 
 	subject := urn.NewUserSubject(authCtx.UserID)
 	parent := remotesessions.ParentChallenge{
 		ID:                  "",
 		ProjectID:           toolset.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Subject:             &subject,
 		RouteBase:           "mcp",
 		McpSlug:             mcpSlug,
 		FinalRedirectURI:    parsedRedirect.String(),
+		Resource:            "",
 	}
-	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, clients[0])
+	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, selected)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization URL").LogError(ctx, s.logger)
 	}
@@ -692,7 +711,7 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	// by the dashboard user's subject URN. The legacy user_oauth_tokens
 	// path is the wrong source for these.
 	if toolset.UserSessionIssuerID.Valid {
-		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, authCtx.ActiveOrganizationID, toolset.UserSessionIssuerID.UUID)
 	}
 
 	// Check if user has a token for this toolset
@@ -750,15 +769,16 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	return nil
 }
 
-// writeIssuerGatedStatus reports whether the dashboard user has a USABLE
-// remote_sessions row under the toolset's user_session_issuer. Mirrors the
-// runtime's ResolveOneAccessToken view: a row whose access token expired
-// without a workable refresh path resolves to "needs_auth", not
-// "authenticated" — otherwise the dashboard badge lies about a connection
-// that the next /mcp/{slug} call will 401 on.
-func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID, issuerID uuid.UUID) error {
+// writeIssuerGatedStatus reports whether the dashboard user has USABLE
+// remote_sessions under the toolset's user_session_issuer. Mirrors the
+// runtime's ResolveAccessTokens view: the badge reads "authenticated" only
+// when every bound remote_session_client resolves to a usable token. If any
+// attached session expired without a workable refresh path the resolver
+// returns ErrNoValidToken and the badge reads "needs_auth" — otherwise it
+// would lie about a connection that the next /mcp/{slug} call will 401 on.
+func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID uuid.UUID, organizationID string, issuerID uuid.UUID) error {
 	subject := urn.NewUserSubject(userID)
-	token, err := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, projectID, issuerID, subject)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, projectID, organizationID, issuerID, subject, "")
 
 	status := "needs_auth"
 	switch {
@@ -766,7 +786,7 @@ func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w htt
 		// fall through with status="needs_auth"
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
-	case token != "":
+	case len(tokens) > 0:
 		status = "authenticated"
 	}
 

@@ -62,7 +62,6 @@ export const ToolifyDialog = ({
 
     const res = await generateObject({
       model,
-      mode: "json",
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
       A composite tool consists of a series of steps which invoke an underlying tool along with instructions for how to use the tool.

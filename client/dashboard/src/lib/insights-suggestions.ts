@@ -86,6 +86,164 @@ export interface InsightsSuggestion {
   icon?: InsightsSuggestionIcon;
 }
 
+/**
+ * Starter prompts for the full-page chat landing + home widget. Pitched at the
+ * questions an enterprise platform, security, or FinOps lead actually asks of
+ * their AI usage — reliability, governance, exposure, spend, and adoption.
+ */
+export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
+  {
+    title: "Any secrets or PII in chats?",
+    label: "Sensitive-data scan",
+    icon: "shield",
+    prompt:
+      "Scan recent agent conversations for sensitive-data exposure — leaked secrets, PII, or prompt-injection attempts. Show me the findings, how serious each is, and which chats they came from.",
+  },
+  {
+    title: "Any unapproved servers?",
+    label: "Shadow MCP usage",
+    icon: "server",
+    prompt:
+      "Are agents calling any MCP servers or tools that aren't on our approved list? List the shadow servers, who's calling them, and how often.",
+  },
+  {
+    title: "Which tools are erroring?",
+    label: "Failure hotspots",
+    icon: "alert",
+    prompt:
+      "Which tools and MCP servers are failing the most right now? Group the errors by pattern and tell me which users or clients are hitting them hardest.",
+  },
+  {
+    title: "What's driving our spend?",
+    label: "Token & cost drivers",
+    icon: "coins",
+    prompt:
+      "Break down token spend over the last 30 days by tool, model, and client, and call out the biggest cost drivers and any sudden jumps.",
+  },
+  {
+    title: "Is adoption growing?",
+    label: "Week-over-week adoption",
+    icon: "trend",
+    prompt:
+      "How is adoption trending week over week — active end users, agent sessions, and tool calls — and which teams or clients are driving the growth?",
+  },
+  {
+    title: "Who are the heaviest users this week?",
+    label: "Top users by volume",
+    icon: "users",
+    prompt:
+      "Who are the heaviest end users this week by tool calls and agent sessions, and what is each of them mainly doing?",
+  },
+  {
+    title: "What's getting slower?",
+    label: "Latency regressions",
+    icon: "gauge",
+    prompt:
+      "Which tools have the worst p95 latency, and which ones have regressed the most this week compared to last? Flag anything that looks like it's degrading.",
+  },
+];
+
+/**
+ * The full command palette shown when the user types `/` in the "Ask anything"
+ * composer. A superset of the landing chips — the seven headline prompts plus a
+ * deeper bench — so the slash menu speaks the same vocabulary as the chips while
+ * surfacing the long tail of questions the assistant can answer.
+ */
+export const SLASH_COMMANDS: InsightsSuggestion[] = [
+  ...CHAT_LANDING_SUGGESTIONS,
+  {
+    title: "Most-called tools",
+    label: "Usage leaders",
+    icon: "wrench",
+    prompt:
+      "Which tools have been called most this week, and how does that compare with last week? Show the top movers in both directions.",
+  },
+  {
+    title: "Top MCP servers by traffic",
+    label: "Server leaderboard",
+    icon: "server",
+    prompt:
+      "Rank our MCP servers by traffic this week — calls, unique end users, and error rate for each — and tell me which are growing fastest.",
+  },
+  {
+    title: "Recent failed tool calls",
+    label: "Latest failures",
+    icon: "alert",
+    prompt:
+      "Show me the most recent failed tool calls with their error messages, grouped by tool and likely root cause.",
+  },
+  {
+    title: "Slowest tools by p95",
+    label: "Latency outliers",
+    icon: "gauge",
+    prompt:
+      "List the tools with the worst p95 latency over the last day, with call volume alongside each so I can see what's actually worth fixing.",
+  },
+  {
+    title: "Any prompt-injection attempts?",
+    label: "Injection & jailbreaks",
+    icon: "shield",
+    prompt:
+      "Look for prompt-injection or jailbreak attempts in recent agent conversations. Show the attempts, which tools they targeted, and whether any succeeded.",
+  },
+  {
+    title: "Open risk & policy findings",
+    label: "Governance summary",
+    icon: "shield",
+    prompt:
+      "Summarize open risk and policy findings across the project — what's flagged, how severe each is, and what I should deal with first.",
+  },
+  {
+    title: "Biggest cost drivers",
+    label: "Where spend concentrates",
+    icon: "coins",
+    prompt:
+      "What are the single biggest contributors to token cost this month, and what would cut spend the most without hurting usage?",
+  },
+  {
+    title: "Token usage by model",
+    label: "Cost per model",
+    icon: "coins",
+    prompt:
+      "Break down token usage and cost by model over the last 30 days, and flag any model that's unusually expensive per call.",
+  },
+  {
+    title: "Which agents are most active?",
+    label: "Top clients",
+    icon: "bot",
+    prompt:
+      "Which LLM clients and agents are driving the most activity this week, and how reliable is each one by error rate?",
+  },
+  {
+    title: "What are agents trying to do?",
+    label: "Intent clusters",
+    icon: "bot",
+    prompt:
+      "What are agents mostly trying to accomplish this week? Cluster their sessions by intent and show the most common workflows.",
+  },
+  {
+    title: "Where do agents get stuck?",
+    label: "Drop-off points",
+    icon: "alert",
+    prompt:
+      "Where are agent sessions failing or stalling — which tools or steps get abandoned, and what errors precede the drop-off?",
+  },
+  {
+    title: "Summarize this week",
+    label: "Weekly recap",
+    icon: "sparkles",
+    prompt:
+      "Give me a concise weekly recap of assistant usage: adoption, top tools, notable errors, spend, and anything that changed sharply versus last week.",
+  },
+  {
+    title: "What should I look into today?",
+    label: "Today's priorities",
+    icon: "search",
+    prompt:
+      "Scan the last 24 hours and tell me what deserves my attention today — new errors, latency spikes, security flags, or unusual spend — ranked by urgency.",
+  },
+];
+
 type SuggestionEntry =
   | InsightsSuggestion[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-entry signatures vary; call sites get exact types from the object literal
@@ -753,7 +911,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what's each source catching",
       icon: "trend",
       prompt:
-        "What is each detection source catching? Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
+        "What is each detection source catching? Group findings by source (gitleaks, PII, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
     },
     {
       title: "What detectors exist?",
@@ -880,6 +1038,142 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 } satisfies Record<string, SuggestionEntry>;
+
+/** The taxonomy node kind the cost explorer is currently focused on. */
+export type CostEntityLevel = "org" | "group" | "user" | "agent";
+
+/**
+ * Cost-explorer suggestions, tailored to the node currently in view. Standalone
+ * (not route-keyed) because the prompts depend on drill state — the entity name,
+ * its kind, and the active breakdown axis — which only the page knows. The page
+ * passes the result to <InsightsConfig suggestions={...}>, so the dock's chips
+ * change every time you drill into a different entity.
+ */
+export function costExplorerSuggestions(args: {
+  level: CostEntityLevel;
+  entityLabel: string | null; // null at the org root
+  childLabel: string; // active breakdown axis, e.g. "Department"
+  rangeLabel: string;
+}): InsightsSuggestion[] {
+  const { level, entityLabel, childLabel, rangeLabel } = args;
+  const child = childLabel.toLowerCase();
+  const who = entityLabel ?? "the organization";
+
+  if (level === "user") {
+    return [
+      {
+        title: `What's driving ${who}'s spend?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI spend for ${who} over ${rangeLabel}? Break it down by agent and model.`,
+      },
+      {
+        title: `Which agents does ${who} use most?`,
+        label: "Top agents",
+        icon: "bot",
+        prompt: `Which agents does ${who} use most by cost over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who}'s spend rising?`,
+        label: "Spend trend",
+        icon: "trend",
+        prompt: `Is AI spend for ${who} rising or falling over ${rangeLabel}? Show the trend.`,
+      },
+      {
+        title: `How efficient is ${who}?`,
+        label: "Cost per session",
+        icon: "gauge",
+        prompt: `What is ${who}'s cost per session over ${rangeLabel}, and how does it compare to their peers?`,
+      },
+    ];
+  }
+
+  if (level === "agent") {
+    return [
+      {
+        title: `What's driving cost on ${who}?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI cost for the ${who} agent over ${rangeLabel}?`,
+      },
+      {
+        title: `Which models does ${who} use?`,
+        label: "Model mix",
+        icon: "chart",
+        prompt: `Which models does the ${who} agent run, and what do they each cost over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who} cost-efficient?`,
+        label: "Cost per session",
+        icon: "gauge",
+        prompt: `What is the cost per session for the ${who} agent over ${rangeLabel}? Is it efficient?`,
+      },
+      {
+        title: `Is ${who}'s usage rising?`,
+        label: "Usage trend",
+        icon: "trend",
+        prompt: `Is usage of the ${who} agent rising or falling over ${rangeLabel}?`,
+      },
+    ];
+  }
+
+  if (level === "group") {
+    return [
+      {
+        title: `What's driving ${who}'s spend?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI spend within ${who} over ${rangeLabel}?`,
+      },
+      {
+        title: `Top ${child} in ${who}?`,
+        label: `Top ${child}`,
+        icon: "chart",
+        prompt: `Which ${child} drives the most AI cost within ${who} over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who}'s spend rising?`,
+        label: "Spend trend",
+        icon: "trend",
+        prompt: `Is AI spend for ${who} rising or falling over ${rangeLabel}? Show the trend.`,
+      },
+      {
+        title: `Top spenders in ${who}?`,
+        label: "Top spenders",
+        icon: "users",
+        prompt: `Who are the top individual AI spenders within ${who} over ${rangeLabel}?`,
+      },
+    ];
+  }
+
+  // Org root.
+  return [
+    {
+      title: "What's driving our spend?",
+      label: "Cost drivers",
+      icon: "coins",
+      prompt: `What's driving our AI spend over ${rangeLabel}? Break it down by the biggest contributors.`,
+    },
+    {
+      title: `Which ${child} costs the most?`,
+      label: `Top ${child}`,
+      icon: "chart",
+      prompt: `Which ${child} has the highest AI cost over ${rangeLabel}, and by how much?`,
+    },
+    {
+      title: "Where is cost growing?",
+      label: "Fastest-growing cost",
+      icon: "trend",
+      prompt: `Where is AI cost growing fastest across the organization over ${rangeLabel}?`,
+    },
+    {
+      title: "Who are the top spenders?",
+      label: "Top spenders",
+      icon: "users",
+      prompt: `Who are the top individual AI spenders across the organization over ${rangeLabel}?`,
+    },
+  ];
+}
 
 /**
  * Resolve the route-level suggestions for a project-scoped pathname

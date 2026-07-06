@@ -169,6 +169,14 @@ func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Make the user an active member of the org, otherwise the challenge is
+	// suppressed as belonging to a user outside the organization.
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.PtrToPGText(&userID),
+	})
+	require.NoError(t, err)
+
 	challengeID := uuid.NewString()
 	insertCHChallengeWithUser(t, ti, authCtx.ActiveOrganizationID, challengeID, "deny", fmt.Sprintf("user:%s", userID), "org:read", &userID, nil)
 
@@ -191,6 +199,56 @@ func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 	require.Equal(t, "alice@example.com", *c.UserEmail)
 	require.NotNil(t, c.PhotoURL)
 	require.Equal(t, "https://example.com/alice.jpg", *c.PhotoURL)
+}
+
+// TestListChallenges_SuppressesUsersOutsideOrg proves the suppression boundary:
+// challenges from active org members and from unknown/external principals (no
+// Gram user identity, e.g. api keys) are still returned, while challenges from
+// Gram users who are NOT members of the org (e.g. Speakeasy staff impersonating
+// a customer org) are suppressed.
+func TestListChallenges_SuppressesUsersOutsideOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+
+	// 1. Active org member — kept.
+	memberID := seedOrgMember(t, ctx, ti, orgID, "member@example.com")
+	memberChallenge := uuid.NewString()
+	insertCHChallengeWithUser(t, ti, orgID, memberChallenge, "deny", "user:"+memberID, "org:read", &memberID, nil)
+
+	// 2. Unknown principal with no Gram user identity (api key / external
+	//    end-user) — kept; user_id is NULL.
+	unknownChallenge := uuid.NewString()
+	insertCHChallengeWithUser(t, ti, orgID, unknownChallenge, "deny", "api_key:ext", "org:read", nil, nil)
+
+	// 3. Gram user outside the org (Speakeasy staff impersonating) — suppressed.
+	outsiderID := seedNonMemberUser(t, ctx, ti, "staff@speakeasy.com")
+	outsiderChallenge := uuid.NewString()
+	insertCHChallengeWithUser(t, ti, orgID, outsiderChallenge, "deny", "user:"+outsiderID, "org:read", &outsiderID, nil)
+
+	result, err := ti.service.ListChallenges(ctx, &gen.ListChallengesPayload{
+		Outcome:      nil,
+		PrincipalUrn: nil,
+		Scope:        nil,
+		ProjectID:    nil,
+		Resolved:     nil,
+		Limit:        20,
+		Offset:       0,
+		ApikeyToken:  nil,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+
+	got := make(map[string]bool, len(result.Challenges))
+	for _, c := range result.Challenges {
+		got[c.ID] = true
+	}
+	require.True(t, got[memberChallenge], "org member's challenge should be returned")
+	require.True(t, got[unknownChallenge], "unknown/external principal's challenge should be returned")
+	require.False(t, got[outsiderChallenge], "challenge from a user outside the org should be suppressed")
+	require.Len(t, result.Challenges, 2)
+	require.Equal(t, 2, result.Total)
 }
 
 func TestListChallenges_FilterByOutcome(t *testing.T) {
@@ -359,6 +417,37 @@ func newChallengeTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	return ctx, ti
+}
+
+// seedOrgMember creates a Gram user and makes them an active member of the org,
+// returning the user ID.
+func seedOrgMember(t *testing.T, ctx context.Context, ti *testInstance, orgID, email string) string {
+	t.Helper()
+
+	userID := seedNonMemberUser(t, ctx, ti, email)
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: orgID,
+		UserID:         conv.PtrToPGText(&userID),
+	})
+	require.NoError(t, err)
+	return userID
+}
+
+// seedNonMemberUser creates a Gram user with no org membership (e.g. a Speakeasy
+// staff member impersonating a customer org), returning the user ID.
+func seedNonMemberUser(t *testing.T, ctx context.Context, ti *testInstance, email string) string {
+	t.Helper()
+
+	userID := uuid.NewString()
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: email,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	return userID
 }
 
 func challengeAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

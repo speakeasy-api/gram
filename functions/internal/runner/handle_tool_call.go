@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,6 +30,7 @@ const (
 	cpuHeader           = "X-Gram-Functions-Cpu"
 	memoryHeader        = "X-Gram-Functions-Memory"
 	executionTimeHeader = "X-Gram-Functions-Execution-Time"
+	spawnTimeHeader     = "X-Gram-Functions-Spawn-Time"
 )
 
 var allowedHeaders = map[string]struct{}{
@@ -92,8 +94,10 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 
 	})
 
-	args := s.args
-	args = append(args, fifoPath, string(req.requestArg), req.requestType)
+	// Build a fresh argument slice per call: executeRequest runs concurrently,
+	// so appending onto s.args directly would race on (and corrupt) its backing
+	// array if it ever carried spare capacity.
+	args := slices.Concat(s.args, []string{fifoPath, string(req.requestArg), req.requestType})
 	cmd := guardian.NewCommand(timeoutCtx, s.command, args...)
 	cmd.Dir = s.workDir
 	cmd.Stdout = stdoutWrt
@@ -106,6 +110,11 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 
 	startTime := time.Now()
 	err = cmd.Start()
+	// spawnDuration captures the fork/exec cost of launching the subprocess.
+	// Combined with the execution-time trailer (which includes runtime init and
+	// user-code import) it lets us watch per-call startup cost drift in
+	// production; the benchmark harness measures the full cold-start profile.
+	spawnDuration := time.Since(startTime)
 	if err != nil {
 		return svc.NewPermanentError(
 			fmt.Errorf("execute %s: %w", req.requestType, err),
@@ -193,7 +202,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	w.Header().Del("Content-Encoding")
 	// Announce trailers for resource usage metrics
 	// We currently have to write these after WriteHeader
-	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader)
+	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader+", "+spawnTimeHeader)
 
 	w.WriteHeader(response.StatusCode)
 	if _, err := io.Copy(w, response.Body); err != nil {
@@ -205,6 +214,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 
 	// Write resource usage as trailers after response body is sent
 	w.Header().Set(executionTimeHeader, fmt.Sprintf("%.17g", executionTime))
+	w.Header().Set(spawnTimeHeader, fmt.Sprintf("%.17g", spawnDuration.Seconds()))
 
 	if cmd.ProcessState != nil {
 		sysUsage := cmd.ProcessState.SysUsage()
@@ -221,14 +231,33 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		}
 	}
 
+	// Use a distinct logger here rather than reassigning logger: the stdout and
+	// stderr capture goroutines above closed over logger and may still be
+	// running until logwg.Wait(), so reassigning it would be a data race.
+	completionLogger := logger.With(
+		attr.SlogSpawnDuration(spawnDuration),
+		attr.SlogDuration(time.Duration(executionTime*float64(time.Second))),
+		attr.SlogInFlight(int(s.inFlight.Load())),
+	)
+
 	var exitErr *exec.ExitError
 	switch {
 	case errors.As(err, &exitErr):
-		s.logger.ErrorContext(ctx, "sub-process exited with non-zero status", attr.SlogError(err), attr.SlogProcessExitCode(exitErr.ExitCode()))
+		// A subprocess terminated by a signal (e.g. SIGKILL from an OOM kill)
+		// carries no exit code; surface the signal so out-of-memory terminations
+		// are distinguishable from ordinary non-zero exits.
+		if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			completionLogger.ErrorContext(ctx, "sub-process terminated by signal",
+				attr.SlogError(err),
+				attr.SlogProcessSignal(ws.Signal().String()),
+			)
+		} else {
+			completionLogger.ErrorContext(ctx, "sub-process exited with non-zero status", attr.SlogError(err), attr.SlogProcessExitCode(exitErr.ExitCode()))
+		}
 	case err != nil:
-		s.logger.ErrorContext(ctx, "sub-process failed", attr.SlogError(err))
+		completionLogger.ErrorContext(ctx, "sub-process failed", attr.SlogError(err))
 	default:
-		s.logger.InfoContext(ctx, "sub-process completed successfully")
+		completionLogger.InfoContext(ctx, "sub-process completed successfully")
 	}
 
 	return nil

@@ -2,6 +2,7 @@ import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { Link } from "react-router";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 
@@ -19,6 +20,8 @@ export type MetricCardProps = {
   accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
+  link?: string;
+  linkText?: string;
 };
 
 export function MetricCard(props: MetricCardProps): JSX.Element {
@@ -34,6 +37,8 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     comparisonLabel,
     subtext,
     tooltip,
+    link,
+    linkText = "View",
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
@@ -93,36 +98,55 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
           </div>
         )}
       </div>
-      <div className="flex items-end justify-between">
-        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {displayValue ?? formatValue(value)}
-        </span>
-        {previousValue > 0 && delta !== 0 && (
-          <div className="flex flex-col items-end gap-0.5">
-            <div
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isGood ? "text-emerald-600" : "text-red-500"
-              }`}
+      <div className="flex flex-nowrap items-end">
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-end justify-between">
+            <span
+              className={`text-3xl font-semibold tracking-tight ${valueColor}`}
             >
-              <Icon
-                name={isPositive ? "trending-up" : "trending-down"}
-                className="size-3"
-              />
-              <span>{delta.toFixed(1)}%</span>
-            </div>
-            {comparisonLabel && (
-              <span className="text-muted-foreground text-[10px]">
-                {comparisonLabel}
-              </span>
+              {displayValue ?? formatValue(value)}
+            </span>
+            {previousValue > 0 && delta !== 0 && (
+              <div className="flex flex-col items-end gap-0.5">
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    isGood ? "text-emerald-600" : "text-red-500"
+                  }`}
+                >
+                  <Icon
+                    name={isPositive ? "trending-up" : "trending-down"}
+                    className="size-3"
+                  />
+                  <span>{delta.toFixed(1)}%</span>
+                </div>
+                {comparisonLabel && (
+                  <span className="text-muted-foreground text-[10px]">
+                    {comparisonLabel}
+                  </span>
+                )}
+              </div>
             )}
+          </div>
+          {subtext && (
+            <span className="text-muted-foreground mt-1 block text-xs">
+              {subtext}
+            </span>
+          )}
+        </div>
+
+        {link && (
+          <div className="shrink">
+            <Link
+              to={link}
+              aria-label={`View ${title}`}
+              className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+            >
+              {linkText}
+              <Icon name="arrow-right" />
+            </Link>
           </div>
         )}
       </div>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
-        </span>
-      )}
     </div>
   );
 }

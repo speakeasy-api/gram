@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
+/* Scan the elements package so Tailwind generates the utility classes its
+ * compiled components use (e.g. the dark slate JSON viewer) — they live in
+ * node_modules and aren't picked up by the default dashboard-src scan. */
+@source "../node_modules/@gram-ai/elements/dist";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -84,6 +88,19 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Radix positions every popover/select/dropdown inside a wrapper tagged
+   `data-radix-popper-content-wrapper`. shadcn content components add their own
+   `z-50`, but third-party poppers (the Elements `TimeRangePicker`) ship no
+   z-index — and Radix writes an *inline* `z-index: auto` on that wrapper, so
+   such poppers render *behind* a `z-50` Sheet/Dialog panel and look like they
+   never opened. Overriding an inline style requires `!important`; floating
+   layers must paint above panels, so lift the wrapper regardless of its
+   content classes. (shadcn poppers already carry `z-50`, so this is a no-op
+   for them.) */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
 }
 
 /* Dismissable CTA "genie": each CTA pairs a dismissable surface with a sidebar

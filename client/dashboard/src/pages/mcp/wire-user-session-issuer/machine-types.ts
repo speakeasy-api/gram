@@ -119,3 +119,8 @@ export type LinkToolsetUserSessionIssuerInput = {
   toolsetSlug: string;
   userSessionIssuerId: string;
 };
+
+export type MigrateGramRegistrationsInput = {
+  oauthProxyProviderId: string;
+  userSessionIssuerId: string;
+};

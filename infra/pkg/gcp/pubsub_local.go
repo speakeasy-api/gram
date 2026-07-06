@@ -18,6 +18,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// emulatorMaxRetention caps how long the local emulator retains messages.
+// Unlike real Pub/Sub, the emulator does not yet support high message
+// retention periods, so we clamp the configured retention down to this value.
+const emulatorMaxRetention = 72 * time.Hour
+
 type EmulatedPubSubBroker struct {
 	logger      *slog.Logger
 	projectID   string
@@ -74,6 +79,9 @@ func (e *EmulatedPubSubBroker) reconcileTopic(ctx context.Context, topicName str
 	var retention time.Duration
 	if options.GetRetentionHint() != nil {
 		retention = options.GetRetentionHint().AsDuration()
+	}
+	if retention > emulatorMaxRetention {
+		retention = emulatorMaxRetention
 	}
 	if retention > 0 {
 		topic.MessageRetentionDuration = durationpb.New(retention)
@@ -150,6 +158,11 @@ func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subNa
 		}
 	}
 
+	retention := options.GetRetention()
+	if retention != nil && retention.AsDuration() > emulatorMaxRetention {
+		retention = durationpb.New(emulatorMaxRetention)
+	}
+
 	var deadLetterPolicy *pubsubpb.DeadLetterPolicy
 	if dl := options.GetDeadLetter(); dl != nil {
 		dlqName := gcp.ResolveDeadLetterTopicName(subName, dl)
@@ -172,7 +185,7 @@ func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subNa
 		Topic:                         topicName,
 		AckDeadlineSeconds:            durationToSeconds(ackDeadline),
 		RetainAckedMessages:           options.GetRetainAckedMessages(),
-		MessageRetentionDuration:      options.GetRetention(),
+		MessageRetentionDuration:      retention,
 		Labels:                        options.GetLabels(),
 		ExpirationPolicy:              expPolicy,
 		Filter:                        options.GetFilter(),

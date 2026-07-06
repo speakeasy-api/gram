@@ -59,10 +59,21 @@ local linters = new Mapping<String, Step> {
         "**/*.md",
       )
     exclude = oxfmtIgnorePatterns
-    check = "pnpm oxfmt --check {{files}}"
-    fix = "pnpm oxfmt --write {{files}}"
+    // `--no-error-on-unmatched-pattern` keeps oxfmt from failing when every file
+    // it is handed is excluded by `.oxfmtrc.json`'s own ignorePatterns. This can
+    // happen when a commit only touches oxfmt-ignored files (e.g. the generated
+    // `docs/pubsub-topology.md`): hk caches the compiled config keyed on hk.pkl
+    // and does not track the `read(".oxfmtrc.json")` above, so a stale cache can
+    // pass an ignored file through `exclude`. Without the flag oxfmt would exit
+    // non-zero on "all files excluded" and break the hook; with it, oxfmt simply
+    // formats nothing and leaves the file untouched.
+    check = "pnpm oxfmt --check --no-error-on-unmatched-pattern {{files}}"
+    fix = "pnpm oxfmt --write --no-error-on-unmatched-pattern {{files}}"
   }
   ["ruff-format"] = (Builtins.ruff_format) {
+    exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
+  }
+  ["ruff"] = (Builtins.ruff) {
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
 }

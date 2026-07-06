@@ -65,6 +65,22 @@ type Service interface {
 	// caller's organization. access_token_encrypted and refresh_token_encrypted
 	// are never returned. Requires org:read.
 	ListClientSessions(context.Context, *ListClientSessionsPayload) (res *ListOrganizationRemoteSessionsResult, err error)
+	// Register a standalone remote_session_client under an existing
+	// remote_session_issuer in the caller's organization, with no
+	// user_session_issuer attachments. The client is project-scoped: it inherits a
+	// project-specific issuer's project, or the caller names a project (which must
+	// belong to the organization) when the issuer is organization-level. Requires
+	// org:admin.
+	CreateClient(context.Context, *CreateClientPayload) (res *types.RemoteSessionClient, err error)
+	// Register a standalone remote_session_client in Client ID Metadata Document
+	// (CIMD) mode under an existing remote_session_issuer in the caller's
+	// organization, with no user_session_issuer attachments. Gram generates the
+	// client_id and hosts the metadata document; the issuer must advertise
+	// client_id_metadata_document_supported. The client is project-scoped: it
+	// inherits a project-specific issuer's project, or the caller names a project
+	// (which must belong to the organization) when the issuer is
+	// organization-level. Requires org:admin.
+	CreateCimdClient(context.Context, *CreateCimdClientPayload) (res *types.RemoteSessionClient, err error)
 	// Update a remote_session_client's non-secret fields in the caller's
 	// organization. Requires org:admin.
 	UpdateClient(context.Context, *UpdateClientPayload) (res *types.RemoteSessionClient, err error)
@@ -77,6 +93,12 @@ type Service interface {
 	// Revoke (soft-delete) a single remote_session in the caller's organization.
 	// Requires org:admin.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
+	// Force an upstream token refresh on a single remote_session in the caller's
+	// organization, regardless of current access-token expiry. Returns the updated
+	// remote_session so callers can reflect the new expiry without a refetch.
+	// Fails with a bad-request error when the session holds no refresh token.
+	// Requires org:admin.
+	RefreshSession(context.Context, *RefreshSessionPayload) (res *types.RemoteSession, err error)
 	// Revoke (soft-delete) all remote_sessions minted against a
 	// remote_session_client in the caller's organization. Requires org:admin.
 	RevokeAllClientSessions(context.Context, *RevokeAllClientSessionsPayload) (res *RevokeAllRemoteSessionsResult, err error)
@@ -102,7 +124,57 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "revokeAllClientSessions"}
+var MethodNames = [20]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "createClient", "createCimdClient", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "refreshSession", "revokeAllClientSessions"}
+
+// CreateCimdClientPayload is the payload type of the
+// organizationRemoteSessionIssuers service createCimdClient method.
+type CreateCimdClientPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization and advertise client_id_metadata_document_supported.
+	RemoteSessionIssuerID string
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
+	ProjectID *string
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string
+}
+
+// CreateClientPayload is the payload type of the
+// organizationRemoteSessionIssuers service createClient method.
+type CreateClientPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization.
+	RemoteSessionIssuerID string
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project,
+	// or to create an organization-level client (no project, attachable by every
+	// project) under an organization-level issuer.
+	ProjectID *string
+	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
+	ClientID string
+	// Optional client_secret supplied by the caller. Gram encrypts before
+	// persisting; the plaintext is never returned.
+	ClientSecret *string
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string
+}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -142,6 +214,10 @@ type CreateIssuerPayload struct {
 	// When true, the MCP client registers and transacts directly with this issuer.
 	// Default false.
 	Passthrough *bool
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool
 }
 
 // DeleteClientPayload is the payload type of the
@@ -347,6 +423,15 @@ type OrganizationRemoteSessionIssuer struct {
 	ProjectName *string
 }
 
+// RefreshSessionPayload is the payload type of the
+// organizationRemoteSessionIssuers service refreshSession method.
+type RefreshSessionPayload struct {
+	// The remote_session id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // RemoveClientFromMcpServerPayload is the payload type of the
 // organizationRemoteSessionIssuers service removeClientFromMcpServer method.
 type RemoveClientFromMcpServerPayload struct {
@@ -393,8 +478,6 @@ type UpdateClientPayload struct {
 	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
 	// is never returned.
 	ClientSecret *string
-	// Re-pair with a different user_session_issuer.
-	UserSessionIssuerID *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
 	// Replace the explicit upstream OAuth scopes for this client.
@@ -432,6 +515,9 @@ type UpdateIssuerPayload struct {
 	TokenEndpointAuthMethodsSupported []string
 	Oidc                              *bool
 	Passthrough                       *bool
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
