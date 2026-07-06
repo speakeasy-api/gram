@@ -567,6 +567,55 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts
+// the account attribution the OTEL path cached for the session, so a chat
+// created here is linked to its user_accounts row — the join the
+// account-identity risk rules and the personal/team classification read.
+// Without the merge, chats captured through /rpc/hooks.ingest are never
+// linked (the payload itself carries no AI-account identity).
+func TestIngest_LinksChatToUserAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-account-link-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	userAccountID := uuid.NewString()
+
+	// Seed session metadata as the OTEL path would for an attributed personal
+	// account.
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     "personal@gmail.com",
+		UserID:        "bridged-employee",
+		Provider:      providerAnthropic,
+		AccountType:   accountTypePersonal,
+		UserAccountID: userAccountID,
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	prompt := "hello from a canonical hook"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())
+}
+
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	t.Parallel()
 

@@ -539,6 +539,34 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
+
+	// Canonical hook events carry no AI-account identity of their own; the OTEL
+	// ingest path attributes the session's account (user_accounts, account_type,
+	// owning user) and caches it under the session id. Adopt that attribution so
+	// a chat created here is linked to its account — without this the
+	// account-identity risk rules and the personal/team classification never see
+	// sessions captured through this endpoint. The session cache is keyed by
+	// session id alone, so only trust an entry the same org+project seeded.
+	if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil &&
+		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
+		metadata.Provider = cached.Provider
+		metadata.ExternalOrgID = cached.ExternalOrgID
+		metadata.ExternalAccountUUID = cached.ExternalAccountUUID
+		metadata.ExternalAccountID = cached.ExternalAccountID
+		metadata.DeviceID = cached.DeviceID
+		metadata.AccountType = cached.AccountType
+		metadata.BillingMode = cached.BillingMode
+		metadata.UserAccountID = cached.UserAccountID
+		if metadata.UserEmail == "" {
+			metadata.UserEmail = cached.UserEmail
+		}
+		// A personal account's email never resolves to an org member, but the
+		// OTEL path may have attributed the owning employee via the device
+		// bridge — adopt it rather than dropping the owner.
+		if metadata.UserID == "" {
+			metadata.UserID = cached.UserID
+		}
+	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -145,6 +146,26 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 				attr.SlogEvent("claude_logs_cache_set_failed"),
 				attr.SlogError(err),
 			)
+		}
+
+		// A session's chat row is created once, on its first persisted message.
+		// When that message beat this attribution (hooks and OTEL race at session
+		// start), the chat exists without its account link and no later hook
+		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
+		// the chat does not exist yet (its eventual creation reads the metadata
+		// cached above) or is already linked. Runs only on the attribution path,
+		// not the per-batch fast path, so it costs one write per session.
+		if completeMetadata.UserAccountID != "" {
+			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
+				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
+				ID:            sessionIDToUUID(completeMetadata.SessionID),
+				ProjectID:     *authCtx.ProjectID,
+			}); err != nil {
+				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
+					attr.SlogEvent("chat_account_link_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
