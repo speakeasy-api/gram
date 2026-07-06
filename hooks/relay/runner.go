@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -283,9 +284,12 @@ func (r *Relay) loginCommand() string {
 	return cmd
 }
 
-// shellQuoteArg single-quotes an argument for a POSIX shell unless it is made
+// shellQuoteArg quotes an argument for the agent's shell unless it is made
 // entirely of characters no shell splits or interprets. The nudge command is
-// executed by the agent's shell, so paths with spaces must survive parsing.
+// executed by the agent, so paths with spaces must survive parsing. POSIX
+// shells get single quotes; Windows shells (cmd.exe, PowerShell) don't group
+// on single quotes, so they get double quotes — safe unescaped because NTFS
+// forbids '"' in paths.
 func shellQuoteArg(s string) string {
 	safe := s != "" && !strings.ContainsFunc(s, func(r rune) bool {
 		switch {
@@ -299,6 +303,9 @@ func shellQuoteArg(s string) string {
 	})
 	if safe {
 		return s
+	}
+	if runtime.GOOS == "windows" {
+		return `"` + s + `"`
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
