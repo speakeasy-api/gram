@@ -1029,7 +1029,7 @@ printf '{}\n401'
 	env := hookAuthTestEnv(dir,
 		"GRAM_CAPTURE_PAYLOADS="+capturePath,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
-		"GRAM_API_KEY=gram_revoked_env_key",
+		"GRAM_HOOKS_API_KEY=gram_revoked_env_key",
 		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
 	)
 	for i, kv := range env {
@@ -1047,8 +1047,8 @@ printf '{}\n401'
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block even before first browser login")
 	require.Equal(t, 2, exitErr.ExitCode(), freshErr.String())
-	require.Contains(t, freshErr.String(), "GRAM_API_KEY")
-	require.Contains(t, freshErr.String(), "Update or unset GRAM_API_KEY")
+	require.Contains(t, freshErr.String(), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, freshErr.String(), "Update or unset GRAM_HOOKS_API_KEY")
 	require.Contains(t, freshErr.String(), "hooks/login.sh")
 	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Equal(t, 1, posts, "rejected env credentials must not trigger the cache-relogin retry")
@@ -1064,8 +1064,65 @@ printf '{}\n401'
 	err = cached.Run()
 	require.ErrorAs(t, err, &exitErr, cachedErr.String())
 	require.Equal(t, 2, exitErr.ExitCode(), cachedErr.String())
-	require.Contains(t, cachedErr.String(), "GRAM_API_KEY")
+	require.Contains(t, cachedErr.String(), "GRAM_HOOKS_API_KEY")
 	require.FileExists(t, authFile, "env credential rejection must not wipe the cached browser login")
+}
+
+func TestRenderHookScriptClaudeIgnoresGenericGramAPIKeyForHooksAuth(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_hooks_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-generic-key","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), stderr.String())
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_cached_hooks_key")
+	require.Contains(t, requests, "Gram-Project: acme-prod")
+	require.NotContains(t, requests, "gram_unrelated_mcp_key")
+	require.NotContains(t, requests, "wrong-project")
 }
 
 // TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin covers
@@ -1108,6 +1165,8 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	env := hookAuthTestEnv(dir,
 		"GRAM_CAPTURE_REQUESTS="+capturePath,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
 	)
 	for i, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {
@@ -1184,6 +1243,8 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	env := hookAuthTestEnv(dir,
 		"GRAM_CAPTURE_REQUESTS="+capturePath,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
 	)
 	for i, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {

@@ -1165,10 +1165,6 @@ gram_hooks_env_key_source() {
     printf 'GRAM_HOOKS_API_KEY'
     return 0
   fi
-  if [ -n "${GRAM_API_KEY:-}" ]; then
-    printf 'GRAM_API_KEY'
-    return 0
-  fi
   return 1
 }
 
@@ -1631,8 +1627,8 @@ gram_hooks_prepare_auth() {
   project=""
   email=""
   if [ "$force" != "force" ]; then
-    api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
-    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
+    api_key="${GRAM_HOOKS_API_KEY:-}"
+    project="${GRAM_HOOKS_PROJECT_SLUG:-}"
   fi
 
   if [ -z "$api_key" ]; then
@@ -1713,13 +1709,13 @@ gram_hooks_post_authenticated() {
     ${auth_config_arg[@]+"${auth_config_arg[@]}"}
   local first_status="$GRAM_HTTP_CODE"
   # Retry through the browser-login cache only when the rejected credentials
-  # came from it. Explicit GRAM_HOOKS_API_KEY/GRAM_API_KEY values take
+  # came from it. Explicit GRAM_HOOKS_API_KEY values take
   # precedence over the cache on every send, so a re-login can never replace
   # them: a rejected configured key must fall through to the caller's non-2xx
   # handling (fail closed) rather than wipe the cache and downgrade to the
   # never-authenticated pass-through.
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
-    && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
+    && [ -z "${GRAM_HOOKS_API_KEY:-}" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     gram_hooks_mark_reauth_needed
