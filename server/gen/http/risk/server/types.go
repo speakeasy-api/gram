@@ -369,6 +369,15 @@ type ListRiskPoliciesResponseBody struct {
 	Policies []*RiskPolicyResponseBody `form:"policies" json:"policies" xml:"policies"`
 }
 
+// ListBuiltinPresetsResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body.
+type ListBuiltinPresetsResponseBody struct {
+	// Catalog checksum/version, for provenance.
+	Version string `form:"version" json:"version" xml:"version"`
+	// The preset library grouped by category.
+	Categories []*BuiltinPresetCategoryResponseBody `form:"categories" json:"categories" xml:"categories"`
+}
+
 // GetRiskPolicyResponseBody is the type of the "risk" service "getRiskPolicy"
 // endpoint HTTP response body.
 type GetRiskPolicyResponseBody struct {
@@ -1367,6 +1376,190 @@ type ListRiskPoliciesUnexpectedResponseBody struct {
 // ListRiskPoliciesGatewayErrorResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body for the "gateway_error" error.
 type ListRiskPoliciesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsUnauthorizedResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListBuiltinPresetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsForbiddenResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "forbidden" error.
+type ListBuiltinPresetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsBadRequestResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "bad_request" error.
+type ListBuiltinPresetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsNotFoundResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "not_found" error.
+type ListBuiltinPresetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsConflictResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "conflict" error.
+type ListBuiltinPresetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsUnsupportedMediaResponseBody is the type of the "risk"
+// service "listBuiltinPresets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListBuiltinPresetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsInvalidResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "invalid" error.
+type ListBuiltinPresetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsInvariantViolationResponseBody is the type of the "risk"
+// service "listBuiltinPresets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListBuiltinPresetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsUnexpectedResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "unexpected" error.
+type ListBuiltinPresetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinPresetsGatewayErrorResponseBody is the type of the "risk" service
+// "listBuiltinPresets" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListBuiltinPresetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7428,6 +7621,29 @@ type RiskPolicyResponseBody struct {
 	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
 }
 
+// BuiltinPresetCategoryResponseBody is used to define fields on response body
+// types.
+type BuiltinPresetCategoryResponseBody struct {
+	// Human category label, e.g. "Test credit cards".
+	Label string `form:"label" json:"label" xml:"label"`
+	// The rules in this category.
+	Entries []*BuiltinPresetEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
+}
+
+// BuiltinPresetEntryResponseBody is used to define fields on response body
+// types.
+type BuiltinPresetEntryResponseBody struct {
+	// Stable rule id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Label surfaced when this rule suppresses a finding.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Human rationale for why these values are known-safe.
+	Description string `form:"description" json:"description" xml:"description"`
+	// Example values or regex patterns — published test/documentation data, never
+	// real secrets.
+	Samples []string `form:"samples,omitempty" json:"samples,omitempty" xml:"samples,omitempty"`
+}
+
 // RiskResultResponseBody is used to define fields on response body types.
 type RiskResultResponseBody struct {
 	// The result ID.
@@ -7850,6 +8066,27 @@ func NewListRiskPoliciesResponseBody(res *risk.ListRiskPoliciesResult) *ListRisk
 		}
 	} else {
 		body.Policies = []*RiskPolicyResponseBody{}
+	}
+	return body
+}
+
+// NewListBuiltinPresetsResponseBody builds the HTTP response body from the
+// result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsResponseBody(res *risk.ListBuiltinPresetsResult) *ListBuiltinPresetsResponseBody {
+	body := &ListBuiltinPresetsResponseBody{
+		Version: res.Version,
+	}
+	if res.Categories != nil {
+		body.Categories = make([]*BuiltinPresetCategoryResponseBody, len(res.Categories))
+		for i, val := range res.Categories {
+			if val == nil {
+				body.Categories[i] = nil
+				continue
+			}
+			body.Categories[i] = marshalRiskBuiltinPresetCategoryToBuiltinPresetCategoryResponseBody(val)
+		}
+	} else {
+		body.Categories = []*BuiltinPresetCategoryResponseBody{}
 	}
 	return body
 }
@@ -8883,6 +9120,148 @@ func NewListRiskPoliciesUnexpectedResponseBody(res *goa.ServiceError) *ListRiskP
 // from the result of the "listRiskPolicies" endpoint of the "risk" service.
 func NewListRiskPoliciesGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskPoliciesGatewayErrorResponseBody {
 	body := &ListRiskPoliciesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsUnauthorizedResponseBody(res *goa.ServiceError) *ListBuiltinPresetsUnauthorizedResponseBody {
+	body := &ListBuiltinPresetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsForbiddenResponseBody(res *goa.ServiceError) *ListBuiltinPresetsForbiddenResponseBody {
+	body := &ListBuiltinPresetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsBadRequestResponseBody(res *goa.ServiceError) *ListBuiltinPresetsBadRequestResponseBody {
+	body := &ListBuiltinPresetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsNotFoundResponseBody(res *goa.ServiceError) *ListBuiltinPresetsNotFoundResponseBody {
+	body := &ListBuiltinPresetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsConflictResponseBody builds the HTTP response body from
+// the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsConflictResponseBody(res *goa.ServiceError) *ListBuiltinPresetsConflictResponseBody {
+	body := &ListBuiltinPresetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listBuiltinPresets" endpoint of the "risk"
+// service.
+func NewListBuiltinPresetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListBuiltinPresetsUnsupportedMediaResponseBody {
+	body := &ListBuiltinPresetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsInvalidResponseBody builds the HTTP response body from
+// the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsInvalidResponseBody(res *goa.ServiceError) *ListBuiltinPresetsInvalidResponseBody {
+	body := &ListBuiltinPresetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listBuiltinPresets" endpoint of the "risk"
+// service.
+func NewListBuiltinPresetsInvariantViolationResponseBody(res *goa.ServiceError) *ListBuiltinPresetsInvariantViolationResponseBody {
+	body := &ListBuiltinPresetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsUnexpectedResponseBody(res *goa.ServiceError) *ListBuiltinPresetsUnexpectedResponseBody {
+	body := &ListBuiltinPresetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinPresetsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listBuiltinPresets" endpoint of the "risk" service.
+func NewListBuiltinPresetsGatewayErrorResponseBody(res *goa.ServiceError) *ListBuiltinPresetsGatewayErrorResponseBody {
+	body := &ListBuiltinPresetsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -13630,6 +14009,17 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 // payload.
 func NewListRiskPoliciesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
 	v := &risk.ListRiskPoliciesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListBuiltinPresetsPayload builds a risk service listBuiltinPresets
+// endpoint payload.
+func NewListBuiltinPresetsPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListBuiltinPresetsPayload {
+	v := &risk.ListBuiltinPresetsPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -9,7 +9,8 @@ import (
 // risk_policies.analyzer_config (JSONB), namespaced by analyzer. New per-scanner
 // options live here rather than as a dedicated column each.
 type AnalyzerConfig struct {
-	Presidio *PresidioConfig `json:"presidio,omitempty"`
+	Presidio       *PresidioConfig       `json:"presidio,omitempty"`
+	BuiltinPresets *BuiltinPresetsConfig `json:"builtin_presets,omitempty"`
 }
 
 // PresidioConfig holds presidio-scanner options.
@@ -17,6 +18,14 @@ type PresidioConfig struct {
 	// ScoreThreshold is the minimum recognizer confidence (0.0-1.0) a match must
 	// clear. Absent means "unset" — the scanner applies DefaultPresidioScoreThreshold.
 	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+}
+
+// BuiltinPresetsConfig holds options for the built-in false-positive preset
+// catalog applied at scan-time across all detection sources.
+type BuiltinPresetsConfig struct {
+	// Enabled toggles scan-time suppression of catalog false positives. Absent
+	// means "unset" — callers default to ON (see BuiltinPresetsEnabledFromConfig).
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // ParseAnalyzerConfig decodes the JSONB blob, returning a zero config for
@@ -39,6 +48,17 @@ func PresidioScoreThresholdFromConfig(b []byte) float64 {
 		return *c.Presidio.ScoreThreshold
 	}
 	return 0
+}
+
+// BuiltinPresetsEnabledFromConfig reports whether scan-time suppression of
+// catalog false positives is enabled. It defaults ON: absent/unset config
+// returns true, and only an explicit stored false disables it.
+func BuiltinPresetsEnabledFromConfig(b []byte) bool {
+	c := ParseAnalyzerConfig(b)
+	if c.BuiltinPresets != nil && c.BuiltinPresets.Enabled != nil {
+		return *c.BuiltinPresets.Enabled
+	}
+	return true
 }
 
 // PresidioScoreThresholdPtr returns the configured threshold as *float64 for

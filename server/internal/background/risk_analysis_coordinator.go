@@ -101,6 +101,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// left unset here to avoid a second config source.
 					PresidioScoreThreshold: 0,
 					CustomRuleIds:          policy.CustomRuleIds,
+					BuiltinPresetsEnabled:  false,
 				})
 				futures = append(futures, f)
 			}

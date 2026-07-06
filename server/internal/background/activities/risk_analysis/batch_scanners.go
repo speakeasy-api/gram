@@ -113,6 +113,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	return mergeFindings(mergeFindingsInput{
 		outOfPolicyScope:        outOfPolicyScope,
 		exclusions:              exclusions,
+		builtinEnabled:          args.BuiltinPresetsEnabled,
 		gitleaksFindings:        gitleaksFindings,
 		presidioFindings:        presidioFindings,
 		shadowMCPFindings:       shadowMCPFindings,
@@ -126,6 +127,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 type mergeFindingsInput struct {
 	outOfPolicyScope        []bool
 	exclusions              ExclusionSet
+	builtinEnabled          bool
 	gitleaksFindings        [][]Finding
 	presidioFindings        [][]Finding
 	shadowMCPFindings       [][]Finding
@@ -152,6 +154,9 @@ func mergeFindings(in mergeFindingsInput) [][]Finding {
 		)
 		if !in.exclusions.Empty() {
 			combined = in.exclusions.FilterFindings(combined)
+		}
+		if in.builtinEnabled {
+			combined = dropBuiltinFalsePositives(combined)
 		}
 		merged[i] = dedup(combined)
 	}

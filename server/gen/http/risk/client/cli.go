@@ -158,6 +158,35 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 	return v, nil
 }
 
+// BuildListBuiltinPresetsPayload builds the payload for the risk
+// listBuiltinPresets endpoint from CLI flags.
+func BuildListBuiltinPresetsPayload(riskListBuiltinPresetsApikeyToken string, riskListBuiltinPresetsSessionToken string, riskListBuiltinPresetsProjectSlugInput string) (*risk.ListBuiltinPresetsPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListBuiltinPresetsApikeyToken != "" {
+			apikeyToken = &riskListBuiltinPresetsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListBuiltinPresetsSessionToken != "" {
+			sessionToken = &riskListBuiltinPresetsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListBuiltinPresetsProjectSlugInput != "" {
+			projectSlugInput = &riskListBuiltinPresetsProjectSlugInput
+		}
+	}
+	v := &risk.ListBuiltinPresetsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyPayload builds the payload for the risk getRiskPolicy
 // endpoint from CLI flags.
 func BuildGetRiskPolicyPayload(riskGetRiskPolicyID string, riskGetRiskPolicyApikeyToken string, riskGetRiskPolicySessionToken string, riskGetRiskPolicyProjectSlugInput string) (*risk.GetRiskPolicyPayload, error) {

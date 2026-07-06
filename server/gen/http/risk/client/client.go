@@ -25,6 +25,10 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
+	// ListBuiltinPresets Doer is the HTTP client used to make requests to the
+	// listBuiltinPresets endpoint.
+	ListBuiltinPresetsDoer goahttp.Doer
+
 	// GetRiskPolicy Doer is the HTTP client used to make requests to the
 	// getRiskPolicy endpoint.
 	GetRiskPolicyDoer goahttp.Doer
@@ -175,6 +179,7 @@ func NewClient(
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
 		ListRiskPoliciesDoer:               doer,
+		ListBuiltinPresetsDoer:             doer,
 		GetRiskPolicyDoer:                  doer,
 		UpdateRiskPolicyDoer:               doer,
 		DeleteRiskPolicyDoer:               doer,
@@ -258,6 +263,30 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 		resp, err := c.ListRiskPoliciesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskPolicies", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListBuiltinPresets returns an endpoint that makes HTTP requests to the risk
+// service listBuiltinPresets server.
+func (c *Client) ListBuiltinPresets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListBuiltinPresetsRequest(c.encoder)
+		decodeResponse = DecodeListBuiltinPresetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListBuiltinPresetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListBuiltinPresetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listBuiltinPresets", err)
 		}
 		return decodeResponse(resp)
 	}

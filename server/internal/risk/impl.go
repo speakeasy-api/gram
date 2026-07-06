@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -445,6 +446,46 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// ListBuiltinPresets returns the built-in preset exclusion library grouped by
+// category. The catalog is static, embedded reference data (see presetlib), so
+// this is a read gated by org admin with no project data access.
+func (s *Service) ListBuiltinPresets(ctx context.Context, _ *gen.ListBuiltinPresetsPayload) (*gen.ListBuiltinPresetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	categories := make([]*gen.BuiltinPresetCategory, 0)
+	index := make(map[string]int)
+	for _, e := range presetlib.Entries() {
+		label := cmp.Or(e.Category, "Other")
+		idx, seen := index[label]
+		if !seen {
+			idx = len(categories)
+			index[label] = idx
+			categories = append(categories, &gen.BuiltinPresetCategory{Label: label, Entries: nil})
+		}
+		// Deliberately omit engine-internal fields (sources, rule ids, matcher
+		// type) — the library is presented to end users without detection-engine
+		// details.
+		categories[idx].Entries = append(categories[idx].Entries, &gen.BuiltinPresetEntry{
+			ID:          e.ID,
+			Reason:      e.Reason,
+			Description: e.Description,
+			Samples:     e.Samples,
+		})
+	}
+
+	return &gen.ListBuiltinPresetsResult{
+		Version:    presetlib.Version(),
+		Categories: categories,
+	}, nil
 }
 
 func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyPayload) (*types.RiskPolicy, error) {

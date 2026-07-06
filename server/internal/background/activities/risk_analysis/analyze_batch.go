@@ -102,6 +102,10 @@ type AnalyzeBatchArgs struct {
 	// DefaultPresidioScoreThreshold.
 	PresidioScoreThreshold float64
 	CustomRuleIds          []string
+	// BuiltinPresetsEnabled toggles scan-time suppression of built-in catalog
+	// false positives. Do derives it from the refetched policy's analyzer_config
+	// (defaulting ON), so it is not a caller input.
+	BuiltinPresetsEnabled bool
 }
 
 type AnalyzeBatchResult struct {
@@ -154,6 +158,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// Single source of truth: derive the presidio threshold from the policy we
 	// just refetched, rather than trusting a (possibly omitted) caller value.
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
+	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {

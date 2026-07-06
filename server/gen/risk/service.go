@@ -21,6 +21,9 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List the built-in preset exclusion library (known-safe values suppressed
+	// before they reach exclusions), grouped by category.
+	ListBuiltinPresets(context.Context, *ListBuiltinPresetsPayload) (res *ListBuiltinPresetsResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -136,7 +139,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [35]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinPresets", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -149,6 +152,29 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// A named group of built-in preset rules.
+type BuiltinPresetCategory struct {
+	// Human category label, e.g. "Test credit cards".
+	Label string
+	// The rules in this category.
+	Entries []*BuiltinPresetEntry
+}
+
+// One rule in the built-in preset exclusion library. Deliberately omits
+// internal detection-engine identifiers (sources, rule ids) so they are not
+// exposed to end users.
+type BuiltinPresetEntry struct {
+	// Stable rule id.
+	ID string
+	// Label surfaced when this rule suppresses a finding.
+	Reason string
+	// Human rationale for why these values are known-safe.
+	Description string
+	// Example values or regex patterns — published test/documentation data, never
+	// real secrets.
+	Samples []string
 }
 
 // CompileExprPayload is the payload type of the risk service compileExpr
@@ -396,6 +422,23 @@ type GetRiskUserBreakdownPayload struct {
 	From *string
 	// Exclusive end of the window. Defaults to now.
 	To *string
+}
+
+// ListBuiltinPresetsPayload is the payload type of the risk service
+// listBuiltinPresets method.
+type ListBuiltinPresetsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListBuiltinPresetsResult is the result type of the risk service
+// listBuiltinPresets method.
+type ListBuiltinPresetsResult struct {
+	// Catalog checksum/version, for provenance.
+	Version string
+	// The preset library grouped by category.
+	Categories []*BuiltinPresetCategory
 }
 
 // ListCustomDetectionRulesPayload is the payload type of the risk service
