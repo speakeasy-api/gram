@@ -1976,6 +1976,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		MarketplaceName:   "",
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
+		Channel:           channelForOrg(orgID),
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

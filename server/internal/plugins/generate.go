@@ -84,6 +84,10 @@ type GenerateConfig struct {
 	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
 	// server unavailability disrupting the user.
 	ObservabilityMode bool
+	// Channel selects the observability plugin implementation this org
+	// receives (bash senders vs the speakeasy-hooks binary). The zero value is
+	// stable, so unenrolled orgs generate byte-identical output.
+	Channel DistributionChannel
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -590,6 +594,9 @@ func generateClaudeObservabilityPluginFlat(files map[string][]byte, cfg Generate
 }
 
 func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	if cfg.Channel == ChannelAlpha {
+		return generateClaudeObservabilityBinaryPluginInDir(files, subdir, cfg, currentHooksBinaryPin)
+	}
 	name := subdir
 	if name == "" {
 		name = ClaudeObservabilitySlug(cfg)
@@ -664,6 +671,9 @@ func generateCursorObservabilityPluginFlat(files map[string][]byte, cfg Generate
 }
 
 func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, name string, cfg GenerateConfig) error {
+	if cfg.Channel == ChannelAlpha {
+		return generateCursorObservabilityBinaryPluginInDir(files, subdir, name, cfg, currentHooksBinaryPin)
+	}
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
@@ -791,6 +801,9 @@ func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateC
 }
 
 func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	if cfg.Channel == ChannelAlpha {
+		return generateCodexObservabilityBinaryPluginInDir(files, subdir, cfg, currentHooksBinaryPin)
+	}
 	name := subdir
 	if name == "" {
 		name = CodexObservabilitySlug(cfg)
@@ -2469,7 +2482,13 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	var approvals []codexHookApproval
+	var err error
+	if cfg.Channel == ChannelAlpha {
+		approvals, err = computeCodexBinaryHookApprovals(cfg)
+	} else {
+		approvals, err = computeCodexHookApprovals(marketplace, plugin)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
