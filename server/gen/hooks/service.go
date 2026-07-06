@@ -69,6 +69,8 @@ type ClaudeHookResult struct {
 	SuppressOutput *bool
 	// Warning message shown to the user in the terminal
 	SystemMessage *string
+	// Whether optional plugin authentication was rejected
+	PluginAuthFailed *bool
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
 	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /

@@ -2196,7 +2196,7 @@ while [ "$#" -gt 0 ]; do
 done
 cat >/dev/null
 printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
-printf '{"decision":"block","reason":"blocked by policy","systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
+printf '{"decision":"block","reason":"blocked by policy","systemMessage":"blocked by policy","pluginAuthFailed":true}\n200'
 `), 0o755))
 
 	authFile := filepath.Join(dir, "auth.env")
@@ -2221,8 +2221,12 @@ printf '{"decision":"block","reason":"blocked by policy","systemMessage":"Speake
 	require.Contains(t, stdout.String(), `"decision":"block"`)
 	require.Contains(t, stdout.String(), "blocked by policy")
 	require.NotContains(t, stdout.String(), `"additionalContext"`)
+	require.NotContains(t, stdout.String(), `"pluginAuthFailed"`)
 	require.NoFileExists(t, authFile, "rejected cached key must still be cleared when a server block is preserved")
 	require.FileExists(t, authFile+".reauth-needed", "server block path must still remember that reconnect is required")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.claude")
 }
 
 func TestCheckedInClaudeSenderRejectedCachedKeyStillBlocksToolUse(t *testing.T) {

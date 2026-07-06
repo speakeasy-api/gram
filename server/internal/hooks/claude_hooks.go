@@ -336,9 +336,12 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		result = makeHookResult(payload.HookEventName)
 	}
-	if pluginAuthFailed && result != nil && result.SystemMessage == nil {
-		msg := "Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."
-		result.SystemMessage = &msg
+	if pluginAuthFailed && result != nil {
+		result.PluginAuthFailed = &pluginAuthFailed
+		if result.SystemMessage == nil {
+			msg := "Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."
+			result.SystemMessage = &msg
+		}
 	}
 
 	return result, err

@@ -155,21 +155,25 @@ except Exception:
 gram_hooks_body_has_auth_failure_signal() {
   local body="$1"
   if command -v python3 >/dev/null 2>&1; then
-    local system_message
-    system_message="$(printf '%s' "$body" | python3 -c "
+    local auth_failed
+    auth_failed="$(printf '%s' "$body" | python3 -c "
 import json, sys
 try:
     data = json.loads(sys.stdin.read())
-    print(data.get('systemMessage') or '', end='')
+    print(
+        '1'
+        if data.get('pluginAuthFailed') is True
+        or str(data.get('systemMessage') or '').startswith('Speakeasy hooks rejected plugin auth.')
+        else '',
+        end='',
+    )
 except Exception:
     pass
 " 2>/dev/null)" || true
-    case "$system_message" in
-      "Speakeasy hooks rejected plugin auth."*) return 0 ;;
-    esac
+    [ "$auth_failed" = "1" ] && return 0
   fi
   case "$body" in
-    *'"systemMessage":"Speakeasy hooks rejected plugin auth.'*) return 0 ;;
+    *'"pluginAuthFailed":true'* | *'"systemMessage":"Speakeasy hooks rejected plugin auth.'*) return 0 ;;
   esac
   return 1
 }
@@ -199,6 +203,28 @@ except Exception:
     *'"decision":"block"'* | *'"permissionDecision":"deny"'*) return 0 ;;
   esac
   return 1
+}
+
+gram_hooks_body_without_auth_failure_signal() {
+  local body="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    local cleaned
+    cleaned="$(printf '%s' "$body" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    if isinstance(data, dict):
+        data.pop('pluginAuthFailed', None)
+    print(json.dumps(data, separators=(',', ':')), end='')
+except Exception:
+    sys.exit(1)
+" 2>/dev/null)" && {
+      printf '%s\n' "$cleaned"
+      return 0
+    }
+  fi
+  printf '%s\n' "$body" |
+    sed -e 's/,"pluginAuthFailed":true//g' -e 's/"pluginAuthFailed":true,//g'
 }
 
 # No env key: fall back to the credentials the browser login flow cached
@@ -301,7 +327,7 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null 
     if [ -n "$env_reason" ]; then
       echo "$env_reason" >&2
     fi
-    echo "$body"
+    gram_hooks_body_without_auth_failure_signal "$body"
     exit 0
   fi
   if [ -n "$env_reason" ]; then

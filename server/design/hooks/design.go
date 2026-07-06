@@ -50,6 +50,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("stopReason", String, "Reason if blocked (SessionStart only)")
 	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
 	Attribute("systemMessage", String, "Warning message shown to the user in the terminal")
+	Attribute("pluginAuthFailed", Boolean, "Whether optional plugin authentication was rejected")
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 	// UserPromptSubmit, PostToolUse, Stop, and SubagentStop use a top-level
 	// `decision` field to block: "block" tells Claude to halt processing.
