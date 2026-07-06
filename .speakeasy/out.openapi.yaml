@@ -29537,7 +29537,7 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateTemplate
-  /rpc/token-exchange:
+  /rpc/tokenExchange.exchange:
     post:
       description: Exchange an org-scoped agent API key plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with the org-scoped API key carrying the 'agent' scope, same scheme as agent.getPlugins. The raw key is returned exactly once.
       operationId: tokenExchange

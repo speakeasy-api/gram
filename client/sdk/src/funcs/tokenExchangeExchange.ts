@@ -96,7 +96,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/token-exchange")();
+  const path = pathToFunc("/rpc/tokenExchange.exchange")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

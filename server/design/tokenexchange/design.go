@@ -40,9 +40,9 @@ var _ = Service("tokenExchange", func() {
 		Result(TokenResult)
 
 		HTTP(func() {
-			// Path pinned explicitly, decoupled from the method name, so the
-			// device-agent wire contract stays stable if the method is renamed.
-			POST("/rpc/token-exchange")
+			// /rpc/<namespace>.<verb> per the house RPC-endpoint convention
+			// (enforced by the glint rpcendpointformat analyzer).
+			POST("/rpc/tokenExchange.exchange")
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})

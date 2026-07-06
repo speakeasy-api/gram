@@ -49,7 +49,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"Exchange", "POST", "/rpc/token-exchange"},
+			{"Exchange", "POST", "/rpc/tokenExchange.exchange"},
 		},
 		Exchange: NewExchangeHandler(e.Exchange, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -85,7 +85,7 @@ func MountExchangeHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/token-exchange", f)
+	mux.Handle("POST", "/rpc/tokenExchange.exchange", f)
 }
 
 // NewExchangeHandler creates a HTTP handler which loads the HTTP request and

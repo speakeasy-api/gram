@@ -9,5 +9,5 @@ package client
 
 // ExchangeTokenExchangePath returns the URL path to the tokenExchange service exchange HTTP endpoint.
 func ExchangeTokenExchangePath() string {
-	return "/rpc/token-exchange"
+	return "/rpc/tokenExchange.exchange"
 }
