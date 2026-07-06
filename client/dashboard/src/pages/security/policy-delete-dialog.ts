@@ -23,19 +23,34 @@ const CATEGORY_LEVEL_SOURCE_BY_CATEGORY: Partial<Record<RuleCategory, string>> =
     cli_destructive: "cli_destructive",
   };
 
+function hasEnabledVisibleRule(
+  category: RuleCategory,
+  disabledRules: Set<string>,
+): boolean {
+  return DETECTION_RULES[category].some(
+    (rule) => !rule.hidden && !disabledRules.has(rule.id),
+  );
+}
+
 function presidioCategories(policy: RiskPolicy): RuleCategory[] {
   if (!policy.sources.includes("presidio")) {
     return [];
   }
 
+  const disabledRules = new Set(policy.disabledRules ?? []);
   const entitySet = new Set(policy.presidioEntities ?? []);
   if (entitySet.size === 0) {
-    return PRESIDIO_CATEGORIES;
+    return PRESIDIO_CATEGORIES.filter((category) =>
+      hasEnabledVisibleRule(category, disabledRules),
+    );
   }
 
   return PRESIDIO_CATEGORIES.filter((category) =>
-    DETECTION_RULES[category].some((rule) =>
-      entitySet.has(ruleIdToPresidioEntity(rule.id)),
+    DETECTION_RULES[category].some(
+      (rule) =>
+        !rule.hidden &&
+        !disabledRules.has(rule.id) &&
+        entitySet.has(ruleIdToPresidioEntity(rule.id)),
     ),
   );
 }
@@ -48,8 +63,12 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
   }
 
   const categories: RuleCategory[] = [];
+  const disabledRules = new Set(policy.disabledRules ?? []);
 
-  if (policy.sources.includes("gitleaks")) {
+  if (
+    policy.sources.includes("gitleaks") &&
+    hasEnabledVisibleRule("secrets", disabledRules)
+  ) {
     categories.push("secrets");
   }
 
@@ -72,6 +91,18 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
 
 export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
   return policy.action === "block" ? "block" : "flag";
+}
+
+export function getPolicyDeleteImpactText(
+  policy: RiskPolicy,
+  hasRuleGroups: boolean,
+): string {
+  const action = getPolicyDeleteRuleActionLabel(policy);
+  if (hasRuleGroups) {
+    return `The following ${action} rules will no longer be enforced.`;
+  }
+
+  return `Any ${action} action this policy applies will stop immediately.`;
 }
 
 export function getPolicyDeleteRuleListItems(ruleNames: string[]): string[] {

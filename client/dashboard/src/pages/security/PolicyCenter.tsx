@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
+  Stack,
   Table,
 } from "@speakeasy-api/moonshine";
 import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
@@ -97,7 +98,7 @@ import {
   policyToCategories,
 } from "./policy-form";
 import {
-  getPolicyDeleteRuleActionLabel,
+  getPolicyDeleteImpactText,
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
@@ -924,9 +925,12 @@ function PolicyCenterContent() {
         getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
       )
     : [];
-  const policyDeleteRuleActionLabel = policyToDelete
-    ? getPolicyDeleteRuleActionLabel(policyToDelete.policy)
-    : "flag";
+  const policyDeleteImpactText = policyToDelete
+    ? getPolicyDeleteImpactText(
+        policyToDelete.policy,
+        policyDeleteRuleListItems.length > 0,
+      )
+    : "";
 
   let policiesBody = (
     <Table
@@ -1032,19 +1036,18 @@ function PolicyCenterContent() {
             <Dialog.Header>
               <Dialog.Title>Delete Policy</Dialog.Title>
             </Dialog.Header>
-            <div className="space-y-4 py-4">
+            <Stack gap={4}>
               <Type variant="body">
                 <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
               </Type>
+              {policyDeleteImpactText && (
+                <Type variant="body">{policyDeleteImpactText}</Type>
+              )}
               {policyDeleteRuleListItems.length > 0 && (
                 <div className="space-y-2">
-                  <Type variant="body">
-                    The following {policyDeleteRuleActionLabel} rules will no
-                    longer be enforced.
-                  </Type>
                   <ul className="list-disc space-y-1 pl-5">
                     {policyDeleteRuleListItems.map((ruleName, index) => (
                       <li key={`${ruleName}-${index}`}>
@@ -1056,7 +1059,9 @@ function PolicyCenterContent() {
                   </ul>
                 </div>
               )}
-              <div className="flex justify-end space-x-2">
+            </Stack>
+            <Dialog.Footer>
+              <div className="flex justify-end gap-2">
                 <Button
                   variant="secondary"
                   onClick={() => setPolicyToDelete(null)}
@@ -1071,7 +1076,7 @@ function PolicyCenterContent() {
                   Delete Policy
                 </Button>
               </div>
-            </div>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
       </Page.Body>

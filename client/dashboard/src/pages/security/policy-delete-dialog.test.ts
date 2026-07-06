@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import { DETECTION_RULES, type DetectionRule } from "./policy-data";
 import {
+  getPolicyDeleteImpactText,
   getPolicyDeleteRuleActionLabel,
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
+
+function visibleRuleIds(rules: DetectionRule[]): string[] {
+  return rules.filter((rule) => !rule.hidden).map((rule) => rule.id);
+}
 
 function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
   return {
@@ -40,6 +46,30 @@ describe("getPolicyRuleGroupNamesForDeleteDialog", () => {
     expect(ruleGroups).toEqual(["Secrets", "Custom Rules"]);
     expect(ruleGroups).not.toContain("1Password Service Account Token");
     expect(ruleGroups).not.toContain("Password in Plain Text");
+  });
+
+  it("omits a category when every visible source rule is disabled", () => {
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({
+          disabledRules: visibleRuleIds(DETECTION_RULES.secrets),
+          sources: ["gitleaks"],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps a category when at least one visible source rule is enabled", () => {
+    const [, ...disabledRules] = visibleRuleIds(DETECTION_RULES.secrets);
+
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({
+          disabledRules,
+          sources: ["gitleaks"],
+        }),
+      ),
+    ).toEqual(["Secrets"]);
   });
 
   it("returns each enabled Presidio-backed category", () => {
@@ -90,6 +120,20 @@ describe("getPolicyDeleteRuleActionLabel", () => {
   it("returns flag for flag policies", () => {
     expect(getPolicyDeleteRuleActionLabel(policy({ action: "flag" }))).toBe(
       "flag",
+    );
+  });
+});
+
+describe("getPolicyDeleteImpactText", () => {
+  it("uses the action-specific grouped-rule text when groups are present", () => {
+    expect(getPolicyDeleteImpactText(policy({ action: "block" }), true)).toBe(
+      "The following block rules will no longer be enforced.",
+    );
+  });
+
+  it("uses action-specific fallback text when no groups are present", () => {
+    expect(getPolicyDeleteImpactText(policy({ action: "flag" }), false)).toBe(
+      "Any flag action this policy applies will stop immediately.",
     );
   });
 });
