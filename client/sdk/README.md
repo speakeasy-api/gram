@@ -293,6 +293,20 @@ run();
 
 * [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 
+### [ExternalCredentials](docs/sdks/externalcredentials/README.md)
+
+* [createAwsIam](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+* [createGcpIam](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+* [deleteAwsIam](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+* [deleteGcpIam](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+* [getAwsIam](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+* [getGcpIam](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+* [list](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+* [listAwsIam](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+* [listGcpIam](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+* [updateAwsIam](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+* [updateGcpIam](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -805,6 +819,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalCredentialsCreateAwsIam`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+- [`externalCredentialsCreateGcpIam`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+- [`externalCredentialsDeleteAwsIam`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+- [`externalCredentialsDeleteGcpIam`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+- [`externalCredentialsGetAwsIam`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+- [`externalCredentialsGetGcpIam`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+- [`externalCredentialsList`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+- [`externalCredentialsListAwsIam`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+- [`externalCredentialsListGcpIam`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+- [`externalCredentialsUpdateAwsIam`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+- [`externalCredentialsUpdateGcpIam`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
@@ -1123,12 +1148,14 @@ To learn about this feature and how to get started, check
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
+- [`useCreateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
 - [`useCreateCimdRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
 - [`useCreateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
 - [`useCreateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
@@ -1155,8 +1182,10 @@ To learn about this feature and how to get started, check
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
+- [`useDeleteAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
 - [`useDeleteGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
 - [`useDeleteGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -1196,9 +1225,11 @@ To learn about this feature and how to get started, check
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGenerateWorkOSAdminPortalLinkMutation`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
+- [`useGetAwsIamCredential`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
+- [`useGetGcpIamCredential`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetMcpEndpoint`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
@@ -1239,12 +1270,15 @@ To learn about this feature and how to get started, check
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
+- [`useListAwsIamCredentials`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatSources`](docs/sdks/chat/README.md#listsources) - listSources chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListExternalCredentials`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`useListGcpIamCredentials`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
 - [`useListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
@@ -1400,8 +1434,10 @@ To learn about this feature and how to get started, check
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useTunneledMcpServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`useUpdateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`useUpdateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
 - [`useUpdateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
