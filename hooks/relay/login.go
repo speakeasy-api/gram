@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/url"
@@ -132,7 +133,8 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 	}()
 
 	authURL := l.dashboardURL(port, state)
-	openBrowser(authURL)
+	cleanupRedirect := openLoginURL(authURL)
+	defer cleanupRedirect()
 	fmt.Fprintf(os.Stderr, "Speakeasy hooks: complete sign-in in your browser.\nIf it did not open, visit:\n  %s\n", authURL)
 
 	waitCtx, cancel := context.WithTimeout(ctx, l.timeout)
@@ -215,6 +217,32 @@ func disableLocalAuth() bool {
 
 func loginForced() bool {
 	return os.Getenv("GRAM_HOOKS_LOGIN_FORCE") == "1"
+}
+
+// openLoginURL opens the sign-in URL through a 0600 redirect file so the
+// callback state token never appears in process arguments — argv is readable
+// by every local account via ps, and a raced callback carrying the state could
+// cache a key this machine's dashboard never minted. The returned cleanup
+// removes the redirect file. When the file cannot be written the URL is opened
+// directly: same exposure as the stderr fallback the user may paste anyway.
+func openLoginURL(authURL string) func() {
+	f, err := os.CreateTemp("", "speakeasy-hooks-login-*.html")
+	if err != nil {
+		openBrowser(authURL)
+		return func() {}
+	}
+	page := `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=` +
+		html.EscapeString(authURL) + `"><title>Speakeasy</title><body style="font-family:sans-serif">Redirecting to <a href="` +
+		html.EscapeString(authURL) + `">Speakeasy sign-in</a>&hellip;</body>`
+	if _, err := f.WriteString(page); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		openBrowser(authURL)
+		return func() {}
+	}
+	_ = f.Close()
+	openBrowser(f.Name())
+	return func() { _ = os.Remove(f.Name()) }
 }
 
 // openBrowser launches the platform browser opener, ignoring failures (the URL

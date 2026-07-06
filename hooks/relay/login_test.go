@@ -2,9 +2,13 @@ package relay
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +25,21 @@ func forceInteractiveEnv(t *testing.T) {
 	t.Setenv("DISPLAY", ":0")
 }
 
+// loginURLFromOpener resolves the sign-in URL the browser would land on. The
+// opener must receive a redirect-file path — argv is world-readable, so the
+// state-bearing URL itself must never appear there.
+func loginURLFromOpener(t *testing.T, target string) *url.URL {
+	t.Helper()
+	require.False(t, strings.HasPrefix(target, "http"), "the opener must receive a redirect file, not the state-bearing URL")
+	b, err := os.ReadFile(target)
+	require.NoError(t, err)
+	m := regexp.MustCompile(`0;url=([^"]+)"`).FindStringSubmatch(string(b))
+	require.NotNil(t, m, "redirect file must carry the sign-in URL")
+	u, err := url.Parse(html.UnescapeString(m[1]))
+	require.NoError(t, err)
+	return u
+}
+
 // TestLoginRoundtrip drives the full browser sign-in without a real browser:
 // the intercepted opener parses the callback URL and delivers a minted key, and
 // the flow must cache it and mark the machine established.
@@ -34,10 +53,7 @@ func TestLoginRoundtrip(t *testing.T) {
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
 	openBrowser = func(target string) {
-		u, err := url.Parse(target)
-		if err != nil {
-			return
-		}
+		u := loginURLFromOpener(t, target)
 		callback := u.Query().Get("cli_callback_url")
 		require.Equal(t, "hooks", u.Query().Get("key_scope"))
 		cb, err := url.Parse(callback)
@@ -85,7 +101,7 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
 	openBrowser = func(target string) {
-		u, _ := url.Parse(target)
+		u := loginURLFromOpener(t, target)
 		cb, _ := url.Parse(u.Query().Get("cli_callback_url"))
 		q := cb.Query()
 		q.Set("state", "wrong-state")

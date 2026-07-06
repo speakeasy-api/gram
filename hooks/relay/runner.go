@@ -252,11 +252,13 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 	return agenthooks.Finish(), nil
 }
 
-// onSessionStart runs the interactive sign-in preflight when the machine is
-// not yet authenticated — or lost its credential to a server rejection — then
-// relays the session.started telemetry.
+// onSessionStart runs the interactive sign-in preflight whenever the machine
+// holds no usable credential — never authenticated, key lost or rejected, or a
+// shared cache minted for a different server or org — then relays the
+// session.started telemetry. Viability guards and the attempt cooldown keep
+// the browser from nagging.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
-	if _, ok := resolveAuth(r.cfg); !ok && (!authEstablished() || reauthNeeded()) {
+	if _, ok := resolveAuth(r.cfg); !ok {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)
