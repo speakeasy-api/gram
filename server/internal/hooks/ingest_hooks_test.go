@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
@@ -290,6 +292,71 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.NotNil(t, skillRow.TraceID)
 	require.NotEqual(t, *toolRow.TraceID, *skillRow.TraceID,
 		"the derived skill row must not share a trace with the tool row")
+}
+
+// TestIngest_SkillRowSurvivesToolIOScrub: orgs with tool_io_logs disabled get
+// gen_ai.tool.call.arguments deleted before insert, but ClickHouse
+// materializes skill_name from that JSON — the scrubber must keep the minimal
+// {"skill": name} on Skill rows while still dropping the real tool input.
+func TestIngest_SkillRowSurvivesToolIOScrub(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	disabled := func(context.Context, string) (bool, error) { return false, nil }
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, disabled, nil)
+	chClient := telemetryrepo.New(chConn)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	raw := "PreToolUse"
+	toolName := "Bash"
+	toolID := "call_scrubbed_skill_read"
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-scrubbed-skill-session")
+	payload.Source.RawEventName = &raw
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "cat .agents/skills/repo-review/SKILL.md # secret-workspace-path"},
+		},
+		Skill: &gen.HookSkillData{Name: "repo-review"},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var rows []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		var listErr error
+		rows, listErr = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return listErr == nil && len(rows) == 2
+	}, 2*time.Second, 50*time.Millisecond)
+
+	var sawSkillRow bool
+	for _, row := range rows {
+		require.NotContains(t, row.Attributes, "secret-workspace-path",
+			"scrubbed orgs must not retain tool input on any row")
+		if strings.Contains(row.Attributes, "skill.activated") {
+			sawSkillRow = true
+			require.Contains(t, row.Attributes, "repo-review",
+				"the skill name must survive the tool IO scrub")
+		}
+	}
+	require.True(t, sawSkillRow)
 }
 
 // TestIngest_PromptInferredSkillsGetDistinctTraces: skill dashboards count

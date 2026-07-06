@@ -102,6 +102,30 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 	return enabled
 }
 
+// scrubbedSkillArguments returns the minimal arguments JSON a scrubbed Skill
+// row may keep ({"skill": <name>}), or "" for non-skill rows and unparsable
+// arguments.
+func scrubbedSkillArguments(attrs map[attr.Key]any) string {
+	if name, _ := attrs[attr.ToolNameKey].(string); name != "Skill" {
+		return ""
+	}
+	raw, _ := attrs[attr.GenAIToolCallArgumentsKey].(string)
+	if raw == "" {
+		return ""
+	}
+	var parsed struct {
+		Skill string `json:"skill"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil || strings.TrimSpace(parsed.Skill) == "" {
+		return ""
+	}
+	minimal, err := json.Marshal(map[string]string{"skill": parsed.Skill})
+	if err != nil {
+		return ""
+	}
+	return string(minimal)
+}
+
 func (l *Logger) Log(ctx context.Context, params LogParams) {
 	if err := l.LogBulk(ctx, []LogParams{params}); err != nil {
 		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
@@ -143,9 +167,17 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		}
 
 		// Scrub tool IO content if the feature is disabled for this organization.
+		// Skill rows keep only the skill name: ClickHouse materializes
+		// skill_name from the arguments JSON, so a full delete would erase the
+		// activation from skill analytics — while any extra invocation args
+		// are still tool IO and get dropped.
 		if !toolIOEnabled {
+			skillArgs := scrubbedSkillArguments(param.Attributes)
 			delete(param.Attributes, attr.GenAIToolCallArgumentsKey)
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
+			if skillArgs != "" {
+				param.Attributes[attr.GenAIToolCallArgumentsKey] = skillArgs
+			}
 		}
 
 		param = l.hydrateUserInfo(shutdownCtx, param)
