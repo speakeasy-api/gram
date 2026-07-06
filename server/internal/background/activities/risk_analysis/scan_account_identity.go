@@ -139,5 +139,5 @@ func emailDomain(email string) string {
 	if at < 0 || at == len(email)-1 {
 		return ""
 	}
-	return strings.ToLower(email[at+1:])
+	return strings.ToLower(strings.TrimSpace(email[at+1:]))
 }
