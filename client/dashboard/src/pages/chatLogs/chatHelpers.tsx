@@ -59,13 +59,47 @@ export function distinctRiskCount(results: RiskResult[]): number {
   return keys.size;
 }
 
-/** An account_identity finding's match is the account the session
- * authenticated as (an email), not message content. It's already stated in the
- * finding description and shown on the message's author chip, so it must not be
- * treated as a redacted content span: never highlighted in the text, surfaced
- * as an out-of-text "flagged value", or reveal-gated in the findings popover. */
-export function isAccountIdentityFinding(result: RiskResult): boolean {
-  return result.source === "account_identity";
+/**
+ * Per-source overrides for how a finding's `match` is rendered. By default a
+ * match is a span lifted from the message the reviewer is reading, so the UI
+ * highlights it inline (or surfaces it as an out-of-text "flagged value" when it
+ * was stripped for display) and repeats it as a reveal-gated chip in the
+ * findings popover. Some policy types instead match on session/account metadata
+ * that isn't message content and is already stated in the finding description,
+ * making those renderings pure redundancy.
+ *
+ * To adjust a policy type's match rendering, add its source here — the two flags
+ * are independent, so a future type opts into only what applies to it.
+ */
+type MatchDisplayOverride = {
+  /** The match isn't drawn from the message text: don't highlight it inline or
+   * surface it as an out-of-text "flagged value" annotation. */
+  notMessageContent?: boolean;
+  /** The match already appears in the finding description: skip the reveal-gated
+   * chip in the findings popover that would just repeat it. */
+  shownInDescription?: boolean;
+};
+
+const MATCH_DISPLAY_OVERRIDES: Record<
+  string,
+  MatchDisplayOverride | undefined
+> = {
+  // The account the session authenticated as (an email): stated in the
+  // description and shown on the message author chip, never message content.
+  account_identity: { notMessageContent: true, shownInDescription: true },
+};
+
+/** Whether a finding's match is a span of the message text — highlighted inline
+ * and eligible for the out-of-text "flagged value" annotation. False for
+ * metadata matches like the authenticated account email. */
+export function matchIsMessageContent(result: RiskResult): boolean {
+  return !MATCH_DISPLAY_OVERRIDES[result.source]?.notMessageContent;
+}
+
+/** Whether a finding's match is already conveyed by its description, so the
+ * findings popover should not repeat it as a separate reveal-gated chip. */
+export function matchShownInDescription(result: RiskResult): boolean {
+  return Boolean(MATCH_DISPLAY_OVERRIDES[result.source]?.shownInDescription);
 }
 
 /** Distinct, non-empty match strings to highlight, longest first so a longer
@@ -74,7 +108,7 @@ export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   if (!results) return [];
   const set = new Set<string>();
   for (const r of results) {
-    if (isAccountIdentityFinding(r)) continue;
+    if (!matchIsMessageContent(r)) continue;
     if (r.match) set.add(r.match);
   }
   return [...set].sort((a, b) => b.length - a.length);
