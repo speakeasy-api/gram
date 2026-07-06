@@ -20,9 +20,6 @@ var (
 	wantObservability = naming.ObservabilitySlug(mockidp.MockOrgName)         // local-dev-org-observability
 )
 
-//go:fix inline
-func strPtr(s string) *string { return new(s) }
-
 func pluginSlugs(res *gen.GetPluginsResult) []string {
 	out := make([]string, 0, len(res.Plugins))
 	for _, p := range res.Plugins {
@@ -37,7 +34,7 @@ func TestGetPlugins_ObservabilityWithoutAssignments(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -61,7 +58,7 @@ func TestGetPlugins_ReturnsAllPublishedProjectPlugins(t *testing.T) {
 	other := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "someone-elses-tool")
 	assignPlugin(t, ctx, ti.conn, other, ti.orgID, "email:someone-else@example.com")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -79,7 +76,7 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	// nothing is installable and the endpoint returns empty.
 	seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unpublished-tool")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Empty(t, res.Marketplaces)
@@ -101,7 +98,7 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false) // local-dev-org-adam-speakeasy
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct project-scoped names do not collapse")
@@ -135,7 +132,7 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 	seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "colliding names collapse to one")
@@ -164,7 +161,7 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	setMarketplaceOverride(t, ctx, ti.conn, adam, "team-adam")
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct names must not collapse")
@@ -188,7 +185,7 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	// A different org has a published marketplace + a wildcard-assigned plugin.
 	seedSecondOrg(t, ctx, ti.conn)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: strPtr(mockidp.MockUserEmail)})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "only the caller's org marketplace")
