@@ -1046,9 +1046,6 @@ func newStartCommand() *cli.Command {
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
-			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
 				Org:            c.String("plugins-github-org"),
@@ -1057,6 +1054,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")

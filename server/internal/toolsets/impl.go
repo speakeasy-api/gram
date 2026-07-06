@@ -41,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -223,6 +225,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
 
+	if createToolParams.McpEnabled {
+		if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
@@ -233,6 +241,47 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	return toolsetDetails, nil
+}
+
+// attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
+// Default plugin so it's included in the auto-published marketplace without
+// a human visiting the Plugins page. No-op if the project has no Default
+// plugin or the toolset is already attached.
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) error {
+	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		DisplayName:    displayName,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
+	}
+	if attached == nil {
+		return nil
+	}
+
+	toolsetURN := urn.NewToolset(toolsetID)
+	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        &toolsetURN,
+		McpServerURN:      nil,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -447,6 +496,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
+	}
+
+	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
+		if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name); err != nil {
+			return nil, err
+		}
 	}
 
 	if payload.PromptTemplateNames != nil {

@@ -6,6 +6,25 @@ INSERT INTO plugins (organization_id, project_id, name, slug, description)
 VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
 RETURNING *;
 
+-- name: CreateDefaultPlugin :one
+-- Creates the project's fallback plugin (new servers land here absent explicit
+-- routing to a named plugin). Called once, in the same transaction as project
+-- creation. plugins_project_id_is_default_key enforces at most one per project.
+INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
+VALUES (@organization_id, @project_id, 'Default', 'default', TRUE)
+RETURNING *;
+
+-- name: GetDefaultPlugin :one
+-- Used by AttachToDefaultPlugin to find the fallback plugin new servers get
+-- auto-attached to. No rows is expected for projects that predate the
+-- Default-plugin feature; callers treat pgx.ErrNoRows as a no-op.
+SELECT *
+FROM plugins
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND is_default IS TRUE
+  AND deleted IS FALSE;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins

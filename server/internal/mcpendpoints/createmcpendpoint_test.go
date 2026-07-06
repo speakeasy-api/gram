@@ -12,8 +12,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
 func TestCreateMcpEndpoint_PlatformDomainWithOrgPrefix(t *testing.T) {
@@ -210,4 +215,105 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlugWithCustomDomain(t *testing.T)
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestCreateMcpEndpoint_AttachesToDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// A non-disabled mcp_server, unlike seedMcpServer's "disabled" fixture,
+	// since AttachToDefaultPlugin skips disabled servers.
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
+	})
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                mcpServerID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText("Attach Test Server"),
+		Slug:              conv.ToPGText("attach-test-server-" + uuid.NewString()),
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "public",
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      mcpServerID.String(),
+		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-attach-test"),
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Equal(t, mcpServerID, servers[0].McpServerID.UUID)
+	require.Equal(t, "Attach Test Server", servers[0].DisplayName)
+	require.Equal(t, "required", servers[0].Policy)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateMcpEndpoint_SkipsAttachWhenNoDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
+	})
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                mcpServerID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText("No Default Plugin Server"),
+		Slug:              conv.ToPGText("no-default-plugin-server-" + uuid.NewString()),
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "public",
+	})
+	require.NoError(t, err)
+
+	// No Default plugin exists for this project (the test fixture project is
+	// created directly through projectsrepo, bypassing projects.CreateProject).
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      mcpServerID.String(),
+		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-no-default"),
+	})
+	require.NoError(t, err)
 }

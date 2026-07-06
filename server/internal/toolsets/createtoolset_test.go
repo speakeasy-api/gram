@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -390,4 +391,91 @@ func TestToolsetsService_CreateToolset_DuplicateSlug_NoAuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
 	require.Equal(t, middleCount, afterCount)
+}
+
+func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+
+	// First toolset in a fresh org auto-enables MCP.
+	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Attach Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.True(t, *result.McpEnabled)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Equal(t, uuid.MustParse(result.ID), servers[0].ToolsetID.UUID)
+	require.Equal(t, "Attach Toolset", servers[0].DisplayName)
+	require.Equal(t, "required", servers[0].Policy)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "First Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Second Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.False(t, *second.McpEnabled)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached")
+	require.NotEqual(t, uuid.MustParse(second.ID), servers[0].ToolsetID.UUID)
 }

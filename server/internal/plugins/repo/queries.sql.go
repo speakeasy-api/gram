@@ -91,6 +91,39 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
+const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
+INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
+VALUES ($1, $2, 'Default', 'default', TRUE)
+RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Creates the project's fallback plugin (new servers land here absent explicit
+// routing to a named plugin). Called once, in the same transaction as project
+// creation. plugins_project_id_is_default_key enforces at most one per project.
+func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, createDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createPlugin = `-- name: CreatePlugin :one
 
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
@@ -152,6 +185,42 @@ type DeletePluginParams struct {
 func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) error {
 	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
 	return err
+}
+
+const getDefaultPlugin = `-- name: GetDefaultPlugin :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+`
+
+type GetDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Used by AttachToDefaultPlugin to find the fallback plugin new servers get
+// auto-attached to. No rows is expected for projects that predate the
+// Default-plugin feature; callers treat pgx.ErrNoRows as a no-op.
+func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one

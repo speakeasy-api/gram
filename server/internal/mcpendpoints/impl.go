@@ -28,11 +28,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -147,11 +150,85 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 
+	if err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID); err != nil {
+		return nil, err
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return mv.BuildMcpEndpointView(created), nil
+}
+
+// attachToDefaultPlugin adds an mcp_server to the project's Default plugin
+// the first time it gets a usable endpoint (this is what AddPluginServer's
+// own publishability check requires), so it's included in the
+// auto-published marketplace without a human visiting the Plugins page.
+// No-op if the project has no Default plugin, the server is disabled, or
+// it's already attached (e.g. a second endpoint on the same server).
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) error {
+	server, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
+	}
+	if server.Visibility == mcpservers.VisibilityDisabled {
+		return nil
+	}
+
+	displayName := mcpServerDisplayName(server)
+
+	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		DisplayName:    displayName,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
+	}
+	if attached == nil {
+		return nil
+	}
+
+	mcpServerURN := urn.NewMcpServer(mcpServerID)
+	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        nil,
+		McpServerURN:      &mcpServerURN,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+// mcpServerDisplayName derives a default plugin-server display name from an
+// mcp_server, preferring its name, then slug, then id. Mirrors
+// plugins.mcpServerDisplayName, which operates on a different generated row
+// type from a joined query and so can't be reused directly here.
+func mcpServerDisplayName(server mcpserversrepo.McpServer) string {
+	if name := conv.FromPGText[string](server.Name); name != nil && *name != "" {
+		return *name
+	}
+	if slug := conv.FromPGText[string](server.Slug); slug != nil && *slug != "" {
+		return *slug
+	}
+	return server.ID.String()
 }
 
 func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpointPayload) (*types.McpEndpoint, error) {
