@@ -623,8 +623,18 @@ function TimeRangePicker({
           // focus interplay can't dismiss mid-typing — but that makes a genuine
           // outside click take two clicks (first only blurs the input). Close
           // directly here, unless the click is on the trigger/input itself.
+          // Inside a ShadowRoot embed, `e.target` is retargeted to the shadow
+          // host, so check the original event's composedPath for the trigger
+          // (same workaround as the tool-ui popover).
+          const trigger = triggerRef.current;
+          const path = e.detail.originalEvent.composedPath?.() ?? [];
           const target = e.target as Node | null;
-          if (target && triggerRef.current?.contains(target)) return;
+          if (
+            trigger &&
+            (path.includes(trigger) || (target && trigger.contains(target)))
+          ) {
+            return;
+          }
           setInputValue("");
           setIsEditing(false);
           setIsOpen(false);
