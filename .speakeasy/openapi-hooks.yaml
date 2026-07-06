@@ -498,6 +498,8 @@ tags:
     description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
   - name: remoteSessionIssuers
     description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
+  - name: adminRemoteSessions
+    description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: risk
