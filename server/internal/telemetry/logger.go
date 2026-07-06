@@ -102,9 +102,14 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 	return enabled
 }
 
+// maxScrubbedSkillNameLen bounds the skill name a scrubbed row may retain:
+// real skill names are short identifiers, and the carve-out must not become a
+// channel for bulky payloads past the tool IO scrub.
+const maxScrubbedSkillNameLen = 128
+
 // scrubbedSkillArguments returns the minimal arguments JSON a scrubbed Skill
-// row may keep ({"skill": <name>}), or "" for non-skill rows and unparsable
-// arguments.
+// row may keep ({"skill": <name>}), or "" for non-skill rows, unparsable
+// arguments, and implausibly long names.
 func scrubbedSkillArguments(attrs map[attr.Key]any) string {
 	if name, _ := attrs[attr.ToolNameKey].(string); name != "Skill" {
 		return ""
@@ -116,10 +121,14 @@ func scrubbedSkillArguments(attrs map[attr.Key]any) string {
 	var parsed struct {
 		Skill string `json:"skill"`
 	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil || strings.TrimSpace(parsed.Skill) == "" {
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return ""
 	}
-	minimal, err := json.Marshal(map[string]string{"skill": parsed.Skill})
+	skill := strings.TrimSpace(parsed.Skill)
+	if skill == "" || len(skill) > maxScrubbedSkillNameLen {
+		return ""
+	}
+	minimal, err := json.Marshal(map[string]string{"skill": skill})
 	if err != nil {
 		return ""
 	}
