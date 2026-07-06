@@ -2107,7 +2107,7 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	}
 
 	cmd := exec.Command("bash", senderPath)
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool","tool_name":"Bash"}`)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool","tool_name":"Bash","tool_input":{"note":"UserPromptSubmit appears here but is not the event"}}`)
 	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

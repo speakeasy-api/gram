@@ -64,6 +64,26 @@ gram_hooks_emit_login_nudge() {
   printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"}}\n' "$escaped"
 }
 
+gram_hooks_is_user_prompt_submit() {
+  local payload="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    local event
+    event="$(printf '%s' "$payload" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print(data.get('hook_event_name') or data.get('event_name') or data.get('event') or '', end='')
+except Exception:
+    pass
+" 2>/dev/null)" || true
+    [ "$event" = "UserPromptSubmit" ] && return 0
+  fi
+  case "$payload" in
+    *'"hook_event_name":"UserPromptSubmit"'* | *'"event_name":"UserPromptSubmit"'* | *'"event":"UserPromptSubmit"'*) return 0 ;;
+  esac
+  return 1
+}
+
 # No env key: fall back to the credentials the browser login flow cached
 # (auth_preflight.sh / login.sh) so authenticated policy enforcement still
 # applies. auth.sh installs an EXIT trap when sourced; the trap set below
@@ -141,12 +161,10 @@ if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
   [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] &&
   type gram_hooks_forget_auth >/dev/null 2>&1; then
   gram_hooks_forget_auth
-  case "$payload" in
-    *UserPromptSubmit*)
-      gram_hooks_emit_login_nudge
-      exit 0
-      ;;
-  esac
+  if gram_hooks_is_user_prompt_submit "$payload"; then
+    gram_hooks_emit_login_nudge
+    exit 0
+  fi
 fi
 
 if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
