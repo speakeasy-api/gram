@@ -97,7 +97,14 @@ func compileRule(r Rule) (compiledRule, error) {
 	cr.sources = toSet(r.Sources)
 	cr.ruleIDs = toSet(r.RuleIDs)
 	for _, g := range r.RuleIDGlobs {
-		cr.globs = append(cr.globs, strings.TrimSuffix(g, "*"))
+		// A glob must be a non-empty prefix ending in "*". Reject "" and "*",
+		// which compile to an empty prefix — strings.HasPrefix(id, "") is always
+		// true, so they would suppress findings across every rule id. Precision guard.
+		prefix, ok := strings.CutSuffix(g, "*")
+		if !ok || prefix == "" {
+			return cr, fmt.Errorf("rule %q: rule_id_glob %q must be a non-empty prefix ending in %q (would match every rule id otherwise)", r.ID, g, "*")
+		}
+		cr.globs = append(cr.globs, prefix)
 	}
 	switch r.Match.Type {
 	case MatchExact, MatchPrefix:

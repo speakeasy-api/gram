@@ -502,6 +502,21 @@ func TestCompileRule_Errors(t *testing.T) {
 			rule:    Rule{ID: "x", Reason: "r", Match: Matcher{Type: MatchDigits, Luhn: true, MinLen: 20, MaxLen: 19}},
 			wantSub: "exceeds max_len",
 		},
+		{
+			name:    "empty rule_id_glob rejected",
+			rule:    Rule{ID: "x", Reason: "r", RuleIDGlobs: []string{""}, Match: Matcher{Type: MatchEmail}},
+			wantSub: "non-empty prefix",
+		},
+		{
+			name:    "bare-star rule_id_glob rejected",
+			rule:    Rule{ID: "x", Reason: "r", RuleIDGlobs: []string{"*"}, Match: Matcher{Type: MatchEmail}},
+			wantSub: "non-empty prefix",
+		},
+		{
+			name:    "rule_id_glob without trailing star rejected",
+			rule:    Rule{ID: "x", Reason: "r", RuleIDGlobs: []string{"secret.stripe_"}, Match: Matcher{Type: MatchEmail}},
+			wantSub: "non-empty prefix",
+		},
 	}
 	for _, tt := range tests {
 		_, err := compileRule(tt.rule)

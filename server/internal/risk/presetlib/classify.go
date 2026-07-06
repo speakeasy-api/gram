@@ -11,6 +11,7 @@
 package presetlib
 
 import (
+	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -48,7 +49,13 @@ var (
 func load() {
 	loadOnce.Do(func() {
 		var cat Catalog
-		if err := yaml.Unmarshal(catalogYAML, &cat); err != nil {
+		// KnownFields(true): reject unknown YAML keys so a misspelled scope field
+		// (e.g. "rule_id_glob" instead of "rule_id_globs") fails the integrity test
+		// rather than silently decoding to a zero value that defaults to "any" and
+		// widens suppression.
+		dec := yaml.NewDecoder(bytes.NewReader(catalogYAML))
+		dec.KnownFields(true)
+		if err := dec.Decode(&cat); err != nil {
 			errLoad = err
 			return
 		}

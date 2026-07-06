@@ -25,8 +25,9 @@ func TestListBuiltinPresets_ReturnsCatalog(t *testing.T) {
 	require.NotEmpty(t, result.Version)
 	require.NotEmpty(t, result.Categories)
 
-	// Every category is non-empty and every entry carries an id, reason and match
-	// type. Collect ids so we can assert a known rule is surfaced.
+	// Every category is non-empty and every entry carries an id and reason. The
+	// response type intentionally omits engine-internal fields (sources, rule ids,
+	// matcher type). Collect ids so we can assert a known rule is surfaced.
 	ids := map[string]bool{}
 	for _, category := range result.Categories {
 		require.NotEmpty(t, category.Label)

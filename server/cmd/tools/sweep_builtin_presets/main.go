@@ -296,15 +296,21 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 
 		rep.scanned += int64(n)
 		rep.flagged += int64(len(ids))
-		rep.lastCursor = cursor
 
 		if len(ids) > 0 && !cfg.dryRun {
 			tag, err := pool.Exec(ctx, markBatch, ids, reasons)
 			if err != nil {
+				// Do NOT advance rep.lastCursor: this batch's rows were not
+				// stamped, so a resume must re-scan from the previous cursor.
 				return rep, fmt.Errorf("mark batch ending at %s: %w", cursor, err)
 			}
 			rep.updated += tag.RowsAffected()
 		}
+
+		// Advance the resume cursor only after the batch's write has succeeded
+		// (dry runs perform no write). Advancing earlier would report a cursor
+		// past rows that were never stamped, skipping them on retry.
+		rep.lastCursor = cursor
 
 		log.Printf("scanned=%d flagged=%d updated=%d cursor=%s",
 			rep.scanned, rep.flagged, rep.updated, rep.lastCursor)
