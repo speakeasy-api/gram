@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -138,6 +140,79 @@ func TestEnvelopeClaudeSkillReclassifies(t *testing.T) {
 	require.Equal(t, components.TypeSkillActivated, got.Event.Type)
 	require.NotNil(t, got.Data.Skill)
 	require.Equal(t, "my-skill", got.Data.Skill.Name)
+}
+
+// TestEnvelopeCursorMCPRedactsRawTransport pins that the verbatim raw payload
+// gets the same MCP transport redaction as the structured mcp block: cursor
+// ships the server url/command inside the hook payload itself, so credentials
+// there must not leave the machine.
+func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
+	// agenthooks writes cursor dedup markers to os.TempDir; isolate them so
+	// reruns don't classify the fixture as a duplicate delivery.
+	t.Setenv("TMPDIR", t.TempDir())
+	payload := []byte(`{"conversation_id":"conv-1","hook_event_name":"beforeMCPExecution","tool_name":"MCP:create_issue","tool_input":"{}","url":"https://user:hunter2@mcp.example.com/sse?api_key=supersecret","command":"npx -y srv --token=abc123"}`)
+	runner := agenthooks.New(agenthooks.WithoutMCPResolution())
+	var got components.IngestRequestBody
+	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+		got = buildEnvelope(e, "test-host")
+		return agenthooks.NoDecision(), nil
+	})
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderCursor, payload)
+
+	require.NotNil(t, got.Data)
+	require.NotNil(t, got.Data.Mcp)
+	require.NotNil(t, got.Data.Mcp.URL)
+	require.NotContains(t, *got.Data.Mcp.URL, "hunter2")
+	require.NotContains(t, *got.Data.Mcp.URL, "supersecret")
+
+	rawJSON, err := json.Marshal(got.Raw)
+	require.NoError(t, err)
+	require.NotContains(t, string(rawJSON), "hunter2")
+	require.NotContains(t, string(rawJSON), "supersecret")
+	require.NotContains(t, string(rawJSON), "abc123")
+	require.Contains(t, string(rawJSON), "mcp.example.com", "redaction must keep the host so evidence stays matchable")
+	require.Contains(t, string(rawJSON), "conv-1", "unrelated raw fields must survive untouched")
+}
+
+// TestSendRetriesTransientConnectionFailure pins the relay-level transport
+// replay: the SDK does not retry connection errors on POST, so a dropped
+// connection must be retried here instead of denying a blocking hook.
+func TestSendRetriesTransientConnectionFailure(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	mux := http.NewServeMux()
+	var served atomic.Int32
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		served.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"decision":"allow"}`))
+	})
+	// Kill the first connection before any response, then serve normally.
+	killed := make(chan struct{})
+	go func() {
+		conn, acceptErr := ln.Accept()
+		if acceptErr == nil {
+			_ = conn.Close()
+		}
+		close(killed)
+		_ = http.Serve(ln, mux)
+	}()
+
+	cl := newClient("http://" + ln.Addr().String())
+	res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
+		SchemaVersion: schemaVersion,
+		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil},
+		Session:       nil,
+		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
+		Data:          nil,
+		Raw:           nil,
+	})
+
+	<-killed
+	require.Equal(t, http.StatusOK, res.statusCode, "a transient connection drop must be replayed, not surfaced")
+	require.GreaterOrEqual(t, served.Load(), int32(1))
 }
 
 func TestIngestAllowSendsAuthenticatedRequest(t *testing.T) {

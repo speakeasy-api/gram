@@ -146,11 +146,60 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	}
 	if len(base.Raw) > 0 {
 		payload.Raw = json.RawMessage(base.Raw)
+		if data.Mcp != nil {
+			// The structured mcp block is redacted above, but some providers
+			// (cursor) carry the server transport in the payload itself; the
+			// verbatim copy must not leak what the block masks.
+			payload.Raw = redactRawMCP(base.Raw)
+		}
 	}
 	if isEmptyData(data) {
 		payload.Data = nil
 	}
 	return payload
+}
+
+// redactRawMCP applies the MCP transport redaction to the secret-bearing
+// top-level fields of a raw provider payload (url/command and their aliases),
+// leaving everything else byte-identical.
+func redactRawMCP(raw json.RawMessage) json.RawMessage {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return raw
+	}
+	changed := false
+	redactField := func(key string, redact func(string) string) {
+		v, ok := obj[key]
+		if !ok {
+			return
+		}
+		var s string
+		if json.Unmarshal(v, &s) != nil || s == "" {
+			return
+		}
+		r := redact(s)
+		if r == s {
+			return
+		}
+		b, err := json.Marshal(r)
+		if err != nil {
+			return
+		}
+		obj[key] = b
+		changed = true
+	}
+	for _, key := range []string{"url", "server_url", "mcp_server_url"} {
+		redactField(key, redactURL)
+	}
+	redactField("command", redactCommand)
+	if !changed {
+		return raw
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return raw
+	}
+	return b
 }
 
 // applyToolCall fills the tool_call (and, for MCP tools, mcp) feature blocks and

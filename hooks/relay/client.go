@@ -69,7 +69,12 @@ func newClient(serverURL string) *client {
 	}
 }
 
-// send posts the payload to the ingest endpoint authenticated with c.
+// send posts the payload to the ingest endpoint authenticated with c. The
+// SDK's built-in retries do not replay connection errors for POSTs, so pure
+// transport failures (statusCode 0, the server was never reached) are replayed
+// here — safe because the Idempotency-Key is minted once and reused, and
+// necessary because a blocking hook would otherwise deny over one dropped
+// connection.
 func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
 	sec := &operations.IngestHookEventSecurity{
 		ApikeyHeaderGramKey:          new(c.APIKey),
@@ -78,15 +83,29 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 	if c.Project != "" {
 		sec.ProjectSlugHeaderGramProject = new(c.Project)
 	}
-
-	res, err := cl.sdk.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
+	req := operations.IngestHookEventRequest{
 		GramKey:        nil,
 		GramProject:    nil,
 		IdempotencyKey: new(newIdempotencyToken()),
 		Body:           body,
-	}, sec)
-	if err != nil {
-		return interpretError(err)
+	}
+
+	var res *operations.IngestHookEventResponse
+	var err error
+	for attempt := 0; ; attempt++ {
+		res, err = cl.sdk.Hooks.Ingest(ctx, req, sec)
+		if err == nil {
+			break
+		}
+		out := interpretError(err)
+		if out.statusCode != 0 || attempt >= 2 || ctx.Err() != nil {
+			return out
+		}
+		select {
+		case <-ctx.Done():
+			return out
+		case <-time.After(time.Duration(attempt+1) * 250 * time.Millisecond):
+		}
 	}
 
 	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
