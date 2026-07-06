@@ -13044,7 +13044,7 @@ func templatesRenderTemplateUsage() {
 // tokenExchangeUsage displays the usage of the token-exchange command and its
 // subcommands.
 func tokenExchangeUsage() {
-	fmt.Fprintln(os.Stderr, `Device-agent token exchange: trade an org-scoped agent API key plus a vouched user email for a long-lived, per-user API key scoped for the device agent.`)
+	fmt.Fprintln(os.Stderr, `Device-agent token exchange: trade an org-scoped install credential (an API key with the 'agent_install' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] token-exchange COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    exchange: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.`)

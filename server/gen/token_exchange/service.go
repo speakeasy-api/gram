@@ -14,9 +14,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Device-agent token exchange: trade an org-scoped agent API key plus a
-// vouched user email for a long-lived, per-user API key scoped for the device
-// agent.
+// Device-agent token exchange: trade an org-scoped install credential (an API
+// key with the 'agent_install' scope) plus a vouched user email for a
+// long-lived, per-user API key scoped for the device agent.
 type Service interface {
 	// Exchange the org-scoped device-agent install credential plus a vouched user
 	// email for a long-lived, per-user API key carrying the 'agent' and 'hooks'
