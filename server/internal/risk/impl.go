@@ -102,6 +102,9 @@ type Service struct {
 	// playground returns an "unsupported" response for that scanner family.
 	piiScanner ra.PIIScanner
 	piScanner  *ra.PromptInjectionScanner
+	// builtinPresets is the parsed built-in exclusion library, injected at
+	// construction. Used by ListBuiltinExclusions to describe the catalog.
+	builtinPresets *presetlib.Library
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng *celenv.Engine
@@ -122,9 +125,12 @@ func NewObserver(
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
-		logger:           logger.With(attr.SlogComponent("risk")),
-		db:               db,
-		repo:             repo.New(db),
+		logger: logger.With(attr.SlogComponent("risk")),
+		db:     db,
+		repo:   repo.New(db),
+		// The observer path does not serve ListBuiltinExclusions, so it carries no
+		// preset library.
+		builtinPresets:   nil,
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
@@ -160,6 +166,7 @@ func NewService(
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -182,6 +189,7 @@ func NewService(
 		piScanner:        piScanner,
 		flags:            flags,
 		celEng:           celEng,
+		builtinPresets:   builtinPresets,
 	}
 }
 
@@ -448,10 +456,10 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
 }
 
-// ListBuiltinPresets returns the built-in preset exclusion library grouped by
+// ListBuiltinExclusions returns the built-in exclusion library grouped by
 // category. The catalog is static, embedded reference data (see presetlib), so
 // this is a read gated by org admin with no project data access.
-func (s *Service) ListBuiltinPresets(ctx context.Context, _ *gen.ListBuiltinPresetsPayload) (*gen.ListBuiltinPresetsResult, error) {
+func (s *Service) ListBuiltinExclusions(ctx context.Context, _ *gen.ListBuiltinExclusionsPayload) (*gen.ListBuiltinExclusionsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -461,20 +469,20 @@ func (s *Service) ListBuiltinPresets(ctx context.Context, _ *gen.ListBuiltinPres
 		return nil, err
 	}
 
-	categories := make([]*gen.BuiltinPresetCategory, 0)
+	categories := make([]*gen.BuiltinExclusionCategory, 0)
 	index := make(map[string]int)
-	for _, e := range presetlib.Entries() {
+	for _, e := range s.builtinPresets.Entries() {
 		label := cmp.Or(e.Category, "Other")
 		idx, seen := index[label]
 		if !seen {
 			idx = len(categories)
 			index[label] = idx
-			categories = append(categories, &gen.BuiltinPresetCategory{Label: label, Entries: nil})
+			categories = append(categories, &gen.BuiltinExclusionCategory{Label: label, Entries: nil})
 		}
 		// Deliberately omit engine-internal fields (sources, rule ids, matcher
 		// type) — the library is presented to end users without detection-engine
 		// details.
-		categories[idx].Entries = append(categories[idx].Entries, &gen.BuiltinPresetEntry{
+		categories[idx].Entries = append(categories[idx].Entries, &gen.BuiltinExclusionEntry{
 			ID:          e.ID,
 			Reason:      e.Reason,
 			Description: e.Description,
@@ -482,8 +490,8 @@ func (s *Service) ListBuiltinPresets(ctx context.Context, _ *gen.ListBuiltinPres
 		})
 	}
 
-	return &gen.ListBuiltinPresetsResult{
-		Version:    presetlib.Version(),
+	return &gen.ListBuiltinExclusionsResult{
+		Version:    s.builtinPresets.Version(),
 		Categories: categories,
 	}, nil
 }

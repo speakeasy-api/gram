@@ -158,28 +158,28 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 	return v, nil
 }
 
-// BuildListBuiltinPresetsPayload builds the payload for the risk
-// listBuiltinPresets endpoint from CLI flags.
-func BuildListBuiltinPresetsPayload(riskListBuiltinPresetsApikeyToken string, riskListBuiltinPresetsSessionToken string, riskListBuiltinPresetsProjectSlugInput string) (*risk.ListBuiltinPresetsPayload, error) {
+// BuildListBuiltinExclusionsPayload builds the payload for the risk
+// listBuiltinExclusions endpoint from CLI flags.
+func BuildListBuiltinExclusionsPayload(riskListBuiltinExclusionsApikeyToken string, riskListBuiltinExclusionsSessionToken string, riskListBuiltinExclusionsProjectSlugInput string) (*risk.ListBuiltinExclusionsPayload, error) {
 	var apikeyToken *string
 	{
-		if riskListBuiltinPresetsApikeyToken != "" {
-			apikeyToken = &riskListBuiltinPresetsApikeyToken
+		if riskListBuiltinExclusionsApikeyToken != "" {
+			apikeyToken = &riskListBuiltinExclusionsApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if riskListBuiltinPresetsSessionToken != "" {
-			sessionToken = &riskListBuiltinPresetsSessionToken
+		if riskListBuiltinExclusionsSessionToken != "" {
+			sessionToken = &riskListBuiltinExclusionsSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if riskListBuiltinPresetsProjectSlugInput != "" {
-			projectSlugInput = &riskListBuiltinPresetsProjectSlugInput
+		if riskListBuiltinExclusionsProjectSlugInput != "" {
+			projectSlugInput = &riskListBuiltinExclusionsProjectSlugInput
 		}
 	}
-	v := &risk.ListBuiltinPresetsPayload{}
+	v := &risk.ListBuiltinExclusionsPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -74,8 +74,8 @@ trackedFiles:
   docs/models/components/authzchallengeprincipaltype.md: {}
   docs/models/components/authzchallengereason.md: {}
   docs/models/components/authzchallengeresolutiontype.md: {}
-  docs/models/components/builtinpresetcategory.md: {}
-  docs/models/components/builtinpresetentry.md: {}
+  docs/models/components/builtinexclusioncategory.md: {}
+  docs/models/components/builtinexclusionentry.md: {}
   docs/models/components/canonicaltoolattributes.md: {}
   docs/models/components/captureeventpayload.md: {}
   docs/models/components/captureeventresult.md: {}
@@ -275,7 +275,7 @@ trackedFiles:
   docs/models/components/listattributekeysresult.md: {}
   docs/models/components/listauditlogfacetsresult.md: {}
   docs/models/components/listauditlogsresult.md: {}
-  docs/models/components/listbuiltinpresetsresult.md: {}
+  docs/models/components/listbuiltinexclusionsresult.md: {}
   docs/models/components/listcatalogresponsebody.md: {}
   docs/models/components/listchallengebucketsresult.md: {}
   docs/models/components/listchallengesresult.md: {}
@@ -1261,10 +1261,10 @@ trackedFiles:
   docs/models/operations/listauditlogsrequest.md: {}
   docs/models/operations/listauditlogsresponse.md: {}
   docs/models/operations/listauditlogssecurity.md: {}
-  docs/models/operations/listbuiltinpresetsrequest.md: {}
-  docs/models/operations/listbuiltinpresetssecurity.md: {}
-  docs/models/operations/listbuiltinpresetssecurityoption1.md: {}
-  docs/models/operations/listbuiltinpresetssecurityoption2.md: {}
+  docs/models/operations/listbuiltinexclusionsrequest.md: {}
+  docs/models/operations/listbuiltinexclusionssecurity.md: {}
+  docs/models/operations/listbuiltinexclusionssecurityoption1.md: {}
+  docs/models/operations/listbuiltinexclusionssecurityoption2.md: {}
   docs/models/operations/listchallengebucketsrequest.md: {}
   docs/models/operations/listchallengebucketssecurity.md: {}
   docs/models/operations/listchallengesrequest.md: {}
@@ -2102,7 +2102,7 @@ trackedFiles:
   src/funcs/riskExclusionsCreate.ts: {}
   src/funcs/riskExclusionsDelete.ts: {}
   src/funcs/riskExclusionsList.ts: {}
-  src/funcs/riskExclusionsListBuiltinPresets.ts: {}
+  src/funcs/riskExclusionsListBuiltinExclusions.ts: {}
   src/funcs/riskExclusionsUpdate.ts: {}
   src/funcs/riskExprCompile.ts: {}
   src/funcs/riskOverviewGet.ts: {}
@@ -2246,8 +2246,8 @@ trackedFiles:
   src/models/components/authorizerequestbody.ts: {}
   src/models/components/authorizeresponsebody.ts: {}
   src/models/components/authzchallenge.ts: {}
-  src/models/components/builtinpresetcategory.ts: {}
-  src/models/components/builtinpresetentry.ts: {}
+  src/models/components/builtinexclusioncategory.ts: {}
+  src/models/components/builtinexclusionentry.ts: {}
   src/models/components/canonicaltoolattributes.ts: {}
   src/models/components/captureeventpayload.ts: {}
   src/models/components/captureeventresult.ts: {}
@@ -2415,7 +2415,7 @@ trackedFiles:
   src/models/components/listattributekeysresult.ts: {}
   src/models/components/listauditlogfacetsresult.ts: {}
   src/models/components/listauditlogsresult.ts: {}
-  src/models/components/listbuiltinpresetsresult.ts: {}
+  src/models/components/listbuiltinexclusionsresult.ts: {}
   src/models/components/listcatalogresponsebody.ts: {}
   src/models/components/listchallengebucketsresult.ts: {}
   src/models/components/listchallengesresult.ts: {}
@@ -2951,7 +2951,7 @@ trackedFiles:
   src/models/operations/listattributekeys.ts: {}
   src/models/operations/listauditlogfacets.ts: {}
   src/models/operations/listauditlogs.ts: {}
-  src/models/operations/listbuiltinpresets.ts: {}
+  src/models/operations/listbuiltinexclusions.ts: {}
   src/models/operations/listchallengebuckets.ts: {}
   src/models/operations/listchallenges.ts: {}
   src/models/operations/listchats.ts: {}
@@ -3144,6 +3144,8 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/builtinExclusions.core.ts: {}
+  src/react-query/builtinExclusions.ts: {}
   src/react-query/challengeBuckets.core.ts: {}
   src/react-query/challengeBuckets.ts: {}
   src/react-query/challenges.core.ts: {}
@@ -3473,8 +3475,6 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
-  src/react-query/riskListBuiltinPresets.core.ts: {}
-  src/react-query/riskListBuiltinPresets.ts: {}
   src/react-query/riskListCustomDetectionRules.core.ts: {}
   src/react-query/riskListCustomDetectionRules.ts: {}
   src/react-query/riskListExclusions.core.ts: {}
@@ -5610,6 +5610,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listBuiltinExclusions:
+    speakeasy-default-list-builtin-exclusions:
+      responses:
+        "200":
+          application/json: {"categories": [{"entries": [{"description": "who even excepting uh-huh across", "id": "<id>", "reason": "<value>"}], "label": "<value>"}], "version": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listBuiltinPresets:
     speakeasy-default-list-builtin-presets:
       responses:

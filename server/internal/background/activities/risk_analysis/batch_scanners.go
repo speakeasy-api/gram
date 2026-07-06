@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -114,6 +115,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		outOfPolicyScope:        outOfPolicyScope,
 		exclusions:              exclusions,
 		builtinEnabled:          args.BuiltinPresetsEnabled,
+		builtinPresets:          a.builtinPresets,
 		gitleaksFindings:        gitleaksFindings,
 		presidioFindings:        presidioFindings,
 		shadowMCPFindings:       shadowMCPFindings,
@@ -128,6 +130,7 @@ type mergeFindingsInput struct {
 	outOfPolicyScope        []bool
 	exclusions              ExclusionSet
 	builtinEnabled          bool
+	builtinPresets          *presetlib.Library
 	gitleaksFindings        [][]Finding
 	presidioFindings        [][]Finding
 	shadowMCPFindings       [][]Finding
@@ -156,7 +159,7 @@ func mergeFindings(in mergeFindingsInput) [][]Finding {
 			combined = in.exclusions.FilterFindings(combined)
 		}
 		if in.builtinEnabled {
-			combined = dropBuiltinFalsePositives(combined)
+			combined = dropBuiltinFalsePositives(in.builtinPresets, combined)
 		}
 		merged[i] = dedup(combined)
 	}

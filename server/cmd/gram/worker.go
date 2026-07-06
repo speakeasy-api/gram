@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -723,6 +724,11 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
 				DB:                             db,
@@ -754,6 +760,7 @@ func newWorkerCommand() *cli.Command {
 				PIIScanner:                     piiScanner,
 				PIScanner:                      piScanner,
 				ShadowMCPClient:                shadowMCPClient,
+				BuiltinPresets:                 builtinPresets,
 				AuditLogger:                    auditLogger,
 				WorkOSClient:                   backgroundWorkOSClient,
 				SvixClient:                     svixClient,

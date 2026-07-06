@@ -96,8 +96,8 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
-	Method("listBuiltinPresets", func() {
-		Description("List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.")
+	Method("listBuiltinExclusions", func() {
+		Description("List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -105,20 +105,20 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 		})
 
-		Result(ListBuiltinPresetsResult)
+		Result(ListBuiltinExclusionsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.listBuiltinPresets")
+			GET("/rpc/risk.listBuiltinExclusions")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "listBuiltinPresets")
+		Meta("openapi:operationId", "listBuiltinExclusions")
 		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
-		Meta("openapi:extension:x-speakeasy-name-override", "listBuiltinPresets")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListBuiltinPresets"}`)
+		Meta("openapi:extension:x-speakeasy-name-override", "listBuiltinExclusions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BuiltinExclusions"}`)
 	})
 
 	Method("getRiskPolicy", func() {
@@ -1231,25 +1231,25 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Required("policies")
 })
 
-var BuiltinPresetEntry = Type("BuiltinPresetEntry", func() {
-	Description("One rule in the built-in preset exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.")
+var BuiltinExclusionEntry = Type("BuiltinExclusionEntry", func() {
+	Description("One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.")
 	Attribute("id", String, "Stable rule id.")
 	Attribute("reason", String, "Label surfaced when this rule suppresses a finding.")
 	Attribute("description", String, "Human rationale for why these values are known-safe.")
-	Attribute("samples", ArrayOf(String), "Example values or regex patterns — published test/documentation data, never real secrets.")
+	Attribute("samples", ArrayOf(String), "Example values — published test/documentation data, never real secrets.")
 	Required("id", "reason", "description")
 })
 
-var BuiltinPresetCategory = Type("BuiltinPresetCategory", func() {
-	Description("A named group of built-in preset rules.")
+var BuiltinExclusionCategory = Type("BuiltinExclusionCategory", func() {
+	Description("A named group of built-in exclusion rules.")
 	Attribute("label", String, "Human category label, e.g. \"Test credit cards\".")
-	Attribute("entries", ArrayOf(BuiltinPresetEntry), "The rules in this category.")
+	Attribute("entries", ArrayOf(BuiltinExclusionEntry), "The rules in this category.")
 	Required("label", "entries")
 })
 
-var ListBuiltinPresetsResult = Type("ListBuiltinPresetsResult", func() {
+var ListBuiltinExclusionsResult = Type("ListBuiltinExclusionsResult", func() {
 	Attribute("version", String, "Catalog checksum/version, for provenance.")
-	Attribute("categories", ArrayOf(BuiltinPresetCategory), "The preset library grouped by category.")
+	Attribute("categories", ArrayOf(BuiltinExclusionCategory), "The library grouped by category.")
 	Required("version", "categories")
 })
 

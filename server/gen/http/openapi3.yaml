@@ -25378,10 +25378,10 @@ paths:
             x-speakeasy-name-override: userBreakdown
             x-speakeasy-react-hook:
                 name: RiskUserBreakdown
-    /rpc/risk.listBuiltinPresets:
+    /rpc/risk.listBuiltinExclusions:
         get:
-            description: List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
-            operationId: listBuiltinPresets
+            description: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+            operationId: listBuiltinExclusions
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -25409,7 +25409,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListBuiltinPresetsResult'
+                                $ref: '#/components/schemas/ListBuiltinExclusionsResult'
                     description: OK response.
                 "400":
                     content:
@@ -25470,13 +25470,13 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: listBuiltinPresets risk
+            summary: listBuiltinExclusions risk
             tags:
                 - risk
             x-speakeasy-group: risk.exclusions
-            x-speakeasy-name-override: listBuiltinPresets
+            x-speakeasy-name-override: listBuiltinExclusions
             x-speakeasy-react-hook:
-                name: RiskListBuiltinPresets
+                name: BuiltinExclusions
     /rpc/risk.listCategories:
         get:
             description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
@@ -36501,22 +36501,22 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
-        BuiltinPresetCategory:
+        BuiltinExclusionCategory:
             type: object
             properties:
                 entries:
                     type: array
                     items:
-                        $ref: '#/components/schemas/BuiltinPresetEntry'
+                        $ref: '#/components/schemas/BuiltinExclusionEntry'
                     description: The rules in this category.
                 label:
                     type: string
                     description: Human category label, e.g. "Test credit cards".
-            description: A named group of built-in preset rules.
+            description: A named group of built-in exclusion rules.
             required:
                 - label
                 - entries
-        BuiltinPresetEntry:
+        BuiltinExclusionEntry:
             type: object
             properties:
                 description:
@@ -36532,8 +36532,8 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Example values or regex patterns — published test/documentation data, never real secrets.
-            description: One rule in the built-in preset exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.
+                    description: Example values — published test/documentation data, never real secrets.
+            description: One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.
             required:
                 - id
                 - reason
@@ -41783,14 +41783,14 @@ components:
                     description: The cursor to be used for the next page of results.
             required:
                 - logs
-        ListBuiltinPresetsResult:
+        ListBuiltinExclusionsResult:
             type: object
             properties:
                 categories:
                     type: array
                     items:
-                        $ref: '#/components/schemas/BuiltinPresetCategory'
-                    description: The preset library grouped by category.
+                        $ref: '#/components/schemas/BuiltinExclusionCategory'
+                    description: The library grouped by category.
                 version:
                     type: string
                     description: Catalog checksum/version, for provenance.

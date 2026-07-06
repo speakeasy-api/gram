@@ -25,9 +25,9 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
-	// ListBuiltinPresets Doer is the HTTP client used to make requests to the
-	// listBuiltinPresets endpoint.
-	ListBuiltinPresetsDoer goahttp.Doer
+	// ListBuiltinExclusions Doer is the HTTP client used to make requests to the
+	// listBuiltinExclusions endpoint.
+	ListBuiltinExclusionsDoer goahttp.Doer
 
 	// GetRiskPolicy Doer is the HTTP client used to make requests to the
 	// getRiskPolicy endpoint.
@@ -179,7 +179,7 @@ func NewClient(
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
 		ListRiskPoliciesDoer:               doer,
-		ListBuiltinPresetsDoer:             doer,
+		ListBuiltinExclusionsDoer:          doer,
 		GetRiskPolicyDoer:                  doer,
 		UpdateRiskPolicyDoer:               doer,
 		DeleteRiskPolicyDoer:               doer,
@@ -268,15 +268,15 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 	}
 }
 
-// ListBuiltinPresets returns an endpoint that makes HTTP requests to the risk
-// service listBuiltinPresets server.
-func (c *Client) ListBuiltinPresets() goa.Endpoint {
+// ListBuiltinExclusions returns an endpoint that makes HTTP requests to the
+// risk service listBuiltinExclusions server.
+func (c *Client) ListBuiltinExclusions() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListBuiltinPresetsRequest(c.encoder)
-		decodeResponse = DecodeListBuiltinPresetsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListBuiltinExclusionsRequest(c.encoder)
+		decodeResponse = DecodeListBuiltinExclusionsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListBuiltinPresetsRequest(ctx, v)
+		req, err := c.BuildListBuiltinExclusionsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -284,9 +284,9 @@ func (c *Client) ListBuiltinPresets() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListBuiltinPresetsDoer.Do(req)
+		resp, err := c.ListBuiltinExclusionsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "listBuiltinPresets", err)
+			return nil, goahttp.ErrRequestError("risk", "listBuiltinExclusions", err)
 		}
 		return decodeResponse(resp)
 	}

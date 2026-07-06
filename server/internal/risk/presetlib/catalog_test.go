@@ -575,40 +575,33 @@ func TestLowerAll(t *testing.T) {
 	require.Equal(t, []string{}, lowerAll([]string{}))
 }
 
-func TestSortedKeys(t *testing.T) {
-	t.Parallel()
-
-	require.Nil(t, sortedKeys(nil))
-	require.Nil(t, sortedKeys(map[string]struct{}{}))
-	got := sortedKeys(map[string]struct{}{"c": {}, "a": {}, "b": {}})
-	require.Equal(t, []string{"a", "b", "c"}, got)
-}
-
 // ---------------------------------------------------------------------------
 // public API surface over the embedded catalog (integration-lite).
 // ---------------------------------------------------------------------------
 
 func TestPublicReason_NoOpConsistency(t *testing.T) {
 	t.Parallel()
+	lib := newLibrary(t)
 
 	// A guaranteed non-match returns "" (real finding).
-	require.Empty(t, Reason(Match{Source: "nope", RuleID: "nope", Value: "definitely not benign"}))
+	require.Empty(t, lib.Reason(Match{Source: "nope", RuleID: "nope", Value: "definitely not benign"}))
 	// Version is a stable 8-char hex prefix.
-	require.Len(t, Version(), 8)
+	require.Len(t, lib.Version(), 8)
 }
 
 func TestPublicRuleIDAccessorsAreSortedAndCopied(t *testing.T) {
 	t.Parallel()
+	lib := newLibrary(t)
 
-	ids := RuleIDs()
+	ids := lib.RuleIDs()
 	require.True(t, sortDetectSorted(ids), "RuleIDs must be sorted")
 	// Returned slice is a copy: mutating it must not affect the next call.
 	if len(ids) > 0 {
 		ids[0] = "ZZZ_mutated"
-		require.NotEqual(t, "ZZZ_mutated", RuleIDs()[0])
+		require.NotEqual(t, "ZZZ_mutated", lib.RuleIDs()[0])
 	}
 
-	globs := RuleIDGlobs()
+	globs := lib.RuleIDGlobs()
 	require.True(t, sortDetectSorted(globs), "RuleIDGlobs must be sorted")
 }
 

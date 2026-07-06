@@ -18,7 +18,7 @@ import (
 type Endpoints struct {
 	CreateRiskPolicy               goa.Endpoint
 	ListRiskPolicies               goa.Endpoint
-	ListBuiltinPresets             goa.Endpoint
+	ListBuiltinExclusions          goa.Endpoint
 	GetRiskPolicy                  goa.Endpoint
 	UpdateRiskPolicy               goa.Endpoint
 	DeleteRiskPolicy               goa.Endpoint
@@ -60,7 +60,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateRiskPolicy:               NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicies:               NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
-		ListBuiltinPresets:             NewListBuiltinPresetsEndpoint(s, a.APIKeyAuth),
+		ListBuiltinExclusions:          NewListBuiltinExclusionsEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicy:                  NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
 		UpdateRiskPolicy:               NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		DeleteRiskPolicy:               NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
@@ -100,7 +100,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRiskPolicy = m(e.CreateRiskPolicy)
 	e.ListRiskPolicies = m(e.ListRiskPolicies)
-	e.ListBuiltinPresets = m(e.ListBuiltinPresets)
+	e.ListBuiltinExclusions = m(e.ListBuiltinExclusions)
 	e.GetRiskPolicy = m(e.GetRiskPolicy)
 	e.UpdateRiskPolicy = m(e.UpdateRiskPolicy)
 	e.DeleteRiskPolicy = m(e.DeleteRiskPolicy)
@@ -253,11 +253,11 @@ func NewListRiskPoliciesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 	}
 }
 
-// NewListBuiltinPresetsEndpoint returns an endpoint function that calls the
-// method "listBuiltinPresets" of service "risk".
-func NewListBuiltinPresetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListBuiltinExclusionsEndpoint returns an endpoint function that calls the
+// method "listBuiltinExclusions" of service "risk".
+func NewListBuiltinExclusionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListBuiltinPresetsPayload)
+		p := req.(*ListBuiltinExclusionsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -308,7 +308,7 @@ func NewListBuiltinPresetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			return nil, err
 		}
-		return s.ListBuiltinPresets(ctx, p)
+		return s.ListBuiltinExclusions(ctx, p)
 	}
 }
 

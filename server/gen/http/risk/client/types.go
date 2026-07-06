@@ -367,13 +367,13 @@ type ListRiskPoliciesResponseBody struct {
 	Policies []*RiskPolicyResponseBody `form:"policies,omitempty" json:"policies,omitempty" xml:"policies,omitempty"`
 }
 
-// ListBuiltinPresetsResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body.
-type ListBuiltinPresetsResponseBody struct {
+// ListBuiltinExclusionsResponseBody is the type of the "risk" service
+// "listBuiltinExclusions" endpoint HTTP response body.
+type ListBuiltinExclusionsResponseBody struct {
 	// Catalog checksum/version, for provenance.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// The preset library grouped by category.
-	Categories []*BuiltinPresetCategoryResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
+	// The library grouped by category.
+	Categories []*BuiltinExclusionCategoryResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
 }
 
 // GetRiskPolicyResponseBody is the type of the "risk" service "getRiskPolicy"
@@ -1389,10 +1389,29 @@ type ListRiskPoliciesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsUnauthorizedResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "unauthorized"
+// ListBuiltinExclusionsUnauthorizedResponseBody is the type of the "risk"
+// service "listBuiltinExclusions" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListBuiltinExclusionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListBuiltinExclusionsForbiddenResponseBody is the type of the "risk" service
+// "listBuiltinExclusions" endpoint HTTP response body for the "forbidden"
 // error.
-type ListBuiltinPresetsUnauthorizedResponseBody struct {
+type ListBuiltinExclusionsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1408,9 +1427,10 @@ type ListBuiltinPresetsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsForbiddenResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "forbidden" error.
-type ListBuiltinPresetsForbiddenResponseBody struct {
+// ListBuiltinExclusionsBadRequestResponseBody is the type of the "risk"
+// service "listBuiltinExclusions" endpoint HTTP response body for the
+// "bad_request" error.
+type ListBuiltinExclusionsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1426,9 +1446,10 @@ type ListBuiltinPresetsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsBadRequestResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "bad_request" error.
-type ListBuiltinPresetsBadRequestResponseBody struct {
+// ListBuiltinExclusionsNotFoundResponseBody is the type of the "risk" service
+// "listBuiltinExclusions" endpoint HTTP response body for the "not_found"
+// error.
+type ListBuiltinExclusionsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1444,9 +1465,9 @@ type ListBuiltinPresetsBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsNotFoundResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "not_found" error.
-type ListBuiltinPresetsNotFoundResponseBody struct {
+// ListBuiltinExclusionsConflictResponseBody is the type of the "risk" service
+// "listBuiltinExclusions" endpoint HTTP response body for the "conflict" error.
+type ListBuiltinExclusionsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1462,28 +1483,10 @@ type ListBuiltinPresetsNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsConflictResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "conflict" error.
-type ListBuiltinPresetsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListBuiltinPresetsUnsupportedMediaResponseBody is the type of the "risk"
-// service "listBuiltinPresets" endpoint HTTP response body for the
+// ListBuiltinExclusionsUnsupportedMediaResponseBody is the type of the "risk"
+// service "listBuiltinExclusions" endpoint HTTP response body for the
 // "unsupported_media" error.
-type ListBuiltinPresetsUnsupportedMediaResponseBody struct {
+type ListBuiltinExclusionsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1499,9 +1502,9 @@ type ListBuiltinPresetsUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsInvalidResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "invalid" error.
-type ListBuiltinPresetsInvalidResponseBody struct {
+// ListBuiltinExclusionsInvalidResponseBody is the type of the "risk" service
+// "listBuiltinExclusions" endpoint HTTP response body for the "invalid" error.
+type ListBuiltinExclusionsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1517,10 +1520,10 @@ type ListBuiltinPresetsInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsInvariantViolationResponseBody is the type of the "risk"
-// service "listBuiltinPresets" endpoint HTTP response body for the
+// ListBuiltinExclusionsInvariantViolationResponseBody is the type of the
+// "risk" service "listBuiltinExclusions" endpoint HTTP response body for the
 // "invariant_violation" error.
-type ListBuiltinPresetsInvariantViolationResponseBody struct {
+type ListBuiltinExclusionsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1536,9 +1539,10 @@ type ListBuiltinPresetsInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsUnexpectedResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "unexpected" error.
-type ListBuiltinPresetsUnexpectedResponseBody struct {
+// ListBuiltinExclusionsUnexpectedResponseBody is the type of the "risk"
+// service "listBuiltinExclusions" endpoint HTTP response body for the
+// "unexpected" error.
+type ListBuiltinExclusionsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1554,10 +1558,10 @@ type ListBuiltinPresetsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListBuiltinPresetsGatewayErrorResponseBody is the type of the "risk" service
-// "listBuiltinPresets" endpoint HTTP response body for the "gateway_error"
-// error.
-type ListBuiltinPresetsGatewayErrorResponseBody struct {
+// ListBuiltinExclusionsGatewayErrorResponseBody is the type of the "risk"
+// service "listBuiltinExclusions" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListBuiltinExclusionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7633,26 +7637,25 @@ type RiskPolicyResponseBody struct {
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
-// BuiltinPresetCategoryResponseBody is used to define fields on response body
-// types.
-type BuiltinPresetCategoryResponseBody struct {
+// BuiltinExclusionCategoryResponseBody is used to define fields on response
+// body types.
+type BuiltinExclusionCategoryResponseBody struct {
 	// Human category label, e.g. "Test credit cards".
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// The rules in this category.
-	Entries []*BuiltinPresetEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	Entries []*BuiltinExclusionEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 }
 
-// BuiltinPresetEntryResponseBody is used to define fields on response body
+// BuiltinExclusionEntryResponseBody is used to define fields on response body
 // types.
-type BuiltinPresetEntryResponseBody struct {
+type BuiltinExclusionEntryResponseBody struct {
 	// Stable rule id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Label surfaced when this rule suppresses a finding.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Human rationale for why these values are known-safe.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Example values or regex patterns — published test/documentation data, never
-	// real secrets.
+	// Example values — published test/documentation data, never real secrets.
 	Samples []string `form:"samples,omitempty" json:"samples,omitempty" xml:"samples,omitempty"`
 }
 
@@ -8717,27 +8720,27 @@ func NewListRiskPoliciesGatewayError(body *ListRiskPoliciesGatewayErrorResponseB
 	return v
 }
 
-// NewListBuiltinPresetsResultOK builds a "risk" service "listBuiltinPresets"
-// endpoint result from a HTTP "OK" response.
-func NewListBuiltinPresetsResultOK(body *ListBuiltinPresetsResponseBody) *risk.ListBuiltinPresetsResult {
-	v := &risk.ListBuiltinPresetsResult{
+// NewListBuiltinExclusionsResultOK builds a "risk" service
+// "listBuiltinExclusions" endpoint result from a HTTP "OK" response.
+func NewListBuiltinExclusionsResultOK(body *ListBuiltinExclusionsResponseBody) *risk.ListBuiltinExclusionsResult {
+	v := &risk.ListBuiltinExclusionsResult{
 		Version: *body.Version,
 	}
-	v.Categories = make([]*risk.BuiltinPresetCategory, len(body.Categories))
+	v.Categories = make([]*risk.BuiltinExclusionCategory, len(body.Categories))
 	for i, val := range body.Categories {
 		if val == nil {
 			v.Categories[i] = nil
 			continue
 		}
-		v.Categories[i] = unmarshalBuiltinPresetCategoryResponseBodyToRiskBuiltinPresetCategory(val)
+		v.Categories[i] = unmarshalBuiltinExclusionCategoryResponseBodyToRiskBuiltinExclusionCategory(val)
 	}
 
 	return v
 }
 
-// NewListBuiltinPresetsUnauthorized builds a risk service listBuiltinPresets
-// endpoint unauthorized error.
-func NewListBuiltinPresetsUnauthorized(body *ListBuiltinPresetsUnauthorizedResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsUnauthorized builds a risk service
+// listBuiltinExclusions endpoint unauthorized error.
+func NewListBuiltinExclusionsUnauthorized(body *ListBuiltinExclusionsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8750,9 +8753,9 @@ func NewListBuiltinPresetsUnauthorized(body *ListBuiltinPresetsUnauthorizedRespo
 	return v
 }
 
-// NewListBuiltinPresetsForbidden builds a risk service listBuiltinPresets
-// endpoint forbidden error.
-func NewListBuiltinPresetsForbidden(body *ListBuiltinPresetsForbiddenResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsForbidden builds a risk service
+// listBuiltinExclusions endpoint forbidden error.
+func NewListBuiltinExclusionsForbidden(body *ListBuiltinExclusionsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8765,9 +8768,9 @@ func NewListBuiltinPresetsForbidden(body *ListBuiltinPresetsForbiddenResponseBod
 	return v
 }
 
-// NewListBuiltinPresetsBadRequest builds a risk service listBuiltinPresets
-// endpoint bad_request error.
-func NewListBuiltinPresetsBadRequest(body *ListBuiltinPresetsBadRequestResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsBadRequest builds a risk service
+// listBuiltinExclusions endpoint bad_request error.
+func NewListBuiltinExclusionsBadRequest(body *ListBuiltinExclusionsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8780,9 +8783,9 @@ func NewListBuiltinPresetsBadRequest(body *ListBuiltinPresetsBadRequestResponseB
 	return v
 }
 
-// NewListBuiltinPresetsNotFound builds a risk service listBuiltinPresets
+// NewListBuiltinExclusionsNotFound builds a risk service listBuiltinExclusions
 // endpoint not_found error.
-func NewListBuiltinPresetsNotFound(body *ListBuiltinPresetsNotFoundResponseBody) *goa.ServiceError {
+func NewListBuiltinExclusionsNotFound(body *ListBuiltinExclusionsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8795,9 +8798,9 @@ func NewListBuiltinPresetsNotFound(body *ListBuiltinPresetsNotFoundResponseBody)
 	return v
 }
 
-// NewListBuiltinPresetsConflict builds a risk service listBuiltinPresets
+// NewListBuiltinExclusionsConflict builds a risk service listBuiltinExclusions
 // endpoint conflict error.
-func NewListBuiltinPresetsConflict(body *ListBuiltinPresetsConflictResponseBody) *goa.ServiceError {
+func NewListBuiltinExclusionsConflict(body *ListBuiltinExclusionsConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8810,9 +8813,9 @@ func NewListBuiltinPresetsConflict(body *ListBuiltinPresetsConflictResponseBody)
 	return v
 }
 
-// NewListBuiltinPresetsUnsupportedMedia builds a risk service
-// listBuiltinPresets endpoint unsupported_media error.
-func NewListBuiltinPresetsUnsupportedMedia(body *ListBuiltinPresetsUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsUnsupportedMedia builds a risk service
+// listBuiltinExclusions endpoint unsupported_media error.
+func NewListBuiltinExclusionsUnsupportedMedia(body *ListBuiltinExclusionsUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8825,9 +8828,9 @@ func NewListBuiltinPresetsUnsupportedMedia(body *ListBuiltinPresetsUnsupportedMe
 	return v
 }
 
-// NewListBuiltinPresetsInvalid builds a risk service listBuiltinPresets
+// NewListBuiltinExclusionsInvalid builds a risk service listBuiltinExclusions
 // endpoint invalid error.
-func NewListBuiltinPresetsInvalid(body *ListBuiltinPresetsInvalidResponseBody) *goa.ServiceError {
+func NewListBuiltinExclusionsInvalid(body *ListBuiltinExclusionsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8840,9 +8843,9 @@ func NewListBuiltinPresetsInvalid(body *ListBuiltinPresetsInvalidResponseBody) *
 	return v
 }
 
-// NewListBuiltinPresetsInvariantViolation builds a risk service
-// listBuiltinPresets endpoint invariant_violation error.
-func NewListBuiltinPresetsInvariantViolation(body *ListBuiltinPresetsInvariantViolationResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsInvariantViolation builds a risk service
+// listBuiltinExclusions endpoint invariant_violation error.
+func NewListBuiltinExclusionsInvariantViolation(body *ListBuiltinExclusionsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8855,9 +8858,9 @@ func NewListBuiltinPresetsInvariantViolation(body *ListBuiltinPresetsInvariantVi
 	return v
 }
 
-// NewListBuiltinPresetsUnexpected builds a risk service listBuiltinPresets
-// endpoint unexpected error.
-func NewListBuiltinPresetsUnexpected(body *ListBuiltinPresetsUnexpectedResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsUnexpected builds a risk service
+// listBuiltinExclusions endpoint unexpected error.
+func NewListBuiltinExclusionsUnexpected(body *ListBuiltinExclusionsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8870,9 +8873,9 @@ func NewListBuiltinPresetsUnexpected(body *ListBuiltinPresetsUnexpectedResponseB
 	return v
 }
 
-// NewListBuiltinPresetsGatewayError builds a risk service listBuiltinPresets
-// endpoint gateway_error error.
-func NewListBuiltinPresetsGatewayError(body *ListBuiltinPresetsGatewayErrorResponseBody) *goa.ServiceError {
+// NewListBuiltinExclusionsGatewayError builds a risk service
+// listBuiltinExclusions endpoint gateway_error error.
+func NewListBuiltinExclusionsGatewayError(body *ListBuiltinExclusionsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -14472,9 +14475,9 @@ func ValidateListRiskPoliciesResponseBody(body *ListRiskPoliciesResponseBody) (e
 	return
 }
 
-// ValidateListBuiltinPresetsResponseBody runs the validations defined on
-// ListBuiltinPresetsResponseBody
-func ValidateListBuiltinPresetsResponseBody(body *ListBuiltinPresetsResponseBody) (err error) {
+// ValidateListBuiltinExclusionsResponseBody runs the validations defined on
+// ListBuiltinExclusionsResponseBody
+func ValidateListBuiltinExclusionsResponseBody(body *ListBuiltinExclusionsResponseBody) (err error) {
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -14483,7 +14486,7 @@ func ValidateListBuiltinPresetsResponseBody(body *ListBuiltinPresetsResponseBody
 	}
 	for _, e := range body.Categories {
 		if e != nil {
-			if err2 := ValidateBuiltinPresetCategoryResponseBody(e); err2 != nil {
+			if err2 := ValidateBuiltinExclusionCategoryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -16028,9 +16031,9 @@ func ValidateListRiskPoliciesGatewayErrorResponseBody(body *ListRiskPoliciesGate
 	return
 }
 
-// ValidateListBuiltinPresetsUnauthorizedResponseBody runs the validations
-// defined on listBuiltinPresets_unauthorized_response_body
-func ValidateListBuiltinPresetsUnauthorizedResponseBody(body *ListBuiltinPresetsUnauthorizedResponseBody) (err error) {
+// ValidateListBuiltinExclusionsUnauthorizedResponseBody runs the validations
+// defined on listBuiltinExclusions_unauthorized_response_body
+func ValidateListBuiltinExclusionsUnauthorizedResponseBody(body *ListBuiltinExclusionsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16052,9 +16055,9 @@ func ValidateListBuiltinPresetsUnauthorizedResponseBody(body *ListBuiltinPresets
 	return
 }
 
-// ValidateListBuiltinPresetsForbiddenResponseBody runs the validations defined
-// on listBuiltinPresets_forbidden_response_body
-func ValidateListBuiltinPresetsForbiddenResponseBody(body *ListBuiltinPresetsForbiddenResponseBody) (err error) {
+// ValidateListBuiltinExclusionsForbiddenResponseBody runs the validations
+// defined on listBuiltinExclusions_forbidden_response_body
+func ValidateListBuiltinExclusionsForbiddenResponseBody(body *ListBuiltinExclusionsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16076,9 +16079,9 @@ func ValidateListBuiltinPresetsForbiddenResponseBody(body *ListBuiltinPresetsFor
 	return
 }
 
-// ValidateListBuiltinPresetsBadRequestResponseBody runs the validations
-// defined on listBuiltinPresets_bad_request_response_body
-func ValidateListBuiltinPresetsBadRequestResponseBody(body *ListBuiltinPresetsBadRequestResponseBody) (err error) {
+// ValidateListBuiltinExclusionsBadRequestResponseBody runs the validations
+// defined on listBuiltinExclusions_bad_request_response_body
+func ValidateListBuiltinExclusionsBadRequestResponseBody(body *ListBuiltinExclusionsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16100,9 +16103,9 @@ func ValidateListBuiltinPresetsBadRequestResponseBody(body *ListBuiltinPresetsBa
 	return
 }
 
-// ValidateListBuiltinPresetsNotFoundResponseBody runs the validations defined
-// on listBuiltinPresets_not_found_response_body
-func ValidateListBuiltinPresetsNotFoundResponseBody(body *ListBuiltinPresetsNotFoundResponseBody) (err error) {
+// ValidateListBuiltinExclusionsNotFoundResponseBody runs the validations
+// defined on listBuiltinExclusions_not_found_response_body
+func ValidateListBuiltinExclusionsNotFoundResponseBody(body *ListBuiltinExclusionsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16124,9 +16127,9 @@ func ValidateListBuiltinPresetsNotFoundResponseBody(body *ListBuiltinPresetsNotF
 	return
 }
 
-// ValidateListBuiltinPresetsConflictResponseBody runs the validations defined
-// on listBuiltinPresets_conflict_response_body
-func ValidateListBuiltinPresetsConflictResponseBody(body *ListBuiltinPresetsConflictResponseBody) (err error) {
+// ValidateListBuiltinExclusionsConflictResponseBody runs the validations
+// defined on listBuiltinExclusions_conflict_response_body
+func ValidateListBuiltinExclusionsConflictResponseBody(body *ListBuiltinExclusionsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16148,9 +16151,9 @@ func ValidateListBuiltinPresetsConflictResponseBody(body *ListBuiltinPresetsConf
 	return
 }
 
-// ValidateListBuiltinPresetsUnsupportedMediaResponseBody runs the validations
-// defined on listBuiltinPresets_unsupported_media_response_body
-func ValidateListBuiltinPresetsUnsupportedMediaResponseBody(body *ListBuiltinPresetsUnsupportedMediaResponseBody) (err error) {
+// ValidateListBuiltinExclusionsUnsupportedMediaResponseBody runs the
+// validations defined on listBuiltinExclusions_unsupported_media_response_body
+func ValidateListBuiltinExclusionsUnsupportedMediaResponseBody(body *ListBuiltinExclusionsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16172,9 +16175,9 @@ func ValidateListBuiltinPresetsUnsupportedMediaResponseBody(body *ListBuiltinPre
 	return
 }
 
-// ValidateListBuiltinPresetsInvalidResponseBody runs the validations defined
-// on listBuiltinPresets_invalid_response_body
-func ValidateListBuiltinPresetsInvalidResponseBody(body *ListBuiltinPresetsInvalidResponseBody) (err error) {
+// ValidateListBuiltinExclusionsInvalidResponseBody runs the validations
+// defined on listBuiltinExclusions_invalid_response_body
+func ValidateListBuiltinExclusionsInvalidResponseBody(body *ListBuiltinExclusionsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16196,9 +16199,10 @@ func ValidateListBuiltinPresetsInvalidResponseBody(body *ListBuiltinPresetsInval
 	return
 }
 
-// ValidateListBuiltinPresetsInvariantViolationResponseBody runs the
-// validations defined on listBuiltinPresets_invariant_violation_response_body
-func ValidateListBuiltinPresetsInvariantViolationResponseBody(body *ListBuiltinPresetsInvariantViolationResponseBody) (err error) {
+// ValidateListBuiltinExclusionsInvariantViolationResponseBody runs the
+// validations defined on
+// listBuiltinExclusions_invariant_violation_response_body
+func ValidateListBuiltinExclusionsInvariantViolationResponseBody(body *ListBuiltinExclusionsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16220,9 +16224,9 @@ func ValidateListBuiltinPresetsInvariantViolationResponseBody(body *ListBuiltinP
 	return
 }
 
-// ValidateListBuiltinPresetsUnexpectedResponseBody runs the validations
-// defined on listBuiltinPresets_unexpected_response_body
-func ValidateListBuiltinPresetsUnexpectedResponseBody(body *ListBuiltinPresetsUnexpectedResponseBody) (err error) {
+// ValidateListBuiltinExclusionsUnexpectedResponseBody runs the validations
+// defined on listBuiltinExclusions_unexpected_response_body
+func ValidateListBuiltinExclusionsUnexpectedResponseBody(body *ListBuiltinExclusionsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16244,9 +16248,9 @@ func ValidateListBuiltinPresetsUnexpectedResponseBody(body *ListBuiltinPresetsUn
 	return
 }
 
-// ValidateListBuiltinPresetsGatewayErrorResponseBody runs the validations
-// defined on listBuiltinPresets_gateway_error_response_body
-func ValidateListBuiltinPresetsGatewayErrorResponseBody(body *ListBuiltinPresetsGatewayErrorResponseBody) (err error) {
+// ValidateListBuiltinExclusionsGatewayErrorResponseBody runs the validations
+// defined on listBuiltinExclusions_gateway_error_response_body
+func ValidateListBuiltinExclusionsGatewayErrorResponseBody(body *ListBuiltinExclusionsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -24075,9 +24079,9 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	return
 }
 
-// ValidateBuiltinPresetCategoryResponseBody runs the validations defined on
-// BuiltinPresetCategoryResponseBody
-func ValidateBuiltinPresetCategoryResponseBody(body *BuiltinPresetCategoryResponseBody) (err error) {
+// ValidateBuiltinExclusionCategoryResponseBody runs the validations defined on
+// BuiltinExclusionCategoryResponseBody
+func ValidateBuiltinExclusionCategoryResponseBody(body *BuiltinExclusionCategoryResponseBody) (err error) {
 	if body.Label == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
 	}
@@ -24086,7 +24090,7 @@ func ValidateBuiltinPresetCategoryResponseBody(body *BuiltinPresetCategoryRespon
 	}
 	for _, e := range body.Entries {
 		if e != nil {
-			if err2 := ValidateBuiltinPresetEntryResponseBody(e); err2 != nil {
+			if err2 := ValidateBuiltinExclusionEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -24094,9 +24098,9 @@ func ValidateBuiltinPresetCategoryResponseBody(body *BuiltinPresetCategoryRespon
 	return
 }
 
-// ValidateBuiltinPresetEntryResponseBody runs the validations defined on
-// BuiltinPresetEntryResponseBody
-func ValidateBuiltinPresetEntryResponseBody(body *BuiltinPresetEntryResponseBody) (err error) {
+// ValidateBuiltinExclusionEntryResponseBody runs the validations defined on
+// BuiltinExclusionEntryResponseBody
+func ValidateBuiltinExclusionEntryResponseBody(body *BuiltinExclusionEntryResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

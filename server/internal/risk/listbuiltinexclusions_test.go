@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func TestListBuiltinPresets_ReturnsCatalog(t *testing.T) {
+func TestListBuiltinExclusions_ReturnsCatalog(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -20,7 +20,7 @@ func TestListBuiltinPresets_ReturnsCatalog(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	result, err := ti.service.ListBuiltinPresets(ctx, &gen.ListBuiltinPresetsPayload{})
+	result, err := ti.service.ListBuiltinExclusions(ctx, &gen.ListBuiltinExclusionsPayload{})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Version)
 	require.NotEmpty(t, result.Categories)
@@ -41,14 +41,14 @@ func TestListBuiltinPresets_ReturnsCatalog(t *testing.T) {
 	require.True(t, ids["test-credit-cards"], "expected the test-credit-cards rule to be surfaced")
 }
 
-func TestListBuiltinPresets_RequiresOrgAdmin(t *testing.T) {
+func TestListBuiltinExclusions_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	// Zero grants — RBAC should deny.
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
-	_, err := ti.service.ListBuiltinPresets(ctx, &gen.ListBuiltinPresetsPayload{})
+	_, err := ti.service.ListBuiltinExclusions(ctx, &gen.ListBuiltinExclusionsPayload{})
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

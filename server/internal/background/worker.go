@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -83,6 +84,7 @@ type WorkerOptions struct {
 	PIIScanner                     risk_analysis.PIIScanner
 	PIScanner                      *risk_analysis.PromptInjectionScanner
 	ShadowMCPClient                *shadowmcp.Client
+	BuiltinPresets                 *presetlib.Library
 	AuditLogger                    *audit.Logger
 	WorkOSClient                   activities.WorkOSClient
 	SvixClient                     *svix.Svix
@@ -132,6 +134,7 @@ func ForDeploymentProcessing(
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
 		ShadowMCPClient:                nil,
+		BuiltinPresets:                 nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		SvixClient:                     nil,
 		ProductFeatures:                nil,
@@ -182,6 +185,7 @@ func NewTemporalWorker(
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
 		ShadowMCPClient:                nil,
+		BuiltinPresets:                 nil,
 		AuditLogger:                    nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		SvixClient:                     nil,
@@ -222,6 +226,7 @@ func NewTemporalWorker(
 			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
 			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
 			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			BuiltinPresets:                 conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
 			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			SvixClient:                     conv.Default(o.SvixClient, opts.SvixClient),
@@ -304,6 +309,7 @@ func NewTemporalWorker(
 		opts.Publishers,
 		celEng,
 		judgeRateLimiter,
+		opts.BuiltinPresets,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

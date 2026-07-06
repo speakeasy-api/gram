@@ -75,7 +75,7 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCELEngine(t))
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCELEngine(t), nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -133,6 +133,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newGitleaksPub(),
 		newCustomRulesPub(),
 		mustCELEngine(t),
+		nil,
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -225,6 +226,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		newGitleaksPub(),
 		newCustomRulesPub(),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -329,6 +331,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newGitleaksPub(),
 		newCustomRulesPub(),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -413,6 +416,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newGitleaksPub(),
 		newCustomRulesPub(),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -872,6 +876,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		newGitleaksPub(),
 		newCustomRulesPub(),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite

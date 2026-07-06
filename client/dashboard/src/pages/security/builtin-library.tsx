@@ -9,8 +9,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useRiskListBuiltinPresets } from "@gram/client/react-query/index.js";
-import type { BuiltinPresetEntry } from "@gram/client/models/components/builtinpresetentry.js";
+import { useBuiltinExclusions } from "@gram/client/react-query/index.js";
+import type { BuiltinExclusionEntry } from "@gram/client/models/components/builtinexclusionentry.js";
 import { Info } from "lucide-react";
 import type { JSX } from "react";
 import { useState } from "react";
@@ -33,8 +33,8 @@ export function BuiltinLibrary(): JSX.Element {
   const [enabled, setEnabled] = useState<boolean>(true);
   const [libraryOpen, setLibraryOpen] = useState<boolean>(false);
 
-  // Live catalog, fetched from risk.listBuiltinPresets. Backs the details view.
-  const { data, isLoading } = useRiskListBuiltinPresets();
+  // Live catalog, fetched from risk.listBuiltinExclusions. Backs the details view.
+  const { data, isLoading } = useBuiltinExclusions();
   const categories = data?.categories ?? [];
 
   return (
@@ -97,7 +97,11 @@ export function BuiltinLibrary(): JSX.Element {
   );
 }
 
-function PresetEntryRow({ entry }: { entry: BuiltinPresetEntry }): JSX.Element {
+function PresetEntryRow({
+  entry,
+}: {
+  entry: BuiltinExclusionEntry;
+}): JSX.Element {
   return (
     <li className="bg-muted/30 space-y-1 rounded-lg border p-3">
       <Type small className="font-medium">

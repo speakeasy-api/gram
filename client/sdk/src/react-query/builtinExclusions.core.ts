@@ -8,24 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskExclusionsListBuiltinPresets } from "../funcs/riskExclusionsListBuiltinPresets.js";
+import { riskExclusionsListBuiltinExclusions } from "../funcs/riskExclusionsListBuiltinExclusions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskListBuiltinPresetsQueryData =
-  components.ListBuiltinPresetsResult;
+export type BuiltinExclusionsQueryData = components.ListBuiltinExclusionsResult;
 
-export function prefetchRiskListBuiltinPresets(
+export function prefetchBuiltinExclusions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskListBuiltinPresetsQuery(
+    ...buildBuiltinExclusionsQuery(
       client$,
       request,
       security,
@@ -34,26 +33,26 @@ export function prefetchRiskListBuiltinPresets(
   });
 }
 
-export function buildRiskListBuiltinPresetsQuery(
+export function buildBuiltinExclusionsQuery(
   client$: GramCore,
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<RiskListBuiltinPresetsQueryData>;
+  ) => Promise<BuiltinExclusionsQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskListBuiltinPresets({
+    queryKey: queryKeyBuiltinExclusions({
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function riskListBuiltinPresetsQueryFn(
+    queryFn: async function builtinExclusionsQueryFn(
       ctx,
-    ): Promise<RiskListBuiltinPresetsQueryData> {
+    ): Promise<BuiltinExclusionsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +64,7 @@ export function buildRiskListBuiltinPresetsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskExclusionsListBuiltinPresets(
+      return unwrapAsync(riskExclusionsListBuiltinExclusions(
         client$,
         request,
         security,
@@ -75,12 +74,12 @@ export function buildRiskListBuiltinPresetsQuery(
   };
 }
 
-export function queryKeyRiskListBuiltinPresets(
+export function queryKeyBuiltinExclusions(
   parameters: {
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "exclusions", "listBuiltinPresets", parameters];
+  return ["@gram/client", "exclusions", "listBuiltinExclusions", parameters];
 }

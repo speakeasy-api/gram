@@ -8,9 +8,9 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * One rule in the built-in preset exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.
+ * One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.
  */
-export type BuiltinPresetEntry = {
+export type BuiltinExclusionEntry = {
   /**
    * Human rationale for why these values are known-safe.
    */
@@ -24,14 +24,14 @@ export type BuiltinPresetEntry = {
    */
   reason: string;
   /**
-   * Example values or regex patterns — published test/documentation data, never real secrets.
+   * Example values — published test/documentation data, never real secrets.
    */
   samples?: Array<string> | undefined;
 };
 
 /** @internal */
-export const BuiltinPresetEntry$inboundSchema: z.ZodMiniType<
-  BuiltinPresetEntry,
+export const BuiltinExclusionEntry$inboundSchema: z.ZodMiniType<
+  BuiltinExclusionEntry,
   unknown
 > = z.object({
   description: z.string(),
@@ -40,12 +40,12 @@ export const BuiltinPresetEntry$inboundSchema: z.ZodMiniType<
   samples: z.optional(z.array(z.string())),
 });
 
-export function builtinPresetEntryFromJSON(
+export function builtinExclusionEntryFromJSON(
   jsonString: string,
-): SafeParseResult<BuiltinPresetEntry, SDKValidationError> {
+): SafeParseResult<BuiltinExclusionEntry, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => BuiltinPresetEntry$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'BuiltinPresetEntry' from JSON`,
+    (x) => BuiltinExclusionEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'BuiltinExclusionEntry' from JSON`,
   );
 }

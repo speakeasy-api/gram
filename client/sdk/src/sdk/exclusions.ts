@@ -5,7 +5,7 @@
 import { riskExclusionsCreate } from "../funcs/riskExclusionsCreate.js";
 import { riskExclusionsDelete } from "../funcs/riskExclusionsDelete.js";
 import { riskExclusionsList } from "../funcs/riskExclusionsList.js";
-import { riskExclusionsListBuiltinPresets } from "../funcs/riskExclusionsListBuiltinPresets.js";
+import { riskExclusionsListBuiltinExclusions } from "../funcs/riskExclusionsListBuiltinExclusions.js";
 import { riskExclusionsUpdate } from "../funcs/riskExclusionsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -52,17 +52,17 @@ export class Exclusions extends ClientSDK {
   }
 
   /**
-   * listBuiltinPresets risk
+   * listBuiltinExclusions risk
    *
    * @remarks
-   * List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+   * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
    */
-  async listBuiltinPresets(
-    request?: operations.ListBuiltinPresetsRequest | undefined,
-    security?: operations.ListBuiltinPresetsSecurity | undefined,
+  async listBuiltinExclusions(
+    request?: operations.ListBuiltinExclusionsRequest | undefined,
+    security?: operations.ListBuiltinExclusionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListBuiltinPresetsResult> {
-    return unwrapAsync(riskExclusionsListBuiltinPresets(
+  ): Promise<components.ListBuiltinExclusionsResult> {
+    return unwrapAsync(riskExclusionsListBuiltinExclusions(
       this,
       request,
       security,

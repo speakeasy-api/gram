@@ -22,12 +22,13 @@ import (
 // TestCatalogData_Validate ensures the shipped catalog parses and compiles.
 func TestCatalogData_Validate(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, Validate(), "embedded catalog.yaml must be valid")
-	require.Len(t, Version(), 8, "Version() should be an 8-char checksum prefix")
+	lib := newLibrary(t)
+	require.Len(t, lib.Version(), 8, "Version() should be an 8-char checksum prefix")
 }
 
 func TestCatalogData_Reason(t *testing.T) {
 	t.Parallel()
+	lib := newLibrary(t)
 
 	tests := []struct {
 		name       string
@@ -111,7 +112,7 @@ func TestCatalogData_Reason(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Reason(tt.m)
+			got := lib.Reason(tt.m)
 			if tt.wantReason {
 				require.NotEmptyf(t, got, "Reason(%+v) should be non-empty (suppressed FP)", tt.m)
 			} else {

@@ -18,7 +18,7 @@ import (
 type Client struct {
 	CreateRiskPolicyEndpoint               goa.Endpoint
 	ListRiskPoliciesEndpoint               goa.Endpoint
-	ListBuiltinPresetsEndpoint             goa.Endpoint
+	ListBuiltinExclusionsEndpoint          goa.Endpoint
 	GetRiskPolicyEndpoint                  goa.Endpoint
 	UpdateRiskPolicyEndpoint               goa.Endpoint
 	DeleteRiskPolicyEndpoint               goa.Endpoint
@@ -54,11 +54,11 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinPresets, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
-		ListBuiltinPresetsEndpoint:             listBuiltinPresets,
+		ListBuiltinExclusionsEndpoint:          listBuiltinExclusions,
 		GetRiskPolicyEndpoint:                  getRiskPolicy,
 		UpdateRiskPolicyEndpoint:               updateRiskPolicy,
 		DeleteRiskPolicyEndpoint:               deleteRiskPolicy,
@@ -138,9 +138,9 @@ func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayloa
 	return ires.(*ListRiskPoliciesResult), nil
 }
 
-// ListBuiltinPresets calls the "listBuiltinPresets" endpoint of the "risk"
-// service.
-// ListBuiltinPresets may return the following errors:
+// ListBuiltinExclusions calls the "listBuiltinExclusions" endpoint of the
+// "risk" service.
+// ListBuiltinExclusions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -152,13 +152,13 @@ func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayloa
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListBuiltinPresets(ctx context.Context, p *ListBuiltinPresetsPayload) (res *ListBuiltinPresetsResult, err error) {
+func (c *Client) ListBuiltinExclusions(ctx context.Context, p *ListBuiltinExclusionsPayload) (res *ListBuiltinExclusionsResult, err error) {
 	var ires any
-	ires, err = c.ListBuiltinPresetsEndpoint(ctx, p)
+	ires, err = c.ListBuiltinExclusionsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListBuiltinPresetsResult), nil
+	return ires.(*ListBuiltinExclusionsResult), nil
 }
 
 // GetRiskPolicy calls the "getRiskPolicy" endpoint of the "risk" service.

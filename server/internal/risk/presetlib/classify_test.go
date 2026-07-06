@@ -1,16 +1,27 @@
 package presetlib
 
-import "testing"
+import (
+	"testing"
 
-// TestCatalogIntegrity guards the embedded catalog.yaml: it must parse, every
-// matcher type must be known, every regex must compile, and rule ids must be
-// unique. A bad edit fails here in CI rather than silently in production.
+	"github.com/stretchr/testify/require"
+)
+
+// newLibrary parses the embedded catalog and fails the test on any error. Shared
+// by the presetlib test files that need a live *Library.
+func newLibrary(t *testing.T) *Library {
+	t.Helper()
+	lib, err := New()
+	require.NoError(t, err, "embedded catalog must parse")
+	return lib
+}
+
+// TestCatalogIntegrity guards the embedded catalog.yaml: New must parse it (every
+// matcher type known, every regex compiling, unique rule ids), and it must expose
+// a version. A bad edit fails here in CI rather than silently in production.
 func TestCatalogIntegrity(t *testing.T) {
 	t.Parallel()
-	if err := Validate(); err != nil {
-		t.Fatalf("embedded catalog is invalid: %v", err)
-	}
-	if Version() == "" {
+	lib := newLibrary(t)
+	if lib.Version() == "" {
 		t.Fatal("Version() is empty")
 	}
 }
@@ -20,6 +31,7 @@ func TestCatalogIntegrity(t *testing.T) {
 // (engine) and catalog_data_test.go (catalog entries).
 func TestReasonSmoke(t *testing.T) {
 	t.Parallel()
+	lib := newLibrary(t)
 	tests := []struct {
 		name    string
 		m       Match
@@ -34,7 +46,7 @@ func TestReasonSmoke(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Reason(tt.m)
+			got := lib.Reason(tt.m)
 			if tt.wantHit && got == "" {
 				t.Errorf("Reason(%+v) = \"\", want non-empty", tt.m)
 			}

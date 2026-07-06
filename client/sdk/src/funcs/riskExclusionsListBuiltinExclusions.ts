@@ -29,19 +29,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listBuiltinPresets risk
+ * listBuiltinExclusions risk
  *
  * @remarks
- * List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+ * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
-export function riskExclusionsListBuiltinPresets(
+export function riskExclusionsListBuiltinExclusions(
   client: GramCore,
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListBuiltinPresetsResult,
+    components.ListBuiltinExclusionsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -63,13 +63,13 @@ export function riskExclusionsListBuiltinPresets(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListBuiltinPresetsResult,
+      components.ListBuiltinExclusionsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -87,7 +87,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListBuiltinPresetsRequest$outboundSchema),
+        z.optional(operations.ListBuiltinExclusionsRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -98,7 +98,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.listBuiltinPresets")();
+  const path = pathToFunc("/rpc/risk.listBuiltinExclusions")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -146,7 +146,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listBuiltinPresets",
+    operationID: "listBuiltinExclusions",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -190,7 +190,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListBuiltinPresetsResult,
+    components.ListBuiltinExclusionsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -201,7 +201,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListBuiltinPresetsResult$inboundSchema),
+    M.json(200, components.ListBuiltinExclusionsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

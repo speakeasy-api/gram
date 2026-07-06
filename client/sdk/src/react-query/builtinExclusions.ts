@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskListBuiltinPresetsQuery,
-  prefetchRiskListBuiltinPresets,
-  queryKeyRiskListBuiltinPresets,
-  RiskListBuiltinPresetsQueryData,
-} from "./riskListBuiltinPresets.core.js";
+  buildBuiltinExclusionsQuery,
+  BuiltinExclusionsQueryData,
+  prefetchBuiltinExclusions,
+  queryKeyBuiltinExclusions,
+} from "./builtinExclusions.core.js";
 export {
-  buildRiskListBuiltinPresetsQuery,
-  prefetchRiskListBuiltinPresets,
-  queryKeyRiskListBuiltinPresets,
-  type RiskListBuiltinPresetsQueryData,
+  buildBuiltinExclusionsQuery,
+  type BuiltinExclusionsQueryData,
+  prefetchBuiltinExclusions,
+  queryKeyBuiltinExclusions,
 };
 
-export type RiskListBuiltinPresetsQueryError =
+export type BuiltinExclusionsQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,25 +53,22 @@ export type RiskListBuiltinPresetsQueryError =
   | SDKValidationError;
 
 /**
- * listBuiltinPresets risk
+ * listBuiltinExclusions risk
  *
  * @remarks
- * List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+ * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
-export function useRiskListBuiltinPresets(
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+export function useBuiltinExclusions(
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: QueryHookOptions<
-    RiskListBuiltinPresetsQueryData,
-    RiskListBuiltinPresetsQueryError
+    BuiltinExclusionsQueryData,
+    BuiltinExclusionsQueryError
   >,
-): UseQueryResult<
-  RiskListBuiltinPresetsQueryData,
-  RiskListBuiltinPresetsQueryError
-> {
+): UseQueryResult<BuiltinExclusionsQueryData, BuiltinExclusionsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskListBuiltinPresetsQuery(
+    ...buildBuiltinExclusionsQuery(
       client,
       request,
       security,
@@ -82,25 +79,25 @@ export function useRiskListBuiltinPresets(
 }
 
 /**
- * listBuiltinPresets risk
+ * listBuiltinExclusions risk
  *
  * @remarks
- * List the built-in preset exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+ * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
-export function useRiskListBuiltinPresetsSuspense(
-  request?: operations.ListBuiltinPresetsRequest | undefined,
-  security?: operations.ListBuiltinPresetsSecurity | undefined,
+export function useBuiltinExclusionsSuspense(
+  request?: operations.ListBuiltinExclusionsRequest | undefined,
+  security?: operations.ListBuiltinExclusionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskListBuiltinPresetsQueryData,
-    RiskListBuiltinPresetsQueryError
+    BuiltinExclusionsQueryData,
+    BuiltinExclusionsQueryError
   >,
 ): UseSuspenseQueryResult<
-  RiskListBuiltinPresetsQueryData,
-  RiskListBuiltinPresetsQueryError
+  BuiltinExclusionsQueryData,
+  BuiltinExclusionsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskListBuiltinPresetsQuery(
+    ...buildBuiltinExclusionsQuery(
       client,
       request,
       security,
@@ -110,7 +107,7 @@ export function useRiskListBuiltinPresetsSuspense(
   });
 }
 
-export function setRiskListBuiltinPresetsData(
+export function setBuiltinExclusionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -119,14 +116,14 @@ export function setRiskListBuiltinPresetsData(
       gramProject?: string | undefined;
     },
   ],
-  data: RiskListBuiltinPresetsQueryData,
-): RiskListBuiltinPresetsQueryData | undefined {
-  const key = queryKeyRiskListBuiltinPresets(...queryKeyBase);
+  data: BuiltinExclusionsQueryData,
+): BuiltinExclusionsQueryData | undefined {
+  const key = queryKeyBuiltinExclusions(...queryKeyBase);
 
-  return client.setQueryData<RiskListBuiltinPresetsQueryData>(key, data);
+  return client.setQueryData<BuiltinExclusionsQueryData>(key, data);
 }
 
-export function invalidateRiskListBuiltinPresets(
+export function invalidateBuiltinExclusions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -142,18 +139,18 @@ export function invalidateRiskListBuiltinPresets(
     queryKey: [
       "@gram/client",
       "exclusions",
-      "listBuiltinPresets",
+      "listBuiltinExclusions",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllRiskListBuiltinPresets(
+export function invalidateAllBuiltinExclusions(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "exclusions", "listBuiltinPresets"],
+    queryKey: ["@gram/client", "exclusions", "listBuiltinExclusions"],
   });
 }

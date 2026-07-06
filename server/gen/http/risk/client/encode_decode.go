@@ -500,13 +500,14 @@ func DecodeListRiskPoliciesResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
-// BuildListBuiltinPresetsRequest instantiates a HTTP request object with
-// method and path set to call the "risk" service "listBuiltinPresets" endpoint
-func (c *Client) BuildListBuiltinPresetsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListBuiltinPresetsRiskPath()}
+// BuildListBuiltinExclusionsRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listBuiltinExclusions"
+// endpoint
+func (c *Client) BuildListBuiltinExclusionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListBuiltinExclusionsRiskPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("risk", "listBuiltinPresets", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("risk", "listBuiltinExclusions", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -515,13 +516,13 @@ func (c *Client) BuildListBuiltinPresetsRequest(ctx context.Context, v any) (*ht
 	return req, nil
 }
 
-// EncodeListBuiltinPresetsRequest returns an encoder for requests sent to the
-// risk listBuiltinPresets server.
-func EncodeListBuiltinPresetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListBuiltinExclusionsRequest returns an encoder for requests sent to
+// the risk listBuiltinExclusions server.
+func EncodeListBuiltinExclusionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*risk.ListBuiltinPresetsPayload)
+		p, ok := v.(*risk.ListBuiltinExclusionsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("risk", "listBuiltinPresets", "*risk.ListBuiltinPresetsPayload", v)
+			return goahttp.ErrInvalidType("risk", "listBuiltinExclusions", "*risk.ListBuiltinExclusionsPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -539,10 +540,10 @@ func EncodeListBuiltinPresetsRequest(encoder func(*http.Request) goahttp.Encoder
 	}
 }
 
-// DecodeListBuiltinPresetsResponse returns a decoder for responses returned by
-// the risk listBuiltinPresets endpoint. restoreBody controls whether the
+// DecodeListBuiltinExclusionsResponse returns a decoder for responses returned
+// by the risk listBuiltinExclusions endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
-// DecodeListBuiltinPresetsResponse may return the following errors:
+// DecodeListBuiltinExclusionsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -554,7 +555,7 @@ func EncodeListBuiltinPresetsRequest(encoder func(*http.Request) goahttp.Encoder
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListBuiltinPresetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListBuiltinExclusionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -571,169 +572,169 @@ func DecodeListBuiltinPresetsResponse(decoder func(*http.Response) goahttp.Decod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListBuiltinPresetsResponseBody
+				body ListBuiltinExclusionsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsResponseBody(&body)
+			err = ValidateListBuiltinExclusionsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			res := NewListBuiltinPresetsResultOK(&body)
+			res := NewListBuiltinExclusionsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListBuiltinPresetsUnauthorizedResponseBody
+				body ListBuiltinExclusionsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsUnauthorizedResponseBody(&body)
+			err = ValidateListBuiltinExclusionsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsUnauthorized(&body)
+			return nil, NewListBuiltinExclusionsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListBuiltinPresetsForbiddenResponseBody
+				body ListBuiltinExclusionsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsForbiddenResponseBody(&body)
+			err = ValidateListBuiltinExclusionsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsForbidden(&body)
+			return nil, NewListBuiltinExclusionsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListBuiltinPresetsBadRequestResponseBody
+				body ListBuiltinExclusionsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsBadRequestResponseBody(&body)
+			err = ValidateListBuiltinExclusionsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsBadRequest(&body)
+			return nil, NewListBuiltinExclusionsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListBuiltinPresetsNotFoundResponseBody
+				body ListBuiltinExclusionsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsNotFoundResponseBody(&body)
+			err = ValidateListBuiltinExclusionsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsNotFound(&body)
+			return nil, NewListBuiltinExclusionsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListBuiltinPresetsConflictResponseBody
+				body ListBuiltinExclusionsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsConflictResponseBody(&body)
+			err = ValidateListBuiltinExclusionsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsConflict(&body)
+			return nil, NewListBuiltinExclusionsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListBuiltinPresetsUnsupportedMediaResponseBody
+				body ListBuiltinExclusionsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsUnsupportedMediaResponseBody(&body)
+			err = ValidateListBuiltinExclusionsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsUnsupportedMedia(&body)
+			return nil, NewListBuiltinExclusionsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListBuiltinPresetsInvalidResponseBody
+				body ListBuiltinExclusionsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsInvalidResponseBody(&body)
+			err = ValidateListBuiltinExclusionsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsInvalid(&body)
+			return nil, NewListBuiltinExclusionsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListBuiltinPresetsInvariantViolationResponseBody
+					body ListBuiltinExclusionsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+					return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 				}
-				err = ValidateListBuiltinPresetsInvariantViolationResponseBody(&body)
+				err = ValidateListBuiltinExclusionsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+					return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 				}
-				return nil, NewListBuiltinPresetsInvariantViolation(&body)
+				return nil, NewListBuiltinExclusionsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListBuiltinPresetsUnexpectedResponseBody
+					body ListBuiltinExclusionsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+					return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 				}
-				err = ValidateListBuiltinPresetsUnexpectedResponseBody(&body)
+				err = ValidateListBuiltinExclusionsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+					return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 				}
-				return nil, NewListBuiltinPresetsUnexpected(&body)
+				return nil, NewListBuiltinExclusionsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinPresets", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinExclusions", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListBuiltinPresetsGatewayErrorResponseBody
+				body ListBuiltinExclusionsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
 			}
-			err = ValidateListBuiltinPresetsGatewayErrorResponseBody(&body)
+			err = ValidateListBuiltinExclusionsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "listBuiltinPresets", err)
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
 			}
-			return nil, NewListBuiltinPresetsGatewayError(&body)
+			return nil, NewListBuiltinExclusionsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinPresets", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinExclusions", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -8602,30 +8603,30 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	return res
 }
 
-// unmarshalBuiltinPresetCategoryResponseBodyToRiskBuiltinPresetCategory builds
-// a value of type *risk.BuiltinPresetCategory from a value of type
-// *BuiltinPresetCategoryResponseBody.
-func unmarshalBuiltinPresetCategoryResponseBodyToRiskBuiltinPresetCategory(v *BuiltinPresetCategoryResponseBody) *risk.BuiltinPresetCategory {
-	res := &risk.BuiltinPresetCategory{
+// unmarshalBuiltinExclusionCategoryResponseBodyToRiskBuiltinExclusionCategory
+// builds a value of type *risk.BuiltinExclusionCategory from a value of type
+// *BuiltinExclusionCategoryResponseBody.
+func unmarshalBuiltinExclusionCategoryResponseBodyToRiskBuiltinExclusionCategory(v *BuiltinExclusionCategoryResponseBody) *risk.BuiltinExclusionCategory {
+	res := &risk.BuiltinExclusionCategory{
 		Label: *v.Label,
 	}
-	res.Entries = make([]*risk.BuiltinPresetEntry, len(v.Entries))
+	res.Entries = make([]*risk.BuiltinExclusionEntry, len(v.Entries))
 	for i, val := range v.Entries {
 		if val == nil {
 			res.Entries[i] = nil
 			continue
 		}
-		res.Entries[i] = unmarshalBuiltinPresetEntryResponseBodyToRiskBuiltinPresetEntry(val)
+		res.Entries[i] = unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry(val)
 	}
 
 	return res
 }
 
-// unmarshalBuiltinPresetEntryResponseBodyToRiskBuiltinPresetEntry builds a
-// value of type *risk.BuiltinPresetEntry from a value of type
-// *BuiltinPresetEntryResponseBody.
-func unmarshalBuiltinPresetEntryResponseBodyToRiskBuiltinPresetEntry(v *BuiltinPresetEntryResponseBody) *risk.BuiltinPresetEntry {
-	res := &risk.BuiltinPresetEntry{
+// unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry builds
+// a value of type *risk.BuiltinExclusionEntry from a value of type
+// *BuiltinExclusionEntryResponseBody.
+func unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry(v *BuiltinExclusionEntryResponseBody) *risk.BuiltinExclusionEntry {
+	res := &risk.BuiltinExclusionEntry{
 		ID:          *v.ID,
 		Reason:      *v.Reason,
 		Description: *v.Description,

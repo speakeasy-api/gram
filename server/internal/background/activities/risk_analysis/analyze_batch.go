@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -44,6 +45,7 @@ type AnalyzeBatch struct {
 	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
 	customRulesPub  gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	celEng          *celenv.Engine
+	builtinPresets  *presetlib.Library
 }
 
 func NewAnalyzeBatch(
@@ -61,6 +63,7 @@ func NewAnalyzeBatch(
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
 ) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
@@ -84,6 +87,7 @@ func NewAnalyzeBatch(
 		gitleaksPub:     gitleaksPub,
 		customRulesPub:  customRulesPub,
 		celEng:          celEng,
+		builtinPresets:  builtinPresets,
 	}
 }
 

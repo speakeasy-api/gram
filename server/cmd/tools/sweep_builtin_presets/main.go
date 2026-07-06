@@ -87,6 +87,12 @@ func run() int {
 		return 2
 	}
 
+	lib, err := presetlib.New()
+	if err != nil {
+		log.Printf("load built-in exclusion library: %v", err)
+		return 1
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -102,8 +108,8 @@ func run() int {
 		return 1
 	}
 
-	rep, runErr := sweep(ctx, pool, cfg)
-	printReport(cfg, rep)
+	rep, runErr := sweep(ctx, pool, cfg, lib)
+	printReport(cfg, rep, lib)
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		log.Printf("sweep failed: %v", runErr)
@@ -185,8 +191,8 @@ func parseFlags() (config, error) {
 }
 
 // selectPage walks risk_results in id order. It only fetches rows whose rule_id
-// is scoped by the preset catalog — either an exact id (presetlib.RuleIDs) or a
-// "prefix*" family exposed as a SQL LIKE pattern (presetlib.RuleIDGlobs, see
+// is scoped by the preset catalog — either an exact id (Library.RuleIDs) or a
+// "prefix*" family exposed as a SQL LIKE pattern (Library.RuleIDGlobs, see
 // likeGlobs) — and that are still active (found, not excluded, not already
 // swept), within the id/time window. source and match are fetched because the
 // catalog classifies on all three axes.
@@ -219,7 +225,7 @@ WHERE r.id = t.id
 
 // likeGlobs turns the catalog's "prefix*" rule-id globs into SQL LIKE patterns
 // (e.g. "secret.stripe_*" -> "secret.stripe_%"). The LIKE clause is only a scan
-// pre-filter: presetlib.Reason re-checks every fetched row, so a pattern that
+// pre-filter: Library.Reason re-checks every fetched row, so a pattern that
 // over-matches (e.g. an underscore acting as a LIKE single-char wildcard) can
 // only widen the scan, never cause a wrong stamp.
 func likeGlobs(globs []string) []string {
@@ -233,14 +239,14 @@ func likeGlobs(globs []string) []string {
 	return out
 }
 
-func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) {
+func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.Library) (report, error) {
 	var rep report
 	rep.byReason = map[string]int64{}
 	rep.lastCursor = cfg.cursor
 
-	ruleIDs := presetlib.RuleIDs()
-	globs := likeGlobs(presetlib.RuleIDGlobs())
-	provenance := "preset:" + presetlib.Version() + " "
+	ruleIDs := lib.RuleIDs()
+	globs := likeGlobs(lib.RuleIDGlobs())
+	provenance := "preset:" + lib.Version() + " "
 	upper := uuidv7.LowerBound(cfg.to)
 	cursor := cfg.cursor
 
@@ -281,7 +287,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 			if match == nil {
 				continue
 			}
-			if reason := presetlib.Reason(presetlib.Match{Source: source, RuleID: ruleID, Value: *match}); reason != "" {
+			if reason := lib.Reason(presetlib.Match{Source: source, RuleID: ruleID, Value: *match}); reason != "" {
 				stamped := provenance + reason
 				ids = append(ids, id)
 				reasons = append(reasons, stamped)
@@ -322,14 +328,14 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 	}
 }
 
-func printReport(cfg config, rep report) {
+func printReport(cfg config, rep report, lib *presetlib.Library) {
 	mode := "DRY RUN (no writes)"
 	if !cfg.dryRun {
 		mode = "APPLIED"
 	}
 	fmt.Println()
 	fmt.Println("preset false-positive sweep summary")
-	fmt.Printf("  catalog:     preset:%s\n", presetlib.Version())
+	fmt.Printf("  catalog:     preset:%s\n", lib.Version())
 	fmt.Printf("  mode:        %s\n", mode)
 	fmt.Printf("  org:         %s\n", cfg.orgID)
 	fmt.Printf("  project:     %s\n", cfg.projectID)

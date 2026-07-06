@@ -475,23 +475,23 @@ func EncodeListRiskPoliciesError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
-// EncodeListBuiltinPresetsResponse returns an encoder for responses returned
-// by the risk listBuiltinPresets endpoint.
-func EncodeListBuiltinPresetsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListBuiltinExclusionsResponse returns an encoder for responses
+// returned by the risk listBuiltinExclusions endpoint.
+func EncodeListBuiltinExclusionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*risk.ListBuiltinPresetsResult)
+		res, _ := v.(*risk.ListBuiltinExclusionsResult)
 		enc := encoder(ctx, w)
-		body := NewListBuiltinPresetsResponseBody(res)
+		body := NewListBuiltinExclusionsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListBuiltinPresetsRequest returns a decoder for requests sent to the
-// risk listBuiltinPresets endpoint.
-func DecodeListBuiltinPresetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ListBuiltinPresetsPayload, error) {
-	return func(r *http.Request) (*risk.ListBuiltinPresetsPayload, error) {
-		var payload *risk.ListBuiltinPresetsPayload
+// DecodeListBuiltinExclusionsRequest returns a decoder for requests sent to
+// the risk listBuiltinExclusions endpoint.
+func DecodeListBuiltinExclusionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ListBuiltinExclusionsPayload, error) {
+	return func(r *http.Request) (*risk.ListBuiltinExclusionsPayload, error) {
+		var payload *risk.ListBuiltinExclusionsPayload
 		var (
 			apikeyToken      *string
 			sessionToken     *string
@@ -509,7 +509,7 @@ func DecodeListBuiltinPresetsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListBuiltinPresetsPayload(apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListBuiltinExclusionsPayload(apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -536,9 +536,9 @@ func DecodeListBuiltinPresetsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	}
 }
 
-// EncodeListBuiltinPresetsError returns an encoder for errors returned by the
-// listBuiltinPresets risk endpoint.
-func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListBuiltinExclusionsError returns an encoder for errors returned by
+// the listBuiltinExclusions risk endpoint.
+func EncodeListBuiltinExclusionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -555,7 +555,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsUnauthorizedResponseBody(res)
+				body = NewListBuiltinExclusionsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -569,7 +569,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsForbiddenResponseBody(res)
+				body = NewListBuiltinExclusionsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -583,7 +583,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsBadRequestResponseBody(res)
+				body = NewListBuiltinExclusionsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -597,7 +597,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsNotFoundResponseBody(res)
+				body = NewListBuiltinExclusionsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -611,7 +611,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsConflictResponseBody(res)
+				body = NewListBuiltinExclusionsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -625,7 +625,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsUnsupportedMediaResponseBody(res)
+				body = NewListBuiltinExclusionsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -639,7 +639,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsInvalidResponseBody(res)
+				body = NewListBuiltinExclusionsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -653,7 +653,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsInvariantViolationResponseBody(res)
+				body = NewListBuiltinExclusionsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -667,7 +667,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsUnexpectedResponseBody(res)
+				body = NewListBuiltinExclusionsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -681,7 +681,7 @@ func EncodeListBuiltinPresetsError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListBuiltinPresetsGatewayErrorResponseBody(res)
+				body = NewListBuiltinExclusionsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -8345,34 +8345,34 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	return res
 }
 
-// marshalRiskBuiltinPresetCategoryToBuiltinPresetCategoryResponseBody builds a
-// value of type *BuiltinPresetCategoryResponseBody from a value of type
-// *risk.BuiltinPresetCategory.
-func marshalRiskBuiltinPresetCategoryToBuiltinPresetCategoryResponseBody(v *risk.BuiltinPresetCategory) *BuiltinPresetCategoryResponseBody {
-	res := &BuiltinPresetCategoryResponseBody{
+// marshalRiskBuiltinExclusionCategoryToBuiltinExclusionCategoryResponseBody
+// builds a value of type *BuiltinExclusionCategoryResponseBody from a value of
+// type *risk.BuiltinExclusionCategory.
+func marshalRiskBuiltinExclusionCategoryToBuiltinExclusionCategoryResponseBody(v *risk.BuiltinExclusionCategory) *BuiltinExclusionCategoryResponseBody {
+	res := &BuiltinExclusionCategoryResponseBody{
 		Label: v.Label,
 	}
 	if v.Entries != nil {
-		res.Entries = make([]*BuiltinPresetEntryResponseBody, len(v.Entries))
+		res.Entries = make([]*BuiltinExclusionEntryResponseBody, len(v.Entries))
 		for i, val := range v.Entries {
 			if val == nil {
 				res.Entries[i] = nil
 				continue
 			}
-			res.Entries[i] = marshalRiskBuiltinPresetEntryToBuiltinPresetEntryResponseBody(val)
+			res.Entries[i] = marshalRiskBuiltinExclusionEntryToBuiltinExclusionEntryResponseBody(val)
 		}
 	} else {
-		res.Entries = []*BuiltinPresetEntryResponseBody{}
+		res.Entries = []*BuiltinExclusionEntryResponseBody{}
 	}
 
 	return res
 }
 
-// marshalRiskBuiltinPresetEntryToBuiltinPresetEntryResponseBody builds a value
-// of type *BuiltinPresetEntryResponseBody from a value of type
-// *risk.BuiltinPresetEntry.
-func marshalRiskBuiltinPresetEntryToBuiltinPresetEntryResponseBody(v *risk.BuiltinPresetEntry) *BuiltinPresetEntryResponseBody {
-	res := &BuiltinPresetEntryResponseBody{
+// marshalRiskBuiltinExclusionEntryToBuiltinExclusionEntryResponseBody builds a
+// value of type *BuiltinExclusionEntryResponseBody from a value of type
+// *risk.BuiltinExclusionEntry.
+func marshalRiskBuiltinExclusionEntryToBuiltinExclusionEntryResponseBody(v *risk.BuiltinExclusionEntry) *BuiltinExclusionEntryResponseBody {
+	res := &BuiltinExclusionEntryResponseBody{
 		ID:          v.ID,
 		Reason:      v.Reason,
 		Description: v.Description,

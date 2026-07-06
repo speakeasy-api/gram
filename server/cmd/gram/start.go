@@ -94,6 +94,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -981,6 +982,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
 			}
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
 			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
@@ -1130,6 +1135,7 @@ func newStartCommand() *cli.Command {
 				hookPIScanner,
 				featureFlags,
 				celEngine,
+				builtinPresets,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -1214,6 +1220,7 @@ func newStartCommand() *cli.Command {
 						PIIScanner:                     piiScanner,
 						PIScanner:                      piScanner,
 						ShadowMCPClient:                shadowMCPClient,
+						BuiltinPresets:                 builtinPresets,
 						AuditLogger:                    auditLogger,
 						WorkOSClient:                   backgroundWorkOSClient,
 						SvixClient:                     svixClient,
