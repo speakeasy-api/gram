@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
@@ -211,6 +212,178 @@ func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "allow", result.Decision)
+}
+
+// TestIngest_InferredSkillEmitsDerivedTelemetryRow covers Codex-style skill
+// detection, where the sender attaches data.skill to an ordinary tool event
+// instead of reclassifying it: the underlying tool row must stay truthful
+// (policy scans and tool counts key on it) and the activation must land as a
+// separate skill.activated row matching the Claude vocabulary.
+func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	raw := "PreToolUse"
+	toolName := "Bash"
+	toolID := "call_skill_read"
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-skill-session")
+	payload.Source.RawEventName = &raw
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "cat .agents/skills/repo-review/SKILL.md"},
+		},
+		Skill: &gen.HookSkillData{Name: "repo-review"},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 2
+	}, 2*time.Second, 50*time.Millisecond, "expected the tool row plus a derived skill row")
+
+	byEvent := map[string]telemetryrepo.TelemetryLog{}
+	for _, l := range logs {
+		switch {
+		case strings.Contains(l.Attributes, "skill.activated"):
+			byEvent["skill"] = l
+		case strings.Contains(l.Attributes, "PreToolUse"):
+			byEvent["tool"] = l
+		}
+	}
+
+	toolRow, ok := byEvent["tool"]
+	require.True(t, ok, "the underlying tool event must be recorded with its provider event name")
+	require.Contains(t, toolRow.Attributes, `"Bash"`, "the tool row must keep the real tool identity")
+	require.NotContains(t, toolRow.Attributes, "skill.activated")
+
+	skillRow, ok := byEvent["skill"]
+	require.True(t, ok, "an inferred skill must produce a derived skill.activated row")
+	require.Contains(t, skillRow.Attributes, "repo-review")
+	require.Contains(t, skillRow.Attributes, `"Skill"`)
+	require.NotNil(t, skillRow.GramChatID)
+	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+}
+
+// TestIngest_ExplicitSkillActivationEmitsSingleRow pins the other half of the
+// derived-row gate: a sender-classified skill.activated event is already the
+// skill row and must not spawn a duplicate.
+func TestIngest_ExplicitSkillActivationEmitsSingleRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	payload := canonicalIngestPayload("claude", "skill.activated", "claude-skill-session")
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		Skill: &gen.HookSkillData{Name: "repo-review"},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	listRows := func() []telemetryrepo.TelemetryLog {
+		rows, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		require.NoError(t, err)
+		return rows
+	}
+
+	require.Eventually(t, func() bool { return len(listRows()) >= 1 }, 2*time.Second, 50*time.Millisecond)
+	require.Never(t, func() bool { return len(listRows()) > 1 }, 500*time.Millisecond, 100*time.Millisecond,
+		"an explicit skill.activated event must not mint a derived duplicate")
+	rows := listRows()
+	require.Len(t, rows, 1)
+	require.Contains(t, rows[0].Attributes, "skill.activated")
+	require.Contains(t, rows[0].Attributes, "repo-review")
+}
+
+// TestIngest_BlockedEventDoesNotEmitDerivedSkillRow: a policy-denied tool call
+// never ran, so an inferred skill on it is not an activation.
+func TestIngest_BlockedEventDoesNotEmitDerivedSkillRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-blocked-skill"
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-blocked-skill-session")
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "cat .agents/skills/repo-review/SKILL.md"},
+		},
+		Mcp:   &gen.HookMCPData{ServerIdentity: &serverIdentity},
+		Skill: &gen.HookSkillData{Name: "repo-review"},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+
+	listRows := func() []telemetryrepo.TelemetryLog {
+		rows, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		require.NoError(t, err)
+		return rows
+	}
+
+	require.Eventually(t, func() bool { return len(listRows()) >= 1 }, 2*time.Second, 50*time.Millisecond)
+	require.Never(t, func() bool {
+		for _, row := range listRows() {
+			if strings.Contains(row.Attributes, "skill.activated") {
+				return true
+			}
+		}
+		return false
+	}, 500*time.Millisecond, 100*time.Millisecond,
+		"a blocked event must not produce a derived activation row")
 }
 
 func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
