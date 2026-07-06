@@ -10,6 +10,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -1020,6 +1021,7 @@ function PolicyCenterContent() {
     useState<Set<string>>(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+  const [deletingPolicy, setDeletingPolicy] = useState<RiskPolicy | null>(null);
 
   const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
     "policies",
@@ -1093,7 +1095,10 @@ function PolicyCenterContent() {
   });
 
   const deleteMutation = useRiskPoliciesDeleteMutation({
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeletingPolicy(null);
+    },
   });
 
   const handleCreate = (kind?: PolicyKind) => {
@@ -1422,8 +1427,9 @@ function PolicyCenterContent() {
     }
   };
 
-  const handleDelete = (row: PolicyRow) => {
-    deleteMutation.mutate({ request: { id: row.policy.id } });
+  const handleConfirmDelete = () => {
+    if (!deletingPolicy) return;
+    deleteMutation.mutate({ request: { id: deletingPolicy.id } });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -1688,7 +1694,9 @@ function PolicyCenterContent() {
               )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(row)}
+                onSelect={() => {
+                  setTimeout(() => setDeletingPolicy(row.policy), 0);
+                }}
               >
                 Delete
               </DropdownMenuItem>
@@ -2065,6 +2073,47 @@ function PolicyCenterContent() {
             {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
+
+        {/* Delete confirmation */}
+        <Dialog
+          open={!!deletingPolicy}
+          onOpenChange={(open) => {
+            if (!open) setDeletingPolicy(null);
+          }}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete Policy</Dialog.Title>
+              <Dialog.Description>
+                Are you sure you want to delete{" "}
+                <strong>{deletingPolicy?.name}</strong>? This action cannot be
+                undone.
+              </Dialog.Description>
+            </Dialog.Header>
+            <Dialog.Footer>
+              <Button
+                variant="tertiary"
+                onClick={() => setDeletingPolicy(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleConfirmDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending && (
+                  <Button.LeftIcon>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </Button.LeftIcon>
+                )}
+                <Button.Text>
+                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                </Button.Text>
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );
