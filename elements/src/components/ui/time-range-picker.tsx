@@ -386,6 +386,7 @@ function TimeRangePicker({
     initialCustomLabel || null,
   );
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const triggerRef = React.useRef<HTMLDivElement>(null);
 
   // Sync custom label from props (e.g., when URL changes)
   React.useEffect(() => {
@@ -548,6 +549,7 @@ function TimeRangePicker({
     <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild disabled={disabled}>
         <div
+          ref={triggerRef}
           className={cn(
             "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
             "border-border hover:border-border/80",
@@ -615,6 +617,27 @@ function TimeRangePicker({
           // Prevent popover from stealing focus from the input
           e.preventDefault();
           inputRef.current?.focus();
+        }}
+        onPointerDownOutside={(e) => {
+          // handleOpenChange swallows close-while-editing so the input/popover
+          // focus interplay can't dismiss mid-typing — but that makes a genuine
+          // outside click take two clicks (first only blurs the input). Close
+          // directly here, unless the click is on the trigger/input itself.
+          // Inside a ShadowRoot embed, `e.target` is retargeted to the shadow
+          // host, so check the original event's composedPath for the trigger
+          // (same workaround as the tool-ui popover).
+          const trigger = triggerRef.current;
+          const path = e.detail.originalEvent.composedPath?.() ?? [];
+          const target = e.target as Node | null;
+          if (
+            trigger &&
+            (path.includes(trigger) || (target && trigger.contains(target)))
+          ) {
+            return;
+          }
+          setInputValue("");
+          setIsEditing(false);
+          setIsOpen(false);
         }}
       >
         <div className="flex flex-col">

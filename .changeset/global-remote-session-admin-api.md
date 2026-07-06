@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+Add the `adminRemoteSessions` management service for curating a platform-wide catalog of remote session providers. A "global" provider is a `remote_session_issuer` paired with one or more `remote_session_client` records that have no owning project and no owning organization (`project_id IS NULL AND organization_id IS NULL`), so it is shared across every organization rather than scoped to one. The service exposes CRUD over global issuers and clients (`createGlobalIssuer`, `listGlobalIssuers`, `getGlobalIssuer`, `updateGlobalIssuer`, `deleteGlobalIssuer`, and the matching `*GlobalClient` methods, plus `listGlobalClients` by issuer). Every method is gated to platform admins (Speakeasy employees) and is session-authenticated only. Issuer slugs are unique within the global scope, deleting an issuer is blocked while a live client still references it, and client secrets are write-only. This ships the creation/administration surface only; the runtime consumption path (projects inheriting global providers) is a separate follow-up, so global rows exist but nothing reads them yet.

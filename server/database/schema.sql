@@ -3813,6 +3813,11 @@ CREATE INDEX IF NOT EXISTS external_keys_external_credential_id_idx
 ON external_keys (external_credential_id)
 WHERE deleted IS FALSE;
 
+-- Composite unique key so tenant-scoped tables (e.g. json_web_key_sets) can
+-- composite-FK to (organization_id, id) and pin the reference to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS external_keys_organization_id_id_key
+ON external_keys (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS aws_kms_keys (
   external_key_id uuid NOT NULL,
   external_keys_provider TEXT NOT NULL DEFAULT 'aws_kms',
@@ -3834,3 +3839,70 @@ CREATE TABLE IF NOT EXISTS gcp_kms_keys (
   CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
   CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
 );
+
+-- JSON Web Key Set (JWKS): the published collection of public keys for an
+-- issuer. Individual keys are external key based (e.g. KMS keys) and hold
+-- public JWK material only; the private key never leaves the customer KMS and
+-- is only ever called to sign. The backing external key is tenancy-pinned via
+-- a composite FK to (organization_id, id) so a set can only reference a key
+-- owned by the same organization.
+CREATE TABLE IF NOT EXISTS json_web_key_sets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  external_key_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_key_sets_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_key_sets_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_key_sets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
+-- and pin the reference to one org. A unique index for parity with external_keys.
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
+ON json_web_key_sets (organization_id, id);
+
+-- Individual published key entries within a JSON Web Key Set. Each row is one
+-- public JWK (identified by `kid`) with a lifecycle state.
+CREATE TABLE IF NOT EXISTS json_web_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  json_web_key_set_id uuid NOT NULL,
+  external_key_id uuid NOT NULL,
+  -- Pin the key version for external key providers that support versioning
+  external_key_version TEXT,
+  state TEXT NOT NULL,
+  kid TEXT NOT NULL,
+  public_jwk JSONB NOT NULL,
+  activated_at timestamptz,
+  retired_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_keys_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT json_web_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_one_active_idx
+ON json_web_keys (json_web_key_set_id)
+WHERE state = 'active' AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_set_kid_idx
+ON json_web_keys (json_web_key_set_id, kid)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing json_web_keys_set_tenant_fkey (ON DELETE CASCADE):
+-- keeps set/org/project cascade deletes off a seq scan, including soft-deleted
+-- rows that the partial unique indexes above exclude.
+CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
+ON json_web_keys (organization_id, json_web_key_set_id);

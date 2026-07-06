@@ -1,5 +1,5 @@
-import { Scope } from "@/hooks/useRBAC";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import React from "react";

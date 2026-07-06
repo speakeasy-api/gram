@@ -18,7 +18,10 @@ const scopePattern = `^[!#-[\]-~]+$`
 // audiencePattern matches non-empty printable ASCII with no whitespace.
 const audiencePattern = `^[!-~]+$`
 
-func scopeAttribute(description string) {
+// ScopeAttribute applies the scope-token element validation. Exported for the
+// platformadmin/remotesessions design, which enforces the same boundary rules
+// on the global-client forms.
+func ScopeAttribute(description string) {
 	Description(description)
 	Elem(func() {
 		Pattern(scopePattern)
@@ -26,7 +29,9 @@ func scopeAttribute(description string) {
 	})
 }
 
-func audienceAttribute() {
+// AudienceAttribute applies the audience validation. Exported for the
+// platformadmin/remotesessions design.
+func AudienceAttribute() {
 	Pattern(audiencePattern)
 	MaxLength(512)
 }
@@ -298,9 +303,9 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), func() {
-		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
 })
@@ -317,9 +322,9 @@ var CreateCimdForm = Type("CreateCimdForm", func() {
 		})
 	})
 	Attribute("scope", ArrayOf(String), func() {
-		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
 
 	Required("remote_session_issuer_id")
 })
@@ -340,9 +345,9 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 	})
 	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), func() {
-		scopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
+		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
 	})
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", audienceAttribute)
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", AudienceAttribute)
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id")
 })
@@ -356,9 +361,9 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), func() {
-		scopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
+		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", audienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
 
 	Required("id")
 })
@@ -397,10 +402,11 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
-	// No FormatUUID: organization-level clients have no project and serialize
-	// this as an empty string, which a UUID format check would reject.
-	Attribute("project_id", String, "The owning project id. Empty for organization-level clients.")
-	Attribute("organization_id", String, "The owning organization id. Empty for legacy rows not yet backfilled.")
+	// No FormatUUID: organization-level clients have no project, and global
+	// clients (project_id NULL, organization_id NULL) have neither, so both
+	// serialize this as an empty string, which a UUID format check would reject.
+	Attribute("project_id", String, "The owning project id. Empty for organization-level and global clients.")
+	Attribute("organization_id", String, "The owning organization id. Empty for legacy rows not yet backfilled and global clients.")
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id.", func() {
 		Format(FormatUUID)
 	})

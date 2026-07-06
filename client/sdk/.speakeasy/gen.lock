@@ -108,6 +108,7 @@ trackedFiles:
   docs/models/components/createdeploymentresult.md: {}
   docs/models/components/createdomainrequestbody.md: {}
   docs/models/components/createenvironmentform.md: {}
+  docs/models/components/createglobalremotesessionclientform.md: {}
   docs/models/components/createissuerrequestbody.md: {}
   docs/models/components/createkeyform.md: {}
   docs/models/components/createmcpendpointform.md: {}
@@ -458,6 +459,7 @@ trackedFiles:
   docs/models/components/remotemcpserverheader.md: {}
   docs/models/components/remotesession.md: {}
   docs/models/components/remotesessionclient.md: {}
+  docs/models/components/remotesessionclienttokenendpointauthmethod.md: {}
   docs/models/components/remotesessionissuer.md: {}
   docs/models/components/remotesessionissuerdraft.md: {}
   docs/models/components/removeclientfrommcpserverrequestbody.md: {}
@@ -824,6 +826,10 @@ trackedFiles:
   docs/models/operations/createdeploymentsecurityoption2.md: {}
   docs/models/operations/createenvironmentrequest.md: {}
   docs/models/operations/createenvironmentsecurity.md: {}
+  docs/models/operations/createglobalremotesessionclientrequest.md: {}
+  docs/models/operations/createglobalremotesessionclientsecurity.md: {}
+  docs/models/operations/createglobalremotesessionissuerrequest.md: {}
+  docs/models/operations/createglobalremotesessionissuersecurity.md: {}
   docs/models/operations/createglobaltoolvariationgrouprequest.md: {}
   docs/models/operations/createglobaltoolvariationgroupsecurity.md: {}
   docs/models/operations/createglobaltoolvariationgroupsecurityoption1.md: {}
@@ -919,6 +925,10 @@ trackedFiles:
   docs/models/operations/deletedomainsecurity.md: {}
   docs/models/operations/deleteenvironmentrequest.md: {}
   docs/models/operations/deleteenvironmentsecurity.md: {}
+  docs/models/operations/deleteglobalremotesessionclientrequest.md: {}
+  docs/models/operations/deleteglobalremotesessionclientsecurity.md: {}
+  docs/models/operations/deleteglobalremotesessionissuerrequest.md: {}
+  docs/models/operations/deleteglobalremotesessionissuersecurity.md: {}
   docs/models/operations/deleteglobalvariationrequest.md: {}
   docs/models/operations/deleteglobalvariationsecurity.md: {}
   docs/models/operations/deleteglobalvariationsecurityoption1.md: {}
@@ -1075,6 +1085,10 @@ trackedFiles:
   docs/models/operations/getemployeedataflowgraphsecurity.md: {}
   docs/models/operations/getemployeedataflowgraphsecurityoption1.md: {}
   docs/models/operations/getemployeedataflowgraphsecurityoption2.md: {}
+  docs/models/operations/getglobalremotesessionclientrequest.md: {}
+  docs/models/operations/getglobalremotesessionclientsecurity.md: {}
+  docs/models/operations/getglobalremotesessionissuerrequest.md: {}
+  docs/models/operations/getglobalremotesessionissuersecurity.md: {}
   docs/models/operations/gethookssummaryrequest.md: {}
   docs/models/operations/gethookssummarysecurity.md: {}
   docs/models/operations/gethookssummarysecurityoption1.md: {}
@@ -1290,6 +1304,12 @@ trackedFiles:
   docs/models/operations/listfilteroptionssecurity.md: {}
   docs/models/operations/listfilteroptionssecurityoption1.md: {}
   docs/models/operations/listfilteroptionssecurityoption2.md: {}
+  docs/models/operations/listglobalremotesessionclientsrequest.md: {}
+  docs/models/operations/listglobalremotesessionclientsresponse.md: {}
+  docs/models/operations/listglobalremotesessionclientssecurity.md: {}
+  docs/models/operations/listglobalremotesessionissuersrequest.md: {}
+  docs/models/operations/listglobalremotesessionissuersresponse.md: {}
+  docs/models/operations/listglobalremotesessionissuerssecurity.md: {}
   docs/models/operations/listglobalvariationsrequest.md: {}
   docs/models/operations/listglobalvariationssecurity.md: {}
   docs/models/operations/listglobalvariationssecurityoption1.md: {}
@@ -1676,6 +1696,10 @@ trackedFiles:
   docs/models/operations/updatedomainsecurity.md: {}
   docs/models/operations/updateenvironmentrequest.md: {}
   docs/models/operations/updateenvironmentsecurity.md: {}
+  docs/models/operations/updateglobalremotesessionclientrequest.md: {}
+  docs/models/operations/updateglobalremotesessionclientsecurity.md: {}
+  docs/models/operations/updateglobalremotesessionissuerrequest.md: {}
+  docs/models/operations/updateglobalremotesessionissuersecurity.md: {}
   docs/models/operations/updateinviterolerequest.md: {}
   docs/models/operations/updateinviterolesecurity.md: {}
   docs/models/operations/updatemarketplacesettingsrequest.md: {}
@@ -1787,6 +1811,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption1.md: {}
   docs/models/operations/verifyremotemcpurlsecurityoption2.md: {}
   docs/sdks/access/README.md: {}
+  docs/sdks/adminremotesessions/README.md: {}
   docs/sdks/agent/README.md: {}
   docs/sdks/aiintegrations/README.md: {}
   docs/sdks/assets/README.md: {}
@@ -1876,6 +1901,16 @@ trackedFiles:
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPAccessRule.ts: {}
+  src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
+  src/funcs/adminRemoteSessionsCreateGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsDeleteGlobalClient.ts: {}
+  src/funcs/adminRemoteSessionsDeleteGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsGetGlobalClient.ts: {}
+  src/funcs/adminRemoteSessionsGetGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsListGlobalClients.ts: {}
+  src/funcs/adminRemoteSessionsListGlobalIssuers.ts: {}
+  src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
+  src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
@@ -2265,6 +2300,7 @@ trackedFiles:
   src/models/components/createdeploymentresult.ts: {}
   src/models/components/createdomainrequestbody.ts: {}
   src/models/components/createenvironmentform.ts: {}
+  src/models/components/createglobalremotesessionclientform.ts: {}
   src/models/components/createissuerrequestbody.ts: {}
   src/models/components/createkeyform.ts: {}
   src/models/components/createmcpendpointform.ts: {}
@@ -2792,6 +2828,8 @@ trackedFiles:
   src/models/operations/createcustomersession.ts: {}
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
+  src/models/operations/createglobalremotesessionclient.ts: {}
+  src/models/operations/createglobalremotesessionissuer.ts: {}
   src/models/operations/createglobaltoolvariationgroup.ts: {}
   src/models/operations/createmcpendpoint.ts: {}
   src/models/operations/createmcpserver.ts: {}
@@ -2825,6 +2863,8 @@ trackedFiles:
   src/models/operations/deletecustomdetectionrule.ts: {}
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
+  src/models/operations/deleteglobalremotesessionclient.ts: {}
+  src/models/operations/deleteglobalremotesessionissuer.ts: {}
   src/models/operations/deleteglobalvariation.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
@@ -2876,6 +2916,8 @@ trackedFiles:
   src/models/operations/getdeploymentlogs.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
+  src/models/operations/getglobalremotesessionclient.ts: {}
+  src/models/operations/getglobalremotesessionissuer.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getlatestdeployment.ts: {}
@@ -2951,6 +2993,8 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listenvironments.ts: {}
   src/models/operations/listfilteroptions.ts: {}
+  src/models/operations/listglobalremotesessionclients.ts: {}
+  src/models/operations/listglobalremotesessionissuers.ts: {}
   src/models/operations/listglobalvariations.ts: {}
   src/models/operations/listgrants.ts: {}
   src/models/operations/listhookstraces.ts: {}
@@ -3071,6 +3115,8 @@ trackedFiles:
   src/models/operations/updatecustomdetectionrule.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
+  src/models/operations/updateglobalremotesessionclient.ts: {}
+  src/models/operations/updateglobalremotesessionissuer.ts: {}
   src/models/operations/updateinviterole.ts: {}
   src/models/operations/updatemarketplacesettings.ts: {}
   src/models/operations/updatemcpendpoint.ts: {}
@@ -3165,6 +3211,8 @@ trackedFiles:
   src/react-query/createCustomerSession.ts: {}
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
+  src/react-query/createGlobalRemoteSessionClient.ts: {}
+  src/react-query/createGlobalRemoteSessionIssuer.ts: {}
   src/react-query/createGlobalToolVariationGroup.ts: {}
   src/react-query/createMcpEndpoint.ts: {}
   src/react-query/createMcpServer.ts: {}
@@ -3191,6 +3239,8 @@ trackedFiles:
   src/react-query/deleteAIIntegrationConfig.ts: {}
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
+  src/react-query/deleteGlobalRemoteSessionClient.ts: {}
+  src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
   src/react-query/deleteGlobalVariation.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
@@ -3268,6 +3318,14 @@ trackedFiles:
   src/react-query/getUsageTiers.ts: {}
   src/react-query/getUserMetricsSummary.core.ts: {}
   src/react-query/getUserMetricsSummary.ts: {}
+  src/react-query/globalRemoteSessionClient.core.ts: {}
+  src/react-query/globalRemoteSessionClient.ts: {}
+  src/react-query/globalRemoteSessionClients.core.ts: {}
+  src/react-query/globalRemoteSessionClients.ts: {}
+  src/react-query/globalRemoteSessionIssuer.core.ts: {}
+  src/react-query/globalRemoteSessionIssuer.ts: {}
+  src/react-query/globalRemoteSessionIssuers.core.ts: {}
+  src/react-query/globalRemoteSessionIssuers.ts: {}
   src/react-query/globalVariations.core.ts: {}
   src/react-query/globalVariations.ts: {}
   src/react-query/grants.core.ts: {}
@@ -3551,6 +3609,8 @@ trackedFiles:
   src/react-query/triggers.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
+  src/react-query/updateGlobalRemoteSessionClient.ts: {}
+  src/react-query/updateGlobalRemoteSessionIssuer.ts: {}
   src/react-query/updateInviteRole.ts: {}
   src/react-query/updateMarketplaceSettings.ts: {}
   src/react-query/updateMcpEndpoint.ts: {}
@@ -3599,6 +3659,7 @@ trackedFiles:
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
   src/sdk/access.ts: {}
+  src/sdk/adminremotesessions.ts: {}
   src/sdk/agent.ts: {}
   src/sdk/aiintegrations.ts: {}
   src/sdk/assets.ts: {}
@@ -4029,6 +4090,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createGlobalRemoteSessionClient:
+    speakeasy-default-create-global-remote-session-client:
+      requestBody:
+        application/json: {"client_id": "<id>", "remote_session_issuer_id": "6f267ffc-c6f0-4622-88cc-2899f4e1190f"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-09-15T02:07:29.395Z", "created_at": "2024-12-29T06:40:50.923Z", "id": "370ec7d7-f8bc-4a92-a196-daab54d3a0f6", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "16e4894e-30c0-4aef-b5ef-5d9747c98b4f", "updated_at": "2025-08-19T00:14:09.736Z", "user_session_issuer_ids": ["93847116-b229-4e06-83c2-72e8d6314e70", "3e880637-2874-4997-ab06-bd4f83509cf3"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createGlobalRemoteSessionIssuer:
+    speakeasy-default-create-global-remote-session-issuer:
+      requestBody:
+        application/json: {"issuer": "diners_club", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2026-11-27T21:01:49.784Z", "id": "7b81df4f-58fd-486c-8d62-7ea22fc873cc", "issuer": "visa", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-08-31T11:41:31.384Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createGlobalToolVariationGroup:
     speakeasy-default-create-global-tool-variation-group:
       responses:
@@ -4382,6 +4465,26 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteGlobalRemoteSessionClient:
+    speakeasy-default-delete-global-remote-session-client:
+      parameters:
+        query:
+          id: "4bd8478b-172d-42a8-a49f-5bdf730cbda8"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteGlobalRemoteSessionIssuer:
+    speakeasy-default-delete-global-remote-session-issuer:
+      parameters:
+        query:
+          id: "8d57ae29-5f45-4a11-bab4-803788203df3"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteGlobalVariation:
     speakeasy-default-delete-global-variation:
       parameters:
@@ -4911,6 +5014,30 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getGlobalRemoteSessionClient:
+    speakeasy-default-get-global-remote-session-client:
+      parameters:
+        query:
+          id: "a32e7fe3-ad88-4843-9e9b-d029eca73d54"
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2025-01-03T11:07:58.027Z", "created_at": "2025-07-07T12:40:04.297Z", "id": "6f29e556-91e5-4edd-b721-b794f6472e81", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "e939aa40-3f85-44f7-9d08-32619e78c9a6", "updated_at": "2025-10-07T12:24:52.485Z", "user_session_issuer_ids": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getGlobalRemoteSessionIssuer:
+    speakeasy-default-get-global-remote-session-issuer:
+      parameters:
+        query:
+          id: "a899ca0f-2b91-4146-9aff-dbd0c0087f45"
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2024-09-21T00:29:22.321Z", "id": "484ce2ae-3cba-4802-8681-3057f85d5400", "issuer": "visa", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-29T08:53:02.458Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getHooksSummary:
     speakeasy-default-get-hooks-summary:
       requestBody:
@@ -5714,6 +5841,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listGlobalRemoteSessionClients:
+    speakeasy-default-list-global-remote-session-clients:
+      parameters:
+        query:
+          remote_session_issuer_id: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf"
+      responses:
+        "200":
+          application/json: {"items": [{"client_id": "<id>", "client_id_issued_at": "2026-10-03T14:38:30.681Z", "created_at": "2026-04-21T22:06:36.083Z", "id": "9812d234-04cc-4a10-9fd9-277c179ddb9a", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "99bd3ca7-f485-4720-ae42-50e9d9367813", "updated_at": "2025-05-06T08:56:14.123Z", "user_session_issuer_ids": ["6768a963-df51-43c1-be28-e9d6fa411025", "ea7cfbb1-4687-4820-82bf-7dda564a3211"]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listGlobalRemoteSessionIssuers:
+    speakeasy-default-list-global-remote-session-issuers:
+      responses:
+        "200":
+          application/json: {"items": [{"client_id_metadata_document_supported": true, "created_at": "2024-05-22T08:48:16.381Z", "id": "60abf4f3-2ba4-4095-a193-907bea3d776c", "issuer": "discover", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-28T08:57:47.917Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listGlobalVariations:
     speakeasy-default-list-global-variations:
       responses:
@@ -6978,6 +7126,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateGlobalRemoteSessionClient:
+    speakeasy-default-update-global-remote-session-client:
+      requestBody:
+        application/json: {"id": "9988f3a1-fc36-4a9f-b68e-b087538c5460"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2025-06-28T07:08:47.239Z", "created_at": "2026-09-25T17:11:59.178Z", "id": "f9bf0152-42d1-40fc-8a9f-836b4300511b", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "ef9d7dbf-465b-409b-8240-ec2eae783e9a", "updated_at": "2024-03-08T00:09:16.741Z", "user_session_issuer_ids": ["92c7eb85-cd67-4e69-8c2f-caba1cdcb403"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateGlobalRemoteSessionIssuer:
+    speakeasy-default-update-global-remote-session-issuer:
+      requestBody:
+        application/json: {"id": "6df977ce-98f8-45c9-926e-7c2b769aaf35"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-06-03T19:56:54.872Z", "id": "c1a38808-eb95-4644-9fb5-bed65587fae7", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-02-16T23:38:16.474Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateInviteRole:
     speakeasy-default-update-invite-role:
       requestBody:

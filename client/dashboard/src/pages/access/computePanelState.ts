@@ -1,9 +1,5 @@
-import type {
-  AnnotationHint,
-  CustomTab,
-  ResourceType,
-  Selector,
-} from "./types";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 
 // --- Collection group shape (minimal interface for computation) ---
