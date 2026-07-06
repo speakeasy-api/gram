@@ -238,12 +238,15 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 		return agenthooks.AcceptPrompt(), nil
 	}
 	// A nudge-worthy posture (never authenticated, or a cleared rejected key)
-	// fails the prompt open: blocking every turn on a credential the machine
-	// does not hold would brick the session, and the context note routes the
-	// user to sign-in instead.
-	if v.nudge && e.Provider == agenthooks.ProviderClaudeCode {
-		if note := r.loginNudge(e.Session.ID); note != "" {
-			return agenthooks.AcceptPrompt().WithContext(note), nil
+	// fails the prompt open on every provider: blocking each turn on a
+	// credential the machine does not hold would brick the session, and the
+	// turn's tool events stay gated regardless. Only Claude can carry the
+	// context note that routes the user to sign-in.
+	if v.nudge {
+		if e.Provider == agenthooks.ProviderClaudeCode {
+			if note := r.loginNudge(e.Session.ID); note != "" {
+				return agenthooks.AcceptPrompt().WithContext(note), nil
+			}
 		}
 		return agenthooks.AcceptPrompt(), nil
 	}

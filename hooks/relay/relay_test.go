@@ -599,6 +599,11 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	got = redactCommand(`curl -H "Cookie: sid=abc;" https://api.example.com/v1`)
 	require.NotContains(t, got, "sid=abc")
 	require.Contains(t, got, "api.example.com", "a trailing ';' on the last fragment must not swallow the next argument")
+
+	got = redactCommand(`curl -H "Cookie:sid=abc; csrf=def" tail5`)
+	require.NotContains(t, got, "sid=abc")
+	require.NotContains(t, got, "csrf=def", "a no-space header value ending in ';' continues the cookie mask")
+	require.Contains(t, got, "tail5")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
@@ -788,6 +793,30 @@ func TestBackfilledPromptDenyGatesTriggeringToolEvent(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "pi-guard", "the prompt deny message must reach the user on the triggering event")
 	require.Equal(t, int32(1), prompts.Load(), "the backfilled prompt must still be reported")
 	require.Equal(t, int32(0), tools.Load(), "the gated tool call is not reported: the agent never got to make it")
+}
+
+// TestRejectedCachedKeyCursorPromptFailsOpen: the reauth posture fails prompt
+// submissions open on every provider — a stale cache must not brick Cursor
+// turns. The turn's tool events remain gated, so nothing is lost policy-wise.
+func TestRejectedCachedKeyCursorPromptFailsOpen(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
+	})
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("TMPDIR", t.TempDir())
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", Nonblocking: false}
+
+	res := invoke(t, cfg, agenthooks.ProviderCursor, "cursor/before_submit_prompt.json")
+	require.Equal(t, 0, res.ExitCode, "a rejected cached key must fail the prompt open on cursor too")
+	require.NotContains(t, string(res.Stdout), `"continue":false`)
+	require.NotContains(t, string(res.Stdout), "reconnect", "the reauth message must not block the prompt")
+	require.FileExists(t, authFile+".reauth-needed")
+	_, statErr := os.Stat(authFile)
+	require.True(t, os.IsNotExist(statErr), "the rejected cached key must be forgotten")
 }
 
 // TestSplitInlineFlagsRecordsConfigError pins that an unreadable --config file

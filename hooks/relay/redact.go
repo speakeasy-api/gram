@@ -126,6 +126,10 @@ func redactCommand(raw string) string {
 				maskNext = true
 			default:
 				out = append(out, f[:i]+": ***")
+				// A no-space header ("Cookie:sid=abc; csrf=def") carries the
+				// first fragment in this token; a ';'-terminated value means
+				// more fragments follow.
+				cookieNext = strings.HasSuffix(value, ";")
 			}
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
