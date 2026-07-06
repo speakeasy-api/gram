@@ -37,7 +37,12 @@ import {
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   Loader2,
@@ -52,10 +57,10 @@ import {
 import {
   Fragment,
   type ReactNode,
-  useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useParams } from "react-router";
@@ -106,6 +111,7 @@ import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useRiskSaveEvalReviewMutation } from "@gram/client/react-query/riskSaveEvalReview.js";
 import { useRiskDeleteEvalReviewMutation } from "@gram/client/react-query/riskDeleteEvalReview.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { PromptGuardrailEvalResult } from "@gram/client/models/components/promptguardrailevalresult.js";
 import type { PromptGuardrailMessageVerdict } from "@gram/client/models/components/promptguardrailmessageverdict.js";
 import {
   ChatTranscript,
@@ -724,8 +730,9 @@ function PromptPolicyEditor({
       scopeMode === "messageTypes"
         ? policyMessageTypesForPayload(messageTypes)
         : [],
-    scopeInclude: scopeMode === "cel" ? scopeInclude.trim() : "",
-    scopeExempt: scopeExempt.trim(),
+    scopeInclude:
+      scopeMode === "cel" && scopeInclude.trim() ? scopeInclude : undefined,
+    scopeExempt: scopeExempt || undefined,
   });
 
   const actionPayload = () => ({
@@ -782,9 +789,7 @@ function PromptPolicyEditor({
 
   const canCreate = prompt.trim().length > 0;
 
-  // The inline guardrail the Evaluate step replays against real sessions. Memoized
-  // so its identity is stable while the author isn't editing; the eval queries
-  // are keyed by it, and a debounce further bounds re-judging (see EvalTuner).
+  // Stable guardrail snapshot for eval query keys.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
@@ -1225,18 +1230,12 @@ function ActionStep({
   );
 }
 
-// ── Evaluate step: prompt-tuning workbench (session-local mock) ───────────────
-// A manual tuning loop rather than a bulk run: tweak the guardrail on the left,
-// watch how it judges a real session's transcript on the right, mark it, move
-// on. The mock's verdicts are predefined, but the UX presents them as re-judged
-// live as the prompt changes.
+// ── Evaluate step: prompt-tuning workbench ────────────────────────────────────
 
 type EvalVerdict = "correct" | "false_positive" | "missed";
-type EvalMatchFilter = "all" | "flagged" | "clean";
 type JudgeAgreement = "agree" | "disagree";
+type EvalMatchFilter = "all" | "flagged" | "clean";
 
-// The inline guardrail replayed against real chat sessions. Mirrors the Evaluate
-// step's editable state; the eval queries are keyed by it.
 type Guardrail = {
   prompt: string;
   model: string;
@@ -1247,12 +1246,8 @@ type Guardrail = {
   scopeExempt: string;
 };
 
-// Cap the session picker so the lazy per-row judge (one call per visible row,
-// cached per guardrail+chat) stays bounded.
 const EVAL_SESSION_LIMIT = 8;
 
-// Build the judge request body for one chat under the current guardrail. The
-// query key derives from this, so equal guardrails hit the same cache.
 function evalRequestBody(guardrail: Guardrail, chatId: string) {
   return {
     evaluatePromptGuardrailRequestBody: {
@@ -1272,6 +1267,23 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
   };
 }
 
+function evalQueryKey(guardrail: Guardrail, chatId: string) {
+  return [
+    "@gram/client",
+    "evals",
+    "evaluate",
+    evalRequestBody(guardrail, chatId),
+  ] as const;
+}
+
+function isFailOpenCleanEval(result: PromptGuardrailEvalResult): boolean {
+  return (
+    !result.flagged &&
+    result.verdicts.length > 0 &&
+    result.verdicts.every((v) => v.totalTokens === 0)
+  );
+}
+
 function usePromptGuardrailEval(
   guardrail: Guardrail,
   chatId: string,
@@ -1283,11 +1295,9 @@ function usePromptGuardrailEval(
     [guardrail, chatId],
   );
 
-  // The generated query hook does not include the POST body in its cache key.
-  // This replay is keyed by the full inline guardrail so prompt edits and chats
-  // never share stale judge results.
+  // Key by POST body; the generated hook does not.
   return useQuery({
-    queryKey: ["@gram/client", "evals", "evaluate", request],
+    queryKey: evalQueryKey(guardrail, chatId),
     queryFn: ({ signal }) =>
       unwrapAsync(riskEvalsEvaluate(client, request, undefined, { signal })),
     enabled,
@@ -1308,13 +1318,12 @@ function guardrailEvalKey(guardrail: Guardrail): string {
 }
 
 const JUDGE_QUERY_OPTIONS = {
-  // Judging costs an LLM call; once a (guardrail, chat) is judged, keep it.
+  // Cache completed judge calls by guardrail and chat.
   staleTime: Infinity,
   gcTime: 5 * 60 * 1000,
   refetchOnWindowFocus: false,
 } as const;
 
-// Debounce a value so live guardrail edits don't fire a judge call per keystroke.
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -1324,9 +1333,6 @@ function useDebounced<T>(value: T, ms: number): T {
   return debounced;
 }
 
-// Verdicts are the review set (ground truth). On an existing policy they persist
-// via the review endpoints; during create (no policy id yet) they stay
-// session-local and are not saved.
 function useEvalVerdicts(policyId: string | null): {
   verdicts: Map<string, EvalVerdict>;
   setVerdict: (chatId: string, verdict: EvalVerdict) => void;
@@ -1399,14 +1405,121 @@ function EvalTuner({
   reviewVerdictFilter: EvalVerdict | null;
   setReviewVerdictFilter: (verdict: EvalVerdict | null) => void;
 }): JSX.Element {
-  // Judge against a debounced guardrail so typing doesn't re-judge every row on
-  // each keystroke; the card itself edits the prompt live.
+  // Debounce guardrail edits before judging rows.
   const judgeGuardrail = useDebounced(guardrail, 600);
   const guardrailKey = useMemo(() => guardrailEvalKey(guardrail), [guardrail]);
   const judgeGuardrailKey = useMemo(
     () => guardrailEvalKey(judgeGuardrail),
     [judgeGuardrail],
   );
+  const accumulatedEvalIdsRef = useRef<{
+    key: string;
+    ids: Set<string>;
+  }>({ key: judgeGuardrailKey, ids: new Set() });
+  const poisonRetryAfterRef = useRef(new Map<string, number>());
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const activeQuery = deferredQuery.trim();
+  const chatsQuery = useListChats(
+    {
+      search: activeQuery || undefined,
+      limit: EVAL_SESSION_LIMIT,
+      sortBy: SortBy.LastMessageTimestamp,
+      sortOrder: SortOrder.Desc,
+    },
+    undefined,
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
+  const rawChats = chatsQuery.data?.chats;
+  const chats = useMemo(() => rawChats ?? [], [rawChats]);
+  const visibleChatIds = useMemo(() => chats.map((chat) => chat.id), [chats]);
+  const reviewSetChatIds = useMemo(
+    () => Array.from(verdicts.keys()).sort(),
+    [verdicts],
+  );
+  const evalChatIds = useMemo(() => {
+    const current = accumulatedEvalIdsRef.current;
+    if (current.key !== judgeGuardrailKey) {
+      current.key = judgeGuardrailKey;
+      current.ids = new Set();
+    }
+    for (const chatId of visibleChatIds) current.ids.add(chatId);
+    for (const chatId of reviewSetChatIds) current.ids.add(chatId);
+    return Array.from(current.ids).sort();
+  }, [judgeGuardrailKey, reviewSetChatIds, visibleChatIds]);
+  const hasJudgeGuardrail = judgeGuardrail.prompt.trim().length > 0;
+  const client = useGramContext();
+  const queryClient = useQueryClient();
+  const evalQueries = useQueries({
+    queries: evalChatIds.map((chatId) => {
+      const request = evalRequestBody(judgeGuardrail, chatId);
+      return {
+        queryKey: evalQueryKey(judgeGuardrail, chatId),
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          unwrapAsync(
+            riskEvalsEvaluate(client, request, undefined, { signal }),
+          ),
+        enabled: hasJudgeGuardrail && evalChatIds.length > 0,
+        ...JUDGE_QUERY_OPTIONS,
+      };
+    }),
+  });
+  const evalByChatId = useMemo(() => {
+    const m = new Map<string, PromptGuardrailEvalResult>();
+    for (const chatId of evalChatIds) {
+      const state = queryClient.getQueryState<PromptGuardrailEvalResult>(
+        evalQueryKey(judgeGuardrail, chatId),
+      );
+      if (
+        state?.status === "success" &&
+        state.fetchStatus !== "fetching" &&
+        state.data?.chatId === chatId &&
+        !isFailOpenCleanEval(state.data)
+      ) {
+        m.set(chatId, state.data);
+      }
+    }
+    return m;
+  }, [evalChatIds, evalQueries, judgeGuardrail, queryClient]);
+  useEffect(() => {
+    const now = Date.now();
+    for (const chatId of evalChatIds) {
+      const queryKey = evalQueryKey(judgeGuardrail, chatId);
+      const state =
+        queryClient.getQueryState<PromptGuardrailEvalResult>(queryKey);
+      if (
+        state?.status === "success" &&
+        state.fetchStatus !== "fetching" &&
+        state.data?.chatId === chatId &&
+        isFailOpenCleanEval(state.data)
+      ) {
+        const retryKey = `${judgeGuardrailKey}:${chatId}`;
+        const retryAfter = poisonRetryAfterRef.current.get(retryKey) ?? 0;
+        if (now >= retryAfter) {
+          poisonRetryAfterRef.current.set(retryKey, now + 5000);
+          void queryClient.invalidateQueries({ queryKey, exact: true });
+        }
+      }
+    }
+  }, [
+    evalChatIds,
+    evalQueries,
+    judgeGuardrail,
+    judgeGuardrailKey,
+    queryClient,
+  ]);
+  const judgingChatIds = useMemo(() => {
+    if (!hasJudgeGuardrail) return new Set<string>();
+    return new Set(evalChatIds.filter((chatId) => !evalByChatId.has(chatId)));
+  }, [evalByChatId, evalChatIds, hasJudgeGuardrail]);
+  const reviewSetJudgingCount = useMemo(
+    () =>
+      reviewSetChatIds.filter((chatId) => judgingChatIds.has(chatId)).length,
+    [judgingChatIds, reviewSetChatIds],
+  );
+  const evalJudging = judgingChatIds.size > 0;
   useEffect(() => {
     if (!reviewVerdictFilter) return;
     for (const current of verdicts.values()) {
@@ -1425,6 +1538,8 @@ function EvalTuner({
         />
         <ReviewScorecard
           verdicts={verdicts}
+          evalsByChatId={evalByChatId}
+          judgingCount={reviewSetJudgingCount}
           activeVerdict={reviewVerdictFilter}
           onVerdictSelect={(next) =>
             setReviewVerdictFilter(reviewVerdictFilter === next ? null : next)
@@ -1434,6 +1549,14 @@ function EvalTuner({
       <SessionReview
         guardrail={judgeGuardrail}
         debouncePending={guardrailKey !== judgeGuardrailKey}
+        evalJudging={evalJudging}
+        evalByChatId={evalByChatId}
+        judgingChatIds={judgingChatIds}
+        query={query}
+        setQuery={setQuery}
+        activeQuery={activeQuery}
+        chats={chats}
+        chatsLoading={chatsQuery.isLoading}
         verdicts={verdicts}
         reviewVerdictFilter={reviewVerdictFilter}
         onClearReviewVerdictFilter={() => setReviewVerdictFilter(null)}
@@ -1474,7 +1597,12 @@ function PromptReview({
   activeVerdict: EvalVerdict | null;
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const scopeText = scopeSummaryText(scopeMode, messageTypes, scopeInclude);
+  const scopeText =
+    scopeMode === "cel"
+      ? scopeInclude.trim() || "All messages matching a CEL expression"
+      : [...messageTypes]
+          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+          .join(", ") || "No message types selected";
   const modelLabel =
     JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
@@ -1506,11 +1634,20 @@ function PromptReview({
               </Type>
             </SummaryRow>
           ) : null}
-          <PolicyActionAudienceRows
-            action={action}
-            audienceType={audienceType}
-            audiencePrincipalCount={audiencePrincipalCount}
-          />
+          <SummaryRow label="Action">
+            <Badge variant={action === "block" ? "warning" : "neutral"}>
+              {action === "block" ? "Block" : "Flag"}
+            </Badge>
+          </SummaryRow>
+          <SummaryRow label="Audience">
+            <Type small>
+              {audienceType === "targeted"
+                ? `${audiencePrincipalCount} targeted principal${
+                    audiencePrincipalCount === 1 ? "" : "s"
+                  }`
+                : "Everyone"}
+            </Type>
+          </SummaryRow>
         </Stack>
       </Card>
       <ReviewScorecard
@@ -1522,25 +1659,42 @@ function PromptReview({
   );
 }
 
-// Scorecard over the labeled review set: agreement + the two disagreement
-// directions (which tell you which way to tune the guardrail).
 function ReviewScorecard({
   verdicts,
+  evalsByChatId = null,
+  judgingCount = 0,
   activeVerdict,
   onVerdictSelect,
 }: {
   verdicts: Map<string, EvalVerdict>;
+  evalsByChatId?: Map<string, PromptGuardrailEvalResult> | null;
+  judgingCount?: number;
   activeVerdict?: EvalVerdict | null;
   onVerdictSelect?: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const reviewed = verdicts.size;
+  const judged = evalsByChatId?.size ?? reviewed;
   let correct = 0;
   let falsePositive = 0;
   let missed = 0;
-  for (const v of verdicts.values()) {
-    if (v === "correct") correct += 1;
-    else if (v === "false_positive") falsePositive += 1;
-    else if (v === "missed") missed += 1;
+  if (evalsByChatId) {
+    for (const [chatId, verdict] of verdicts) {
+      const result = evalsByChatId.get(chatId);
+      if (!result) continue;
+      const agreement = agreementForVerdict(result.flagged, verdict);
+      if (agreement === "agree") correct += 1;
+      else if (result.flagged && verdict === "false_positive") {
+        falsePositive += 1;
+      } else if (!result.flagged && verdict === "missed") {
+        missed += 1;
+      }
+    }
+  } else {
+    for (const v of verdicts.values()) {
+      if (v === "correct") correct += 1;
+      else if (v === "false_positive") falsePositive += 1;
+      else if (v === "missed") missed += 1;
+    }
   }
 
   return (
@@ -1555,10 +1709,14 @@ function ReviewScorecard({
         <Stack gap={4}>
           <div>
             <Type className="text-2xl font-semibold">
-              {correct}/{reviewed}
+              {correct}/{judged}
             </Type>
             <Type small muted>
-              match your judgment
+              {judgingCount > 0
+                ? `${judgingCount} judging, ${reviewed} in review set`
+                : `match your judgment across ${reviewed} reviewed ${
+                    reviewed === 1 ? "session" : "sessions"
+                  }`}
             </Type>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -1649,11 +1807,6 @@ function ScoreStat({
   return <div className="rounded-lg border p-3">{content}</div>;
 }
 
-type JudgedMatch = {
-  guardrailKey: string;
-  flagged: boolean;
-};
-
 function verdictForAgreement(
   flagged: boolean,
   agreement: JudgeAgreement,
@@ -1704,7 +1857,8 @@ function rowHiddenByFilter(
   filter: EvalMatchFilter,
   flagged: boolean | undefined,
 ): boolean {
-  if (filter === "all" || flagged === undefined) return false;
+  if (filter === "all") return false;
+  if (flagged === undefined) return true;
   return filter === "flagged" ? !flagged : flagged;
 }
 
@@ -1713,10 +1867,6 @@ function sessionUserLabel(chat: {
   userId?: string | undefined;
 }): string {
   return chat.externalUserId || chat.userId || "Unknown user";
-}
-
-function textContainsQuery(text: string, query: string): boolean {
-  return text.toLowerCase().includes(query.toLowerCase());
 }
 
 function highlightQuery(text: string, query: string): ReactNode {
@@ -1736,14 +1886,6 @@ function highlightQuery(text: string, query: string): ReactNode {
   );
 }
 
-function chatMatchesVisibleSearch(chat: ChatOverview, query: string): boolean {
-  if (query.length === 0) return true;
-
-  const title = chat.title || "Untitled session";
-  const userLabel = sessionUserLabel(chat);
-  return textContainsQuery(title, query) || textContainsQuery(userLabel, query);
-}
-
 function reviewedChatIdsForVerdict(
   verdicts: Map<string, EvalVerdict>,
   verdict: EvalVerdict | null,
@@ -1759,12 +1901,16 @@ function reviewedChatIdsForVerdict(
 function ReviewedSessionRows({
   chatIds,
   verdict,
+  evalsByChatId,
+  judgingChatIds,
   activeChatId,
   onClear,
   onSelect,
 }: {
   chatIds: string[];
   verdict: EvalVerdict;
+  evalsByChatId: Map<string, PromptGuardrailEvalResult>;
+  judgingChatIds: Set<string>;
   activeChatId: string | null;
   onClear: () => void;
   onSelect: (chatId: string) => void;
@@ -1795,6 +1941,8 @@ function ReviewedSessionRows({
             key={chatId}
             chatId={chatId}
             verdict={verdict}
+            evalResult={evalsByChatId.get(chatId)}
+            judging={judgingChatIds.has(chatId)}
             active={chatId === activeChatId}
             first={i === 0}
             onSelect={() => onSelect(chatId)}
@@ -1808,12 +1956,16 @@ function ReviewedSessionRows({
 function ReviewedSessionRow({
   chatId,
   verdict,
+  evalResult,
+  judging,
   active,
   first,
   onSelect,
 }: {
   chatId: string;
   verdict: EvalVerdict;
+  evalResult: PromptGuardrailEvalResult | undefined;
+  judging: boolean;
   active: boolean;
   first: boolean;
   onSelect: () => void;
@@ -1860,9 +2012,16 @@ function ReviewedSessionRow({
           ) : null}
         </Type>
       </div>
-      <Badge variant={verdict === "missed" ? "warning" : "neutral"}>
-        {evalVerdictLabel(verdict)}
-      </Badge>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <SessionMatchBadge
+          enabled
+          judging={judging}
+          flagged={evalResult?.flagged}
+        />
+        <Badge variant={verdict === "missed" ? "warning" : "neutral"}>
+          {evalVerdictLabel(verdict)}
+        </Badge>
+      </div>
     </button>
   );
 }
@@ -1870,6 +2029,14 @@ function ReviewedSessionRow({
 function SessionReview({
   guardrail,
   debouncePending,
+  evalJudging,
+  evalByChatId,
+  judgingChatIds,
+  query,
+  setQuery,
+  activeQuery,
+  chats,
+  chatsLoading,
   verdicts,
   reviewVerdictFilter,
   onClearReviewVerdictFilter,
@@ -1877,101 +2044,36 @@ function SessionReview({
 }: {
   guardrail: Guardrail;
   debouncePending: boolean;
+  evalJudging: boolean;
+  evalByChatId: Map<string, PromptGuardrailEvalResult>;
+  judgingChatIds: Set<string>;
+  query: string;
+  setQuery: (query: string) => void;
+  activeQuery: string;
+  chats: ChatOverview[];
+  chatsLoading: boolean;
   verdicts: Map<string, EvalVerdict>;
   reviewVerdictFilter: EvalVerdict | null;
   onClearReviewVerdictFilter: () => void;
   onVerdict: (chatId: string, verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<EvalMatchFilter>("all");
   const [selectedIdState, setSelectedIdState] = useState<string | null>(null);
-  const deferredQuery = useDeferredValue(query);
   const reviewedChatIds = useMemo(
     () => reviewedChatIdsForVerdict(verdicts, reviewVerdictFilter),
     [verdicts, reviewVerdictFilter],
   );
-
-  const chatsQuery = useListChats({
-    search: deferredQuery.trim() || undefined,
-    limit: EVAL_SESSION_LIMIT,
-    sortBy: SortBy.LastMessageTimestamp,
-    sortOrder: SortOrder.Desc,
-  });
-  const activeQuery = deferredQuery.trim();
-  const guardrailKey = useMemo(() => guardrailEvalKey(guardrail), [guardrail]);
-  const rawChats = chatsQuery.data?.chats;
-  const chats = useMemo(
+  const hasGuardrail = guardrail.prompt.trim().length > 0;
+  const visibleChats = useMemo(
     () =>
-      (rawChats ?? []).filter((chat) =>
-        chatMatchesVisibleSearch(chat, activeQuery),
+      chats.filter(
+        (chat) =>
+          !rowHiddenByFilter(filter, evalByChatId.get(chat.id)?.flagged),
       ),
-    [rawChats, activeQuery],
+    [chats, evalByChatId, filter],
   );
 
-  // Each row judges itself and reports its flagged state up so the match filter
-  // can hide non-matching rows without unmounting them (keeping the cache warm).
-  const [judged, setJudged] = useState<Map<string, JudgedMatch>>(new Map());
-  const [judgingRows, setJudgingRows] = useState<Map<string, string>>(
-    new Map(),
-  );
-  const [judgingTranscript, setJudgingTranscript] = useState<{
-    chatId: string;
-    guardrailKey: string;
-  } | null>(null);
-  const reportJudged = useCallback(
-    (chatId: string, flagged: boolean, reportedGuardrailKey: string) => {
-      setJudged((prev) => {
-        const current = prev.get(chatId);
-        if (
-          current?.guardrailKey === reportedGuardrailKey &&
-          current.flagged === flagged
-        ) {
-          return prev;
-        }
-        const next = new Map(prev);
-        next.set(chatId, { guardrailKey: reportedGuardrailKey, flagged });
-        return next;
-      });
-    },
-    [],
-  );
-  const reportRowJudging = useCallback(
-    (chatId: string, judging: boolean, reportedGuardrailKey: string) => {
-      setJudgingRows((prev) => {
-        const current = prev.get(chatId);
-        if (judging) {
-          if (current === reportedGuardrailKey) return prev;
-          const next = new Map(prev);
-          next.set(chatId, reportedGuardrailKey);
-          return next;
-        }
-        if (current !== reportedGuardrailKey) return prev;
-        const next = new Map(prev);
-        next.delete(chatId);
-        return next;
-      });
-    },
-    [],
-  );
-  const reportTranscriptJudging = useCallback(
-    (chatId: string, judging: boolean, reportedGuardrailKey: string) => {
-      setJudgingTranscript((current) => {
-        if (judging) return { chatId, guardrailKey: reportedGuardrailKey };
-        if (
-          current?.chatId !== chatId ||
-          current.guardrailKey !== reportedGuardrailKey
-        ) {
-          return current;
-        }
-        return null;
-      });
-    },
-    [],
-  );
-
-  // Keep the drawer closed until the user opens a row. If the selected row drops
-  // out of the current result set, close the drawer rather than auto-opening the
-  // first session.
+  // Do not auto-open a row while search/filter results change.
   const selectedId =
     selectedIdState &&
     (chats.some((c) => c.id === selectedIdState) ||
@@ -1979,29 +2081,13 @@ function SessionReview({
       ? selectedIdState
       : null;
   const selectedChat = chats.find((c) => c.id === selectedId) ?? null;
-  const hasGuardrail = guardrail.prompt.trim().length > 0;
-  const flaggedForCurrentGuardrail = (chatId: string) => {
-    const match = judged.get(chatId);
-    return match?.guardrailKey === guardrailKey ? match.flagged : undefined;
-  };
-  const rowIsVisible = (chat: ChatOverview) =>
-    !rowHiddenByFilter(filter, flaggedForCurrentGuardrail(chat.id));
-  const visibleRowsJudging = chats.some(
-    (chat) => rowIsVisible(chat) && judgingRows.get(chat.id) === guardrailKey,
-  );
-  const transcriptJudging =
-    !!selectedId &&
-    judgingTranscript?.chatId === selectedId &&
-    judgingTranscript.guardrailKey === guardrailKey;
-  const reevaluating =
-    hasGuardrail &&
-    (debouncePending || visibleRowsJudging || transcriptJudging);
+  const reevaluating = hasGuardrail && (debouncePending || evalJudging);
 
   return (
     <Card className="flex flex-col">
       <SectionHeader description="Search by title or user, review how this guardrail judges the transcript, then mark the verdict." />
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        {/* Search + match filter */}
+        {/* Search */}
         <Stack gap={2}>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -2043,11 +2129,13 @@ function SessionReview({
             <ReviewedSessionRows
               chatIds={reviewedChatIds}
               verdict={reviewVerdictFilter}
+              evalsByChatId={evalByChatId}
+              judgingChatIds={judgingChatIds}
               activeChatId={selectedId}
               onClear={onClearReviewVerdictFilter}
               onSelect={setSelectedIdState}
             />
-          ) : chatsQuery.isLoading ? (
+          ) : chatsLoading ? (
             <Type small muted className="block px-3 py-6 text-center">
               Loading sessions…
             </Type>
@@ -2055,21 +2143,23 @@ function SessionReview({
             <Type small muted className="block px-3 py-6 text-center">
               No sessions match your search.
             </Type>
+          ) : visibleChats.length === 0 ? (
+            <Type small muted className="block px-3 py-6 text-center">
+              No sessions match this judge filter.
+            </Type>
           ) : (
-            chats.map((chat, i) => (
+            visibleChats.map((chat, i) => (
               <SessionRow
                 key={chat.id}
                 chat={chat}
-                guardrail={guardrail}
-                guardrailKey={guardrailKey}
                 active={chat.id === selectedId}
                 first={i === 0}
-                enabled={hasGuardrail}
-                hidden={!rowIsVisible(chat)}
+                evalEnabled={hasGuardrail}
+                flagged={evalByChatId.get(chat.id)?.flagged}
+                judging={judgingChatIds.has(chat.id)}
+                reviewVerdict={verdicts.get(chat.id) ?? null}
                 searchQuery={activeQuery}
                 onSelect={() => setSelectedIdState(chat.id)}
-                onJudged={reportJudged}
-                onJudging={reportRowJudging}
               />
             ))
           )}
@@ -2079,14 +2169,12 @@ function SessionReview({
         chatId={selectedId}
         chat={selectedChat}
         guardrail={guardrail}
-        guardrailKey={guardrailKey}
         verdict={selectedId ? (verdicts.get(selectedId) ?? null) : null}
-        reviewDisabled={debouncePending || transcriptJudging}
+        reviewDisabled={debouncePending}
         onClose={() => setSelectedIdState(null)}
         onVerdict={(v) => {
           if (selectedId) onVerdict(selectedId, v);
         }}
-        onJudging={reportTranscriptJudging}
       />
     </Card>
   );
@@ -2111,45 +2199,27 @@ function ReevaluatingIndicator({
 
 function SessionRow({
   chat,
-  guardrail,
-  guardrailKey,
   active,
   first,
-  enabled,
-  hidden,
+  evalEnabled,
+  flagged,
+  judging,
+  reviewVerdict,
   searchQuery,
   onSelect,
-  onJudged,
-  onJudging,
 }: {
   chat: ChatOverview;
-  guardrail: Guardrail;
-  guardrailKey: string;
   active: boolean;
   first: boolean;
-  enabled: boolean;
-  hidden: boolean;
+  evalEnabled: boolean;
+  flagged: boolean | undefined;
+  judging: boolean;
+  reviewVerdict: EvalVerdict | null;
   searchQuery: string;
   onSelect: () => void;
-  onJudged: (chatId: string, flagged: boolean, guardrailKey: string) => void;
-  onJudging: (chatId: string, judging: boolean, guardrailKey: string) => void;
 }): JSX.Element {
-  const judge = usePromptGuardrailEval(guardrail, chat.id, enabled);
-  const judging = enabled && (judge.isPending || judge.isFetching);
-  const flagged = judging ? undefined : judge.data?.flagged;
   const title = chat.title || "Untitled session";
   const userLabel = sessionUserLabel(chat);
-
-  useEffect(() => {
-    if (flagged !== undefined) onJudged(chat.id, flagged, guardrailKey);
-  }, [flagged, chat.id, guardrailKey, onJudged]);
-  useEffect(() => {
-    onJudging(chat.id, judging, guardrailKey);
-  }, [chat.id, guardrailKey, judging, onJudging]);
-  useEffect(
-    () => () => onJudging(chat.id, false, guardrailKey),
-    [chat.id, guardrailKey, onJudging],
-  );
 
   return (
     <button
@@ -2159,7 +2229,6 @@ function SessionRow({
         "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
         !first && "border-t",
         active ? "bg-muted/60" : "hover:bg-muted/30",
-        hidden && "hidden",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -2176,10 +2245,13 @@ function SessionRow({
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <SessionMatchBadge
-          enabled={enabled}
-          judging={judging}
+          enabled={evalEnabled}
+          judging={judging || flagged === undefined}
           flagged={flagged}
         />
+        {reviewVerdict ? (
+          <Badge variant="neutral">{evalVerdictLabel(reviewVerdict)}</Badge>
+        ) : null}
       </div>
     </button>
   );
@@ -2211,22 +2283,18 @@ function EvalSessionTranscriptSheet({
   chatId,
   chat,
   guardrail,
-  guardrailKey,
   verdict,
   reviewDisabled,
   onClose,
   onVerdict,
-  onJudging,
 }: {
   chatId: string | null;
   chat: ChatOverview | null;
   guardrail: Guardrail;
-  guardrailKey: string;
   verdict: EvalVerdict | null;
   reviewDisabled: boolean;
   onClose: () => void;
   onVerdict: (v: EvalVerdict) => void;
-  onJudging: (chatId: string, judging: boolean, guardrailKey: string) => void;
 }): JSX.Element {
   return (
     <Sheet
@@ -2244,12 +2312,10 @@ function EvalSessionTranscriptSheet({
             chatId={chatId}
             chat={chat}
             guardrail={guardrail}
-            guardrailKey={guardrailKey}
             verdict={verdict}
             reviewDisabled={reviewDisabled}
             onClose={onClose}
             onVerdict={onVerdict}
-            onJudging={onJudging}
           />
         )}
       </SheetContent>
@@ -2284,26 +2350,110 @@ function EvalJudgeVerdictBlock({
   );
 }
 
+function JudgeSessionBanner({
+  evalResult,
+  fetching,
+}: {
+  evalResult: PromptGuardrailEvalResult | undefined;
+  fetching: boolean;
+}): JSX.Element {
+  if (fetching && !evalResult) {
+    return (
+      <div className="border-border bg-muted/30 flex items-start gap-3 border-b px-4 py-3">
+        <Loader2 className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
+        <div className="min-w-0">
+          <Type small className="font-medium">
+            Judge is evaluating this session
+          </Type>
+          <Type small muted>
+            Verdicts will appear against matching messages when the run
+            finishes.
+          </Type>
+        </div>
+      </div>
+    );
+  }
+
+  if (!evalResult) {
+    return (
+      <div className="border-border bg-muted/20 flex items-start gap-3 border-b px-4 py-3">
+        <Shield className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+        <div className="min-w-0">
+          <Type small className="font-medium">
+            Opened for judge evaluation
+          </Type>
+          <Type small muted>
+            The session has not returned a judge result yet.
+          </Type>
+        </div>
+      </div>
+    );
+  }
+
+  const matchedCount = evalResult.verdicts.filter((v) => v.matched).length;
+  const judgedLabel = `${evalResult.judgedCount} judged ${
+    evalResult.judgedCount === 1 ? "message" : "messages"
+  }`;
+  const detail = `${matchedCount} ${
+    matchedCount === 1 ? "message" : "messages"
+  } matched`;
+
+  if (evalResult.flagged) {
+    return (
+      <div className="border-warning/40 bg-warning/15 flex items-start gap-3 border-b px-4 py-3">
+        <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Type small className="font-semibold">
+              Judge flagged this session
+            </Type>
+            <Badge variant="warning" background>
+              Flagged
+            </Badge>
+          </div>
+          <Type small muted>
+            {detail} across {judgedLabel}. Matching messages are highlighted
+            below.
+          </Type>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-success/35 bg-success/10 flex items-start gap-3 border-b px-4 py-3">
+      <Check className="text-success mt-0.5 size-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Type small className="font-semibold">
+            Judge found this session clean
+          </Type>
+          <Badge variant="neutral">Clean</Badge>
+        </div>
+        <Type small muted>
+          No messages matched across {judgedLabel}.
+        </Type>
+      </div>
+    </div>
+  );
+}
+
 function SessionTranscript({
   chatId,
   chat,
   guardrail,
-  guardrailKey,
   verdict,
   reviewDisabled,
   onClose,
   onVerdict,
-  onJudging,
 }: {
   chatId: string;
   chat: ChatOverview | null;
   guardrail: Guardrail;
-  guardrailKey: string;
   verdict: EvalVerdict | null;
   reviewDisabled: boolean;
   onClose: () => void;
   onVerdict: (v: EvalVerdict) => void;
-  onJudging: (chatId: string, judging: boolean, guardrailKey: string) => void;
 }): JSX.Element {
   const transcript = useChatTranscript(chatId, true);
   const headerChat = chat ?? transcript.chat ?? null;
@@ -2312,12 +2462,14 @@ function SessionTranscript({
     chatId,
     guardrail.prompt.trim().length > 0,
   );
+  const evalResult = judge.data;
+  const judgeFetching = judge.isFetching;
 
   const verdictByMessage = useMemo(() => {
     const m = new Map<string, PromptGuardrailMessageVerdict>();
-    for (const v of judge.data?.verdicts ?? []) m.set(v.messageId, v);
+    for (const v of evalResult?.verdicts ?? []) m.set(v.messageId, v);
     return m;
-  }, [judge.data]);
+  }, [evalResult]);
 
   const rows = useMemo(
     () => buildTranscript(transcript.messages),
@@ -2369,17 +2521,9 @@ function SessionTranscript({
     }),
     [headerChat, verdictByMessage],
   );
-  const judgeFlagged = judge.data?.flagged;
-  const judgeSettled = judgeFlagged !== undefined && !judge.isFetching;
+  const judgeFlagged = evalResult?.flagged;
+  const judgeSettled = judgeFlagged !== undefined && !judgeFetching;
   const canReview = judgeSettled && !reviewDisabled;
-
-  useEffect(() => {
-    onJudging(chatId, judge.isFetching, guardrailKey);
-  }, [chatId, guardrailKey, judge.isFetching, onJudging]);
-  useEffect(
-    () => () => onJudging(chatId, false, guardrailKey),
-    [chatId, guardrailKey, onJudging],
-  );
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -2415,15 +2559,15 @@ function SessionTranscript({
                   {headerChat?.source ? (
                     <Badge variant="neutral">{headerChat.source}</Badge>
                   ) : null}
-                  {judge.data ? (
+                  {evalResult ? (
                     <Badge variant="neutral">
                       {formatEvalCostLatency(
-                        judge.data.totalCostUsd,
-                        judge.data.totalLatencyMs,
+                        evalResult.totalCostUsd,
+                        evalResult.totalLatencyMs,
                       )}
                     </Badge>
                   ) : null}
-                  {judge.isFetching ? (
+                  {judgeFetching ? (
                     <Badge variant="neutral">Judging…</Badge>
                   ) : null}
                 </div>
@@ -2439,6 +2583,8 @@ function SessionTranscript({
           </button>
         </div>
       </SheetHeader>
+
+      <JudgeSessionBanner evalResult={evalResult} fetching={judgeFetching} />
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -2967,11 +3113,12 @@ function StandardReview({
     );
   }
 
-  const scopeText = scopeSummaryText(
-    scopeMode,
-    selectedMessageTypes,
-    scopeInclude,
-  );
+  const scopeText =
+    scopeMode === "cel"
+      ? scopeInclude.trim() || "All messages matching a CEL expression"
+      : [...selectedMessageTypes]
+          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+          .join(", ") || "No message types selected";
 
   return (
     <Card>
@@ -3007,43 +3154,22 @@ function StandardReview({
             </Type>
           </SummaryRow>
         ) : null}
-        <PolicyActionAudienceRows
-          action={action}
-          audienceType={audienceType}
-          audiencePrincipalCount={audiencePrincipalCount}
-        />
+        <SummaryRow label="Action">
+          <Badge variant={action === "block" ? "warning" : "neutral"}>
+            {action === "block" ? "Block" : "Flag"}
+          </Badge>
+        </SummaryRow>
+        <SummaryRow label="Audience">
+          <Type small>
+            {audienceType === "targeted"
+              ? `${audiencePrincipalCount} targeted principal${
+                  audiencePrincipalCount === 1 ? "" : "s"
+                }`
+              : "Everyone"}
+          </Type>
+        </SummaryRow>
       </Stack>
     </Card>
-  );
-}
-
-// Action + Audience summary rows shared by both review confirmations.
-function PolicyActionAudienceRows({
-  action,
-  audienceType,
-  audiencePrincipalCount,
-}: {
-  action: PolicyAction;
-  audienceType: "everyone" | "targeted";
-  audiencePrincipalCount: number;
-}): JSX.Element {
-  return (
-    <>
-      <SummaryRow label="Action">
-        <Badge variant={action === "block" ? "warning" : "neutral"}>
-          {action === "block" ? "Block" : "Flag"}
-        </Badge>
-      </SummaryRow>
-      <SummaryRow label="Audience">
-        <Type small>
-          {audienceType === "targeted"
-            ? `${audiencePrincipalCount} targeted principal${
-                audiencePrincipalCount === 1 ? "" : "s"
-              }`
-            : "Everyone"}
-        </Type>
-      </SummaryRow>
-    </>
   );
 }
 
@@ -3076,23 +3202,6 @@ function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
   for (const v of a) if (!b.has(v)) return false;
   return true;
-}
-
-// Human summary of a policy's scope: the CEL expression, or the selected
-// message-type labels, with a fallback when neither is set.
-function scopeSummaryText(
-  scopeMode: "messageTypes" | "cel",
-  messageTypes: Set<PolicyMessageType>,
-  scopeInclude: string,
-): string {
-  if (scopeMode === "cel") {
-    return scopeInclude.trim() || "All messages matching a CEL expression";
-  }
-  return (
-    [...messageTypes]
-      .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-      .join(", ") || "No message types selected"
-  );
 }
 
 function formatRelative(date: Date): string {
