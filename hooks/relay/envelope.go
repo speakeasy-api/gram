@@ -145,13 +145,7 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 		Raw:  nil,
 	}
 	if len(base.Raw) > 0 {
-		payload.Raw = json.RawMessage(base.Raw)
-		if data.Mcp != nil {
-			// The structured mcp block is redacted above, but some providers
-			// (cursor) carry the server transport in the payload itself; the
-			// verbatim copy must not leak what the block masks.
-			payload.Raw = redactRawMCP(base.Raw)
-		}
+		payload.Raw = scrubRawPayload(base.Raw)
 	}
 	if isEmptyData(data) {
 		payload.Data = nil
@@ -159,10 +153,14 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	return payload
 }
 
-// redactRawMCP applies the MCP transport redaction to the secret-bearing
-// top-level fields of a raw provider payload (url/command and their aliases),
-// leaving everything else byte-identical.
-func redactRawMCP(raw json.RawMessage) json.RawMessage {
+// scrubRawPayload rewrites the secret-bearing top-level keys of the provider
+// payload before it is echoed under raw (a debugging aid the backend never
+// reads): url/mcp_server_url/command can carry credentials, and redacting
+// data.mcp alone would leave the same values in the echo. It runs on every
+// event like the bash senders' scrub did. Payloads that need no rewrite are
+// returned verbatim; a rewritten payload is re-encoded, so its key order and
+// whitespace may normalize while all other values stay intact.
+func scrubRawPayload(raw json.RawMessage) json.RawMessage {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return raw

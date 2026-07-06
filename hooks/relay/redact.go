@@ -40,9 +40,11 @@ func redactURL(raw string) string {
 }
 
 var (
-	secretAssignRE = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
-	secretFlagRE   = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
-	tokenPrefixRE  = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
+	secretEnvAssignRE = regexp.MustCompile(`(?i)^[A-Za-z_][A-Za-z0-9_]*(key|token|secret|password|passwd|credential|auth)[A-Za-z0-9_]*=`)
+	secretAssignRE    = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
+	secretFlagRE      = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
+	secretHeaderRE    = regexp.MustCompile(`(?i)^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:`)
+	tokenPrefixRE     = regexp.MustCompile(`(?i)://[^/@]*@|^(sk-|ghp_|gho_|github_pat_|xox[a-z]-|glpat-)`)
 )
 
 // redactCommand masks secret flag values and inline tokens in a stdio MCP
@@ -66,6 +68,9 @@ func redactCommand(raw string) string {
 			continue
 		}
 		switch {
+		case secretEnvAssignRE.MatchString(f):
+			i := strings.IndexByte(f, '=')
+			out = append(out, f[:i+1]+"***")
 		case secretAssignRE.MatchString(f):
 			if i := strings.IndexByte(f, '='); i >= 0 {
 				out = append(out, f[:i+1]+"***")
@@ -75,6 +80,9 @@ func redactCommand(raw string) string {
 		case secretFlagRE.MatchString(f):
 			out = append(out, f)
 			maskNext = true
+		case secretHeaderRE.MatchString(f):
+			i := strings.IndexByte(f, ':')
+			out = append(out, f[:i]+": ***")
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true

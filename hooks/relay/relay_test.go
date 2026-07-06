@@ -150,7 +150,7 @@ func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
 	// agenthooks writes cursor dedup markers to os.TempDir; isolate them so
 	// reruns don't classify the fixture as a duplicate delivery.
 	t.Setenv("TMPDIR", t.TempDir())
-	payload := []byte(`{"conversation_id":"conv-1","hook_event_name":"beforeMCPExecution","tool_name":"MCP:create_issue","tool_input":"{}","url":"https://user:hunter2@mcp.example.com/sse?api_key=supersecret","command":"npx -y srv --token=abc123"}`)
+	payload := []byte(`{"conversation_id":"conv-1","hook_event_name":"beforeMCPExecution","tool_name":"MCP:create_issue","tool_input":"{}","url":"https://user:hunter2@mcp.example.com/sse?api_key=supersecret","command":"GITHUB_TOKEN=ghp_secret999 npx -y srv --token=abc123"}`)
 	runner := agenthooks.New(agenthooks.WithoutMCPResolution())
 	var got components.IngestRequestBody
 	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
@@ -170,8 +170,21 @@ func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
 	require.NotContains(t, string(rawJSON), "hunter2")
 	require.NotContains(t, string(rawJSON), "supersecret")
 	require.NotContains(t, string(rawJSON), "abc123")
+	require.NotContains(t, string(rawJSON), "ghp_secret999", "env-assignment credentials must be masked")
+	require.Contains(t, string(rawJSON), "GITHUB_TOKEN=***")
 	require.Contains(t, string(rawJSON), "mcp.example.com", "redaction must keep the host so evidence stays matchable")
 	require.Contains(t, string(rawJSON), "conv-1", "unrelated raw fields must survive untouched")
+}
+
+// TestScrubRawPayloadRunsOnEveryEvent pins the legacy scrub posture: raw is
+// rewritten wherever a payload carries secret-bearing top-level keys, not only
+// when the structured mcp block was populated.
+func TestScrubRawPayloadRunsOnEveryEvent(t *testing.T) {
+	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`))
+	require.NotContains(t, string(scrubbed), "sekrit-1")
+
+	verbatim := []byte(`{"hook_event_name":"stop","final_message":"done",  "spacing":"preserved"}`)
+	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim)), "payloads needing no rewrite pass through verbatim")
 }
 
 // TestSendRetriesTransientConnectionFailure pins the relay-level transport
