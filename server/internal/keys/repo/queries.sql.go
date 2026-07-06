@@ -107,29 +107,6 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (Del
 	return i, err
 }
 
-const deleteAPIKeysByNameAndUser = `-- name: DeleteAPIKeysByNameAndUser :exec
-UPDATE api_keys
-SET deleted_at = NOW()
-WHERE organization_id = $1
-  AND created_by_user_id = $2
-  AND name = $3
-  AND deleted IS FALSE
-`
-
-type DeleteAPIKeysByNameAndUserParams struct {
-	OrganizationID  string
-	CreatedByUserID string
-	Name            string
-}
-
-// Soft-delete every live key with the given name owned by the given user in the
-// org. Used by the device-agent token exchange to revoke a user's prior
-// device-agent key(s) before minting a fresh one (DNO-383 rotation).
-func (q *Queries) DeleteAPIKeysByNameAndUser(ctx context.Context, arg DeleteAPIKeysByNameAndUserParams) error {
-	_, err := q.db.Exec(ctx, deleteAPIKeysByNameAndUser, arg.OrganizationID, arg.CreatedByUserID, arg.Name)
-	return err
-}
-
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
 SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys

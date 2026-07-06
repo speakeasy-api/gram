@@ -316,25 +316,12 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("hash api key: %w", err)
 	}
 
-	// Per-user key name. The api_keys (organization_id, name) unique index
-	// allows only one live key per name per org, so a fixed "device-agent" name
-	// would collide across users in an org (and across a user's own re-enrolls).
-	// Scoping the name by user id keeps it unique per user and deterministic.
-	keyName := deviceAgentKeyName + ":" + record.UserID
-
-	// Rotation: revoke the user's prior device-agent key before minting a fresh
-	// one, so a re-enroll replaces rather than collides with the live key.
-	// Best-effort — a revoke failure must not block the mint.
-	if err := s.keysRepo.DeleteAPIKeysByNameAndUser(ctx, keysrepo.DeleteAPIKeysByNameAndUserParams{
-		OrganizationID:  record.OrgID,
-		CreatedByUserID: record.UserID,
-		Name:            keyName,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to revoke prior device-agent key; minting anyway",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(record.OrgID),
-		)
-	}
+	// Unique per-enrollment key name. API keys are not treated as singletons:
+	// each enrollment mints its own key (made unique by the random token suffix),
+	// so a user's other enrolled devices keep working — no revoke-then-mint gap,
+	// and no collision with the (organization_id, name) unique index. Stale keys
+	// are reclaimed out of band via revocation, not by deleting a prior key here.
+	keyName := deviceAgentKeyName + ":" + record.UserID + ":" + token[:8]
 
 	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
 	// is used directly here — no default, so an unexpectedly empty scope set

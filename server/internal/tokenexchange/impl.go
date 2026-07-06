@@ -124,10 +124,10 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
 	}
 
-	// Resolve the vouched email to a real user within the authenticated org.
-	// The minted key's created_by_user_id MUST be a real users row or the JOIN
-	// in GetAPIKeyByKeyHash drops it and later auth fails. Fail closed if the
-	// email is not a member of the org — never fabricate a user id.
+	// Resolve the vouched email to a real connected user in the authenticated
+	// org. The minted key's created_by_user_id is a FK to users, and the later
+	// GetAPIKeyByKeyHash lookup JOINs users, so the owner must be a real row —
+	// an email with no matching org member fails closed here.
 	user, err := s.usersRepo.GetConnectedUserByEmail(ctx, users_repo.GetConnectedUserByEmailParams{
 		Email:          email,
 		OrganizationID: orgID,
@@ -151,26 +151,6 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 	}
 	projectID := uuid.NullUUID{UUID: projects[0].ID, Valid: true}
 
-	// Per-user key name. The api_keys (organization_id, name) unique index
-	// allows only one live key per name per org, so a fixed "device-agent" name
-	// would let only the first user in an org mint. Scoping the name by user id
-	// keeps it unique per user and deterministic for rotation.
-	keyName := deviceAgentKeyName + ":" + user.ID
-
-	// Rotation: best-effort revoke the user's prior device-agent key(s) in this
-	// org before minting a fresh one. Long-lived keys, so revocation is the
-	// lifecycle lever. A revoke failure must not block a fresh mint.
-	if err := s.keysRepo.DeleteAPIKeysByNameAndUser(ctx, keys_repo.DeleteAPIKeysByNameAndUserParams{
-		OrganizationID:  orgID,
-		CreatedByUserID: user.ID,
-		Name:            keyName,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to revoke prior device-agent key(s); minting anyway",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
-		)
-	}
-
 	token, err := generateToken()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate api key token").LogError(ctx, s.logger)
@@ -181,6 +161,14 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "hash api key").LogError(ctx, s.logger)
 	}
+
+	// Unique per-enrollment key name. API keys are not treated as singletons:
+	// each enrollment mints its own key (made unique by the random token suffix),
+	// so a user's other enrolled devices keep working — there is no
+	// revoke-then-mint gap, and no collision with the (organization_id, name)
+	// unique index. Stale keys are reclaimed out of band via revocation, not by
+	// deleting a prior key here.
+	keyName := deviceAgentKeyName + ":" + user.ID + ":" + token[:8]
 
 	if _, err := s.keysRepo.CreateAPIKey(ctx, keys_repo.CreateAPIKeyParams{
 		OrganizationID:  orgID,

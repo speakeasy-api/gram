@@ -40,17 +40,6 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, scopes;
 
--- name: DeleteAPIKeysByNameAndUser :exec
--- Soft-delete every live key with the given name owned by the given user in the
--- org. Used by the device-agent token exchange to revoke a user's prior
--- device-agent key(s) before minting a fresh one (DNO-383 rotation).
-UPDATE api_keys
-SET deleted_at = NOW()
-WHERE organization_id = @organization_id
-  AND created_by_user_id = @created_by_user_id
-  AND name = @name
-  AND deleted IS FALSE;
-
 -- name: UpdateAPIKeyLastAccessedAt :exec
 UPDATE api_keys
 SET last_accessed_at = clock_timestamp()
