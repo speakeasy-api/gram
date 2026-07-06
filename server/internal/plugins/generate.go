@@ -1147,6 +1147,24 @@ gram_hooks_mark_auth_established() {
   : >"$(gram_hooks_auth_file).established" 2>/dev/null || true
 }
 
+gram_hooks_env_key_source() {
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'GRAM_HOOKS_API_KEY'
+    return 0
+  fi
+  if [ -n "${GRAM_API_KEY:-}" ]; then
+    printf 'GRAM_API_KEY'
+    return 0
+  fi
+  return 1
+}
+
+gram_hooks_env_key_rejected_message() {
+  local source
+  source="$(gram_hooks_env_key_source)" || return 1
+  printf 'Speakeasy hooks rejected the API key configured in %s. Update or unset %s, then run hooks/login.sh to reconnect hooks.' "$source" "$source"
+}
+
 gram_hooks_manual_auth_instructions() {
   local server_url="$1"
   local project_hint="$2"
@@ -2046,6 +2064,15 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null;
 fi
 
 reason="$(gram_hooks_json_string_value "$body" "message")"
+if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
+  type gram_hooks_env_key_rejected_message >/dev/null 2>&1 &&
+  env_reason="$(gram_hooks_env_key_rejected_message)"; then
+  if [ -n "$reason" ]; then
+    reason="${env_reason} Server response: ${reason}"
+  else
+    reason="$env_reason"
+  fi
+fi
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 if [ -n "$gram_hooks_nonblocking" ]; then
   gram_hooks_provider_response "%s" "$native_event" '{}'

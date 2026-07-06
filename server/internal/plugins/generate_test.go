@@ -1029,7 +1029,7 @@ printf '{}\n401'
 	env := hookAuthTestEnv(dir,
 		"GRAM_CAPTURE_PAYLOADS="+capturePath,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
-		"GRAM_HOOKS_API_KEY=gram_revoked_env_key",
+		"GRAM_API_KEY=gram_revoked_env_key",
 		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
 	)
 	for i, kv := range env {
@@ -1047,7 +1047,9 @@ printf '{}\n401'
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block even before first browser login")
 	require.Equal(t, 2, exitErr.ExitCode(), freshErr.String())
-	require.Contains(t, freshErr.String(), "401")
+	require.Contains(t, freshErr.String(), "GRAM_API_KEY")
+	require.Contains(t, freshErr.String(), "Update or unset GRAM_API_KEY")
+	require.Contains(t, freshErr.String(), "hooks/login.sh")
 	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Equal(t, 1, posts, "rejected env credentials must not trigger the cache-relogin retry")
 
@@ -1062,6 +1064,7 @@ printf '{}\n401'
 	err = cached.Run()
 	require.ErrorAs(t, err, &exitErr, cachedErr.String())
 	require.Equal(t, 2, exitErr.ExitCode(), cachedErr.String())
+	require.Contains(t, cachedErr.String(), "GRAM_API_KEY")
 	require.FileExists(t, authFile, "env credential rejection must not wipe the cached browser login")
 }
 
@@ -1966,6 +1969,52 @@ func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
 	require.Contains(t, headers, "/rpc/hooks.claude")
+}
+
+func TestCheckedInClaudeSenderRejectedEnvKeyReportsSource(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) shift ;;
+  esac
+done
+cat >/dev/null
+printf '{"message":"unauthorized: api key not found"}\n401'
+`), 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_API_KEY=gram_revoked_env_key",
+		"GRAM_PROJECT_SLUG=acme-prod",
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-env-reject-checked-in","prompt":"hi"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "GRAM_API_KEY")
+	require.Contains(t, stderr.String(), "Update or unset GRAM_API_KEY")
+	require.Contains(t, stderr.String(), "hooks/login.sh")
 }
 
 func TestCheckedInClaudeSenderRejectedCachedKeyClearsAuthAndNudgesLogin(t *testing.T) {

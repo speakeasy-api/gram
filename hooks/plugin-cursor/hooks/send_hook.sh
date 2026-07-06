@@ -21,6 +21,24 @@ project_slug="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
 gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
 gram_hooks_cached_auth=""
 
+gram_hooks_env_key_source() {
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'GRAM_HOOKS_API_KEY'
+    return 0
+  fi
+  if [ -n "${GRAM_API_KEY:-}" ]; then
+    printf 'GRAM_API_KEY'
+    return 0
+  fi
+  return 1
+}
+
+gram_hooks_env_key_rejected_message() {
+  local source
+  source="$(gram_hooks_env_key_source)" || return 1
+  printf 'Speakeasy hooks rejected the API key configured in %s. Update or unset %s, then run hooks/login.sh to reconnect hooks.' "$source" "$source"
+}
+
 debug() {
   if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
     printf 'gram-hooks(cursor): %s\n' "$1" >&2
@@ -128,6 +146,12 @@ body="$GRAM_HTTP_BODY"
 # guards keep a non-numeric code from leaking a shell error.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   echo "$body"
+  exit 0
+fi
+
+if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
+  env_reason="$(gram_hooks_env_key_rejected_message)"; then
+  emit_deny "$env_reason"
   exit 0
 fi
 

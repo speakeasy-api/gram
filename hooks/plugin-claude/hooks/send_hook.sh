@@ -20,10 +20,28 @@ if [ -f "$script_dir/identity.sh" ]; then
 fi
 . "$script_dir/http.sh"
 
-api_key="${GRAM_HOOKS_API_KEY:-}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
+api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
+project_slug="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
 gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
 gram_hooks_cached_auth=""
+
+gram_hooks_env_key_source() {
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'GRAM_HOOKS_API_KEY'
+    return 0
+  fi
+  if [ -n "${GRAM_API_KEY:-}" ]; then
+    printf 'GRAM_API_KEY'
+    return 0
+  fi
+  return 1
+}
+
+gram_hooks_env_key_rejected_message() {
+  local source
+  source="$(gram_hooks_env_key_source)" || return 1
+  printf 'Speakeasy hooks rejected the API key configured in %s. Update or unset %s, then run hooks/login.sh to reconnect hooks.' "$source" "$source"
+}
 
 gram_hooks_json_escape_string() {
   if command -v python3 >/dev/null 2>&1; then
@@ -129,6 +147,12 @@ if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
       exit 0
       ;;
   esac
+fi
+
+if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
+  env_reason="$(gram_hooks_env_key_rejected_message)"; then
+  echo "$env_reason" >&2
+  exit 2
 fi
 
 # Only treat a real 2xx as allow. curl returns 000 on connection failure, DNS
