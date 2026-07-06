@@ -650,6 +650,65 @@ func TestGenerateCodexMCPServerNameCollisionsDeduped(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/mcp/notes-two", mcpConfig.MCPServers["Notes_App_2"].URL)
 }
 
+// An already-valid display name must keep its exact key even when an
+// earlier-sorted invalid name sanitizes to the same key — the invalid name
+// takes the suffix, not the valid one.
+func TestGenerateCodexMCPServerValidNamesReservedOverSanitized(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Team Slack", MCPURL: "https://app.getgram.ai/mcp/spaced"},
+				{DisplayName: "Team_Slack", MCPURL: "https://app.getgram.ai/mcp/literal"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2)
+
+	require.Equal(t, "https://app.getgram.ai/mcp/literal", mcpConfig.MCPServers["Team_Slack"].URL, "valid name must keep its exact key")
+	require.Equal(t, "https://app.getgram.ai/mcp/spaced", mcpConfig.MCPServers["Team_Slack_2"].URL, "sanitized name takes the suffix")
+}
+
+// Collision renames are bounded (_2 through _6); servers beyond that are
+// dropped instead of overwriting an earlier entry.
+func TestGenerateCodexMCPServerRenameAttemptsBounded(t *testing.T) {
+	t.Parallel()
+	servers := make([]PluginServerInfo, 8)
+	for i := range servers {
+		servers[i] = PluginServerInfo{
+			DisplayName: "Dup Server",
+			MCPURL:      fmt.Sprintf("https://app.getgram.ai/mcp/dup-%d", i),
+		}
+	}
+	plugins := []PluginInfo{{Name: "Test", Slug: "test", Servers: servers}}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	require.Len(t, mcpConfig.MCPServers, 6, "base key plus renames _2.._6, remaining collisions dropped")
+	require.Equal(t, "https://app.getgram.ai/mcp/dup-0", mcpConfig.MCPServers["Dup_Server"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/dup-5", mcpConfig.MCPServers["Dup_Server_6"].URL)
+}
+
 // TestCodexJSONKeysMatchPinnedSchema asserts the literal JSON key casing in
 // Codex output against the openai/codex source pinned in generate.go. Keys
 // are inspected on the raw JSON bytes (not a round-trip through our own

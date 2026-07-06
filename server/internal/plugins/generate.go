@@ -526,8 +526,42 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
+	// Assign every server its Codex key before building entries. Already-valid
+	// display names reserve their exact key first, so an invalid name that
+	// sanitizes into the same key can never steal it — "Team Slack" must not
+	// displace a server literally named "Team_Slack".
+	keys := make([]string, len(p.Servers))
+	taken := make(map[string]bool, len(p.Servers))
+	for i, s := range p.Servers {
+		if name := codexMCPServerName(s.DisplayName); name == s.DisplayName && !taken[name] {
+			keys[i] = name
+			taken[name] = true
+		}
+	}
+	for i, s := range p.Servers {
+		if keys[i] != "" {
+			continue
+		}
+		base := codexMCPServerName(s.DisplayName)
+		key := base
+		for n := 2; taken[key] && n <= maxCodexServerRenameSuffix; n++ {
+			key = fmt.Sprintf("%s_%d", base, n)
+		}
+		if taken[key] {
+			// Rename attempts exhausted; drop the server rather than
+			// overwrite another entry.
+			continue
+		}
+		keys[i] = key
+		taken[key] = true
+	}
+
 	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
-	for _, s := range p.Servers {
+	for i, s := range p.Servers {
+		if keys[i] == "" {
+			continue
+		}
+
 		entry := codexMCPServer{
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
@@ -550,14 +584,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
-		key := codexMCPServerName(s.DisplayName)
-		for i := 2; ; i++ {
-			if _, taken := mcpServers[key]; !taken {
-				break
-			}
-			key = fmt.Sprintf("%s_%d", codexMCPServerName(s.DisplayName), i)
-		}
-		mcpServers[key] = entry
+		mcpServers[keys[i]] = entry
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -567,6 +594,11 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 	return nil
 }
+
+// maxCodexServerRenameSuffix bounds the collision-rename attempts for
+// sanitized Codex server keys: a colliding name tries _2 through _6 before
+// the server is dropped from the config.
+const maxCodexServerRenameSuffix = 6
 
 // codexMCPServerName converts a human display name (e.g. "Team Slack") into a
 // Codex-safe MCP server key. Codex validates the keys of .mcp.json against
