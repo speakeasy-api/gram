@@ -139,30 +139,39 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
 
-		// Process each session independently so a single cache failure does not
-		// abort flushing the remaining sessions in the batch.
-		if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-			sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
-				attr.SlogEvent("claude_logs_cache_set_failed"),
-				attr.SlogError(err),
-			)
-		}
-
 		// A session's chat row is created once, on its first persisted message.
 		// When that message beat this attribution (hooks and OTEL race at session
 		// start), the chat exists without its account link and no later hook
 		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
 		// the chat does not exist yet (its eventual creation reads the metadata
-		// cached above) or is already linked. Runs only on the attribution path,
+		// cached below) or is already linked. Runs only on the attribution path,
 		// not the per-batch fast path, so it costs one write per session.
+		linkFailed := false
 		if completeMetadata.UserAccountID != "" {
 			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
 				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
 				ID:            sessionIDToUUID(completeMetadata.SessionID),
 				ProjectID:     *authCtx.ProjectID,
 			}); err != nil {
+				linkFailed = true
 				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
 					attr.SlogEvent("chat_account_link_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+
+		// Cache only after the backfill: the once-per-session fast path above
+		// keys on the cached UserAccountID, so caching an attribution whose
+		// backfill just failed would freeze the chat unlinked forever. Skipping
+		// the write keeps this batch's row stamping (attributionBySession) and
+		// lets the next batch re-attribute and retry the link. Process each
+		// session independently so a single cache failure does not abort
+		// flushing the remaining sessions in the batch.
+		if !linkFailed {
+			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
+					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
 				)
 			}

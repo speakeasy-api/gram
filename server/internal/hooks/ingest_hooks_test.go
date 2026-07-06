@@ -614,6 +614,77 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())
+
+	// Message rows carry the same identity as the linked chat — both are
+	// written from the hydrated session metadata, not the raw auth context.
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, chat.UserID.String, msgs[0].UserID.String)
+	require.Equal(t, chat.ExternalUserID.String, msgs[0].ExternalUserID.String)
+}
+
+// TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows
+// carry the cached account attribution (provider, account_type, external org
+// id) and the session's user identity, matching the legacy per-provider hook
+// paths — dashboards and policies reading telemetry must see the AI account
+// behind the session, not just the Gram key owner.
+func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "canonical-stamp-" + uuid.NewString()
+	externalOrgID := "stamp-ext-org-" + sessionID
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     "personal@gmail.com",
+		UserID:        "bridged-employee",
+		Provider:      providerAnthropic,
+		ExternalOrgID: externalOrgID,
+		AccountType:   accountTypePersonal,
+		UserAccountID: uuid.NewString(),
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	prompt := "attribution should ride on this row"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the hook row to land in telemetry")
+
+	require.Contains(t, logs[0].Attributes, providerAnthropic)
+	require.Contains(t, logs[0].Attributes, accountTypePersonal)
+	require.Contains(t, logs[0].Attributes, externalOrgID)
+	require.Contains(t, logs[0].Attributes, "personal@gmail.com")
 }
 
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
