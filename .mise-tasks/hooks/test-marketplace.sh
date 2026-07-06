@@ -19,16 +19,16 @@ install() {
 }
 
 uninstall() {
-	if claude plugin list --json | jq -e 'any(.[]; .id == "gram-hooks@gram")' >/dev/null; then
+	if claude plugin list --json | jq -e --arg scope "$scope" 'any(.[]; .id == "gram-hooks@gram" and .scope == $scope)' >/dev/null; then
 		claude plugin uninstall --scope "$scope" gram-hooks@gram
 	else
-		echo "Plugin gram-hooks@gram is not installed, skipping uninstall"
+		echo "Plugin gram-hooks@gram is not installed in scope '$scope', skipping uninstall"
 	fi
 
-	if claude plugin marketplace list --json | jq -e 'any(.[]; .name == "gram")' >/dev/null; then
-		claude plugin marketplace remove --scope "$scope" gram
+	if claude plugin marketplace remove --scope "$scope" gram 2>/dev/null; then
+		echo "Removed marketplace gram from scope '$scope'"
 	else
-		echo "Marketplace gram is not registered, skipping remove"
+		echo "Marketplace gram is not registered in scope '$scope', skipping remove"
 	fi
 }
 
