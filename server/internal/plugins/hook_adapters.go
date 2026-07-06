@@ -478,7 +478,81 @@ gram_hooks_skill_name() {
     fi
     [ -n "$skill" ] || skill="$(gram_hooks_json_string_value "$payload" "name")"
   fi
+  if [ -z "$skill" ] && [ "%s" = "codex" ]; then
+    skill="$(gram_hooks_codex_skill_name "$payload" "$tool_name")"
+  fi
   printf '%%s' "$skill"
+}
+
+# gram_hooks_codex_skill_exists validates a candidate skill name against the
+# directories Codex discovers skills from: .agents/skills walking up from the
+# session cwd, plus the user, admin, and Codex-home locations.
+gram_hooks_codex_skill_exists() {
+  local name="$1"
+  local dir="$2"
+  local root
+  [ -n "$name" ] || return 1
+  case "$name" in
+    */* | .*) return 1 ;;
+  esac
+  [ -f "${HOME}/.agents/skills/${name}/SKILL.md" ] && return 0
+  # Bundled/system skills live under a .system subdirectory of the skill
+  # roots (e.g. ~/.codex/skills/.system/plan) but are mentioned by bare name.
+  for root in /etc/codex/skills /opt/codex/skills "${CODEX_HOME:-${HOME}/.codex}/skills"; do
+    [ -f "${root}/${name}/SKILL.md" ] && return 0
+    [ -f "${root}/.system/${name}/SKILL.md" ] && return 0
+  done
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+    [ -f "${dir}/.agents/skills/${name}/SKILL.md" ] && return 0
+    # cwd comes from the provider payload: a value with no slash left would
+    # make the strip a no-op and spin this loop forever.
+    case "$dir" in
+      */*) dir="${dir%%/*}" ;;
+      *) dir="" ;;
+    esac
+  done
+  return 1
+}
+
+# gram_hooks_codex_skill_name infers skill activations for Codex, which has no
+# structured skill signal. Two best-effort detections:
+#   - a reader tool opening a skills/<name>/SKILL.md path (implicit
+#     activation: Codex is prompted to open SKILL.md when it picks a skill)
+#   - an explicit $skill-name mention in the submitted prompt, accepted only
+#     when the name resolves to a skill directory on disk (explicit mentions
+#     are expanded internally and never surface as a tool call)
+gram_hooks_codex_skill_name() {
+  local payload="$1"
+  local tool_name="$2"
+  local native tool_input prompt cwd match token
+  native="$(gram_hooks_native_event_name "$payload")"
+  case "$native" in
+    PreToolUse)
+      case "$tool_name" in
+        Bash | shell | Read) ;;
+        *) return 0 ;;
+      esac
+      tool_input="$(gram_hooks_json_value "$payload" "tool_input")"
+      [ -n "$tool_input" ] || return 0
+      match="$(printf '%%s\n' "$tool_input" | sed -n 's/.*skills\/\(\.system\/\)\{0,1\}\([A-Za-z0-9][A-Za-z0-9._-]*\)\/SKILL\.md.*/\2/p' | sed -n '1p')"
+      printf '%%s' "$match"
+      ;;
+    UserPromptSubmit)
+      prompt="$(gram_hooks_json_string_value "$payload" "prompt")"
+      [ -n "$prompt" ] || return 0
+      case "$prompt" in
+        *\$*) ;;
+        *) return 0 ;;
+      esac
+      cwd="$(gram_hooks_json_string_value "$payload" "cwd")"
+      for token in $(printf '%%s\n' "$prompt" | tr -c 'A-Za-z0-9._$-' '\n' | sed -n 's/^\$\([A-Za-z0-9][A-Za-z0-9._-]*\)$/\1/p' | sed 's/\.*$//' | sort -u); do
+        if gram_hooks_codex_skill_exists "$token" "$cwd"; then
+          printf '%%s' "$token"
+          return 0
+        fi
+      done
+      ;;
+  esac
 }
 
 gram_hooks_mcp_server_from_tool_name() {
@@ -863,7 +937,12 @@ gram_hooks_build_canonical_payload() {
   event_type="$(gram_hooks_normalized_event_type "$native")"
   [ -n "$event_type" ] || event_type="$native"
   [ -n "$event_type" ] || event_type="session.updated"
-  if [ -n "$(gram_hooks_skill_name "$payload")" ]; then
+  # Codex skill names are inferred from ordinary tool/prompt payloads, so the
+  # wire event keeps its true type there: reclassifying would skip the
+  # server's tool/prompt policy scan for any payload that happens to mention
+  # a SKILL.md path. The skill lands in data.skill and the server layers the
+  # skill.activated classification on top.
+  if [ "%s" != "codex" ] && [ -n "$(gram_hooks_skill_name "$payload")" ]; then
     event_type="skill.activated"
   fi
 
@@ -1099,5 +1178,5 @@ gram_hooks_provider_response() {
       ;;
   esac
 }
-`, spec.Platform, cases.String(), spec.Platform, spec.Platform, spec.Platform)
+`, spec.Platform, cases.String(), spec.Platform, spec.Platform, spec.Platform, spec.Platform, spec.Platform)
 }

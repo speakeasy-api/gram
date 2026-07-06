@@ -2516,6 +2516,159 @@ gram_hooks_build_canonical_payload "$res" "test-host"
 	require.Equal(t, reqBID, resBID, "second completion must pop the second request's id")
 }
 
+// TestRenderHookPayloadNormalizationCodexSkillHeuristic covers the best-effort
+// Codex skill detection. Codex has no Skill tool: implicit activations surface
+// as a reader tool opening skills/<name>/SKILL.md, and explicit $skill-name
+// prompt mentions are expanded internally without any tool call. Both must
+// attach data.skill while keeping the event's true type on the wire — a
+// reclassified event would skip the server's tool/prompt policy scan.
+func TestRenderHookPayloadNormalizationCodexSkillHeuristic(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	repoDir := filepath.Join(dir, "repo")
+	cwd := filepath.Join(repoDir, "nested", "sub")
+	codexHome := filepath.Join(dir, "codex-home")
+	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".agents", "skills", "home-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, ".agents", "skills", "repo-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(codexHome, "skills", ".system", "sys-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(cwd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".agents", "skills", "home-skill", "SKILL.md"), []byte("# home"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".agents", "skills", "repo-skill", "SKILL.md"), []byte("# repo"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "skills", ".system", "sys-skill", "SKILL.md"), []byte("# sys"), 0o644))
+
+	scriptPath := filepath.Join(dir, "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("codex") + fmt.Sprintf(`
+read_req='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p %[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_1"}'
+read_res='{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p %[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_1"}'
+perm_req='{"hook_event_name":"PermissionRequest","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat %[1]s/.agents/skills/repo-skill/SKILL.md"},"permission_type":"exec"}'
+patch_req='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"apply_patch","tool_input":{"changes":"%[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_2"}'
+prompt_hit='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"Check $HOME then use $home-skill please","cwd":"%[2]s"}'
+prompt_walk='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"%[2]s"}'
+prompt_miss='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"pay $50 to $unknown-skill","cwd":"%[2]s"}'
+prompt_punct='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"please use $home-skill.","cwd":"%[2]s"}'
+prompt_relcwd='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"nested/sub"}'
+prompt_system='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"%[2]s"}'
+read_system='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}'
+gram_hooks_build_canonical_payload "$read_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$read_res" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$perm_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$patch_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_hit" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_walk" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_miss" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_punct" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_system" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$read_system" "test-host"
+`, repoDir, cwd)
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "CODEX_HOME="+codexHome, "XDG_STATE_HOME="+filepath.Join(dir, "state"))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(output), "\n---GRAM---\n")
+	require.Len(t, chunks, 11)
+
+	parse := func(raw string) (eventType string, skillName string) {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed))
+		eventType, _ = requireMapValue(t, parsed, "event")["type"].(string)
+		data, _ := parsed["data"].(map[string]any)
+		if skill, ok := data["skill"].(map[string]any); ok {
+			skillName, _ = skill["name"].(string)
+		}
+		return eventType, skillName
+	}
+
+	eventType, skill := parse(chunks[0])
+	require.Equal(t, "tool.requested", eventType, "a detected skill read must keep its true event type")
+	require.Equal(t, "repo-skill", skill, "SKILL.md path in a reader tool input must resolve the skill name")
+
+	eventType, skill = parse(chunks[1])
+	require.Equal(t, "tool.completed", eventType)
+	require.Empty(t, skill, "completions must not re-report the activation")
+
+	eventType, skill = parse(chunks[2])
+	require.Equal(t, "tool.requested", eventType)
+	require.Empty(t, skill, "permission previews may be denied and must not count as activations")
+
+	eventType, skill = parse(chunks[3])
+	require.Equal(t, "tool.requested", eventType)
+	require.Empty(t, skill, "editing a SKILL.md is not an activation")
+
+	eventType, skill = parse(chunks[4])
+	require.Equal(t, "prompt.submitted", eventType, "a skill mention must keep the prompt event type")
+	require.Equal(t, "home-skill", skill, "$name mentions must resolve against $HOME/.agents/skills")
+
+	eventType, skill = parse(chunks[5])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "repo-skill", skill, "$name mentions must resolve by walking up from the session cwd")
+
+	eventType, skill = parse(chunks[6])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Empty(t, skill, "$ tokens that resolve to no skill directory must be ignored")
+
+	eventType, skill = parse(chunks[7])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "home-skill", skill, "sentence-final punctuation must not defeat a mention")
+
+	eventType, skill = parse(chunks[8])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Empty(t, skill, "a relative cwd must terminate the walk without matching")
+
+	eventType, skill = parse(chunks[9])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "sys-skill", skill, "bundled skills under a .system subdirectory must resolve by bare name")
+
+	eventType, skill = parse(chunks[10])
+	require.Equal(t, "tool.requested", eventType)
+	require.Equal(t, "imagegen", skill, "reads of .system skill paths must infer the bare skill name")
+}
+
+// TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies pins the
+// Claude behavior the codex guard must not disturb: the dedicated Skill tool
+// is a benign meta-tool, so its events keep being reclassified to
+// skill.activated on the wire.
+func TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	scriptPath := filepath.Join(t.TempDir(), "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("claude") + `
+payload='{"hook_event_name":"PreToolUse","session_id":"sess-claude-skill","tool_name":"Skill","tool_input":{"skill":"pdf-tools"},"tool_use_id":"toolu_1"}'
+gram_hooks_build_canonical_payload "$payload" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	output, err := exec.Command(bashPath, scriptPath).CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(output))), &parsed))
+	require.Equal(t, "skill.activated", requireMapValue(t, parsed, "event")["type"])
+	skill := requireMapValue(t, requireMapValue(t, parsed, "data"), "skill")
+	require.Equal(t, "pdf-tools", skill["name"])
+}
+
 // TestRenderHookPayloadNormalizationCodexMCPExactServerNameWins pins the codex
 // MCP config lookup semantics when server names collide after sanitizing: an
 // exact name match must win, and without one a sanitized match only resolves
