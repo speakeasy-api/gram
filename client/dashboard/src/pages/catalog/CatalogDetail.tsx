@@ -528,7 +528,7 @@ function ToolCard({ tool }: { tool: Tool }) {
               {tool.annotations?.title || tool.name}
             </Type>
             {tool.annotations?.readOnlyHint && (
-              <Badge variant="neutral" className="text-xs">
+              <Badge variant="neutral" background className="text-xs">
                 Read-only
               </Badge>
             )}
@@ -542,6 +542,13 @@ function ToolCard({ tool }: { tool: Tool }) {
               !tool.annotations?.readOnlyHint && (
                 <Badge variant="information" className="text-xs">
                   Idempotent
+                </Badge>
+              )}
+            {!tool.annotations?.readOnlyHint &&
+              !tool.annotations?.destructiveHint &&
+              !tool.annotations?.idempotentHint && (
+                <Badge variant="information" background className="text-xs">
+                  Write
                 </Badge>
               )}
           </Stack>
