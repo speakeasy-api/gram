@@ -130,6 +130,34 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(alias.tokenCount).toBe(0);
   });
 
+  it("claims both the id-keyed and email-keyed summaries for one member", () => {
+    // The backend groups usage by work email when present and by resolved user
+    // id otherwise, so a single person whose sessions sometimes carry an email
+    // and sometimes don't splits into two summaries. Both must attach to the
+    // member — otherwise the leftover shows up as an "unknown user" duplicate of
+    // an already-enrolled employee (DNO-380).
+    const member = makeMember({
+      id: "member-1",
+      email: "adam@example.com",
+      name: "Adam Bull",
+    });
+
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({ userId: "member-1", userEmail: "" }),
+      makeSummary({
+        userId: "adam@example.com",
+        userEmail: "adam@example.com",
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    expect(employees[0]!.id).toBe("member-1");
+    expect(employees[0]!.status).toBe("enrolled");
+    // Tokens from both summaries are summed (150 each).
+    expect(employees[0]!.tokenCount).toBe(300);
+    expect(employees.some(isUnattributedEmployee)).toBe(false);
+  });
+
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
     const employees = buildEmployees([], noRoles, [
       makeSummary({ userId: "ghost@example.com" }),

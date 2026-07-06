@@ -51,40 +51,85 @@ export function isUnattributedEmployee(employee: Employee): boolean {
   return employee.id.startsWith("usage:");
 }
 
+// The email a summary should be matched to a member on: the explicit user email
+// when present, otherwise the user id when it looks like an email (older payloads
+// that grouped opaque and email identities under the same key).
+function summaryEmail(summary: UserSummary): string {
+  return (
+    summary.userEmail || (summary.userId.includes("@") ? summary.userId : "")
+  );
+}
+
+// Unions the linked accounts across a member's summaries, deduped on the account
+// identity (provider, email) so the same account seen on two summaries collapses.
+function mergeAccounts(summaries: UserSummary[]): EmployeeAccount[] {
+  const byIdentity = new Map<string, EmployeeAccount>();
+  for (const summary of summaries) {
+    for (const account of accountsFromSummary(summary)) {
+      const key = `${account.provider}\u0000${account.email}`;
+      if (!byIdentity.has(key)) byIdentity.set(key, account);
+    }
+  }
+  return [...byIdentity.values()];
+}
+
 export function buildEmployees(
   members: AccessMember[],
   roles: Role[],
   summaries: UserSummary[],
 ): Employee[] {
   const roleNameById = new Map(roles.map((role) => [role.id, role.name]));
-  const summaryByUserId = new Map(
-    summaries.map((summary) => [summary.userId, summary]),
-  );
-  const summaryByEmail = new Map(
-    summaries
-      .map((summary) => {
-        const email =
-          summary.userEmail ||
-          (summary.userId.includes("@") ? summary.userId : "");
-        return email ? ([email.toLowerCase(), summary] as const) : null;
-      })
-      .filter(
-        (entry): entry is readonly [string, UserSummary] => entry != null,
-      ),
-  );
-  const matchedSummaryIds = new Set<string>();
+  const memberById = new Map(members.map((member) => [member.id, member]));
+  const memberByEmail = new Map<string, AccessMember>();
+  for (const member of members) {
+    const key = member.email.toLowerCase();
+    // First member wins so ownership stays deterministic on the (rare) case of
+    // two members sharing an email.
+    if (key && !memberByEmail.has(key)) memberByEmail.set(key, member);
+  }
+
+  // Assign every summary to at most one owning member. A single person's usage
+  // can be split across multiple summaries — the backend groups by work email
+  // when present and by resolved user id otherwise, so sessions that carry an
+  // email land in a different bucket from those that don't. Both buckets belong
+  // to the same member, so the member must claim all of them; otherwise the
+  // leftover surfaces as a phantom "unknown user" for someone already listed as
+  // an employee (DNO-380). A user-id match wins over an email match so
+  // opaque-id usage keeps its member id.
+  const claimedByMember = new Map<string, UserSummary[]>();
+  const unmatched: UserSummary[] = [];
+  for (const summary of summaries) {
+    const email = summaryEmail(summary);
+    const owner =
+      memberById.get(summary.userId) ??
+      (email ? memberByEmail.get(email.toLowerCase()) : undefined);
+    if (!owner) {
+      unmatched.push(summary);
+      continue;
+    }
+    const claimed = claimedByMember.get(owner.id);
+    if (claimed) claimed.push(summary);
+    else claimedByMember.set(owner.id, [summary]);
+  }
 
   const employees = members.map((member) => {
-    const summary =
-      summaryByUserId.get(member.id) ??
-      summaryByEmail.get(member.email.toLowerCase());
-    if (summary) {
-      matchedSummaryIds.add(summary.userId);
-    }
-    const tokenCount =
-      (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
+    const claimed = claimedByMember.get(member.id) ?? [];
     const status: EmployeeStatus =
-      summary != null ? "enrolled" : "not_enrolled";
+      claimed.length > 0 ? "enrolled" : "not_enrolled";
+    const tokenCount = claimed.reduce(
+      (sum, summary) =>
+        sum + summary.totalInputTokens + summary.totalOutputTokens,
+      0,
+    );
+    const latest = claimed.reduce<UserSummary | null>(
+      (acc, summary) =>
+        acc == null ||
+        BigInt(summary.lastSeenUnixNano) > BigInt(acc.lastSeenUnixNano)
+          ? summary
+          : acc,
+      null,
+    );
+    const accounts = mergeAccounts(claimed);
     const role =
       member.roleIds
         .map((id) => roleNameById.get(id))
@@ -99,44 +144,37 @@ export function buildEmployees(
       status,
       tokenCount,
       photoUrl: member.photoUrl,
-      lastActivityTimestamp: summary
-        ? Number(BigInt(summary.lastSeenUnixNano) / 1_000_000n)
+      lastActivityTimestamp: latest
+        ? Number(BigInt(latest.lastSeenUnixNano) / 1_000_000n)
         : null,
-      lastActivity: summary
-        ? formatUnixNano(summary.lastSeenUnixNano)
+      lastActivity: latest
+        ? formatUnixNano(latest.lastSeenUnixNano)
         : "No activity found",
-      accounts: accountsFromSummary(summary),
-      hasPersonalAccount: accountsFromSummary(summary).some(
-        (a) => a.accountType === "personal",
-      ),
+      accounts,
+      hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
     };
   });
 
-  const unmatchedUsage = summaries
-    .filter((summary) => !matchedSummaryIds.has(summary.userId))
-    .map((summary) => {
-      const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
-      const email =
-        summary.userEmail ||
-        (summary.userId.includes("@") ? summary.userId : "");
-      return {
-        id: `usage:${summary.userId}`,
-        name: email || summary.userId,
-        email,
-        role: "-",
-        status: "not_enrolled" as const,
-        tokenCount,
-        photoUrl: null,
-        lastActivityTimestamp: Number(
-          BigInt(summary.lastSeenUnixNano) / 1_000_000n,
-        ),
-        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
-        accounts: accountsFromSummary(summary),
-        hasPersonalAccount: accountsFromSummary(summary).some(
-          (a) => a.accountType === "personal",
-        ),
-      };
-    });
+  const unmatchedUsage = unmatched.map((summary) => {
+    const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
+    const email = summaryEmail(summary);
+    const accounts = accountsFromSummary(summary);
+    return {
+      id: `usage:${summary.userId}`,
+      name: email || summary.userId,
+      email,
+      role: "-",
+      status: "not_enrolled" as const,
+      tokenCount,
+      photoUrl: null,
+      lastActivityTimestamp: Number(
+        BigInt(summary.lastSeenUnixNano) / 1_000_000n,
+      ),
+      lastActivity: formatUnixNano(summary.lastSeenUnixNano),
+      accounts,
+      hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+    };
+  });
 
   return [...employees, ...unmatchedUsage].sort((a, b) => {
     if (a.status !== b.status) {
