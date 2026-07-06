@@ -96,6 +96,7 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           orgID,
 		ProjectID:           projectID,
 	}

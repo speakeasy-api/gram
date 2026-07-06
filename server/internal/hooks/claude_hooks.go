@@ -737,6 +737,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
+			ObservedUserEmail:   "",
 			GramOrgID:           "",
 			ProjectID:           "",
 		}, false
@@ -755,6 +756,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
@@ -1155,6 +1157,9 @@ func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata S
 	metadata.AccountType = cached.AccountType
 	metadata.BillingMode = cached.BillingMode
 	metadata.UserAccountID = cached.UserAccountID
+	// The OTEL path's UserEmail is the account's own report; fall back to it
+	// for cache entries written before ObservedUserEmail existed.
+	metadata.ObservedUserEmail = conv.Default(cached.ObservedUserEmail, cached.UserEmail)
 	return metadata
 }
 

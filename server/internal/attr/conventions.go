@@ -113,11 +113,16 @@ const (
 	// Personal-account tracking. These are stamped by hook/OTEL ingest and
 	// materialized into ClickHouse columns of the same suffix (provider,
 	// external_org_id, account_type) for org-level usage dashboards.
+	// account_email is the AI account's own (observed) email, kept separate
+	// from user.email — the authenticated actor — so adopting cached
+	// attribution never rewrites the canonical user identity; it has no
+	// materialized column yet.
 	ProviderKey                    = attribute.Key("gram.provider")
 	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
 	AccountTypeKey                 = attribute.Key("gram.account_type")
 	BillingModeKey                 = attribute.Key("gram.billing_mode")
 	DeviceIDKey                    = attribute.Key("gram.device_id")
+	AccountEmailKey                = attribute.Key("gram.account_email")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")

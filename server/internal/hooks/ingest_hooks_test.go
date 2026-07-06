@@ -572,7 +572,10 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 // created here is linked to its user_accounts row — the join the
 // account-identity risk rules and the personal/team classification read.
 // Without the merge, chats captured through /rpc/hooks.ingest are never
-// linked (the payload itself carries no AI-account identity).
+// linked (the payload itself carries no AI-account identity). The link is
+// adopted without rewriting the canonical user identity: UserID/UserEmail
+// stay the authenticated actor's, and the account's own email rides
+// separately (ObservedUserEmail / gram.account_email).
 func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	t.Parallel()
 
@@ -588,7 +591,8 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	userAccountID := uuid.NewString()
 
 	// Seed session metadata as the OTEL path would for an attributed personal
-	// account.
+	// account. No ObservedUserEmail: entries cached before the field existed
+	// must still adopt via the UserEmail fallback.
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
@@ -615,6 +619,12 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())
 
+	// The canonical identity is the authenticated actor, not the cached
+	// account identity: the session was sent under the actor's token.
+	require.Equal(t, authCtx.UserID, chat.UserID.String)
+	require.NotEqual(t, "personal@gmail.com", chat.ExternalUserID.String,
+		"account email must not replace the actor's on the chat")
+
 	// Message rows carry the same identity as the linked chat — both are
 	// written from the hydrated session metadata, not the raw auth context.
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
@@ -629,9 +639,10 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 
 // TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows
 // carry the cached account attribution (provider, account_type, external org
-// id) and the session's user identity, matching the legacy per-provider hook
-// paths — dashboards and policies reading telemetry must see the AI account
-// behind the session, not just the Gram key owner.
+// id) with the account's own email as the gram.account_email attribute, while
+// user.email stays the authenticated actor — dashboards and policies reading
+// telemetry see both the AI account behind the session and the Gram identity
+// that sent it, without one masquerading as the other.
 func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 	t.Parallel()
 
@@ -642,16 +653,17 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 	sessionID := "canonical-stamp-" + uuid.NewString()
 	externalOrgID := "stamp-ext-org-" + sessionID
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:     sessionID,
-		ServiceName:   "claude-code",
-		UserEmail:     "personal@gmail.com",
-		UserID:        "bridged-employee",
-		Provider:      providerAnthropic,
-		ExternalOrgID: externalOrgID,
-		AccountType:   accountTypePersonal,
-		UserAccountID: uuid.NewString(),
-		GramOrgID:     authCtx.ActiveOrganizationID,
-		ProjectID:     authCtx.ProjectID.String(),
+		SessionID:         sessionID,
+		ServiceName:       "claude-code",
+		UserEmail:         "personal@gmail.com",
+		UserID:            "bridged-employee",
+		Provider:          providerAnthropic,
+		ExternalOrgID:     externalOrgID,
+		AccountType:       accountTypePersonal,
+		UserAccountID:     uuid.NewString(),
+		ObservedUserEmail: "personal@gmail.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
 	}, time.Hour))
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
@@ -684,7 +696,12 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 	require.Contains(t, logs[0].Attributes, providerAnthropic)
 	require.Contains(t, logs[0].Attributes, accountTypePersonal)
 	require.Contains(t, logs[0].Attributes, externalOrgID)
-	require.Contains(t, logs[0].Attributes, "personal@gmail.com")
+	// Attribute keys nest on dots in the stored JSON: gram.account_email
+	// carries the account's own email while user.email stays the actor.
+	require.Contains(t, logs[0].Attributes, `"account_email":"personal@gmail.com"`,
+		"account email must ride as its own attribute")
+	require.NotContains(t, logs[0].Attributes, `"email":"personal@gmail.com"`,
+		"account email must not replace the actor's user.email")
 }
 
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {

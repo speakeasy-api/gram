@@ -116,8 +116,11 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
-			GramOrgID:           orgID,
-			ProjectID:           projectID,
+			// On this path user.email is the account's own report, so it doubles
+			// as the observed email consumers keep separate from actor identity.
+			ObservedUserEmail: userEmail,
+			GramOrgID:         orgID,
+			ProjectID:         projectID,
 		}
 
 		sessionLogger := logger.With(
@@ -143,9 +146,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// When that message beat this attribution (hooks and OTEL race at session
 		// start), the chat exists without its account link and no later hook
 		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
-		// the chat does not exist yet (its eventual creation reads the metadata
-		// cached below) or is already linked. Runs only on the attribution path,
-		// not the per-batch fast path, so it costs one write per session.
+		// the chat does not exist yet or is already linked. At most one write per
+		// attributed session, since only the attribution path runs this.
 		linkFailed := false
 		if completeMetadata.UserAccountID != "" {
 			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{

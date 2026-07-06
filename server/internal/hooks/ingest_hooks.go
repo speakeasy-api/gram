@@ -330,8 +330,11 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 // carry no account identity of their own, so without the cached attribution
 // telemetry rows and chats captured here reflect only the Gram key owner —
 // invisible to the account-identity risk rules and the personal/team
-// classification. The session cache is keyed by session id alone, so only
-// trust an entry the same org+project seeded.
+// classification. UserID/UserEmail stay the authenticated actor's — the
+// predictable canonical identity — while the AI account's own email rides
+// separately in ObservedUserEmail (the gram.account_email attribute). The
+// session cache is keyed by session id alone, so only trust an entry the
+// same org+project seeded.
 func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) SessionMetadata {
 	actorEmail := ""
 	if authCtx.Email != nil {
@@ -350,6 +353,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
@@ -367,15 +371,15 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
 		metadata.UserAccountID = cached.UserAccountID
-		// The AI account's email wins over the token owner's, matching
-		// mergeClaudeAuthContextMetadata on the legacy path: the session's
-		// identity is the account that produced it, not the key that sent it.
-		if cached.UserEmail != "" {
+		// The OTEL path's UserEmail is the account's own report; fall back to it
+		// for cache entries written before ObservedUserEmail existed.
+		metadata.ObservedUserEmail = conv.Default(cached.ObservedUserEmail, cached.UserEmail)
+		// Fill identity only when the auth context carried none (org-scoped
+		// ingest keys): the device bridge may have attributed the owning
+		// employee. A token-derived identity is never overwritten.
+		if metadata.UserEmail == "" {
 			metadata.UserEmail = cached.UserEmail
 		}
-		// A personal account's email never resolves to an org member, but the
-		// OTEL path may have attributed the owning employee via the device
-		// bridge — adopt it rather than dropping the owner.
 		if metadata.UserID == "" {
 			metadata.UserID = cached.UserID
 		}
