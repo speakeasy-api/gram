@@ -90,24 +90,38 @@ func redactCommand(raw string) string {
 		case secretHeaderRE.MatchString(f):
 			// `--header "X-API-Key: abc"` tokenizes the value into the next
 			// field after quote stripping; a header with nothing after its
-			// colon must consume that field too.
+			// colon — or with only an auth scheme, as in
+			// "Authorization:Bearer TOKEN" — must keep the mask pending for
+			// the credential that follows.
 			i := strings.IndexByte(f, ':')
-			if strings.TrimSpace(f[i+1:]) == "" {
+			value := strings.TrimSpace(f[i+1:])
+			switch {
+			case value == "":
 				out = append(out, f[:i]+":")
 				maskNext = true
-			} else {
+			case strings.EqualFold(value, "bearer") || strings.EqualFold(value, "basic"):
+				out = append(out, f[:i]+": "+value)
+				maskNext = true
+			default:
 				out = append(out, f[:i]+": ***")
 			}
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true
-		case tokenPrefixRE.MatchString(f):
-			out = append(out, "***")
 		case strings.Contains(f, "://"):
 			// A server URL passed as an argument (npx mcp-remote <url>) can
-			// carry credentials in its query string; give it the same
-			// treatment as a structured MCP URL.
-			out = append(out, redactURL(f))
+			// carry credentials in userinfo or its query string; structured
+			// redaction keeps the host and path matchable. Checked before
+			// tokenPrefixRE so userinfo URLs are stripped, not swallowed
+			// whole. A token the parser cannot make sense of could hide
+			// credentials anywhere, so it is dropped entirely.
+			if _, err := url.Parse(f); err != nil {
+				out = append(out, "***")
+			} else {
+				out = append(out, redactURL(f))
+			}
+		case tokenPrefixRE.MatchString(f):
+			out = append(out, "***")
 		default:
 			out = append(out, f)
 		}

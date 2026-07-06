@@ -573,6 +573,10 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	got = redactCommand("curl -H authorization:token-value-1")
 	require.NotContains(t, got, "token-value-1", "in-token header values keep masking")
 	require.Contains(t, got, "authorization: ***")
+
+	got = redactCommand(`curl --header "Authorization:Bearer tok-77" https://api.example.com/v1`)
+	require.NotContains(t, got, "tok-77", "a scheme-only header value keeps the mask pending for the credential")
+	require.Contains(t, got, "Authorization: Bearer ***")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
@@ -718,6 +722,11 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 	require.NotContains(t, got, "sekrit22")
 	require.Contains(t, got, "mcp.example.com", "the host must survive so the identity stays matchable")
 	require.Contains(t, got, "channel", "non-secret query parameters must survive")
+
+	got = redactCommand("npx -y mcp-remote https://user:hunter9@mcp.example.com/mcp")
+	require.NotContains(t, got, "hunter9")
+	require.NotContains(t, got, "user:")
+	require.Contains(t, got, "mcp.example.com/mcp", "userinfo URLs keep host and path, matching the structured MCP URL")
 }
 
 // TestSendBoundsTotalRetryTime pins the overall send budget: an endpoint that
