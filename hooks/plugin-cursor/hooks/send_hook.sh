@@ -77,6 +77,13 @@ if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
   fi
 fi
 
+if [ -z "$api_key" ] &&
+  type gram_hooks_reauth_needed >/dev/null 2>&1 &&
+  gram_hooks_reauth_needed; then
+  emit_deny "Speakeasy hooks need to reconnect before this action can be checked. Run the plugin's hooks/login.sh, then retry."
+  exit 0
+fi
+
 # Not configured: this is a setup problem, not a policy decision. Allow the
 # action (emit no decision) but surface the misconfiguration instead of failing
 # silently — the single most common "my hook isn't firing" cause.
@@ -160,6 +167,9 @@ if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
   [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] &&
   type gram_hooks_forget_auth >/dev/null 2>&1; then
   gram_hooks_forget_auth
+  if type gram_hooks_mark_reauth_needed >/dev/null 2>&1; then
+    gram_hooks_mark_reauth_needed
+  fi
   reason="Speakeasy hooks need to reconnect before this action can be checked. Run the plugin's hooks/login.sh, then retry."
   debug "cleared rejected cached auth (http_code=${http_code}); failing closed"
   emit_deny "$reason"

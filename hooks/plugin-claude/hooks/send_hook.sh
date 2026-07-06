@@ -105,6 +105,17 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
+if [ -z "$api_key" ] &&
+  type gram_hooks_reauth_needed >/dev/null 2>&1 &&
+  gram_hooks_reauth_needed; then
+  if gram_hooks_is_user_prompt_submit "$payload"; then
+    gram_hooks_emit_login_nudge
+    exit 0
+  fi
+  echo "Speakeasy hooks need to reconnect. Run hooks/login.sh to reconnect hooks." >&2
+  exit 2
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
@@ -161,6 +172,9 @@ if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
   [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] &&
   type gram_hooks_forget_auth >/dev/null 2>&1; then
   gram_hooks_forget_auth
+  if type gram_hooks_mark_reauth_needed >/dev/null 2>&1; then
+    gram_hooks_mark_reauth_needed
+  fi
   if gram_hooks_is_user_prompt_submit "$payload"; then
     gram_hooks_emit_login_nudge
     exit 0

@@ -1125,12 +1125,25 @@ gram_hooks_write_auth() {
   umask "$old_umask"
   mv "$tmp" "$path" || return 1
   gram_hooks_mark_auth_established
+  gram_hooks_clear_reauth_needed
 }
 
 gram_hooks_forget_auth() {
   local path
   path="$(gram_hooks_auth_file)"
   rm -f "$path"
+}
+
+gram_hooks_mark_reauth_needed() {
+  : >"$(gram_hooks_auth_file).reauth-needed" 2>/dev/null || true
+}
+
+gram_hooks_reauth_needed() {
+  [ -e "$(gram_hooks_auth_file).reauth-needed" ]
+}
+
+gram_hooks_clear_reauth_needed() {
+  rm -f "$(gram_hooks_auth_file).reauth-needed" 2>/dev/null || true
 }
 
 # gram_hooks_auth_established reports whether this machine has EVER cached
@@ -1631,6 +1644,11 @@ gram_hooks_prepare_auth() {
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
+        if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then
+          GRAM_HTTP_CODE=""
+          GRAM_HTTP_BODY='{"message":"Speakeasy hooks need to reconnect. Run hooks/login.sh to reconnect hooks."}'
+          return 79
+        fi
         if gram_hooks_auth_established; then
           echo "Speakeasy hooks could not authenticate with Gram. Run the plugin's hooks/login.sh to reconnect, or set GRAM_HOOKS_API_KEY." >&2
           exit "$failure_exit"
@@ -1675,11 +1693,19 @@ gram_hooks_post_authenticated() {
   shift 5
 
   # Return 78 when this machine has never authenticated (ratchet fail-open):
-  # callers emit a pass-through response instead of blocking. Once auth has
-  # been established, prepare_auth fails closed by exiting from within.
-  if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"; then
+  # callers emit a pass-through response instead of blocking. Return 79 when a
+  # rejected cached key was cleared and the caller should surface reconnect.
+  # Other established-auth failures still fail closed by exiting from within.
+  gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"
+  local prepare_status=$?
+  if [ "$prepare_status" -ne 0 ]; then
     GRAM_HTTP_CODE=""
-    GRAM_HTTP_BODY=""
+    if [ "$prepare_status" -ne 79 ]; then
+      GRAM_HTTP_BODY=""
+    fi
+    if [ "$prepare_status" -eq 79 ]; then
+      return 79
+    fi
     return 78
   fi
   gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
@@ -1696,6 +1722,7 @@ gram_hooks_post_authenticated() {
     && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
+    gram_hooks_mark_reauth_needed
     if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
       GRAM_HTTP_CODE="$first_status"
       return 79

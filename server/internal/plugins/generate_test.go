@@ -1126,10 +1126,23 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Contains(t, stdout.String(), "login.sh")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
 	require.FileExists(t, authFile+".established", "clearing a rejected key must preserve the fail-closed ratchet marker")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that prompt submits should keep nudging reconnect")
 	requests := string(requireFileBytes(t, capturePath))
 	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
 	require.Contains(t, requests, "/rpc/hooks.ingest")
 	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-repeat","prompt":"again"}`)
+	repeat.Env = env
+	var repeatOut, repeatErr bytes.Buffer
+	repeat.Stdout = &repeatOut
+	repeat.Stderr = &repeatErr
+	require.NoError(t, repeat.Run(), "reauth-needed prompt submits should keep nudging login after the stale cache is gone: %s", repeatErr.String())
+	require.Contains(t, repeatOut.String(), `"additionalContext"`)
+	require.Contains(t, repeatOut.String(), "login.sh")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed prompt submit must not send an unauthenticated request")
 }
 
 // TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
@@ -1189,9 +1202,22 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
 	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
 	requests := string(requireFileBytes(t, capturePath))
 	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
 	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-stale-cache-tool-repeat","tool_name":"Bash"}`)
+	repeat.Env = env
+	stderr.Reset()
+	repeat.Stderr = &stderr
+	err = repeat.Run()
+	require.ErrorAs(t, err, &exitErr, "reauth-needed tool-use events must still fail closed")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "need to reconnect")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed tool-use event must not send an unauthenticated request")
 }
 
 // TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
@@ -1957,6 +1983,69 @@ func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
 	require.Contains(t, headers, "/rpc/hooks.cursor")
 }
 
+func TestCheckedInCursorSenderRejectedCachedKeyClearsAuthAndKeepsBlocking(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-cursor", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"preToolUse","conversation_id":"sess-cursor-stale-tool","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	require.NoError(t, cmd.Run(), "Cursor sender reports blocks through stdout JSON")
+	require.Contains(t, stdout.String(), `"permission":"deny"`)
+	require.Contains(t, stdout.String(), "need to reconnect")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.cursor")
+
+	repeat := exec.Command("bash", senderPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"preToolUse","conversation_id":"sess-cursor-stale-tool-repeat","tool_name":"Bash"}`)
+	repeat.Env = env
+	stdout.Reset()
+	repeat.Stdout = &stdout
+	require.NoError(t, repeat.Run())
+	require.Contains(t, stdout.String(), `"permission":"deny"`)
+	require.Contains(t, stdout.String(), "need to reconnect")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.cursor"), "reauth-needed Cursor event must not send an unauthenticated request")
+}
+
 // TestCheckedInClaudeSenderUsesCachedBrowserAuth verifies the checked-in
 // Claude plugin's per-event sender attaches the credentials cached by the
 // browser login flow when no env key is set, so policy enforcement that needs
@@ -2064,9 +2153,22 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Contains(t, stdout.String(), `"additionalContext"`)
 	require.Contains(t, stdout.String(), "login.sh")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that prompt submits should keep nudging reconnect")
 	requests := string(requireFileBytes(t, capturePath))
 	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
 	require.Contains(t, requests, "/rpc/hooks.claude")
+
+	repeat := exec.Command("bash", senderPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-checked-in-stale-repeat","prompt":"again"}`)
+	repeat.Env = env
+	stdout.Reset()
+	stderr.Reset()
+	repeat.Stdout = &stdout
+	repeat.Stderr = &stderr
+	require.NoError(t, repeat.Run(), "checked-in reauth-needed prompt submit should keep nudging login: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"additionalContext"`)
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.claude"), "reauth-needed prompt submit must not send an unauthenticated request")
 }
 
 func TestCheckedInClaudeSenderRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
@@ -2117,9 +2219,22 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
 	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
 	requests := string(requireFileBytes(t, capturePath))
 	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
 	require.Contains(t, requests, "/rpc/hooks.claude")
+
+	repeat := exec.Command("bash", senderPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool-repeat","tool_name":"Bash"}`)
+	repeat.Env = env
+	stderr.Reset()
+	repeat.Stderr = &stderr
+	err = repeat.Run()
+	require.ErrorAs(t, err, &exitErr, "checked-in reauth-needed tool-use events must still block")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "need to reconnect")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.claude"), "reauth-needed tool-use event must not send an unauthenticated request")
 }
 
 // TestRenderHookScriptCursorBackfillsLaterTurnPrompts verifies the prompt
