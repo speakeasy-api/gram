@@ -96,6 +96,11 @@ import {
   policyMessageTypesForForm,
   policyToCategories,
 } from "./policy-form";
+import {
+  getPolicyDeleteRuleActionLabel,
+  getPolicyDeleteRuleListItems,
+  getPolicyRuleGroupNamesForDeleteDialog,
+} from "./policy-delete-dialog";
 
 /** Built-in detector categories that only produce findings when Speakeasy hooks
  *  are installed on the agent (no rule list to customize). */
@@ -914,6 +919,14 @@ function PolicyCenterContent() {
           label: "Create Exclusion",
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
+  const policyDeleteRuleListItems = policyToDelete
+    ? getPolicyDeleteRuleListItems(
+        getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
+      )
+    : [];
+  const policyDeleteRuleActionLabel = policyToDelete
+    ? getPolicyDeleteRuleActionLabel(policyToDelete.policy)
+    : "flag";
 
   let policiesBody = (
     <Table
@@ -1024,9 +1037,25 @@ function PolicyCenterContent() {
                 <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
-                policy will be permanently deleted. Any flags or blocks it
-                applies will stop immediately.
+                policy will be permanently deleted.
               </Type>
+              {policyDeleteRuleListItems.length > 0 && (
+                <div className="space-y-2">
+                  <Type variant="body">
+                    The following {policyDeleteRuleActionLabel} rules will no
+                    longer be enforced.
+                  </Type>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {policyDeleteRuleListItems.map((ruleName, index) => (
+                      <li key={`${ruleName}-${index}`}>
+                        <Type variant="body" muted as="span">
+                          {ruleName}
+                        </Type>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="flex justify-end space-x-2">
                 <Button
                   variant="secondary"
