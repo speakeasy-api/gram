@@ -973,10 +973,6 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	})
 	require.NoError(t, err, "expired plugin auth must not return an error")
 	require.NotNil(t, result)
-	require.NotNil(t, result.SystemMessage)
-	require.Contains(t, *result.SystemMessage, "rejected plugin auth")
-	require.NotNil(t, result.PluginAuthFailed)
-	require.True(t, *result.PluginAuthFailed)
 
 	// The whole point of the fallback is that the event still lands in
 	// the Redis buffer, ready for flushPendingHooks once OTEL Logs seeds
@@ -986,42 +982,6 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1, "hook should be buffered when plugin auth fails")
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
-}
-
-func TestClaude_PluginAuthFailurePreservesPreToolUseBlockMessage(t *testing.T) {
-	t.Parallel()
-	_, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
-
-	badKey := "gram_key_expired_or_invalid"
-	projectSlug := "some-project"
-	sessionID := uuid.NewString()
-	toolName := "mcp__gram__do_thing"
-	toolUseID := "toolu_plugin_auth_failed_pretooluse"
-
-	result, err := ti.service.Claude(t.Context(), &gen.ClaudePayload{
-		HookEventName:    "PreToolUse",
-		SessionID:        &sessionID,
-		ApikeyToken:      &badKey,
-		ProjectSlugInput: &projectSlug,
-		ToolName:         &toolName,
-		ToolUseID:        &toolUseID,
-		ToolInput:        map[string]any{"foo": "bar"},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.PluginAuthFailed)
-	require.True(t, *result.PluginAuthFailed)
-	require.NotNil(t, result.SystemMessage)
-	require.Contains(t, *result.SystemMessage, "could not verify this MCP tool call")
-	require.NotContains(t, *result.SystemMessage, "rejected plugin auth")
-
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
-	require.Equal(t, "deny", *output.PermissionDecision)
-	require.NotNil(t, output.PermissionDecisionReason)
-	require.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 }
 
 // When Claude PreToolUse cannot resolve org/project metadata for an MCP call,

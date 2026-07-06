@@ -19,25 +19,6 @@ server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
 gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
-gram_hooks_cached_auth=""
-
-gram_hooks_env_key_source() {
-  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
-    printf 'GRAM_HOOKS_API_KEY'
-    return 0
-  fi
-  if [ -n "${GRAM_API_KEY:-}" ]; then
-    printf 'GRAM_API_KEY'
-    return 0
-  fi
-  return 1
-}
-
-gram_hooks_env_key_rejected_message() {
-  local source
-  source="$(gram_hooks_env_key_source)" || return 1
-  printf 'Speakeasy hooks rejected the API key configured in %s. Update or unset %s, then run hooks/login.sh to reconnect hooks.' "$source" "$source"
-}
 
 debug() {
   if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
@@ -72,16 +53,8 @@ if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
     if gram_hooks_read_auth "$server_url" 2>/dev/null; then
       api_key="$GRAM_HOOKS_CACHED_API_KEY"
       [ -n "$project_slug" ] || project_slug="$GRAM_HOOKS_CACHED_PROJECT"
-      gram_hooks_cached_auth=1
     fi
   fi
-fi
-
-if [ -z "$api_key" ] &&
-  type gram_hooks_reauth_needed >/dev/null 2>&1 &&
-  gram_hooks_reauth_needed; then
-  emit_deny "Speakeasy hooks need to reconnect before this action can be checked. Run the plugin's hooks/login.sh, then retry."
-  exit 0
 fi
 
 # Not configured: this is a setup problem, not a policy decision. Allow the
@@ -153,26 +126,6 @@ body="$GRAM_HTTP_BODY"
 # guards keep a non-numeric code from leaking a shell error.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   echo "$body"
-  exit 0
-fi
-
-if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
-  env_reason="$(gram_hooks_env_key_rejected_message)"; then
-  emit_deny "$env_reason"
-  exit 0
-fi
-
-if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
-  [ -n "$gram_hooks_cached_auth" ] &&
-  [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] &&
-  type gram_hooks_forget_auth >/dev/null 2>&1; then
-  gram_hooks_forget_auth
-  if type gram_hooks_mark_reauth_needed >/dev/null 2>&1; then
-    gram_hooks_mark_reauth_needed
-  fi
-  reason="Speakeasy hooks need to reconnect before this action can be checked. Run the plugin's hooks/login.sh, then retry."
-  debug "cleared rejected cached auth (http_code=${http_code}); failing closed"
-  emit_deny "$reason"
   exit 0
 fi
 

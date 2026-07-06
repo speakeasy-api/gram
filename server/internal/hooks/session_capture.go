@@ -99,7 +99,6 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 		StopReason:         nil,
 		SuppressOutput:     nil,
 		SystemMessage:      nil,
-		PluginAuthFailed:   nil,
 		Decision:           nil,
 		Reason:             nil,
 	}

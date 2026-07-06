@@ -199,8 +199,6 @@ type ClaudeResponseBody struct {
 	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
 	// Warning message shown to the user in the terminal
 	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
-	// Whether optional plugin authentication was rejected
-	PluginAuthFailed *bool `form:"pluginAuthFailed,omitempty" json:"pluginAuthFailed,omitempty" xml:"pluginAuthFailed,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
 	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /
@@ -1783,7 +1781,6 @@ func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
 		StopReason:         body.StopReason,
 		SuppressOutput:     body.SuppressOutput,
 		SystemMessage:      body.SystemMessage,
-		PluginAuthFailed:   body.PluginAuthFailed,
 		HookSpecificOutput: body.HookSpecificOutput,
 		Decision:           body.Decision,
 		Reason:             body.Reason,

@@ -224,7 +224,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	// yet on this optional-auth endpoint — log it as a hint up front.
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
 	hasPluginAuth := hasOptionalPluginAuth(payload)
-	pluginAuthFailed := false
 
 	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
 	// endpoint. May be empty for the first hooks of a session (before OTEL
@@ -272,7 +271,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		// validated. Policies that need auth context degrade gracefully.
 		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
 			outcome = hookMetricOutcomeUnauthorized
-			pluginAuthFailed = true
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
@@ -335,13 +333,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	default:
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		result = makeHookResult(payload.HookEventName)
-	}
-	if pluginAuthFailed && result != nil {
-		result.PluginAuthFailed = &pluginAuthFailed
-		if result.SystemMessage == nil {
-			msg := "Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."
-			result.SystemMessage = &msg
-		}
 	}
 
 	return result, err

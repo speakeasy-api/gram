@@ -36629,9 +36629,6 @@ components:
           description: Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.
         hookSpecificOutput:
           description: Hook-specific output as JSON object
-        pluginAuthFailed:
-          type: boolean
-          description: Whether optional plugin authentication was rejected
         reason:
           type: string
           description: Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
