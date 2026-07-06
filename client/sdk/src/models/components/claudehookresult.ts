@@ -24,6 +24,10 @@ export type ClaudeHookResult = {
    */
   hookSpecificOutput?: any | undefined;
   /**
+   * Whether optional plugin authentication was rejected
+   */
+  pluginAuthFailed?: boolean | undefined;
+  /**
    * Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
    */
   reason?: string | undefined;
@@ -49,6 +53,7 @@ export const ClaudeHookResult$inboundSchema: z.ZodMiniType<
   continue: z.optional(z.boolean()),
   decision: z.optional(z.string()),
   hookSpecificOutput: z.optional(z.any()),
+  pluginAuthFailed: z.optional(z.boolean()),
   reason: z.optional(z.string()),
   stopReason: z.optional(z.string()),
   suppressOutput: z.optional(z.boolean()),
