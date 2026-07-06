@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -191,6 +192,12 @@ func (l *loginFlow) attemptMarker() string { return authFilePath() + ".login-att
 
 func (l *loginFlow) markAttempt() {
 	path := l.attemptMarker()
+	// On a fresh machine the auth directory does not exist until a sign-in
+	// succeeds; the cooldown marker must not depend on that, or a dismissed
+	// browser prompt reopens on every session.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return

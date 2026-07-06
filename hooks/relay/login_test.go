@@ -136,3 +136,16 @@ func TestLoginRefusesBrokenConfig(t *testing.T) {
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "reinstall")
 }
+
+// TestMarkAttemptCreatesAuthDir: on a fresh machine the auth directory only
+// appears after a successful sign-in, but the cooldown marker for a dismissed
+// attempt must record regardless or every session reopens the browser.
+func TestMarkAttemptCreatesAuthDir(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "config", "gram", "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+
+	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false})
+	l.markAttempt()
+	require.FileExists(t, authFile+".login-attempt")
+	require.False(t, l.cooldownElapsed(false), "a fresh attempt marker must hold the cooldown")
+}

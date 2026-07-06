@@ -78,7 +78,11 @@ func redactCommand(raw string) string {
 				continue
 			}
 			out = append(out, "***")
-			maskNext, schemeNext = false, false
+			// A quoted multi-part cookie tokenizes into ';'-terminated
+			// fragments ("Cookie: sid=abc; csrf=def"); the mask must keep
+			// riding until the fragment that ends the value.
+			maskNext = strings.HasSuffix(f, ";")
+			schemeNext = false
 			continue
 		}
 		switch {

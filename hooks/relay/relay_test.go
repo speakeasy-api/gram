@@ -589,6 +589,11 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 
 	got = redactCommand("cmd --api-key token tail3")
 	require.Contains(t, got, "--api-key *** tail3", "a flag value colliding with a scheme word is still the secret")
+
+	got = redactCommand(`curl -H "Cookie: sid=abc; csrf=def" tail4`)
+	require.NotContains(t, got, "sid=abc")
+	require.NotContains(t, got, "csrf=def", "every fragment of a multi-part cookie is credential material")
+	require.Contains(t, got, "tail4", "masking must stop with the cookie value")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
@@ -762,7 +767,15 @@ func TestBackfilledPromptDenyGatesTriggeringToolEvent(t *testing.T) {
 	})
 	cfg := authedConfig(t, fs.URL)
 
-	payload := []byte(`{"conversation_id":"conv-backfill-1","generation_id":"gen-1","hook_event_name":"beforeShellExecution","transcript_path":"` + transcript + `","command":"curl example.com","cwd":"/work/repo"}`)
+	payload, err := json.Marshal(map[string]string{
+		"conversation_id": "conv-backfill-1",
+		"generation_id":   "gen-1",
+		"hook_event_name": "beforeShellExecution",
+		"transcript_path": transcript,
+		"command":         "curl example.com",
+		"cwd":             "/work/repo",
+	})
+	require.NoError(t, err)
 	runner := NewRunner(cfg)
 	res := agenthookstest.Invoke(t, runner, agenthooks.ProviderCursor, payload, "--variant=cli")
 
