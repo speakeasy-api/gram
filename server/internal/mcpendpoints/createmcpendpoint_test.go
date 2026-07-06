@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -278,7 +279,7 @@ func TestCreateMcpEndpoint_AttachesToDefaultPlugin(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestCreateMcpEndpoint_SkipsAttachWhenNoDefaultPlugin(t *testing.T) {
+func TestCreateMcpEndpoint_LazilyCreatesDefaultPluginWhenMissing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -305,8 +306,20 @@ func TestCreateMcpEndpoint_SkipsAttachWhenNoDefaultPlugin(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// No Default plugin exists for this project (the test fixture project is
-	// created directly through projectsrepo, bypassing projects.CreateProject).
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	_, err = pluginsQueries.GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "fixture project (created directly via projectsrepo) has no Default plugin yet")
+
+	beforeCreateCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginCreate)
+	require.NoError(t, err)
+	beforeAddCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+
+	// This project predates the Default-plugin feature (no CreateProject call
+	// ever ran for it) — the endpoint create must lazily provision one.
 	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -316,4 +329,25 @@ func TestCreateMcpEndpoint_SkipsAttachWhenNoDefaultPlugin(t *testing.T) {
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-no-default"),
 	})
 	require.NoError(t, err)
+
+	defaultPlugin, err := pluginsQueries.GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Default", defaultPlugin.Name)
+	require.Equal(t, "default", defaultPlugin.Slug)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Equal(t, mcpServerID, servers[0].McpServerID.UUID)
+
+	afterCreateCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCreateCount+1, afterCreateCount)
+
+	afterAddCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	require.Equal(t, beforeAddCount+1, afterAddCount)
 }

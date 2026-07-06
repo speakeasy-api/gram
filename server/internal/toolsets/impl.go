@@ -261,6 +261,21 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return nil
 	}
 
+	if attached.PluginCreated {
+		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         attached.PluginID,
+			PluginName:       attached.PluginName,
+			PluginSlug:       attached.PluginSlug,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+		}
+	}
+
 	toolsetURN := urn.NewToolset(toolsetID)
 	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
 		OrganizationID:    authCtx.ActiveOrganizationID,
