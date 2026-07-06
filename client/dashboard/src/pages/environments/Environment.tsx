@@ -173,7 +173,12 @@ function EnvironmentPageInner() {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  // Editing environment values (add/edit/remove variables, delete env) is gated
+  // on environment:write server-side — the environment scope family is
+  // independent from project:* because env values include secrets. Linking an
+  // environment to a toolset ("Fill for MCP Server") remains project:write.
+  const canWrite = hasScope("environment:write");
+  const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -470,7 +475,7 @@ function EnvironmentPageInner() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <RequireScope scope="project:write" level="component">
+            <RequireScope scope="environment:write" level="component">
               <Button
                 onClick={handleAddNewEntry}
                 disabled={isSaving || isAddingNew}
@@ -485,7 +490,7 @@ function EnvironmentPageInner() {
                 label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
-                disabled: !canWrite,
+                disabled: !canLinkToolset,
               },
               {
                 label: "Delete Environment",
