@@ -1,9 +1,9 @@
-import { ApprovalRequestsContent } from "@/components/access/ApprovalRequestsContent";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { useProject } from "@/contexts/Auth";
 
-export default function ApprovalRequests(): JSX.Element {
+export default function ShadowMCP(): JSX.Element {
   const project = useProject();
 
   return (
@@ -14,15 +14,13 @@ export default function ApprovalRequests(): JSX.Element {
       <Page.Body>
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title stage="beta">
-              Approval Requests
-            </Page.Section.Title>
+            <Page.Section.Title stage="beta">Shadow MCP</Page.Section.Title>
             <Page.Section.Description>
-              Review blocked resource access requests and manage project-scoped
-              access rules.
+              Manage project-scoped Shadow MCP server inventory and URL access
+              rules.
             </Page.Section.Description>
             <Page.Section.Body>
-              <ApprovalRequestsContent projectSlug={project.slug} />
+              <ShadowMCPInventoryTable projectID={project.id} />
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>

@@ -30,15 +30,15 @@ import {
 } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-query/riskApprovePolicyBypassRequest.js";
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
+import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
+import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Inbox } from "lucide-react";
+import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
-import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 import { formatShortDate } from "./shadow-mcp-utils";
 
 type ReviewAction = "approve" | "deny";
@@ -84,6 +84,44 @@ function memberDisplayName(member: AccessMember) {
     return `${member.name} (${member.email})`;
   }
   return member.email;
+}
+
+function principalDisplayName(
+  principalUrn: string,
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrn === ALL_USERS_PRINCIPAL_URN) {
+    return "Everyone";
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    const member = members.find((item) => item.principalUrn === principalUrn);
+    return member ? memberDisplayName(member) : principalUrn;
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  return role?.name ?? principalUrn;
+}
+
+function principalSummary(
+  principalUrns: string[],
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrns.length === 0) {
+    return "None";
+  }
+
+  const names = principalUrns.map((principalUrn) =>
+    principalDisplayName(principalUrn, roles, members),
+  );
+  if (names.length <= 2) {
+    return names.join(", ");
+  }
+
+  return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
 }
 
 function approvalAudienceFromPrincipalUrns(
@@ -685,10 +723,8 @@ function ReviewRequestSheet({
 }
 
 export function ApprovalRequestsContent({
-  projectID,
   projectSlug,
 }: {
-  projectID: string;
   projectSlug: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -696,9 +732,20 @@ export function ApprovalRequestsContent({
   const canAdmin = hasScope("org:admin");
   const [reviewRequest, setReviewRequest] =
     useState<RiskPolicyBypassRequest | null>(null);
+  const [rulePendingDelete, setRulePendingDelete] =
+    useState<RiskPolicyBypassRequest | null>(null);
+
+  useEffect(() => {
+    setRulePendingDelete(null);
+  }, [projectSlug]);
 
   const requestsQuery = useRiskListPolicyBypassRequests(
     { status: "requested", gramProject: projectSlug },
+    undefined,
+    { enabled: canAdmin && projectSlug.length > 0 },
+  );
+  const rulesQuery = useRiskListPolicyBypassRequests(
+    { status: "approved", gramProject: projectSlug },
     undefined,
     { enabled: canAdmin && projectSlug.length > 0 },
   );
@@ -709,6 +756,10 @@ export function ApprovalRequestsContent({
     () => requestsQuery.data?.requests ?? [],
     [requestsQuery.data?.requests],
   );
+  const rules = useMemo(
+    () => rulesQuery.data?.requests ?? [],
+    [rulesQuery.data?.requests],
+  );
   const roles = useMemo(() => rolesQuery.data?.roles ?? [], [rolesQuery.data]);
   const members = useMemo(
     () => membersQuery.data?.members ?? [],
@@ -716,9 +767,12 @@ export function ApprovalRequestsContent({
   );
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
+  const rulesLoading = rulesQuery.isLoading;
+  const rulesError = rulesQuery.error;
 
   const approveRequest = useRiskApprovePolicyBypassRequestMutation();
   const denyRequest = useRiskDenyPolicyBypassRequestMutation();
+  const revokeRequest = useRiskRevokePolicyBypassRequestMutation();
   const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
 
   // The command palette deep-links to pending requests because they do not have
@@ -744,6 +798,29 @@ export function ApprovalRequestsContent({
 
   const refreshApprovalRequestsData = async () => {
     await invalidateAllRiskListPolicyBypassRequests(queryClient);
+  };
+
+  const closeDeleteRuleDialog = () => {
+    if (revokeRequest.isPending) return;
+    setRulePendingDelete(null);
+  };
+
+  const confirmDeleteRule = async () => {
+    if (!rulePendingDelete || revokeRequest.isPending) return;
+
+    try {
+      await revokeRequest.mutateAsync({
+        request: {
+          gramProject: projectSlug,
+          riskIDRequestBody: { id: rulePendingDelete.id },
+        },
+      });
+      await refreshApprovalRequestsData();
+      toast.success("Access revoked");
+      setRulePendingDelete(null);
+    } catch {
+      toast.error("Access revoke failed");
+    }
   };
 
   const requestColumns: Column<RiskPolicyBypassRequest>[] = [
@@ -805,6 +882,79 @@ export function ApprovalRequestsContent({
           <Button size="sm" onClick={() => setReviewRequest(request)}>
             <Button.Text>Review</Button.Text>
           </Button>
+        </RequireScope>
+      ),
+    },
+  ];
+
+  const ruleColumns: Column<RiskPolicyBypassRequest>[] = [
+    {
+      key: "server",
+      header: "Server",
+      width: "1.5fr",
+      render: (rule) => (
+        <ServerCell
+          name={getPolicyBypassRequestDisplayName(rule)}
+          detail={getPolicyBypassRequestTargetDetail(rule)}
+        />
+      ),
+    },
+    {
+      key: "resourceType",
+      header: "Type",
+      width: "0.75fr",
+      render: (rule) => (
+        <Badge variant="neutral">
+          <Badge.Text>{getPolicyBypassRequestTargetType(rule)}</Badge.Text>
+        </Badge>
+      ),
+    },
+    {
+      key: "appliesTo",
+      header: "Applies to",
+      width: "1.5fr",
+      render: (rule) => (
+        <Type variant="small" className="truncate">
+          {principalSummary(rule.grantedPrincipalUrns, roles, members)}
+        </Type>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.5fr",
+      render: (rule) => <RequestStatusBadge status={rule.status} />,
+    },
+    {
+      key: "updated",
+      header: "Updated",
+      width: "0.75fr",
+      render: (rule) => (
+        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.75fr",
+      render: (rule) => (
+        <RequireScope scope="org:admin" level="component">
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setReviewRequest(rule)}
+            >
+              <Button.Text>Edit</Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setRulePendingDelete(rule)}
+            >
+              <Button.Text>Revoke</Button.Text>
+            </Button>
+          </div>
         </RequireScope>
       ),
     },
@@ -895,13 +1045,84 @@ export function ApprovalRequestsContent({
           <div>
             <Heading variant="h5">Access Rules</Heading>
             <Type muted small className="mt-1">
-              Manage project-scoped Shadow MCP server allow and block rules.
+              Manage approved policy bypass access.
             </Type>
           </div>
         </div>
 
-        <ShadowMCPInventoryTable projectID={projectID} enabled={canAdmin} />
+        {rulesLoading ? (
+          <SkeletonTable />
+        ) : rulesError ? (
+          <TableEmptyState
+            title="Access Rules could not be loaded"
+            description="Refresh the page or try again later."
+          />
+        ) : rules.length === 0 ? (
+          <ApprovalSectionEmptyState
+            icon={ShieldCheck}
+            title="No access rules"
+            description="Approved policy bypass requests will appear here."
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border">
+            <Table
+              columns={ruleColumns}
+              data={rules}
+              rowKey={(row) => row.id}
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            />
+          </div>
+        )}
       </section>
+
+      <Dialog
+        open={rulePendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteRuleDialog();
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Revoke access</Dialog.Title>
+          </Dialog.Header>
+          <Type variant="small">
+            This removes the bypass grant for{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              {rulePendingDelete
+                ? getPolicyBypassRequestDisplayName(rulePendingDelete)
+                : "this access rule"}
+            </code>
+            ?
+          </Type>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={closeDeleteRuleDialog}
+              disabled={revokeRequest.isPending}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={() => {
+                void confirmDeleteRule();
+              }}
+              disabled={revokeRequest.isPending}
+            >
+              {revokeRequest.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Revoking</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Revoke</Button.Text>
+              )}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }

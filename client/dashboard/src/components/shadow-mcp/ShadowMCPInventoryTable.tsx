@@ -12,7 +12,7 @@ import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { formatShortDate } from "./shadow-mcp-utils";
+import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 
 const INVENTORY_PAGE_LIMIT = 50;
 
@@ -36,11 +36,6 @@ function accessBadgeVariant(access: ShadowMCPInventoryServer["access"]) {
     case "none":
       return "neutral" as const;
   }
-}
-
-function topUsersLabel(topUsers: string[]) {
-  if (topUsers.length === 0) return "No users";
-  return topUsers.join(", ");
 }
 
 function usageCountLabel(count: number) {
@@ -211,16 +206,6 @@ export function ShadowMCPInventoryTable({
             {userCountLabel(server.userCount)}
           </Type>
         </div>
-      ),
-    },
-    {
-      key: "users",
-      header: "Top users",
-      width: "1.2fr",
-      render: (server) => (
-        <Type variant="small" className="truncate">
-          {topUsersLabel(server.topUsers)}
-        </Type>
       ),
     },
     {

@@ -13,16 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
-import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 
 const mocks = vi.hoisted(() => ({
   useRBAC: vi.fn(),
   usePolicyBypassRequests: vi.fn(),
-  useShadowMCPInventory: vi.fn(),
-  invalidateShadowMCPInventory: vi.fn(),
-  allowInventoryServerMutation: vi.fn(),
-  blockInventoryServerMutation: vi.fn(),
-  clearInventoryServerMutation: vi.fn(),
   useRoles: vi.fn(),
   useMembers: vi.fn(),
   mutation: vi.fn(),
@@ -62,33 +56,16 @@ vi.mock("@gram/client/react-query/riskListPolicyBypassRequests.js", () => ({
   useRiskListPolicyBypassRequests: mocks.usePolicyBypassRequests,
 }));
 
-vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
-  invalidateAllShadowMCPInventory: mocks.invalidateShadowMCPInventory,
-  useShadowMCPInventory: mocks.useShadowMCPInventory,
-}));
-
-vi.mock("@gram/client/react-query/allowShadowMCPInventoryServer.js", () => ({
-  useAllowShadowMCPInventoryServerMutation: mocks.allowInventoryServerMutation,
-}));
-
-vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
-  useBlockShadowMCPInventoryServerMutation: mocks.blockInventoryServerMutation,
-}));
-
-vi.mock(
-  "@gram/client/react-query/clearShadowMCPInventoryServerAccess.js",
-  () => ({
-    useClearShadowMCPInventoryServerAccessMutation:
-      mocks.clearInventoryServerMutation,
-  }),
-);
-
 vi.mock("@gram/client/react-query/riskApprovePolicyBypassRequest.js", () => ({
   useRiskApprovePolicyBypassRequestMutation: mocks.mutation,
 }));
 
 vi.mock("@gram/client/react-query/riskDenyPolicyBypassRequest.js", () => ({
   useRiskDenyPolicyBypassRequestMutation: mocks.mutation,
+}));
+
+vi.mock("@gram/client/react-query/riskRevokePolicyBypassRequest.js", () => ({
+  useRiskRevokePolicyBypassRequestMutation: mocks.mutation,
 }));
 
 vi.mock("@gram/client/react-query/roles.js", () => ({
@@ -102,8 +79,6 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("nuqs", () => ({
   useQueryState: mocks.useQueryState,
 }));
-
-type TableRow = RiskPolicyBypassRequest | ShadowMCPInventoryServer;
 
 vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: Object.assign(
@@ -133,6 +108,22 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+  Dialog: Object.assign(
+    ({
+      children,
+      open,
+    }: {
+      children: ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (open ? <div role="dialog">{children}</div> : null),
+    {
+      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    },
+  ),
   Table: ({
     columns,
     data,
@@ -141,10 +132,10 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     columns: Array<{
       header: ReactNode;
       key: string;
-      render?: (row: TableRow) => ReactNode;
+      render?: (row: RiskPolicyBypassRequest) => ReactNode;
     }>;
-    data: TableRow[];
-    rowKey: (row: TableRow) => string;
+    data: RiskPolicyBypassRequest[];
+    rowKey: (row: RiskPolicyBypassRequest) => string;
   }) => (
     <table>
       <thead>
@@ -299,29 +290,6 @@ function policyBypassRequest({
   };
 }
 
-function inventoryServer(
-  overrides: Partial<ShadowMCPInventoryServer> & {
-    canonicalServerUrl: string;
-  },
-): ShadowMCPInventoryServer {
-  const { canonicalServerUrl, ...rest } = overrides;
-
-  return {
-    access: "none",
-    canonicalServerUrl,
-    firstSeen: new Date("2026-01-01T10:00:00Z"),
-    lastCalled: undefined,
-    lastSeen: new Date("2026-01-02T10:00:00Z"),
-    observedUseCount: 0,
-    rule: undefined,
-    serverName: undefined,
-    topUsers: [],
-    urlHost: new URL(canonicalServerUrl).host,
-    userCount: 0,
-    ...rest,
-  };
-}
-
 function accessMember({
   id,
   email,
@@ -368,36 +336,20 @@ function accessRole({
 
 function mockPolicyBypassLists({
   requested = [],
+  approved = [],
 }: {
   requested?: RiskPolicyBypassRequest[];
+  approved?: RiskPolicyBypassRequest[];
 } = {}) {
   mocks.usePolicyBypassRequests.mockImplementation(
     ({ status }: { status?: RiskPolicyBypassRequest["status"] }) => ({
       data: {
-        requests: status === "requested" ? requested : [],
+        requests: status === "approved" ? approved : requested,
       },
       isLoading: false,
       error: null,
     }),
   );
-}
-
-function mockShadowMCPInventory({
-  servers = [],
-  isLoading = false,
-  error = null,
-  nextCursor,
-}: {
-  servers?: ShadowMCPInventoryServer[];
-  isLoading?: boolean;
-  error?: Error | null;
-  nextCursor?: string;
-} = {}) {
-  mocks.useShadowMCPInventory.mockReturnValue({
-    data: { servers, nextCursor },
-    isLoading,
-    error,
-  });
 }
 
 function mockAdminRBAC() {
@@ -411,7 +363,6 @@ function mockAdminRBAC() {
 
 function renderContent(
   projectSlug = "project-1",
-  projectId = "project-id-1",
   path = "/speakeasy/projects/project-1/approval-requests",
 ) {
   const queryClient = new QueryClient();
@@ -423,10 +374,7 @@ function renderContent(
           path="/:orgSlug/projects/:projectSlug/approval-requests"
           element={
             <QueryClientProvider client={queryClient}>
-              <ApprovalRequestsContent
-                projectID={projectId}
-                projectSlug={projectSlug}
-              />
+              <ApprovalRequestsContent projectSlug={projectSlug} />
             </QueryClientProvider>
           }
         />
@@ -441,20 +389,7 @@ beforeEach(() => {
   }
 
   mockPolicyBypassLists();
-  mockShadowMCPInventory();
   mocks.mutation.mockReturnValue({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  });
-  mocks.allowInventoryServerMutation.mockReturnValue({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  });
-  mocks.blockInventoryServerMutation.mockReturnValue({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  });
-  mocks.clearInventoryServerMutation.mockReturnValue({
     isPending: false,
     mutateAsync: vi.fn(),
   });
@@ -491,14 +426,14 @@ afterEach(() => {
 });
 
 describe("ApprovalRequestsContent", () => {
-  it("renders empty states for approval requests and inventory access", async () => {
+  it("renders empty states for approval requests and approved access", async () => {
     mockAdminRBAC();
 
     renderContent();
 
     await waitFor(() => {
       expect(screen.getByText("No approval requests")).toBeTruthy();
-      expect(screen.getByText("No Shadow MCP servers")).toBeTruthy();
+      expect(screen.getByText("No access rules")).toBeTruthy();
     });
     expect(
       screen.getByText(
@@ -506,9 +441,7 @@ describe("ApprovalRequestsContent", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        "Inventory URLs will appear here after hook startup captures configured Shadow MCP servers.",
-      ),
+      screen.getByText("Approved policy bypass requests will appear here."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add Rule" })).toBeNull();
   });
@@ -528,8 +461,8 @@ describe("ApprovalRequestsContent", () => {
       undefined,
       expect.objectContaining({ enabled: false }),
     );
-    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
-      { projectId: "project-id-1", limit: 50 },
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "approved", gramProject: "project-1" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
@@ -542,15 +475,15 @@ describe("ApprovalRequestsContent", () => {
   it("does not load policy access data without a project id", () => {
     mockAdminRBAC();
 
-    renderContent("", "");
+    renderContent("");
 
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
       { status: "requested", gramProject: "" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
-    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
-      { projectId: "", limit: 50 },
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "approved", gramProject: "" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
@@ -615,7 +548,6 @@ describe("ApprovalRequestsContent", () => {
 
     renderContent(
       "project-1",
-      "project-id-1",
       "/speakeasy/projects/project-1/approval-requests?review=request-linked",
     );
 
@@ -781,32 +713,18 @@ describe("ApprovalRequestsContent", () => {
     });
   });
 
-  it("renders Shadow MCP inventory rows as access rules", async () => {
-    mockShadowMCPInventory({
-      servers: [
-        inventoryServer({
-          access: "allowed",
-          canonicalServerUrl: "https://github.example.com/mcp",
-          lastCalled: new Date("2026-01-02T11:30:00Z"),
-          observedUseCount: 42,
-          rule: {
-            accessScope: "project",
-            displayName: "GitHub MCP",
-            disposition: "allowed",
-            id: "rule-1",
-            matchBreadth: "full_url",
-            matchValue: "https://github.example.com/mcp",
-            projectId: "project-id-1",
-          },
-          serverName: "GitHub MCP",
-          topUsers: ["ava@example.com", "bea@example.com"],
-          userCount: 3,
-        }),
-        inventoryServer({
-          access: "none",
-          canonicalServerUrl: "https://unused.example.com/mcp",
-          lastCalled: undefined,
-          lastSeen: new Date("2026-01-03T11:30:00Z"),
+  it("renders approved policy bypass requests as access rules", async () => {
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-approved",
+          label: "Datadog MCP",
+          serverURL: "https://datadog.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: [
+            "user:all",
+            "role:organization:role-reviewers",
+          ],
         }),
       ],
     });
@@ -815,115 +733,374 @@ describe("ApprovalRequestsContent", () => {
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+      expect(screen.getByText("Datadog MCP")).toBeTruthy();
     });
     const accessRulesSection = screen
       .getByRole("heading", { name: "Access Rules" })
       .closest("section");
     if (!accessRulesSection) throw new Error("Access Rules section not found");
 
+    expect(within(accessRulesSection).getByText("Approved")).toBeTruthy();
     expect(
-      within(accessRulesSection).getByText("https://github.example.com/mcp"),
+      within(accessRulesSection).getByRole("columnheader", {
+        name: "Applies to",
+      }),
     ).toBeTruthy();
-    expect(within(accessRulesSection).getByText("Allowed")).toBeTruthy();
-    expect(within(accessRulesSection).getByText("42 calls")).toBeTruthy();
-    expect(within(accessRulesSection).getByText("3 users")).toBeTruthy();
     expect(
-      within(accessRulesSection).getByText("ava@example.com, bea@example.com"),
+      within(accessRulesSection).getByText("Everyone, Reviewers"),
     ).toBeTruthy();
-    expect(within(accessRulesSection).getByText("Never")).toBeTruthy();
-    expect(
-      within(accessRulesSection).getByText("https://unused.example.com/mcp"),
-    ).toBeTruthy();
-    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
-      { projectId: "project-id-1", limit: 50 },
-      undefined,
-      expect.objectContaining({ enabled: true }),
-    );
+    expect(within(accessRulesSection).getByText("Shadow MCP")).toBeTruthy();
   });
 
-  it("allows, blocks, and clears Shadow MCP inventory URL access", async () => {
-    const allowServer = vi.fn().mockResolvedValue({});
-    const blockServer = vi.fn().mockResolvedValue({});
-    const clearServer = vi.fn().mockResolvedValue({});
-    mockShadowMCPInventory({
-      servers: [
-        inventoryServer({
-          access: "none",
-          canonicalServerUrl: "https://pending.example.com/mcp",
-          serverName: "Pending MCP",
-        }),
-        inventoryServer({
-          access: "allowed",
-          canonicalServerUrl: "https://allowed.example.com/mcp",
-          serverName: "Allowed MCP",
-        }),
-        inventoryServer({
-          access: "denied",
-          canonicalServerUrl: "https://blocked.example.com/mcp",
-          serverName: "Blocked MCP",
+  it("edits the principals for approved policy bypass access", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-edit",
+          label: "Editable access",
+          serverURL: "https://edit.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["user:all"],
         }),
       ],
     });
     mockAdminRBAC();
-    mocks.allowInventoryServerMutation.mockReturnValue({
+    mocks.mutation.mockReturnValue({
       isPending: false,
-      mutateAsync: allowServer,
-    });
-    mocks.blockInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: blockServer,
-    });
-    mocks.clearInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: clearServer,
+      mutateAsync: approveRequest,
     });
 
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Pending MCP")).toBeTruthy();
+      expect(screen.getByText("Editable access")).toBeTruthy();
     });
+    const row = screen.getByText("Editable access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
 
-    const pendingRow = screen.getByText("Pending MCP").closest("tr");
-    const allowedRow = screen.getByText("Allowed MCP").closest("tr");
-    const blockedRow = screen.getByText("Blocked MCP").closest("tr");
-    if (!pendingRow || !allowedRow || !blockedRow) {
-      throw new Error("Inventory rows not found");
-    }
-
-    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
-    fireEvent.click(within(allowedRow).getByRole("button", { name: "Block" }));
-    fireEvent.click(within(blockedRow).getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("Edit access")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
-      expect(allowServer).toHaveBeenCalledWith({
+      expect(approveRequest).toHaveBeenCalledWith({
         request: {
-          shadowMCPInventoryServerAccessForm: {
-            projectId: "project-id-1",
-            serverName: "Pending MCP",
-            serverUrl: "https://pending.example.com/mcp",
-          },
-        },
-      });
-      expect(blockServer).toHaveBeenCalledWith({
-        request: {
-          shadowMCPInventoryServerAccessForm: {
-            projectId: "project-id-1",
-            serverName: "Allowed MCP",
-            serverUrl: "https://allowed.example.com/mcp",
-          },
-        },
-      });
-      expect(clearServer).toHaveBeenCalledWith({
-        request: {
-          clearShadowMCPInventoryServerAccessRequestBody: {
-            projectId: "project-id-1",
-            serverUrl: "https://blocked.example.com/mcp",
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-edit",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
           },
         },
       });
     });
-    expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
+  });
+
+  it("preserves stale user principals when editing approved policy bypass access", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-stale-user",
+          label: "Stale user access",
+          serverURL: "https://stale-user.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["user:user-stale"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Stale user access")).toBeTruthy();
+    });
+    const row = screen.getByText("Stale user access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    fireEvent.click(screen.getAllByRole("radio")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-stale-user",
+            grantedPrincipalUrns: ["user:user-stale"],
+          },
+        },
+      });
+    });
+  });
+
+  it("updates pristine initial audience when roles load after opening", async () => {
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-late-roles",
+          label: "Late roles access",
+          serverURL: "https://late-roles.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["role:organization:role-reviewers"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+
+    let currentRoles: Role[] = [];
+    mocks.useRoles.mockImplementation(() => ({
+      data: { roles: currentRoles },
+    }));
+
+    const queryClient = new QueryClient();
+    const renderTree = () => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectSlug="project-1" />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getByText("Late roles access")).toBeTruthy();
+    });
+    const row = screen.getByText("Late roles access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    expect(screen.getAllByRole<HTMLInputElement>("radio")[2]?.checked).toBe(
+      true,
+    );
+
+    currentRoles = [
+      accessRole({ id: "role-admin", name: "Admin", isSystem: true }),
+      accessRole({ id: "role-reviewers", name: "Reviewers" }),
+    ];
+    view.rerender(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getAllByRole<HTMLInputElement>("radio")[1]?.checked).toBe(
+        true,
+      );
+    });
+  });
+
+  it("does not reset reviewer edits when members refetch", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    const approved = [
+      policyBypassRequest({
+        id: "request-members-refetch",
+        label: "Members refetch access",
+        serverURL: "https://members-refetch.example.com/mcp",
+        status: "approved",
+        grantedPrincipalUrns: ["user:all"],
+      }),
+    ];
+    mockPolicyBypassLists({ approved });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    let currentMembers = [
+      accessMember({
+        id: "user-1",
+        email: "requester@example.com",
+        name: "Requester",
+        roleIds: ["role-reviewers"],
+      }),
+      accessMember({
+        id: "user-2",
+        email: "reviewer@example.com",
+        name: "Reviewer",
+      }),
+    ];
+    mocks.useMembers.mockImplementation(() => ({
+      data: { members: currentMembers },
+    }));
+
+    const queryClient = new QueryClient();
+    const renderTree = () => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectSlug="project-1" />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getByText("Members refetch access")).toBeTruthy();
+    });
+    const row = screen.getByText("Members refetch access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+
+    currentMembers = [
+      accessMember({
+        id: "user-1",
+        email: "requester@example.com",
+        name: "Requester",
+      }),
+    ];
+    view.rerender(renderTree());
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-members-refetch",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
+        },
+      });
+    });
+  });
+
+  it("revokes approved policy bypass access with a design system dialog", async () => {
+    const revokeRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-revoke",
+          label: "Revoke me",
+          serverURL: "https://revoke.example.com/mcp",
+          status: "approved",
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: revokeRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Revoke me")).toBeTruthy();
+    });
+    const row = screen.getByText("Revoke me").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Revoke" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    });
+    expect(screen.getByRole("heading", { name: "Revoke access" })).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    const requestName = within(dialog).getByText("Revoke me");
+    expect(requestName.tagName).toBe("CODE");
+    expect(requestName.className).toContain("font-mono");
+    expect(revokeRequest).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke" }));
+
+    await waitFor(() => {
+      expect(revokeRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskIDRequestBody: { id: "request-revoke" },
+        },
+      });
+    });
+  });
+
+  it("resets pending access revocation when the project changes", async () => {
+    mockAdminRBAC();
+    mocks.usePolicyBypassRequests.mockImplementation(
+      ({ status }: { status?: RiskPolicyBypassRequest["status"] }) => ({
+        data: {
+          requests:
+            status === "approved"
+              ? [
+                  policyBypassRequest({
+                    id: "request-project",
+                    label: "Project access",
+                    serverURL: "https://project.example.com/mcp",
+                    status: "approved",
+                  }),
+                ]
+              : [],
+        },
+        isLoading: false,
+        error: null,
+      }),
+    );
+    const queryClient = new QueryClient();
+    const renderWithProject = (projectSlug: string) => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectSlug={projectSlug} />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const view = render(renderWithProject("project-1"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Project access")).toBeTruthy();
+    });
+    const row = screen.getByText("Project access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Revoke" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    });
+
+    view.rerender(renderWithProject("project-2"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
   });
 });

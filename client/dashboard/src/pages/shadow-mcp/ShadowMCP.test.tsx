@@ -1,11 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ApprovalRequests from "./ApprovalRequests";
+import ShadowMCP from "./ShadowMCP";
 
 const mocks = vi.hoisted(() => ({
   useProject: vi.fn(),
-  useOrganization: vi.fn(),
   useRBAC: vi.fn(),
 }));
 
@@ -24,18 +23,32 @@ vi.mock("@/components/page-layout", () => {
   }
 
   function Section({ children }: { children: ReactNode }) {
+    let title: ReactElement | null = null;
+    let description: ReactElement | null = null;
     let body: ReactElement | null = null;
 
     for (const child of Array.isArray(children) ? children : [children]) {
       if (typeof child === "object" && child && "type" in child) {
+        if (child.type === Section.Title) title = child;
+        if (child.type === Section.Description) description = child;
         if (child.type === Section.Body) body = child;
       }
     }
 
-    return <div>{body}</div>;
+    return (
+      <section>
+        {title}
+        {description}
+        {body}
+      </section>
+    );
   }
-  Section.Title = () => null;
-  Section.Description = () => null;
+  Section.Title = ({ children }: { children: ReactNode }) => (
+    <h1>{children}</h1>
+  );
+  Section.Description = ({ children }: { children: ReactNode }) => (
+    <p>{children}</p>
+  );
   Section.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
 
   return {
@@ -47,13 +60,9 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
-  Icon: ({ name }: { name: string }) => <span>{name}</span>,
-}));
-
-vi.mock("@/components/access/ApprovalRequestsContent", () => ({
-  ApprovalRequestsContent: ({ projectSlug }: { projectSlug: string }) => (
-    <div>Approval Requests Content for {projectSlug}</div>
+vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
+  ShadowMCPInventoryTable: ({ projectID }: { projectID: string }) => (
+    <div>Shadow MCP inventory for {projectID}</div>
   ),
 }));
 
@@ -65,13 +74,13 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: mocks.useRBAC,
 }));
 
-describe("ApprovalRequests", () => {
+describe("ShadowMCP", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("renders the org-admin content in the page section body", () => {
+  it("renders the Shadow MCP inventory management page", () => {
     mocks.useProject.mockReturnValue({
       id: "project-1",
       name: "Demo",
@@ -83,29 +92,14 @@ describe("ApprovalRequests", () => {
       isLoading: false,
     });
 
-    render(<ApprovalRequests />);
+    render(<ShadowMCP />);
 
-    expect(screen.getByText("Approval Requests Content for demo")).toBeTruthy();
-  });
-
-  it("requires org admin access", () => {
-    mocks.useProject.mockReturnValue({
-      id: "project-1",
-      name: "Demo",
-      slug: "demo",
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasAnyScope: (scopes: string[]) =>
-        scopes.some(
-          (scope) => scope === "project:read" || scope === "project:write",
-        ),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    render(<ApprovalRequests />);
-
-    expect(screen.queryByText("Approval Requests Content for demo")).toBeNull();
-    expect(screen.getByText("Access restricted")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Manage project-scoped Shadow MCP server inventory and URL access rules.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
   });
 });
