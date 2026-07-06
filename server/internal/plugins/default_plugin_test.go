@@ -158,3 +158,37 @@ func TestListPluginPublishCandidates_ExcludesProjectWithoutDefaultPlugin(t *test
 	require.NoError(t, err)
 	require.Empty(t, candidates)
 }
+
+func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	// This project already published before the Default-plugin feature
+	// shipped (a plugin_github_connections row exists) but has had no new
+	// attach activity since, so it never got a Default plugin. It must not
+	// silently drop out of the rollout just because is_default became part
+	// of the candidate signal.
+	_, err := queries.UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:            *authCtx.ProjectID,
+		InstallationID:       12345,
+		RepoOwner:            "test-org",
+		RepoName:             "test-project-plugins",
+		MarketplaceToken:     pgtype.Text{String: "test-token", Valid: true},
+		PublishedFingerprint: pgtype.Text{String: "test-fingerprint", Valid: true},
+	})
+	require.NoError(t, err)
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+}
