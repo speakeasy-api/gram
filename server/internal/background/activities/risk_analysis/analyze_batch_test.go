@@ -692,8 +692,10 @@ func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 0, result.Findings, "excluded content finding must be suppressed end-to-end through Do()")
 
-	// The scanned message is still recorded, but only as the empty sentinel row
-	// (found=false) — no active finding survives the exclusion.
+	// No active finding remains. The scanned message still records the empty
+	// sentinel row buildRows writes, but that row is found=false, which this
+	// active-findings query filters out — so the list is empty, as in
+	// TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex.
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
@@ -701,9 +703,7 @@ func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
-	for _, r := range rows {
-		assert.False(t, r.Found, "no active finding should survive the exclusion")
-	}
+	require.Empty(t, rows, "no active finding should survive the exclusion")
 }
 
 func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
