@@ -1495,7 +1495,9 @@ func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	server, ok := mcpConfig.MCPServers["Codex Server"]
+	// The key is the display name sanitized to Codex's ^[a-zA-Z0-9_-]+$
+	// server-name pattern — "Codex Server" would fail MCP client startup.
+	server, ok := mcpConfig.MCPServers["Codex_Server"]
 	require.True(t, ok)
 	require.Contains(t, server.URL, "/mcp/")
 	require.Contains(t, server.HTTPHeaders["Authorization"], "Bearer gram_local_")
@@ -1599,7 +1601,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	server, ok := mcpConfig.MCPServers["Public Codex Server"]
+	server, ok := mcpConfig.MCPServers["Public_Codex_Server"]
 	require.True(t, ok)
 	// Codex resolves env_http_headers["Authorization"] = "ANALYTICS_API_KEY"
 	// by reading the ANALYTICS_API_KEY env var at runtime and using its
@@ -1651,8 +1653,8 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 	}
 	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
 
-	require.Contains(t, mcpConfig.MCPServers, "Server codex-enabled")
-	require.NotContains(t, mcpConfig.MCPServers, "Server codex-disabled")
+	require.Contains(t, mcpConfig.MCPServers, "Server_codex-enabled")
+	require.NotContains(t, mcpConfig.MCPServers, "Server_codex-disabled")
 }
 
 // PublishProject with SkipIfUnchanged set re-publishes the first time (no

@@ -526,7 +526,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]codexMCPServer)
+	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
 	for _, s := range p.Servers {
 		entry := codexMCPServer{
 			URL:               s.MCPURL,
@@ -550,7 +550,14 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
-		mcpServers[s.DisplayName] = entry
+		key := codexMCPServerName(s.DisplayName)
+		for i := 2; ; i++ {
+			if _, taken := mcpServers[key]; !taken {
+				break
+			}
+			key = fmt.Sprintf("%s_%d", codexMCPServerName(s.DisplayName), i)
+		}
+		mcpServers[key] = entry
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -559,6 +566,34 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
 	return nil
+}
+
+// codexMCPServerName converts a human display name (e.g. "Team Slack") into a
+// Codex-safe MCP server key. Codex validates the keys of .mcp.json against
+// ^[a-zA-Z0-9_-]+$ at MCP client startup and refuses to start clients whose
+// names contain spaces, parentheses, or other punctuation. Each run of
+// disallowed characters collapses into a single underscore; leading and
+// trailing runs are dropped.
+func codexMCPServerName(displayName string) string {
+	var b strings.Builder
+	b.Grow(len(displayName))
+	pendingSep := false
+	for _, r := range displayName {
+		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-'
+		if !valid {
+			pendingSep = true
+			continue
+		}
+		if pendingSep && b.Len() > 0 {
+			b.WriteByte('_')
+		}
+		pendingSep = false
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return "mcp-server"
+	}
+	return b.String()
 }
 
 // ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability

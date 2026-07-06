@@ -583,6 +583,73 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
+// Codex validates .mcp.json server names against ^[a-zA-Z0-9_-]+$ at MCP
+// client startup, so human display names must be sanitized into valid keys.
+func TestGenerateCodexMCPServerNamesSanitized(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Team Slack", MCPURL: "https://app.getgram.ai/mcp/team-slack"},
+				{DisplayName: "Slack (Remote)", MCPURL: "https://app.getgram.ai/mcp/slack-remote"},
+				{DisplayName: "already_valid-1", MCPURL: "https://app.getgram.ai/mcp/valid"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 3)
+
+	codexNamePattern := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	for name := range mcpConfig.MCPServers {
+		require.Regexp(t, codexNamePattern, name, "Codex rejects MCP server names outside its allowed pattern")
+	}
+
+	require.Equal(t, "https://app.getgram.ai/mcp/team-slack", mcpConfig.MCPServers["Team_Slack"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/slack-remote", mcpConfig.MCPServers["Slack_Remote"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/valid", mcpConfig.MCPServers["already_valid-1"].URL, "already-valid names must pass through unchanged")
+}
+
+// Display names that differ only in punctuation sanitize to the same key;
+// later servers must get a numeric suffix instead of overwriting earlier ones.
+func TestGenerateCodexMCPServerNameCollisionsDeduped(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Notes App", MCPURL: "https://app.getgram.ai/mcp/notes-one"},
+				{DisplayName: "Notes (App)", MCPURL: "https://app.getgram.ai/mcp/notes-two"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2, "colliding names must not overwrite each other")
+
+	require.Equal(t, "https://app.getgram.ai/mcp/notes-one", mcpConfig.MCPServers["Notes_App"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/notes-two", mcpConfig.MCPServers["Notes_App_2"].URL)
+}
+
 // TestCodexJSONKeysMatchPinnedSchema asserts the literal JSON key casing in
 // Codex output against the openai/codex source pinned in generate.go. Keys
 // are inspected on the raw JSON bytes (not a round-trip through our own
