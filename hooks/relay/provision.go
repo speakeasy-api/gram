@@ -65,6 +65,17 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 // quirk #29 — and Codex trust-hashes the command definition), so the command
 // carries only a pointer to the plugin's config file.
 func manifest(cfg PluginConfig, dir string) install.Manifest {
+	return InstallManifest(
+		[]string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},
+		install.Identity{Name: pluginName, Version: "0.0.0", Description: pluginDescription},
+	)
+}
+
+// InstallManifest is the single subscription table every speakeasy-hooks
+// provider config is rendered from. Both the local `speakeasy-hooks install`
+// path and the server's plugin distribution render from it, so what ships to
+// the fleet is what the e2e harness exercises locally.
+func InstallManifest(command []string, id install.Identity) install.Manifest {
 	gate := func(kind agenthooks.EventKind, timeout time.Duration) install.HookSpec {
 		return install.HookSpec{Kind: kind, Tools: install.ToolMatcher{}, Blocking: true, Timeout: timeout}
 	}
@@ -72,7 +83,7 @@ func manifest(cfg PluginConfig, dir string) install.Manifest {
 		return install.HookSpec{Kind: kind, Tools: install.ToolMatcher{}, Blocking: false, Timeout: 60 * time.Second}
 	}
 	return install.Manifest{
-		Command: []string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},
+		Command: command,
 		Hooks: []install.HookSpec{
 			// SessionStart runs the interactive sign-in preflight; the raised
 			// timeout covers the browser round-trip.
@@ -87,7 +98,7 @@ func manifest(cfg PluginConfig, dir string) install.Manifest {
 			observe(agenthooks.KindNotification),
 			observe(agenthooks.KindModelResponse),
 		},
-		Identity: install.Identity{Name: pluginName, Version: "0.0.0", Description: pluginDescription},
+		Identity: id,
 		// Crashed decision hooks must not silently allow (cursor failClosed,
 		// quirk #7); the ratchet's fail-open posture for unauthenticated
 		// machines is handled in-process, not by the provider.
