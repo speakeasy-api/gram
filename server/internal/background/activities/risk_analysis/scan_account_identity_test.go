@@ -59,12 +59,21 @@ func seedAccountIdentityPolicyScoped(t *testing.T, conn *pgxpool.Pool, td testDa
 // for an unclassified account) and a chat linked to it, returning the chat id.
 func seedAccountChat(t *testing.T, conn *pgxpool.Pool, td testData, accountType, email string) uuid.UUID {
 	t.Helper()
+	chatID, _ := seedAccountChatWithAccount(t, conn, td, accountType, email)
+	return chatID
+}
+
+// seedAccountChatWithAccount additionally returns the account's external uuid
+// (the ingest upsert key), for tests that enrich the account across batches.
+func seedAccountChatWithAccount(t *testing.T, conn *pgxpool.Pool, td testData, accountType, email string) (uuid.UUID, string) {
+	t.Helper()
 	ctx := t.Context()
 
+	externalAccountUUID := uuid.NewString()
 	account, err := hooksrepo.New(conn).UpsertUserAccount(ctx, hooksrepo.UpsertUserAccountParams{
 		OrganizationID:      td.orgID,
 		Provider:            "anthropic",
-		ExternalAccountUuid: uuid.NewString(),
+		ExternalAccountUuid: externalAccountUUID,
 		UserID:              pgtype.Text{},
 		ExternalOrgID:       pgtype.Text{},
 		ExternalAccountID:   pgtype.Text{},
@@ -85,7 +94,24 @@ func seedAccountChat(t *testing.T, conn *pgxpool.Pool, td testData, accountType,
 		Title:          pgtype.Text{String: "account identity chat", Valid: true},
 	})
 	require.NoError(t, err)
-	return chatID
+	return chatID, externalAccountUUID
+}
+
+// setAccountEmail fills the account's email through the same ingest upsert
+// the OTEL path uses (COALESCE fills a previously-unknown field).
+func setAccountEmail(t *testing.T, conn *pgxpool.Pool, td testData, externalAccountUUID, email string) {
+	t.Helper()
+	_, err := hooksrepo.New(conn).UpsertUserAccount(t.Context(), hooksrepo.UpsertUserAccountParams{
+		OrganizationID:      td.orgID,
+		Provider:            "anthropic",
+		ExternalAccountUuid: externalAccountUUID,
+		UserID:              pgtype.Text{},
+		ExternalOrgID:       pgtype.Text{},
+		ExternalAccountID:   pgtype.Text{},
+		Email:               pgtype.Text{String: email, Valid: true},
+		AccountType:         pgtype.Text{},
+	})
+	require.NoError(t, err)
 }
 
 func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID) uuid.UUID {
@@ -377,6 +403,36 @@ func TestAnalyzeBatch_AccountIdentityHonorsExclusions(t *testing.T) {
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
+}
+
+func TestAnalyzeBatch_AccountIdentityLateFieldEmitsRemainingRule(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, []string{"acme.com"}, nil)
+
+	// Identity fields arrive incrementally: the account is classified personal
+	// before its email is known, so batch 1 can only fire the personal rule.
+	chatID, accountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
+	msg1 := seedChatMessage(t, conn, td, chatID)
+	msg2 := seedChatMessage(t, conn, td, chatID)
+
+	ab := newAccountIdentityAnalyzeBatch(t, conn)
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
+	findings := accountIdentityFindings(t, conn, td, policyID)
+	require.Len(t, findings, 1)
+	require.Equal(t, "identity.personal_account", findings[0].RuleID.String)
+
+	// The email lands later (ingest upserts fill fields as batches carry them).
+	// Dedupe is per rule, so the next batch must still emit the domain rule —
+	// without duplicating the personal rule.
+	setAccountEmail(t, conn, td, accountUUID, "jane@gmail.com")
+
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
+	findings = accountIdentityFindings(t, conn, td, policyID)
+	require.Len(t, findings, 2)
+	rules := []string{findings[0].RuleID.String, findings[1].RuleID.String}
+	require.ElementsMatch(t, []string{"identity.personal_account", "identity.unapproved_domain"}, rules)
 }
 
 func TestWithApprovedEmailDomains_PreservesPresidioConfig(t *testing.T) {

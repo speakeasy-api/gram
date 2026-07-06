@@ -876,45 +876,47 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 }
 
 const getBatchChatIdentities = `-- name: GetBatchChatIdentities :many
-SELECT earliest_message_id, account_type, email
+SELECT earliest_message_id, account_type, email, flagged_rule_ids
 FROM (
   SELECT DISTINCT ON (cm.chat_id)
       cm.id AS earliest_message_id
     , ua.account_type
     , ua.email
+    , (
+        SELECT COALESCE(array_agg(DISTINCT rr.rule_id), '{}')
+        FROM risk_results rr
+        JOIN chat_messages prior ON prior.id = rr.chat_message_id
+        WHERE rr.project_id = $1::uuid
+          AND rr.risk_policy_id = $2
+          AND rr.risk_policy_version = $3
+          AND rr.source = 'account_identity'
+          AND rr.found IS TRUE
+          AND rr.rule_id IS NOT NULL
+          AND prior.chat_id = cm.chat_id
+          AND rr.chat_message_id != ALL($4::uuid[])
+      )::text[] AS flagged_rule_ids
   FROM chat_messages cm
   JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
-  WHERE cm.id = ANY($1::uuid[])
-    AND cm.project_id = $2::uuid
-    AND NOT EXISTS (
-      SELECT 1
-      FROM risk_results rr
-      JOIN chat_messages prior ON prior.id = rr.chat_message_id
-      WHERE rr.project_id = $2::uuid
-        AND rr.risk_policy_id = $3
-        AND rr.risk_policy_version = $4
-        AND rr.source = 'account_identity'
-        AND rr.found IS TRUE
-        AND prior.chat_id = cm.chat_id
-        AND rr.chat_message_id != ALL($1::uuid[])
-    )
+  WHERE cm.id = ANY($4::uuid[])
+    AND cm.project_id = $1::uuid
   ORDER BY cm.chat_id, cm.id ASC
 ) batch_chats
 ORDER BY earliest_message_id ASC
 `
 
 type GetBatchChatIdentitiesParams struct {
-	Ids               []uuid.UUID
 	ProjectID         uuid.UUID
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
+	Ids               []uuid.UUID
 }
 
 type GetBatchChatIdentitiesRow struct {
 	EarliestMessageID uuid.UUID
 	AccountType       pgtype.Text
 	Email             pgtype.Text
+	FlaggedRuleIds    []string
 }
 
 // One row per chat represented in a batch of messages, for the session-scoped
@@ -924,17 +926,21 @@ type GetBatchChatIdentitiesRow struct {
 // account_type/email for unattributed chats — the scanner emits nothing for
 // those).
 //
-// Chats that already carry an account_identity finding for this policy
-// version on a message OUTSIDE the batch are omitted: session-scoped findings
-// dedupe to one per chat per policy version. Findings on in-batch messages do
-// not block re-emission because the writer deletes and re-inserts results for
-// the batch's messages.
+// flagged_rule_ids carries the account_identity rules already recorded for
+// the chat at this policy version on messages OUTSIDE the batch; the scanner
+// drops those rules and emits only the rest, so session-scoped findings
+// dedupe to one per chat PER RULE per policy version. Dedupe must be
+// rule-scoped, not chat-scoped: identity fields arrive incrementally (an
+// account can be classified personal before its email is known, and vice
+// versa), so a later batch can legitimately fire a rule the first batch could
+// not evaluate yet. Findings on in-batch messages do not block re-emission
+// because the writer deletes and re-inserts results for the batch's messages.
 func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatIdentitiesParams) ([]GetBatchChatIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, getBatchChatIdentities,
-		arg.Ids,
 		arg.ProjectID,
 		arg.RiskPolicyID,
 		arg.RiskPolicyVersion,
+		arg.Ids,
 	)
 	if err != nil {
 		return nil, err
@@ -943,7 +949,12 @@ func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatId
 	var items []GetBatchChatIdentitiesRow
 	for rows.Next() {
 		var i GetBatchChatIdentitiesRow
-		if err := rows.Scan(&i.EarliestMessageID, &i.AccountType, &i.Email); err != nil {
+		if err := rows.Scan(
+			&i.EarliestMessageID,
+			&i.AccountType,
+			&i.Email,
+			&i.FlaggedRuleIds,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

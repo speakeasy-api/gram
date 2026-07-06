@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -45,10 +46,13 @@ type sessionFinding struct {
 // user messages.
 //
 // Findings are session-scoped rather than message-scoped: each offending chat
-// gets exactly one finding per rule, attached to the chat's earliest in-batch
-// message. The query reduces to one identity row per chat and omits chats
-// already flagged at this policy version, so re-analysis and later batches of
-// the same session don't accumulate duplicates. Chats spanning two
+// gets exactly one finding per rule per policy version, attached to the
+// chat's earliest in-batch message. The query reduces to one identity row per
+// chat and reports which rules are already flagged at this policy version;
+// only the remaining rules emit, so re-analysis and later batches of the same
+// session don't accumulate duplicates, while a rule that only became
+// evaluable later (identity fields arrive incrementally — e.g. the account
+// email can land after classification) still fires. Chats spanning two
 // concurrently analyzed batches can rarely double-emit; that is accepted as
 // cosmetic.
 func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatchArgs) ([]sessionFinding, error) {
@@ -70,6 +74,9 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 			conv.FromPGTextOrEmpty[string](row.Email),
 			approvedDomains,
 		)
+		findings = slices.DeleteFunc(findings, func(f Finding) bool {
+			return slices.Contains(row.FlaggedRuleIds, f.RuleID)
+		})
 		if len(findings) == 0 {
 			continue
 		}
