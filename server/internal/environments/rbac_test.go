@@ -144,9 +144,8 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithEnvironmentWrite(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// project:write alone must NOT authorize creating an environment: environment
-// values include secrets, so the environment scope family is intentionally
-// independent from the project scope family (no scope expansion bridges them).
+// project:write alone must NOT authorize creating an environment: the scope
+// families are intentionally independent because env values include secrets.
 func TestEnvironments_RBAC_Create_DeniedWithProjectWriteOnly(t *testing.T) {
 	t.Parallel()
 

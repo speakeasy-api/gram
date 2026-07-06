@@ -173,11 +173,8 @@ function EnvironmentPageInner() {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  // Editing environment values (add/edit/remove variables, delete env) is gated
-  // on environment:write server-side — the environment scope family is
-  // independent from project:* because env values include secrets. Linking an
-  // environment to a toolset ("Fill for MCP Server") remains project:write.
   const canWrite = hasScope("environment:write");
+  // "Fill for MCP Server" links an environment to a toolset, which remains project:write.
   const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);

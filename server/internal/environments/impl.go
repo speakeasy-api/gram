@@ -88,16 +88,11 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Creating an environment is an environment-level write. The destination env
-	// doesn't exist yet, so there's no env id to gate on — we use the project id
-	// as the check resource id (env ids and project ids are distinct UUIDs, so it
-	// never collides with a real env grant) together with the project_id
-	// dimension. A wildcard env:write grant for this project (the "All in project"
-	// pill) or admin satisfies it; a grant scoped to one specific env does not,
-	// which is correct since creating a new env is a project-wide capability. The
-	// project_id dimension prevents another project's wildcard env grant from
-	// matching. project:write does not satisfy this — environment values include
-	// secrets, so the two scope families are intentionally independent.
+	// The env doesn't exist yet, so gate on a project-scoped environment:write
+	// grant: the project id stands in as the check resource id (env and project
+	// UUIDs never collide) and the project_id dimension confines it to this
+	// project. A wildcard env:write grant satisfies it; a single-env grant does
+	// not, which is correct since creating a new env is a project-wide capability.
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        authz.ScopeEnvironmentWrite,
 		ResourceKind: "environment",
@@ -208,9 +203,8 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
 
-	// The lookup is project-bounded at the SQL layer (ProjectID parameter), so
-	// cross-project leakage isn't possible even before authz runs. We need the
-	// environment id to express the authz check at env-level granularity.
+	// Fetch the environment before the authz check so we can gate on its resource
+	// id. The lookup is project-bounded at the SQL layer.
 	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
@@ -222,9 +216,6 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	// Authz: env:write on the target env with project_id as a constraining
-	// dimension. project:write does not satisfy this — environment values include
-	// secrets, so the two scope families are intentionally independent.
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        authz.ScopeEnvironmentWrite,
 		ResourceKind: "environment",
@@ -449,9 +440,8 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
 
-	// Look up the environment first so we can gate on the env resource id. The
-	// lookup is project-bounded at the SQL layer. Deletion is idempotent, so a
-	// missing environment is a no-op rather than an authz failure.
+	// Fetch the environment before the authz check so we can gate on its resource
+	// id. Deletion is idempotent, so a missing environment is a no-op.
 	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
@@ -463,8 +453,6 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	// Authz: env:write on the target env with project_id as a constraining
-	// dimension, mirroring update/clone. project:write does not satisfy this.
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        authz.ScopeEnvironmentWrite,
 		ResourceKind: "environment",
