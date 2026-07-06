@@ -92,7 +92,7 @@ const MATCH_DISPLAY_OVERRIDES: Record<
 /** Whether a finding's match is a span of the message text — highlighted inline
  * and eligible for the out-of-text "flagged value" annotation. False for
  * metadata matches like the authenticated account email. */
-export function matchIsMessageContent(result: RiskResult): boolean {
+function matchIsMessageContent(result: RiskResult): boolean {
   return !MATCH_DISPLAY_OVERRIDES[result.source]?.notMessageContent;
 }
 
