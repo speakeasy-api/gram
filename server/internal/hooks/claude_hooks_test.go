@@ -973,6 +973,8 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	})
 	require.NoError(t, err, "expired plugin auth must not return an error")
 	require.NotNil(t, result)
+	require.NotNil(t, result.SystemMessage)
+	require.Contains(t, *result.SystemMessage, "rejected plugin auth")
 
 	// The whole point of the fallback is that the event still lands in
 	// the Redis buffer, ready for flushPendingHooks once OTEL Logs seeds

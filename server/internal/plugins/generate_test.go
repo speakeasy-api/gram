@@ -2078,7 +2078,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 cat >/dev/null
-printf '{"message":"unauthorized: api key not found"}\n401'
+printf '{"systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
 `), 0o755))
 
 	env := hookAuthTestEnv(dir,
@@ -2128,7 +2128,7 @@ while [ "$#" -gt 0 ]; do
 done
 cat >/dev/null
 printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
-printf '{"message":"unauthorized: api_key not found"}\n401'
+printf '{"systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
 `), 0o755))
 
 	authFile := filepath.Join(dir, "auth.env")
@@ -2193,7 +2193,10 @@ while [ "$#" -gt 0 ]; do
 done
 cat >/dev/null
 printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
-printf '{"message":"unauthorized: api_key not found"}\n401'
+printf '{"systemMessage":"Speakeasy hooks rejected plugin auth. Run hooks/login.sh to reconnect hooks."}\n200'
+`), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "python3"), []byte(`#!/usr/bin/env bash
+exit 1
 `), 0o755))
 
 	authFile := filepath.Join(dir, "auth.env")
@@ -2209,7 +2212,7 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	}
 
 	cmd := exec.Command("bash", senderPath)
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool","tool_name":"Bash","tool_input":{"note":"UserPromptSubmit appears here but is not the event"}}`)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool","tool_name":"Bash","tool_input":{"note":"nested \"hook_event_name\":\"UserPromptSubmit\" is not the event"}}`)
 	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -2217,7 +2220,7 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, "checked-in stale cached key should still block tool-use events")
 	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
-	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
+	require.Contains(t, stderr.String(), "need to reconnect")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
 	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
 	requests := string(requireFileBytes(t, capturePath))

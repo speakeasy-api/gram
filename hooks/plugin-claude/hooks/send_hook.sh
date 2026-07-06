@@ -78,8 +78,29 @@ except Exception:
 " 2>/dev/null)" || true
     [ "$event" = "UserPromptSubmit" ] && return 0
   fi
-  case "$payload" in
-    *'"hook_event_name":"UserPromptSubmit"'* | *'"event_name":"UserPromptSubmit"'* | *'"event":"UserPromptSubmit"'*) return 0 ;;
+  # Without a JSON parser, do not scan the raw payload: nested tool input can
+  # contain hook-looking text and must not turn a tool event into fail-open.
+  return 1
+}
+
+gram_hooks_body_has_auth_failure_signal() {
+  local body="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    local system_message
+    system_message="$(printf '%s' "$body" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print(data.get('systemMessage') or '', end='')
+except Exception:
+    pass
+" 2>/dev/null)" || true
+    case "$system_message" in
+      "Speakeasy hooks rejected plugin auth."*) return 0 ;;
+    esac
+  fi
+  case "$body" in
+    *'"systemMessage":"Speakeasy hooks rejected plugin auth.'*) return 0 ;;
   esac
   return 1
 }
@@ -166,6 +187,27 @@ gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
 
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
+
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null &&
+  gram_hooks_body_has_auth_failure_signal "$body"; then
+  if env_reason="$(gram_hooks_env_key_rejected_message)"; then
+    echo "$env_reason" >&2
+    exit 2
+  fi
+  if [ -n "$gram_hooks_cached_auth" ] &&
+    type gram_hooks_forget_auth >/dev/null 2>&1; then
+    gram_hooks_forget_auth
+    if type gram_hooks_mark_reauth_needed >/dev/null 2>&1; then
+      gram_hooks_mark_reauth_needed
+    fi
+  fi
+  if gram_hooks_is_user_prompt_submit "$payload"; then
+    gram_hooks_emit_login_nudge
+    exit 0
+  fi
+  echo "Speakeasy hooks need to reconnect. Run hooks/login.sh to reconnect hooks." >&2
+  exit 2
+fi
 
 if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
   [ -n "$gram_hooks_cached_auth" ] &&
