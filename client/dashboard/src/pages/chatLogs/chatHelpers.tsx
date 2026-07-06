@@ -59,12 +59,22 @@ export function distinctRiskCount(results: RiskResult[]): number {
   return keys.size;
 }
 
+/** An account_identity finding's match is the account the session
+ * authenticated as (an email), not message content. It's already stated in the
+ * finding description and shown on the message's author chip, so it must not be
+ * treated as a redacted content span: never highlighted in the text, surfaced
+ * as an out-of-text "flagged value", or reveal-gated in the findings popover. */
+export function isAccountIdentityFinding(result: RiskResult): boolean {
+  return result.source === "account_identity";
+}
+
 /** Distinct, non-empty match strings to highlight, longest first so a longer
  * secret wins over a substring of it. */
 export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   if (!results) return [];
   const set = new Set<string>();
   for (const r of results) {
+    if (isAccountIdentityFinding(r)) continue;
     if (r.match) set.add(r.match);
   }
   return [...set].sort((a, b) => b.length - a.length);

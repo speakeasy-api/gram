@@ -12,6 +12,7 @@ import {
   getMatchStrings,
   getRiskBadgeLabel,
   highlightMatches,
+  isAccountIdentityFinding,
   maskValue,
   resultsAreSensitive,
   shouldShowRiskRuleId,
@@ -243,7 +244,10 @@ export function RiskBadge({
                     More Info
                   </Link>
                 )}
-                {spans.length > 0 && (
+                {/* account_identity's match (the authenticated account email)
+                 * already appears in the description above, so skip the
+                 * reveal-gated span chip that would just repeat it. */}
+                {spans.length > 0 && !isAccountIdentityFinding(r) && (
                   <div className="mt-1 flex flex-col gap-1">
                     {spans.map((span, i) => {
                       const label = spanFieldLabel(span);
