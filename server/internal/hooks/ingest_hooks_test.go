@@ -282,6 +282,14 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Contains(t, skillRow.Attributes, `"Skill"`)
 	require.NotNil(t, skillRow.GramChatID)
 	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+
+	// trace_summaries resolves tool_name with any(): on a shared trace the
+	// Bash sibling could win the summary and hide the activation from
+	// tool_name = 'Skill' skill analytics.
+	require.NotNil(t, toolRow.TraceID)
+	require.NotNil(t, skillRow.TraceID)
+	require.NotEqual(t, *toolRow.TraceID, *skillRow.TraceID,
+		"the derived skill row must not share a trace with the tool row")
 }
 
 // TestIngest_PromptInferredSkillsGetDistinctTraces: skill dashboards count

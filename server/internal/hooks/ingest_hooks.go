@@ -399,13 +399,14 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// A policy-blocked event never ran, so it is not an activation.
 	if skill != "" && !isExplicitSkillActivation(payload) && blockReason == "" {
 		attrs = hookTelemetryBaseAttrs(payload, authCtx, eventTypeSkillActivated)
-		// Skill counts aggregate at trace level (trace_summaries). Without a
-		// tool call id the payload-derived trace falls back to the session
-		// hash, which would collapse every prompt-mention activation in a
-		// session into one summary row; mint a per-activation trace instead.
-		if canonicalToolCallID(payload) == "" {
-			attrs[attr.TraceIDKey] = generateTraceID()
-		}
+		// Skill counts aggregate at trace level (trace_summaries), and its MV
+		// resolves tool_name/skill_name with any(): sharing a trace with the
+		// underlying tool or prompt rows lets a non-Skill sibling win the
+		// summary and drop the activation from skill analytics — and the
+		// session-hash fallback would additionally collapse every
+		// prompt-mention activation in a session into one summary row. Every
+		// derived row gets its own trace.
+		attrs[attr.TraceIDKey] = generateTraceID()
 		attrs[attr.ToolNameKey] = "Skill"
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 		s.logHookTelemetry(ctx, authCtx, timestamp, "Skill", attrs)
