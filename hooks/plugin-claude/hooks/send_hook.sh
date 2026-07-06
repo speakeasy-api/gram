@@ -23,6 +23,28 @@ fi
 api_key="${GRAM_HOOKS_API_KEY:-}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
 gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
+gram_hooks_cached_auth=""
+
+gram_hooks_json_escape_string() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json, sys; print(json.dumps(sys.stdin.read())[1:-1], end="")'
+    return
+  fi
+  local s
+  s="$(cat)"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/}"
+  printf '%s' "$s"
+}
+
+gram_hooks_emit_login_nudge() {
+  local context escaped
+  context="Notice from the Speakeasy observability plugin installed in this workspace: this machine needs to reconnect before telemetry can be recorded. Handle the user's current request as normal, then directly ask whether to reconnect Speakeasy hooks now. If they agree, run: bash \"${script_dir}/login.sh\". Never run it without their explicit consent."
+  escaped="$(printf '%s' "$context" | gram_hooks_json_escape_string)"
+  printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"}}\n' "$escaped"
+}
 
 # No env key: fall back to the credentials the browser login flow cached
 # (auth_preflight.sh / login.sh) so authenticated policy enforcement still
@@ -35,6 +57,7 @@ if [ -z "$api_key" ] && [ -f "$script_dir/auth.sh" ]; then
     if gram_hooks_read_auth "$server_url" 2>/dev/null; then
       api_key="$GRAM_HOOKS_CACHED_API_KEY"
       [ -n "$project_slug" ] || project_slug="$GRAM_HOOKS_CACHED_PROJECT"
+      gram_hooks_cached_auth=1
     fi
   fi
 fi
@@ -95,8 +118,18 @@ gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
 
-# Forward the body to stdout so Claude can read PreToolUse decisions from it.
-echo "$body"
+if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
+  [ -n "$gram_hooks_cached_auth" ] &&
+  [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] &&
+  type gram_hooks_forget_auth >/dev/null 2>&1; then
+  gram_hooks_forget_auth
+  case "$payload" in
+    *UserPromptSubmit*)
+      gram_hooks_emit_login_nudge
+      exit 0
+      ;;
+  esac
+fi
 
 # Only treat a real 2xx as allow. curl returns 000 on connection failure, DNS
 # error, or timeout, and a 3xx (e.g. an http->https redirect, which curl does
@@ -105,6 +138,8 @@ echo "$body"
 # or misconfigured. The 2>/dev/null guards keep a non-numeric code from leaking
 # a shell error before we fall through to the block path below.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+  # Forward the body to stdout so Claude can read PreToolUse decisions from it.
+  echo "$body"
   exit 0
 fi
 

@@ -1968,6 +1968,111 @@ func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	require.Contains(t, headers, "/rpc/hooks.claude")
 }
 
+func TestCheckedInClaudeSenderRejectedCachedKeyClearsAuthAndNudgesLogin(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-checked-in-stale","prompt":"hi"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "checked-in stale cached key should nudge login: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"additionalContext"`)
+	require.Contains(t, stdout.String(), "login.sh")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.claude")
+}
+
+func TestCheckedInClaudeSenderRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
+	t.Parallel()
+
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "send_hook.sh"))
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", senderPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-checked-in-stale-tool","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "checked-in stale cached key should still block tool-use events")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.claude")
+}
+
 // TestRenderHookScriptCursorBackfillsLaterTurnPrompts verifies the prompt
 // backfill marker tracks prompt content rather than a per-session boolean: a
 // beforeSubmitPrompt dropped on a later turn is still backfilled from the
