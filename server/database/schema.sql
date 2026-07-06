@@ -3081,6 +3081,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT,
+  is_default boolean DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3095,6 +3096,17 @@ CREATE TABLE IF NOT EXISTS plugins (
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS plugins_project_id_idx
+  ON plugins (project_id);
+
+-- Only one plugin per project may be the default (fallback) target that new
+-- servers land in absent explicit routing to a named plugin.
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
+  ON plugins (project_id)
+  WHERE is_default IS TRUE AND deleted IS FALSE;
+
+COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
 
 -- Links a plugin to an MCP server, backed by either a toolset or an
 -- mcp_servers row (exactly one, enforced by the exclusivity check below).
