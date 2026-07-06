@@ -1,10 +1,20 @@
 package risk_analysis
 
-import "github.com/speakeasy-api/gram/server/internal/gitleaks"
+import (
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+)
 
 const (
 	// SourceGitleaks is the policy source value for secret scanning.
 	SourceGitleaks = gitleaks.Source
+	// SourceCLIDestructive is the policy source value that flags tool calls
+	// whose arguments contain a curated destructive CLI command pattern
+	// (rm -rf, git push --force, DROP TABLE, ...). It is content-driven
+	// instead of annotation-driven and applies to native tools (Bash,
+	// run_terminal_cmd) as well as MCP-routed calls whose arguments happen to
+	// carry a destructive payload.
+	SourceCLIDestructive = clidestructive.Source
 	// SourceNone marks the sentinel row for an analyzed message with no findings.
 	SourceNone = "none"
 

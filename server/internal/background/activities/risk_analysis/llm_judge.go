@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
@@ -179,12 +180,12 @@ func ParseJudgeConfig(raw []byte) JudgeConfig {
 // JudgeFinding builds a canonical llm_judge Finding from a verdict. Shared by
 // the batch analyzer so the (source, rule_id) identity stays consistent with
 // the realtime scanner.
-func JudgeFinding(verdict JudgeVerdict) Finding {
+func JudgeFinding(verdict JudgeVerdict) scanners.Finding {
 	description := verdict.Rationale
 	if description == "" {
 		description = "Message matched the prompt-based policy."
 	}
-	return Finding{
+	return scanners.Finding{
 		Source:              SourceLLMJudge,
 		RuleID:              RuleLLMJudge,
 		Description:         description,
@@ -194,9 +195,9 @@ func JudgeFinding(verdict JudgeVerdict) Finding {
 		Tags:                []string{},
 		Confidence:          verdict.Confidence,
 		DeadLetterReason:    "",
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}
 }

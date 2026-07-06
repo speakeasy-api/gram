@@ -19,13 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func dedup(findings []Finding) []Finding {
+func dedup(findings []scanners.Finding) []scanners.Finding {
 	if len(findings) <= 1 {
 		return findings
 	}
-	var out []Finding
+	var out []scanners.Finding
 	for _, f := range findings {
 		if overlapsAny(out, f) {
 			continue
@@ -35,7 +36,7 @@ func dedup(findings []Finding) []Finding {
 	return out
 }
 
-func overlapsAny(kept []Finding, candidate Finding) bool {
+func overlapsAny(kept []scanners.Finding, candidate scanners.Finding) bool {
 	for _, k := range kept {
 		if k.StartPos < candidate.EndPos && candidate.StartPos < k.EndPos {
 			return true
@@ -44,7 +45,7 @@ func overlapsAny(kept []Finding, candidate Finding) bool {
 	return false
 }
 
-func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messageIDs []uuid.UUID, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
+func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messageIDs []uuid.UUID, batchFindings [][]scanners.Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
@@ -100,18 +101,18 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 }
 
 type findingGroup struct {
-	primary Finding
+	primary scanners.Finding
 	spans   []FindingSpan
 }
 
-func groupFindings(findings []Finding) []findingGroup {
+func groupFindings(findings []scanners.Finding) []findingGroup {
 	var order []string
 	groups := map[string]*findingGroup{}
 	uniq := 0
 	for _, f := range findings {
 		var key string
-		if f.spanGroupKey != "" {
-			key = f.Source + "\x00" + f.RuleID + "\x00" + f.spanGroupKey
+		if f.SpanGroupKey != "" {
+			key = f.Source + "\x00" + f.RuleID + "\x00" + f.SpanGroupKey
 		} else {
 			key = fmt.Sprintf("u%d", uniq)
 			uniq++
@@ -124,8 +125,8 @@ func groupFindings(findings []Finding) []findingGroup {
 		}
 		g.spans = append(g.spans, FindingSpan{
 			Match:    f.Match,
-			Field:    f.field,
-			Path:     f.path,
+			Field:    f.Field,
+			Path:     f.Path,
 			StartPos: f.StartPos,
 			EndPos:   f.EndPos,
 		})
@@ -140,8 +141,6 @@ func groupFindings(findings []Finding) []findingGroup {
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
-
-	rows = a.guardRuleIDs(ctx, rows)
 
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
@@ -219,21 +218,6 @@ func findingCreatedPayloads(rows []repo.InsertRiskResultsParams, now time.Time) 
 	return payloads
 }
 
-func (a *AnalyzeBatch) guardRuleIDs(_ context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
-	if !enforceRuleIDFormat {
-		return rows
-	}
-	for _, row := range rows {
-		if !row.RuleID.Valid || row.RuleID.String == "" {
-			continue
-		}
-		if err := ValidateRuleID(row.RuleID.String); err != nil {
-			panic(fmt.Sprintf("risk_analysis.writeResults: malformed rule_id %q from source %q: %v", row.RuleID.String, row.Source, err))
-		}
-	}
-	return rows
-}
-
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
 		ID:                id,
@@ -256,7 +240,7 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 	}
 }
 
-func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f Finding) repo.InsertRiskResultsParams {
+func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f scanners.Finding) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
 		ID:                id,
 		ProjectID:         args.ProjectID,

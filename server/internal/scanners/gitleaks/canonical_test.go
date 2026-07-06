@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
 func TestCanonicalRuleID_PrependsSecret(t *testing.T) {
