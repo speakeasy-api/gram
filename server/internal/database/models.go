@@ -821,6 +821,37 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type JsonWebKey struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	JsonWebKeySetID    uuid.UUID
+	ExternalKeyID      uuid.UUID
+	ExternalKeyVersion pgtype.Text
+	State              string
+	Kid                string
+	PublicJwk          []byte
+	ActivatedAt        pgtype.Timestamptz
+	RetiredAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type JsonWebKeySet struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ExternalKeyID  uuid.UUID
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type McpEndpoint struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
