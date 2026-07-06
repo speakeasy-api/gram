@@ -490,13 +490,18 @@ gram_hooks_skill_name() {
 gram_hooks_codex_skill_exists() {
   local name="$1"
   local dir="$2"
+  local root
   [ -n "$name" ] || return 1
   case "$name" in
     */* | .*) return 1 ;;
   esac
   [ -f "${HOME}/.agents/skills/${name}/SKILL.md" ] && return 0
-  [ -f "/etc/codex/skills/${name}/SKILL.md" ] && return 0
-  [ -f "${CODEX_HOME:-${HOME}/.codex}/skills/${name}/SKILL.md" ] && return 0
+  # Bundled/system skills live under a .system subdirectory of the skill
+  # roots (e.g. ~/.codex/skills/.system/plan) but are mentioned by bare name.
+  for root in /etc/codex/skills /opt/codex/skills "${CODEX_HOME:-${HOME}/.codex}/skills"; do
+    [ -f "${root}/${name}/SKILL.md" ] && return 0
+    [ -f "${root}/.system/${name}/SKILL.md" ] && return 0
+  done
   while [ -n "$dir" ] && [ "$dir" != "/" ]; do
     [ -f "${dir}/.agents/skills/${name}/SKILL.md" ] && return 0
     # cwd comes from the provider payload: a value with no slash left would

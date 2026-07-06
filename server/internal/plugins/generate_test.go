@@ -2406,11 +2406,14 @@ func TestRenderHookPayloadNormalizationCodexSkillHeuristic(t *testing.T) {
 	homeDir := filepath.Join(dir, "home")
 	repoDir := filepath.Join(dir, "repo")
 	cwd := filepath.Join(repoDir, "nested", "sub")
+	codexHome := filepath.Join(dir, "codex-home")
 	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".agents", "skills", "home-skill"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, ".agents", "skills", "repo-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(codexHome, "skills", ".system", "sys-skill"), 0o755))
 	require.NoError(t, os.MkdirAll(cwd, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".agents", "skills", "home-skill", "SKILL.md"), []byte("# home"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".agents", "skills", "repo-skill", "SKILL.md"), []byte("# repo"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "skills", ".system", "sys-skill", "SKILL.md"), []byte("# sys"), 0o644))
 
 	scriptPath := filepath.Join(dir, "normalize.sh")
 	script := renderHookPayloadNormalizationSnippet("codex") + fmt.Sprintf(`
@@ -2423,6 +2426,7 @@ prompt_walk='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","pr
 prompt_miss='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"pay $50 to $unknown-skill","cwd":"%[2]s"}'
 prompt_punct='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"please use $home-skill.","cwd":"%[2]s"}'
 prompt_relcwd='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"nested/sub"}'
+prompt_system='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"%[2]s"}'
 gram_hooks_build_canonical_payload "$read_req" "test-host"
 printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$read_res" "test-host"
@@ -2440,16 +2444,18 @@ printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$prompt_punct" "test-host"
 printf '\n---GRAM---\n'
 gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_system" "test-host"
 `, repoDir, cwd)
 	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
 
 	cmd := exec.Command(bashPath, scriptPath)
-	cmd.Env = append(os.Environ(), "HOME="+homeDir, "XDG_STATE_HOME="+filepath.Join(dir, "state"))
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "CODEX_HOME="+codexHome, "XDG_STATE_HOME="+filepath.Join(dir, "state"))
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 
 	chunks := strings.Split(string(output), "\n---GRAM---\n")
-	require.Len(t, chunks, 9)
+	require.Len(t, chunks, 10)
 
 	parse := func(raw string) (eventType string, skillName string) {
 		var parsed map[string]any
@@ -2497,6 +2503,10 @@ gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
 	eventType, skill = parse(chunks[8])
 	require.Equal(t, "prompt.submitted", eventType)
 	require.Empty(t, skill, "a relative cwd must terminate the walk without matching")
+
+	eventType, skill = parse(chunks[9])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "sys-skill", skill, "bundled skills under a .system subdirectory must resolve by bare name")
 }
 
 // TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies pins the
