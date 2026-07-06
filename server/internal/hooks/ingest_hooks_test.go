@@ -284,6 +284,60 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
 }
 
+// TestIngest_PromptInferredSkillsGetDistinctTraces: skill dashboards count
+// activations at trace level, and prompt events carry no tool call id — the
+// session-hash trace fallback would collapse every prompt-mention activation
+// in a session into one summary row, so each derived row mints its own trace.
+func TestIngest_PromptInferredSkillsGetDistinctTraces(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	for i, promptText := range []string{"use $repo-review on this", "run $repo-review again"} {
+		payload := canonicalIngestPayload("codex", "prompt.submitted", "codex-prompt-skill-session")
+		payload.Event.OccurredAt = &occurredAt
+		key := "prompt-skill-" + uuid.NewString()
+		payload.IdempotencyKey = &key
+		text := promptText
+		payload.Data = &gen.HookIngestData{
+			Prompt: &gen.HookPromptData{Text: &text},
+			Skill:  &gen.HookSkillData{Name: "repo-review"},
+		}
+		result, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err, "ingest %d", i)
+		require.Equal(t, "allow", result.Decision)
+	}
+
+	var skillTraces []string
+	require.Eventually(t, func() bool {
+		rows, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		if err != nil {
+			return false
+		}
+		skillTraces = skillTraces[:0]
+		for _, row := range rows {
+			if strings.Contains(row.Attributes, "skill.activated") && row.TraceID != nil {
+				skillTraces = append(skillTraces, *row.TraceID)
+			}
+		}
+		return len(skillTraces) == 2
+	}, 2*time.Second, 50*time.Millisecond, "expected two derived skill rows")
+	require.NotEqual(t, skillTraces[0], skillTraces[1],
+		"prompt-inferred activations in one session must not share a trace")
+}
+
 // TestIngest_ExplicitSkillActivationEmitsSingleRow pins the other half of the
 // derived-row gate: a sender-classified skill.activated event is already the
 // skill row and must not spawn a duplicate.
