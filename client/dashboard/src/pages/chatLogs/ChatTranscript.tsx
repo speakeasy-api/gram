@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type JSX,
   memo,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -74,10 +75,15 @@ import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
+type RowDecoration = {
+  footer?: ReactNode;
+};
+
 interface RowContext {
-  riskResultsByMessage: Map<string, RiskResult[]>;
-  claudeUsageByMessage: Map<string, ClaudeUsageMatch>;
-  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
+  riskResultsByMessage?: Map<string, RiskResult[]>;
+  claudeUsageByMessage?: Map<string, ClaudeUsageMatch>;
+  claudeToolUsageByToolUseId?: Map<string, ClaudeToolUsage>;
+  rowDecoration?: (messageIds: string[]) => RowDecoration | null;
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
@@ -87,6 +93,48 @@ interface RowContext {
   /** Chat-level user label, used as the turn-header name when an individual
    * message carries no user id of its own. */
   userLabel?: string;
+}
+
+type ResolvedRowContext = Required<
+  Pick<
+    RowContext,
+    | "riskResultsByMessage"
+    | "claudeUsageByMessage"
+    | "claudeToolUsageByToolUseId"
+  >
+> &
+  RowContext;
+
+const EMPTY_RISK_RESULTS = new Map<string, RiskResult[]>();
+const EMPTY_CLAUDE_USAGE = new Map<string, ClaudeUsageMatch>();
+const EMPTY_CLAUDE_TOOL_USAGE = new Map<string, ClaudeToolUsage>();
+
+function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
+  return {
+    ...ctx,
+    riskResultsByMessage: ctx.riskResultsByMessage ?? EMPTY_RISK_RESULTS,
+    claudeUsageByMessage: ctx.claudeUsageByMessage ?? EMPTY_CLAUDE_USAGE,
+    claudeToolUsageByToolUseId:
+      ctx.claudeToolUsageByToolUseId ?? EMPTY_CLAUDE_TOOL_USAGE,
+  };
+}
+
+function RowDecorationFooter({
+  decoration,
+  className,
+}: {
+  decoration: RowDecoration | null | undefined;
+  className?: string;
+}) {
+  if (!decoration?.footer) return null;
+  return <div className={className}>{decoration.footer}</div>;
+}
+
+function messageIdsForRow(row: TranscriptRow): string[] {
+  if (row.kind === "message") return [row.message.id];
+  return [row.callMessage?.id, row.resultMessage?.id].filter(
+    (id): id is string => Boolean(id),
+  );
 }
 
 // Fade non-risky rows so the findings stand out.
@@ -365,7 +413,7 @@ function UserMessageRow({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
@@ -377,6 +425,7 @@ function UserMessageRow({
   const flagged = !!results && results.length > 0;
   const sensitive = flagged && resultsAreSensitive(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
+  const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
   return (
     <div
@@ -385,7 +434,11 @@ function UserMessageRow({
         dimClass(ctx.dimNonRisk && !flagged),
       )}
     >
-      <div className="bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word">
+      <div
+        className={cn(
+          "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
+        )}
+      >
         {flagged ? (
           <HighlightedMessageText
             text={text}
@@ -406,6 +459,10 @@ function UserMessageRow({
           </div>
         )}
       </div>
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 max-w-[80%] pl-4"
+      />
       {(usage || sensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
           {usage && <CostBadge usage={usage} />}
@@ -431,7 +488,7 @@ function AssistantMessageRow({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
@@ -442,10 +499,15 @@ function AssistantMessageRow({
   const flagged = !!results && results.length > 0;
   const sensitive = flagged && resultsAreSensitive(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
+  const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk && !flagged))}>
-      <div className="text-foreground mx-2 min-w-0 leading-relaxed wrap-break-word">
+      <div
+        className={cn(
+          "text-foreground mx-2 min-w-0 leading-relaxed wrap-break-word",
+        )}
+      >
         {flagged ? (
           <HighlightedMessageText
             text={text}
@@ -466,6 +528,10 @@ function AssistantMessageRow({
           <MessageContent markdown content={text} />
         )}
       </div>
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 mt-1 max-w-[80%] pl-4"
+      />
       {/* Turn-level risk count + exclusion live in the turn header now; the row
           keeps only the reveal toggle for an inline masked value. */}
       {sensitive && (
@@ -481,7 +547,13 @@ function AssistantMessageRow({
   );
 }
 
-function SystemMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function SystemMessageRow({
+  row,
+  ctx,
+}: {
+  row: MessageRow;
+  ctx: ResolvedRowContext;
+}) {
   const text = messageText(row.message.content);
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
@@ -508,7 +580,7 @@ function MessageRowView({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   activeTextOccurrence: number | null;
 }) {
   switch (row.entryType) {
@@ -535,7 +607,7 @@ function MessageRowView({
 
 function toolResults(
   row: ToolRow,
-  ctx: RowContext,
+  ctx: ResolvedRowContext,
 ): { callResults?: RiskResult[]; resultResults?: RiskResult[] } {
   return {
     callResults: row.callMessage
@@ -581,7 +653,7 @@ function ToolRowView({
   activeOutputOccurrence,
 }: {
   row: ToolRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** This tool holds the active search occurrence → expand it (and remount on
    * toggle so it collapses again when navigation moves to another match). */
   active: boolean;
@@ -656,6 +728,7 @@ function ToolRowView({
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
   const inputBytes = usage?.inputSizeBytes ?? 0;
   const outputBytes = usage?.resultSizeBytes ?? 0;
+  const decoration = ctx.rowDecoration?.(messageIdsForRow(row)) ?? null;
 
   return (
     <div className={cn("px-4 py-2.5", dimClass(ctx.dimNonRisk && !flagged))}>
@@ -679,6 +752,10 @@ function ToolRowView({
         resultHighlight={resultHighlight}
         nameQuery={ctx.searchQuery}
         nameActiveOccurrence={activeNameOccurrence}
+      />
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mt-1 max-w-[80%] pl-4"
       />
     </div>
   );
@@ -785,7 +862,7 @@ const RowView = memo(function RowView({
   activeField,
 }: {
   row: TranscriptRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** This row holds the currently-active search occurrence (drives tool expand). */
   active: boolean;
   /** Which field + occurrence in this row is active, or null when none is. */
@@ -830,7 +907,7 @@ function DisplayItemView({
   /** This item's position in the display list — matched against the active
    * occurrence's itemIndex to decide if this row holds it. */
   index: number;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   pagination: TranscriptPagination;
 }) {
   switch (item.type) {
@@ -897,7 +974,7 @@ function DisplayItemView({
 
 export function ChatTranscript({
   items,
-  ctx,
+  ctx: rawCtx,
   pagination,
   emptyMessage = "No messages to display.",
 }: {
@@ -906,6 +983,7 @@ export function ChatTranscript({
   pagination: TranscriptPagination;
   emptyMessage?: string;
 }): JSX.Element {
+  const ctx = useMemo(() => applyRowContextDefaults(rawCtx), [rawCtx]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: items.length,
