@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -190,7 +192,7 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	projectID := uuid.NewString()
+	projectID := ti.projectID
 	otherProjectID := uuid.NewString()
 	observedAt := time.Date(2026, 6, 29, 16, 0, 0, 0, time.UTC)
 
@@ -218,16 +220,18 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
-			GramProjectID: projectID,
-			Limit:         50,
+			GramProjectID:      projectID,
+			Limit:              50,
+			HostedMCPHostnames: nil,
 		})
 		require.NoError(c, err)
 		require.Equal(c, 1, result.InventoryURLCount)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
-		GramProjectID: projectID,
-		Limit:         50,
+		GramProjectID:      projectID,
+		Limit:              50,
+		HostedMCPHostnames: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InventoryURLCount)
@@ -242,6 +246,65 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	assert.Equal(t, "mcp.speakeasy.com", rows[0].URLHost)
 	assert.Equal(t, observedAt, rows[0].FirstSeen)
 	assert.Equal(t, observedAt.Add(time.Minute), rows[0].LastSeen)
+}
+
+func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := ti.projectID
+	observedAt := time.Date(2026, 6, 29, 17, 0, 0, 0, time.UTC)
+	customDomain := "gram-hosted-" + uuid.NewString()[:8] + ".example.com"
+
+	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID:  ti.orgID,
+		Domain:          customDomain,
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://external.example.com/mcp?token=secret",
+		ServerName: "External",
+		UserEmail:  "ada@example.com",
+		ObservedAt: observedAt,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://app.getgram.ai/mcp/hosted",
+		ServerName: "Gram Hosted",
+		UserEmail:  "grace@example.com",
+		ObservedAt: observedAt.Add(time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://" + customDomain + "/mcp/custom",
+		ServerName: "Custom Domain Hosted",
+		UserEmail:  "linus@example.com",
+		ObservedAt: observedAt.Add(2 * time.Minute),
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
+			GramProjectID:      projectID,
+			Limit:              50,
+			HostedMCPHostnames: []string{"https://app.getgram.ai"},
+		})
+		require.NoError(c, err)
+		require.Equal(c, 1, result.InventoryURLCount)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	rows := requireShadowMCPInventoryURLsEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         50,
+	}, 1)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
 }
 
 type historicalShadowMCPCall struct {
