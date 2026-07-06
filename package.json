@@ -23,7 +23,7 @@
     "@datadog/datadog-ci": "^5.19.0",
     "@gram/client": "workspace:*",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.13.2",
     "confbox": "^0.2.4",
     "get-port-please": "^3.2.0",
     "oxfmt": "^0.57.0",

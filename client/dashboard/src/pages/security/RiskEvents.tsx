@@ -17,7 +17,7 @@ import {
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, RefreshCw, Share2 } from "lucide-react";
+import { History, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -211,30 +211,7 @@ export default function RiskEvents(): JSX.Element {
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
-        actions={
-          <div className="flex items-center gap-2">
-            <RevealAllToggle />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                void resultsQuery.refetch();
-              }}
-              disabled={resultsQuery.isFetching}
-              aria-label="Refresh risk events"
-            >
-              <Button.LeftIcon>
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    resultsQuery.isFetching && "animate-spin",
-                  )}
-                />
-              </Button.LeftIcon>
-              <Button.Text>Refresh</Button.Text>
-            </Button>
-          </div>
-        }
+        actions={<RevealAllToggle />}
         filters={
           <Page.Toolbar>
             <Page.Toolbar.Filters
@@ -244,6 +221,10 @@ export default function RiskEvents(): JSX.Element {
               onChange={setValue as (id: string, value: FilterValue) => void}
               onClear={clearValue as (id: string) => void}
               onClearAll={clearAll}
+            />
+            <Page.Toolbar.Refresh
+              onRefresh={() => void resultsQuery.refetch()}
+              isRefreshing={resultsQuery.isFetching}
             />
           </Page.Toolbar>
         }

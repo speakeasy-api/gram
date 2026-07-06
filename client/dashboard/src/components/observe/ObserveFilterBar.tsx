@@ -122,6 +122,8 @@ export function ObserveFilterBar({
   attributeSearchControl,
   accountType,
   onAccountTypeChange,
+  onRefresh,
+  isRefreshing,
 }: {
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
@@ -151,6 +153,8 @@ export function ObserveFilterBar({
   // pages whose data source can filter on account_type (e.g. raw logs).
   accountType?: string;
   onAccountTypeChange?: (value: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }): JSX.Element {
   const valuesByPath = useCallback(
     (path: string) =>
@@ -391,6 +395,12 @@ export function ObserveFilterBar({
         projectSlug={projectSlug}
         customBuilder={attributeSearchControl}
       />
+      {onRefresh && (
+        <Page.Toolbar.Refresh
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+        />
+      )}
     </Page.Toolbar>
   );
 }

@@ -6,6 +6,7 @@ export function useToolsets(): NonNullable<
 >["toolsets"] & {
   refetch: ReturnType<typeof useListToolsets>["refetch"];
   isLoading: ReturnType<typeof useListToolsets>["isLoading"];
+  isFetching: ReturnType<typeof useListToolsets>["isFetching"];
   isError: ReturnType<typeof useListToolsets>["isError"];
 } {
   const gramProject = useProjectSlugForRequests();
@@ -13,6 +14,7 @@ export function useToolsets(): NonNullable<
     data: toolsets,
     refetch,
     isLoading,
+    isFetching,
     isError,
   } = useListToolsets({ gramProject }, undefined, {
     // toolsets.list is non-critical for the MCP screens — degrade to the last
@@ -24,6 +26,7 @@ export function useToolsets(): NonNullable<
   return Object.assign(toolsets?.toolsets || [], {
     refetch,
     isLoading,
+    isFetching,
     isError,
   });
 }

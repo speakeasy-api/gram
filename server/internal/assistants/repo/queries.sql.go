@@ -308,14 +308,15 @@ WHERE t.project_id = $1
   AND t.assistant_id = $2
   AND t.deleted IS FALSE
   AND t.source_kind <> $3
-  AND t.last_event_at > $4
+  AND t.source_kind <> $4
+  AND t.last_event_at > $5
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_thread_events e
     WHERE e.project_id = t.project_id
       AND e.assistant_thread_id = t.id
       AND e.deleted IS FALSE
-      AND e.status = $5
+      AND e.status = $6
   )
 `
 
@@ -323,6 +324,7 @@ type CountActiveAssistantThreadsParams struct {
 	ProjectID        uuid.UUID
 	AssistantID      uuid.UUID
 	WarmupSourceKind string
+	SetupSourceKind  string
 	ActiveSince      pgtype.Timestamptz
 	PendingStatus    string
 }
@@ -333,11 +335,16 @@ type CountActiveAssistantThreadsParams struct {
 // thread is excluded too: it holds the VM warm but never occupies a
 // runner slot, and counting it would block max_concurrency=1 assistants
 // from admitting their first real turn until the window lapses.
+// Client-driven setup/onboarding threads are excluded for the same reason:
+// they carry no runtime events and never occupy a runner slot, so counting
+// them would wrongly consume max_concurrency / warm headroom against real
+// turns even though the setup chat runs entirely client-side.
 func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActiveAssistantThreadsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveAssistantThreads,
 		arg.ProjectID,
 		arg.AssistantID,
 		arg.WarmupSourceKind,
+		arg.SetupSourceKind,
 		arg.ActiveSince,
 		arg.PendingStatus,
 	)

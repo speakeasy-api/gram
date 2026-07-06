@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -20,15 +20,15 @@ Literal substring to highlight and step to.
 
 ### label?
 
-> `optional` **label**: `string`
+> `optional` **label?**: `string`
 
 Short rule label shown when this match is active (e.g. "pii.phone_number").
 
 ***
 
-### onExclude()?
+### onExclude?
 
-> `optional` **onExclude**: () => `void`
+> `optional` **onExclude?**: () => `void`
 
 Optional action for this finding, surfaced as a button while it is the
 active match (e.g. open the create-exclusion flow).

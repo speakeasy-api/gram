@@ -14,7 +14,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope, useRBAC } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";

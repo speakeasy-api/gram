@@ -350,6 +350,14 @@ type ListChatsPayload struct {
 	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
+	// When set with assistant_id, list only that assistant's threads whose
+	// source_kind matches this value (e.g. 'setup' for onboarding threads). Empty
+	// for no filter.
+	SourceKind *string
+	// When set with assistant_id, exclude that assistant's threads whose
+	// source_kind matches this value (e.g. 'setup' to hide onboarding threads from
+	// runtime views). Empty for no filter.
+	ExcludeSourceKind *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string

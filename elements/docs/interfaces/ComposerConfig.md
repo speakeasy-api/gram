@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.0**](../README.md)
+[**@gram-ai/elements v1.40.1**](../README.md)
 
 ***
 
@@ -10,7 +10,7 @@
 
 ### placeholder?
 
-> `optional` **placeholder**: `string`
+> `optional` **placeholder?**: `string`
 
 The placeholder text for the composer input.
 
@@ -24,7 +24,7 @@ The placeholder text for the composer input.
 
 ### attachments?
 
-> `optional` **attachments**: `boolean` \| [`AttachmentsConfig`](AttachmentsConfig.md)
+> `optional` **attachments?**: `boolean` \| [`AttachmentsConfig`](AttachmentsConfig.md)
 
 Configuration for file attachments in the composer.
 Set to `false` to disable attachments entirely.
@@ -41,7 +41,7 @@ true
 
 ### toolMentions?
 
-> `optional` **toolMentions**: `boolean` \| [`ToolMentionsConfig`](ToolMentionsConfig.md)
+> `optional` **toolMentions?**: `boolean` \| [`ToolMentionsConfig`](ToolMentionsConfig.md)
 
 Configuration for
 

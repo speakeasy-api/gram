@@ -164,8 +164,15 @@ export function InsightsEmployeesContent(): JSX.Element {
     data: membersData,
     isLoading: membersLoading,
     error: membersError,
+    refetch: refetchMembers,
+    isFetching: membersFetching,
   } = useMembers();
-  const { data: rolesData, isLoading: rolesLoading } = useRoles();
+  const {
+    data: rolesData,
+    isLoading: rolesLoading,
+    refetch: refetchRoles,
+    isFetching: rolesFetching,
+  } = useRoles();
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(EMPLOYEE_FILTERS);
@@ -385,6 +392,16 @@ export function InsightsEmployeesContent(): JSX.Element {
                   disabled={isLoading}
                 />
               </Page.Toolbar.Actions>
+              <Page.Toolbar.Refresh
+                onRefresh={() => {
+                  void refetchMembers();
+                  void refetchRoles();
+                  void usageQuery.refetch();
+                }}
+                isRefreshing={
+                  membersFetching || rolesFetching || usageQuery.isFetching
+                }
+              />
             </Page.Toolbar>
           </div>
 

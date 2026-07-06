@@ -155,6 +155,7 @@ trackedFiles:
   docs/models/components/cursorhookresult.md: {}
   docs/models/components/customdomain.md: {}
   docs/models/components/customdomainmcpendpoint.md: {}
+  docs/models/components/decision.md: {}
   docs/models/components/deleteaiintegrationconfigrequest.md: {}
   docs/models/components/deleteglobaltoolvariationresult.md: {}
   docs/models/components/deleterequestbody.md: {}
@@ -234,16 +235,30 @@ trackedFiles:
   docs/models/components/groupby.md: {}
   docs/models/components/headerinput.md: {}
   docs/models/components/hookeventname.md: {}
+  docs/models/components/hookingestdata.md: {}
+  docs/models/components/hookingestevent.md: {}
+  docs/models/components/hookingesteventtype.md: {}
+  docs/models/components/hookingestsession.md: {}
+  docs/models/components/hookingestsource.md: {}
+  docs/models/components/hookmcpdata.md: {}
+  docs/models/components/hookmessagedata.md: {}
+  docs/models/components/hooknotificationdata.md: {}
+  docs/models/components/hookpromptdata.md: {}
   docs/models/components/hooksbreakdownrow.md: {}
+  docs/models/components/hookskilldata.md: {}
   docs/models/components/hooksourceusage.md: {}
   docs/models/components/hooksserversummary.md: {}
   docs/models/components/hookstatus.md: {}
   docs/models/components/hookstimeseriespoint.md: {}
   docs/models/components/hooksusersummary.md: {}
+  docs/models/components/hooktoolcalldata.md: {}
   docs/models/components/hooktracesummary.md: {}
+  docs/models/components/hookusagedata.md: {}
   docs/models/components/httpmethod.md: {}
   docs/models/components/httptooldefinition.md: {}
   docs/models/components/inforesponsebody.md: {}
+  docs/models/components/ingesthookresult.md: {}
+  docs/models/components/ingestrequestbody.md: {}
   docs/models/components/instancemcpserver.md: {}
   docs/models/components/integration.md: {}
   docs/models/components/integrationentry.md: {}
@@ -1229,6 +1244,8 @@ trackedFiles:
   docs/models/operations/hooksnumberlogssecurity.md: {}
   docs/models/operations/hooksnumbermetricsrequest.md: {}
   docs/models/operations/hooksnumbermetricssecurity.md: {}
+  docs/models/operations/ingesthookeventrequest.md: {}
+  docs/models/operations/ingesthookeventsecurity.md: {}
   docs/models/operations/integrationsnumbergetrequest.md: {}
   docs/models/operations/integrationsnumbergetsecurity.md: {}
   docs/models/operations/listallowedoriginsrequest.md: {}
@@ -1980,6 +1997,7 @@ trackedFiles:
   src/funcs/hooksHooksNumberCursor.ts: {}
   src/funcs/hooksHooksNumberLogs.ts: {}
   src/funcs/hooksHooksNumberMetrics.ts: {}
+  src/funcs/hooksIngest.ts: {}
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts: {}
   src/funcs/hooksServerNamesListServerNameOverrides.ts: {}
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
@@ -2387,17 +2405,30 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/headerinput.ts: {}
+  src/models/components/hookingestdata.ts: {}
+  src/models/components/hookingestevent.ts: {}
+  src/models/components/hookingestsession.ts: {}
+  src/models/components/hookingestsource.ts: {}
+  src/models/components/hookmcpdata.ts: {}
+  src/models/components/hookmessagedata.ts: {}
+  src/models/components/hooknotificationdata.ts: {}
+  src/models/components/hookpromptdata.ts: {}
   src/models/components/hooksbreakdownrow.ts: {}
+  src/models/components/hookskilldata.ts: {}
   src/models/components/hooksourceusage.ts: {}
   src/models/components/hooksserversummary.ts: {}
   src/models/components/hookstimeseriespoint.ts: {}
   src/models/components/hooksusersummary.ts: {}
+  src/models/components/hooktoolcalldata.ts: {}
   src/models/components/hooktracesummary.ts: {}
+  src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
   src/models/components/index.ts:
     id: 0aa842dce54d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts: {}
+  src/models/components/ingesthookresult.ts: {}
+  src/models/components/ingestrequestbody.ts: {}
   src/models/components/instancemcpserver.ts: {}
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
@@ -2941,6 +2972,7 @@ trackedFiles:
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
+  src/models/operations/ingesthookevent.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
   src/models/operations/listallowedorigins.ts: {}
   src/models/operations/listapikeys.ts: {}
@@ -3310,6 +3342,7 @@ trackedFiles:
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
+  src/react-query/ingestHookEvent.ts: {}
   src/react-query/instance.core.ts: {}
   src/react-query/instance.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
@@ -5579,6 +5612,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  ingestHookEvent:
+    speakeasy-default-ingest-hook-event:
+      requestBody:
+        application/json: {"event": {"type": "skill.activated"}, "schema_version": "<value>", "source": {"adapter": "<value>"}}
+      responses:
+        "200":
+          application/json: {"decision": "allow"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   integrations#get:
     speakeasy-default-integrations#get:
       responses:

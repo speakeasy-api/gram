@@ -82,17 +82,28 @@ function MCPOverview() {
   const {
     data: mcpServersResult,
     isLoading: isLoadingMcpServers,
+    isFetching: isFetchingMcpServers,
     isError: isMcpServersError,
+    refetch: refetchMcpServers,
   } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
   const {
     data: endpointsResult,
     isLoading: isLoadingEndpoints,
+    isFetching: isFetchingEndpoints,
     isError: isEndpointsError,
+    refetch: refetchEndpoints,
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
+  const handleRefresh = () => {
+    void toolsets.refetch();
+    void refetchMcpServers();
+    void refetchEndpoints();
+  };
+  const isRefreshing =
+    isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
   // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
   // cutover will introduce toolset-backed rows that today still render
   // through the existing Hosted MCPCard path via useToolsets().
@@ -294,6 +305,10 @@ function MCPOverview() {
                 onClearAll={mcpFilters.clearAll}
               />
               <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+              <Page.Toolbar.Refresh
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
+              />
             </Page.Toolbar>
           )}
           {showNoMatches ? (

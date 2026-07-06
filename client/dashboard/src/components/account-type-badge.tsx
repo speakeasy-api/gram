@@ -19,8 +19,11 @@ type AccountTypeBadgeProps = {
   className?: string;
 };
 
-const PERSONAL_TOOLTIP =
+export const PERSONAL_TOOLTIP =
   "Personal account — usage from an individual AI account (e.g. Claude Max) signed in on a company device, not your enterprise plan.";
+
+export const TEAM_TOOLTIP =
+  "Team account — usage from a shared AI plan provisioned by your organization's enterprise agreement.";
 
 export function AccountTypeBadge({
   accountType,
