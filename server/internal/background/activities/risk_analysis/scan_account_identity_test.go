@@ -262,6 +262,39 @@ func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testi
 	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
 }
 
+func TestAnalyzeBatch_AccountIdentityEnrichmentFillsMatchOnce(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
+
+	chatID, externalAccountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
+	msg1 := seedChatMessage(t, conn, td, chatID)
+	msg2 := seedChatMessage(t, conn, td, chatID)
+	msg3 := seedChatMessage(t, conn, td, chatID)
+
+	ab := newAccountIdentityAnalyzeBatch(t, conn)
+
+	// Record the generic (empty-match) finding, then enrich it once the email
+	// is learned.
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
+	setAccountEmail(t, conn, td, externalAccountUUID, "jane@gmail.com")
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
+	require.Equal(t, "jane@gmail.com", accountIdentityFindings(t, conn, td, policyID)[0].Match.String)
+
+	// The account's email is later replaced. Enrichment only fills a still-empty
+	// match, so the already-populated finding must NOT be rewritten — the backfill
+	// is fill-once and idempotent, never churning or clobbering recorded detail.
+	// (Without the empty-match guard this would overwrite with the new value.)
+	setAccountEmail(t, conn, td, externalAccountUUID, "jane.doe@corp.com")
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg3})
+
+	findings := accountIdentityFindings(t, conn, td, policyID)
+	require.Len(t, findings, 1)
+	assert.Equal(t, "jane@gmail.com", findings[0].Match.String, "populated match must not be overwritten")
+	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
+}
+
 func TestAnalyzeBatch_AccountIdentityVersionBumpReemits(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
