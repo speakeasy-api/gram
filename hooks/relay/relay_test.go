@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -611,6 +612,18 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.Contains(t, got, "retry=3", "cookie continuation is scoped to cookie headers")
 	require.Contains(t, got, "tail6")
 
+	got = redactCommand(`npx srv --header "api-key: abc125" tail8`)
+	require.NotContains(t, got, "abc125", "keyword-bearing header names count as secret headers")
+	require.Contains(t, got, "tail8")
+
+	got = redactCommand(`curl -H "X-Auth-Token: tok-99" https://good.example.com/v3`)
+	require.NotContains(t, got, "tok-99")
+	require.Contains(t, got, "good.example.com")
+
+	got = redactCommand("connect oauth://svc.example.com/cb tail9")
+	require.Contains(t, got, "svc.example.com", "a keyword-bearing URL scheme is not a header")
+	require.Contains(t, got, "tail9")
+
 	got = redactCommand(`curl -H'X-API-Key: abc124' tail7`)
 	require.NotContains(t, got, "abc124", "curl's attached short-option header form is still a secret header")
 	require.Contains(t, got, "tail7")
@@ -663,6 +676,9 @@ func TestCodexToolCompletionReplaysRequestID(t *testing.T) {
 // queue (the async completion sender overlaps the next request's hook); every
 // pushed id must survive and pop exactly once.
 func TestCodexToolQueueConcurrentPushPop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the queue lock is a no-op on windows; concurrent pushes may clobber")
+	}
 	path := filepath.Join(t.TempDir(), "queue.ids")
 	var wg sync.WaitGroup
 	for i := range 16 {

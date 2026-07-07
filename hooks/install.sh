@@ -8,11 +8,12 @@ set -e
 #
 # Environment overrides:
 #   VERSION      release version to install (default: latest hooks@ release)
-#   INSTALL_DIR  target directory (default: /usr/local/bin, falling back to
-#                ~/.local/bin when not writable)
+#   INSTALL_DIR  target directory, created if missing (default: /usr/local/bin,
+#                falling back to ~/.local/bin when not writable)
 
 REPO="speakeasy-api/gram"
 BINARY="speakeasy-hooks"
+user_install_dir="${INSTALL_DIR:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 fmt_error() {
@@ -98,7 +99,14 @@ if [ -z "$bin_path" ]; then
 fi
 chmod +x "$bin_path"
 
-if [ ! -w "$INSTALL_DIR" ]; then
+# An explicitly requested directory is honored (created if missing) rather
+# than silently falling back; only the default falls back to ~/.local/bin.
+if [ -n "$user_install_dir" ]; then
+  if ! mkdir -p "$INSTALL_DIR" || [ ! -w "$INSTALL_DIR" ]; then
+    fmt_error "INSTALL_DIR is not writable: ${INSTALL_DIR}"
+    exit 1
+  fi
+elif [ ! -w "$INSTALL_DIR" ]; then
   INSTALL_DIR="${HOME}/.local/bin"
   mkdir -p "$INSTALL_DIR"
 fi

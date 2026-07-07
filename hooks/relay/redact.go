@@ -44,9 +44,13 @@ var (
 	secretAssignRE    = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
 	secretFlagRE      = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
 	// The optional prefix covers --header=NAME:..., and curl's attached
-	// short-option form (-HNAME:... after quote stripping).
-	secretHeaderRE = regexp.MustCompile(`(?i)^(--?[^=]*=|-[a-z])?(authorization|proxy-authorization|cookie|x-api-key) *:`)
-	envAssignRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+	// short-option form (-HNAME:... after quote stripping). Alongside the
+	// known names, any header name carrying a secret keyword counts
+	// (api-key, X-Auth-Token) — guarded at the call site against URL tokens,
+	// whose scheme can carry a keyword too (oauth://).
+	secretHeaderRE        = regexp.MustCompile(`(?i)^(--?[^=]*=|-[a-z])?(authorization|proxy-authorization|cookie|x-api-key) *:`)
+	genericSecretHeaderRE = regexp.MustCompile(`(?i)^(--?[^=]*=|-[a-z])?[a-z0-9-]*(key|token|secret|password|passwd|credential|auth)[a-z0-9-]* *:`)
+	envAssignRE           = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 	// authSchemeRE matches auth scheme words that precede the credential in a
 	// header value ("Authorization: Token abc"); the scheme is not the secret.
 	authSchemeRE  = regexp.MustCompile(`(?i)^(bearer|basic|token|digest|negotiate|ntlm|dpop|oauth|hawk|apikey)$`)
@@ -115,7 +119,7 @@ func redactCommand(raw string) string {
 		case secretFlagRE.MatchString(f):
 			out = append(out, f)
 			maskNext = true
-		case secretHeaderRE.MatchString(f):
+		case secretHeaderRE.MatchString(f) || (!strings.Contains(f, "://") && genericSecretHeaderRE.MatchString(f)):
 			// `--header "X-API-Key: abc"` tokenizes the value into the next
 			// field after quote stripping; a header with nothing after its
 			// colon — or with only an auth scheme, as in
