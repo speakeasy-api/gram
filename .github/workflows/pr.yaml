@@ -1996,6 +1996,7 @@ jobs:
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes
+      - tunnel-agent
     steps:
       - name: Check results
         env:
