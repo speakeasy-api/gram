@@ -871,8 +871,9 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.
 
 // loadAssistantMcpServers pulls the hydrated mcp_servers attachments for one or
 // more assistants in a single query, mirroring loadAssistantToolsets. Rows
-// whose server has no Gram-hosted endpoint (empty EndpointSlug) are dropped
-// here so dispatch never builds a slugless MCP URL.
+// whose server has no Gram-hosted endpoint (empty EndpointSlug) are kept so
+// the attachment stays visible and detachable on API reads;
+// resolveAssistantMCPServers skips them at dispatch.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
 	out := map[uuid.UUID][]assistantMCPServerRow{}
 	if len(assistantIDs) == 0 {
@@ -886,9 +887,6 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 		return nil, fmt.Errorf("load assistant mcp servers: %w", err)
 	}
 	for _, row := range rows {
-		if row.EndpointSlug == "" {
-			continue
-		}
 		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
 			MCPServerID:     row.McpServerID,
 			ServerSlug:      row.ServerSlug,
@@ -2867,9 +2865,11 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// uniformly as an MCP endpoint to connect to, so these need only the same
 	// {ID, URL, Headers} shape: the public /mcp/{endpoint} path that
 	// serveRemoteBackend already proxies, plus an optional bound environment.
-	// loadAssistantMcpServers already dropped rows without a Gram-hosted
-	// endpoint. ServerSlug is the runtime ID (agentkit namespaces tool names by
-	// it, 64-char cap). Disabled servers 404 at the /mcp serving path, so
+	// Rows without a Gram-hosted endpoint (deleted after attach) are skipped
+	// so dispatch never builds a slugless MCP URL; the attachment stays
+	// visible on reads. ServerSlug is the runtime ID (agentkit namespaces
+	// tool names by it, 64-char cap). Disabled servers 404 at the /mcp
+	// serving path, so
 	// they're skipped here like a not-MCP-reachable toolset: the attachment
 	// stays visible on reads, the runtime just won't dial it.
 	for _, m := range mcpServers {
