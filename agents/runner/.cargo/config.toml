@@ -1,0 +1,12 @@
+[alias]
+ci-check = ["check", "--locked"]
+ci-clippy = [
+  "clippy",
+  "--locked",
+  "--all-targets",
+  "--all-features",
+  "--",
+  "-D",
+  "warnings",
+]
+ci-test = ["test", "--locked"]

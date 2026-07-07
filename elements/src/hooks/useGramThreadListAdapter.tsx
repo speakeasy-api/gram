@@ -112,6 +112,8 @@ export interface ThreadListAdapterOptions {
     userId?: string;
     externalUserId?: string;
   }) => { name?: string; email: string; photoUrl?: string } | undefined;
+  /** See {@link HistoryConfig.isOwnChat}. */
+  isOwnChat?: (chat: { userId?: string; externalUserId?: string }) => boolean;
 }
 
 interface ListChatsResponse {
@@ -426,15 +428,17 @@ export function useGramThreadListAdapter(
           // below. `resolveCreator` is consumer-supplied and synchronous (the
           // consumer already holds whatever identity data it needs), so no
           // extra request goes out here.
-          const { resolveCreator } = optionsRef.current;
+          const { resolveCreator, isOwnChat } = optionsRef.current;
           const nextMeta: Record<string, ThreadMeta> = { ...metaRef.current };
           for (const chat of data.chats) {
+            const chatIdentity = {
+              userId: readChatUserId(chat),
+              externalUserId: readChatExternalUserId(chat),
+            };
             nextMeta[chat.id] = {
               createdAt: readChatCreatedAt(chat),
-              owner: resolveCreator?.({
-                userId: readChatUserId(chat),
-                externalUserId: readChatExternalUserId(chat),
-              }),
+              owner: resolveCreator?.(chatIdentity),
+              readOnly: isOwnChat ? !isOwnChat(chatIdentity) : false,
             };
           }
           metaRef.current = nextMeta;

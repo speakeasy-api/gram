@@ -1165,6 +1165,18 @@ export interface HistoryConfig {
     userId?: string;
     externalUserId?: string;
   }) => { name?: string; email: string; photoUrl?: string } | undefined;
+
+  /**
+   * Report whether the signed-in caller owns a chat returned by the thread
+   * list. Called for every chat with that chat's `userId`/`externalUserId`;
+   * return `false` to hide the composer for that chat — the backend rejects
+   * sends into a chat the caller can view (e.g. via an admin-level read
+   * grant) but didn't create. Omit to always show the composer.
+   *
+   * @example
+   * isOwnChat: ({ userId }) => userId === currentUser.id
+   */
+  isOwnChat?: (chat: { userId?: string; externalUserId?: string }) => boolean;
 }
 
 /**

@@ -42,8 +42,13 @@ export function LogWorkbench({
 }: LogWorkbenchProps): JSX.Element {
   return (
     <>
-      <div className={cn("flex min-h-0 w-full flex-1 flex-col", className)}>
-        <div className="shrink-0 px-8 py-4">
+      <div
+        className={cn(
+          "flex min-h-0 w-full flex-1 flex-col gap-6 px-8 pt-8",
+          className,
+        )}
+      >
+        <div className="shrink-0">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
@@ -63,10 +68,12 @@ export function LogWorkbench({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden border-t">
+        {/* Inset the table in a bordered card so it doesn't run full-bleed to
+            the page edges — matching the Tool Logs page layout. */}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <div
             className={cn(
-              "bg-background flex h-full flex-col",
+              "bg-background flex h-full min-h-0 flex-1 flex-col border",
               surfaceClassName,
             )}
           >

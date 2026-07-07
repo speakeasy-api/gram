@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AssistantMCPServerRef,
+  AssistantMCPServerRef$inboundSchema,
+} from "./assistantmcpserverref.js";
+import {
   AssistantToolsetRef,
   AssistantToolsetRef$inboundSchema,
 } from "./assistanttoolsetref.js";
@@ -46,6 +50,10 @@ export type Assistant = {
    * Maximum active warm runtimes for the assistant.
    */
   maxConcurrency: number;
+  /**
+   * MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+   */
+  mcpServers: Array<AssistantMCPServerRef>;
   /**
    * The model identifier used by the assistant.
    */
@@ -93,6 +101,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       id: z.string(),
       instructions: z.string(),
       max_concurrency: z.int(),
+      mcp_servers: z.array(AssistantMCPServerRef$inboundSchema),
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
@@ -109,6 +118,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
         "max_concurrency": "maxConcurrency",
+        "mcp_servers": "mcpServers",
         "project_id": "projectId",
         "updated_at": "updatedAt",
         "warm_ttl_seconds": "warmTtlSeconds",
