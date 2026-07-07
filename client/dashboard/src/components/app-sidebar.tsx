@@ -83,7 +83,7 @@ export function AppSidebar({
   const { state } = useSidebar();
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
-  const { isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading, hasScope } = useRBAC();
   const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -107,13 +107,19 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  const observeActive = [
-    routes.employees,
-    routes.costs,
-    routes.insights,
-    routes.agentSessions,
-    routes.logs,
-  ].some((r) => r.active);
+  // Gate observeActive on observe:read too: the Observe group is hidden for
+  // users without it, so directly navigating to an Observe page must not set
+  // activeGroup to a group that isn't rendered, which would leave the nav with
+  // no visible active/open group.
+  const observeActive =
+    hasScope("observe:read") &&
+    [
+      routes.employees,
+      routes.costs,
+      routes.insights,
+      routes.agentSessions,
+      routes.logs,
+    ].some((r) => r.active);
 
   const securityActive = [
     routes.riskOverview,
@@ -198,10 +204,10 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group — the whole group exposes environment-derived
-                  telemetry, so hide it entirely (label included) from anyone
-                  without environment:read rather than showing an empty group. */}
-              <RequireScope scope="environment:read" level="section">
+              {/* Observe group — gated on observe:read; hide it entirely (label
+                  included) from anyone without the scope rather than showing an
+                  empty group. */}
+              <RequireScope scope="observe:read" level="section">
                 <CollapsibleNavGroup
                   label="Observe"
                   Icon={(p) => <Icon {...p} name="eye" />}

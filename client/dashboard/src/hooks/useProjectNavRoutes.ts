@@ -40,10 +40,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
     const readWrite: Scope[] = ["project:read", "project:write"];
-    // The Observe surface exposes environment values and telemetry derived from
-    // them, so it is gated on environment:read. Basic members do not hold
-    // environment:read by default, so Observe is hidden from them.
-    const observe: Scope[] = ["environment:read"];
+    // The Observe surface is gated on its own observe:read scope. Basic members
+    // do not hold observe:read by default, so Observe is hidden from them.
+    const observe: Scope[] = ["observe:read"];
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },

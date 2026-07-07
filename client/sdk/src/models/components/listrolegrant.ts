@@ -35,6 +35,7 @@ export const ListRoleGrantScope = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
+  ObserveRead: "observe:read",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -63,6 +64,7 @@ export const SubScopes = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
+  ObserveRead: "observe:read",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
