@@ -64,6 +64,21 @@ export function EditAssistantOnboarding(): JSX.Element {
   );
 }
 
+// Elements namespaces tools as `<name>__<tool>` when more than one MCP entry
+// is configured, and completion providers reject tool names over 64
+// characters, so overlong entry names are truncated with a deterministic
+// FNV-1a suffix (mirrors the runtime-side capRuntimeMCPServerID).
+function capMcpEntryName(name: string): string {
+  const maxLen = 24;
+  if (name.length <= maxLen) return name;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < name.length; i++) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${name.slice(0, maxLen - 9)}-${hash.toString(16).padStart(8, "0")}`;
+}
+
 function OnboardingShell() {
   // Hosts its own chat runtime — hide the floating dock and keep the shared
   // runtime out of this tree (no nested RemoteThreadListRuntime).
@@ -152,7 +167,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       if (!toolset) continue;
       entries.push({
         url: internalMcpUrl({ slug: project.slug }, toolset),
-        name: toolset.slug,
+        name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
       });
     }
@@ -164,7 +179,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       if (!ref.endpointSlug) continue;
       entries.push({
         url: `${getServerURL()}/mcp/${ref.endpointSlug}`,
-        name: ref.mcpServerSlug,
+        name: capMcpEntryName(ref.mcpServerSlug),
         environment: ref.environmentSlug,
       });
     }
