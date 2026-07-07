@@ -134,7 +134,7 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 
   const stateBlock = isEdit
     ? `\n\n# Current Assistant state (page-load snapshot)
-This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_triggers\` / \`list_environments\`.
+This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`.
 
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
