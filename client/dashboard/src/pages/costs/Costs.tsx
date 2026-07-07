@@ -7,7 +7,8 @@ import { InsightsAgentsPage } from "../insights/Insights";
 import { CostsExplorer } from "./CostsExplorer";
 import { displayName, parseDrillPath } from "./taxonomy";
 
-// New cost-taxonomy dashboard. Org-scoped data, so gate to org readers/admins.
+// New cost-taxonomy dashboard. Part of the Observe surface, so gate on
+// observe:read (basic members do not hold it; admins and custom roles do).
 function NewCostsPage(): JSX.Element {
   const location = useLocation();
 
