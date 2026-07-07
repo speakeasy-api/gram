@@ -128,6 +128,7 @@ func evaluateAccountIdentity(accountType string, email string, approvedDomains m
 func accountIdentityFinding(ruleID string, description string, email string) Finding {
 	return Finding{
 		Source:              SourceAccountIdentity,
+		Stage:               StageHeuristic,
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               email,

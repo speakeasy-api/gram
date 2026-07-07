@@ -69,7 +69,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 		for _, grp := range groupFindings(realFindings) {
 			f := grp.primary
 			findingsCount++
-			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
+			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Stage, f.Confidence)
 			resultID, _ := uuid.NewV7()
 			spansJSON, err := json.Marshal(grp.spans)
 			if err != nil {

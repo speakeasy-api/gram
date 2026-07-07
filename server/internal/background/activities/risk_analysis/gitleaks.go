@@ -58,6 +58,7 @@ func fromDetection(d gitleaks.Detection) Finding {
 		EndPos:              d.EndPos,
 		Tags:                d.Tags,
 		Source:              SourceGitleaks,
+		Stage:               StageHeuristic,
 		Confidence:          d.Confidence,
 		DeadLetterReason:    "",
 		mcpLookupToolCallID: "",

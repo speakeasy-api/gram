@@ -192,6 +192,7 @@ func JudgeFinding(verdict JudgeVerdict) Finding {
 		StartPos:            0,
 		EndPos:              0,
 		Tags:                []string{},
+		Stage:               StageJudge,
 		Confidence:          verdict.Confidence,
 		DeadLetterReason:    "",
 		mcpLookupToolCallID: "",

@@ -184,6 +184,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 		EndPos:              len(text),
 		Tags:                []string{"llm-judge", "layer-1"},
 		Source:              SourcePromptInjection,
+		Stage:               StageJudge,
 		Confidence:          r.Score,
 		DeadLetterReason:    "",
 		mcpLookupToolCallID: "",

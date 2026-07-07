@@ -522,6 +522,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	ruleID, description := DescribePresidioDeadLetter()
 	return []Finding{{
 		Source:              SourcePresidio,
+		Stage:               StageHeuristic,
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               "",
@@ -683,6 +684,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 			EndPos:              endByte,
 			Tags:                []string{"pii"},
 			Source:              SourcePresidio,
+			Stage:               StageHeuristic,
 			Confidence:          r.Score,
 			DeadLetterReason:    "",
 			mcpLookupToolCallID: "",

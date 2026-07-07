@@ -361,6 +361,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 				StartPos:         0,
 				EndPos:           len(text),
 				Source:           risk_analysis.SourcePromptInjection,
+				Stage:            risk_analysis.StageJudge,
 				Confidence:       confidence,
 				Tags:             []string{"llm-judge", "layer-1"},
 				DeadLetterReason: "",

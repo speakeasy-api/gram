@@ -89,6 +89,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, c
 		ruleID, description := DescribeShadowMCP(toolName)
 		findings = append(findings, Finding{
 			Source:              shadowmcp.SourceShadowMCP,
+			Stage:               StageHeuristic,
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               match,
@@ -143,6 +144,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 		ruleID, description := DescribeDestructiveTool(resolved.ToolName)
 		findings = append(findings, Finding{
 			Source:              shadowmcp.SourceDestructiveTool,
+			Stage:               StageHeuristic,
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               resolved.ToolName,
@@ -184,6 +186,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(_ context.Context, calls [
 		ruleID, description := DescribeCLIDestructive(matched, toolName)
 		findings = append(findings, Finding{
 			Source:              SourceCLIDestructive,
+			Stage:               StageHeuristic,
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               toolName,

@@ -92,12 +92,13 @@ func (m *riskMetrics) RecordScan(ctx context.Context, orgID string, outcome o11y
 }
 
 // RecordFindingConfidence records the confidence score of an individual finding.
-func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string, ruleID string, confidence float64) {
+func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string, ruleID string, stage string, confidence float64) {
 	if m.ruleConfidence == nil {
 		return
 	}
 	m.ruleConfidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskRuleID(ruleID),
+		attr.RiskStage(stage),
 	))
 }

@@ -67,6 +67,7 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 				EndPos:              s.End,
 				Tags:                []string{},
 				Source:              SourceCustom,
+				Stage:               StageHeuristic,
 				Confidence:          1.0,
 				DeadLetterReason:    "",
 				mcpLookupToolCallID: "",
