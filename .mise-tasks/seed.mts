@@ -1955,15 +1955,28 @@ async function enableRBACForDevUser(init: {
   const { sessionId, organizationId, userId, gram } = init;
   log.info("Enabling RBAC + granting dev user full session visibility...");
 
+  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
+  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
+  // Locally the dev user's email is neither (e.g. a personal gmail address) and
+  // admin defaults to false, so the call 403s. Promote the dev user to admin in
+  // the DB first so the platform-admin check passes. Idempotent.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    abort(
+      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+
   // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  // The dev user is a Speakeasy super-admin (email-gated), so this is allowed
-  // even before any grants exist.
   const res = await accessEnableRBAC(gram, undefined, {
     sessionHeaderGramSession: sessionId,
   });
   if (!res.ok) {
-    log.warn(`Failed to enable RBAC: ${JSON.stringify(res.error)}`);
-    return;
+    abort("Failed to enable RBAC", res.error);
   }
 
   // The admin system role intentionally omits chat:read, and the dev user has
@@ -2012,7 +2025,7 @@ async function enableRBACForDevUser(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    abort(
       `Failed to grant dev user RBAC scopes: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }

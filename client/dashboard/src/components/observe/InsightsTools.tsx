@@ -129,7 +129,7 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 5;
+const BAR_BORDER_RADIUS = 0;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 
 function displayTargetLabel(

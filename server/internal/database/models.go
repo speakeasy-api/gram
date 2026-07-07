@@ -1516,6 +1516,21 @@ type RiskPolicyChallenge struct {
 	Deleted        bool
 }
 
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type RiskResult struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
@@ -1539,16 +1554,6 @@ type RiskResult struct {
 	FalsePositiveAt     pgtype.Timestamptz
 	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
-}
-
-type SessionCaptureExclusion struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
 }
 
 type SlackApp struct {

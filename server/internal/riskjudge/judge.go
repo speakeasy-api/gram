@@ -161,13 +161,18 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 			return nil
 		}
 		return &ra.JudgeVerdict{
-			Confidence: 0,
-			Rationale:  "Policy judge was rate limited; flagged by fail-closed policy.",
+			Matched:          true,
+			Confidence:       0,
+			Rationale:        "Policy judge was rate limited; flagged by fail-closed policy.",
+			CostUSD:          0,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
 		}
 	}
 
 	start := time.Now()
-	matched, confidence, rationale, err := j.call(ctx, in)
+	callResult, err := j.call(ctx, in)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeFromError(err), time.Since(start))
 	if err != nil {
 		span.RecordError(err)
@@ -179,25 +184,44 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 			return nil
 		}
 		return &ra.JudgeVerdict{
-			Confidence: 0,
-			Rationale:  "Policy judge was unavailable; flagged by fail-closed policy.",
+			Matched:          true,
+			Confidence:       0,
+			Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
+			CostUSD:          0,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
 		}
 	}
-	if !matched {
-		return nil
+	if callResult.matched {
+		j.metrics.RecordConfidence(ctx, in.OrgID, callResult.confidence)
 	}
-	j.metrics.RecordConfidence(ctx, in.OrgID, confidence)
 	span.SetAttributes(
-		attribute.Bool("risk.judge.matched", true),
-		attribute.Float64("risk.judge.confidence", confidence),
+		attribute.Bool("risk.judge.matched", callResult.matched),
+		attribute.Float64("risk.judge.confidence", callResult.confidence),
 	)
 	return &ra.JudgeVerdict{
-		Confidence: confidence,
-		Rationale:  strings.TrimSpace(rationale),
+		Matched:          callResult.matched,
+		Confidence:       callResult.confidence,
+		Rationale:        strings.TrimSpace(callResult.rationale),
+		CostUSD:          callResult.costUSD,
+		PromptTokens:     callResult.promptTokens,
+		CompletionTokens: callResult.completionTokens,
+		TotalTokens:      callResult.totalTokens,
 	}
 }
 
-func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confidence float64, rationale string, err error) {
+type judgeCallResult struct {
+	matched          bool
+	confidence       float64
+	rationale        string
+	costUSD          float64
+	promptTokens     int
+	completionTokens int
+	totalTokens      int
+}
+
+func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (judgeCallResult, error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -235,14 +259,14 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		JSONSchema:     &jsonSchema,
 	})
 	if err != nil {
-		return false, 0, "", fmt.Errorf("openrouter object completion: %w", err)
+		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return false, 0, "", fmt.Errorf("empty completion response")
+		return judgeCallResult{}, fmt.Errorf("empty completion response")
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return false, 0, "", fmt.Errorf("empty completion content")
+		return judgeCallResult{}, fmt.Errorf("empty completion content")
 	}
 
 	var verdict struct {
@@ -251,17 +275,29 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, "", fmt.Errorf("parse judge response: %w", err)
+		return judgeCallResult{}, fmt.Errorf("parse judge response: %w", err)
 	}
 	// Clamp confidence and cap rationale length in code — the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
 	// Truncate by rune, not byte, so a multi-byte character can't be split into
 	// invalid UTF-8 that later flows into stored finding descriptions.
-	rationale = verdict.Rationale
+	rationale := verdict.Rationale
 	if utf8.RuneCountInString(rationale) > maxRationaleLen {
 		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
-	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, nil
+	costUSD := 0.0
+	if response.Usage.Cost != nil {
+		costUSD = *response.Usage.Cost
+	}
+	return judgeCallResult{
+		matched:          verdict.Matched,
+		confidence:       max(0, min(1, verdict.Confidence)),
+		rationale:        rationale,
+		costUSD:          costUSD,
+		promptTokens:     response.Usage.PromptTokens,
+		completionTokens: response.Usage.CompletionTokens,
+		totalTokens:      response.Usage.TotalTokens,
+	}, nil
 }
 
 // VerdictSchema is the judge's structured-output JSON schema. Deliberately no

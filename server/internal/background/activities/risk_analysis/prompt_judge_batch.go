@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
@@ -15,6 +16,49 @@ import (
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
 const judgeConcurrency = 8
+
+// judgeFanout evaluates the given message indices against a guardrail prompt
+// with at most judgeConcurrency calls in flight, invoking apply for each result
+// (pos is the position within indices, idx the original message index, verdict
+// nil when the judge returned none, latency the wall-clock call time). onChunk,
+// when non-nil, runs after each chunk with the exclusive end position so callers
+// can record progress heartbeats. Shared by the batch analyzer and the
+// workbench replay so both drive the judge identically.
+func judgeFanout(
+	ctx context.Context,
+	judge PromptJudge,
+	orgID, projectID, prompt string,
+	cfg JudgeConfig,
+	msgs []batchMessage,
+	indices []int,
+	apply func(pos, idx int, verdict *JudgeVerdict, latency time.Duration),
+	onChunk func(end int),
+) {
+	for start := 0; start < len(indices); start += judgeConcurrency {
+		end := min(start+judgeConcurrency, len(indices))
+		var wg sync.WaitGroup
+		for pos := start; pos < end; pos++ {
+			wg.Add(1)
+			go func(pos int) {
+				defer wg.Done()
+				idx := indices[pos]
+				started := time.Now()
+				verdict := judge.Evaluate(ctx, JudgeInput{
+					OrgID:     orgID,
+					ProjectID: projectID,
+					Prompt:    prompt,
+					Message:   batchJudgeMessage(msgs[idx]),
+					Config:    cfg,
+				})
+				apply(pos, idx, verdict, time.Since(started))
+			}(pos)
+		}
+		wg.Wait()
+		if onChunk != nil {
+			onChunk(end)
+		}
+	}
+}
 
 func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]Finding {
 	out := make([][]Finding, len(messages))
@@ -36,7 +80,15 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		if !cfg.FailOpen {
-			finding := JudgeFinding(JudgeVerdict{Confidence: 0, Rationale: "Policy judge was unavailable; flagged by fail-closed policy."})
+			finding := JudgeFinding(JudgeVerdict{
+				Matched:          true,
+				Confidence:       0,
+				Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
+				CostUSD:          0,
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+			})
 			for _, idx := range indices {
 				out[idx] = []Finding{finding}
 			}
@@ -44,28 +96,17 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return out
 	}
 
-	for start := 0; start < len(indices); start += judgeConcurrency {
-		end := min(start+judgeConcurrency, len(indices))
-		var wg sync.WaitGroup
-		for _, idx := range indices[start:end] {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				verdict := a.judge.Evaluate(ctx, JudgeInput{
-					OrgID:     args.OrganizationID,
-					ProjectID: args.ProjectID.String(),
-					Prompt:    policy.Prompt.String,
-					Message:   batchJudgeMessage(messages[idx]),
-					Config:    cfg,
-				})
-				if verdict != nil {
-					out[idx] = []Finding{JudgeFinding(*verdict)}
-				}
-			}(idx)
-		}
-		wg.Wait()
-		activity.RecordHeartbeat(ctx, SourceLLMJudge, end)
-	}
+	judgeFanout(
+		ctx, a.judge,
+		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
+		messages, indices,
+		func(_, idx int, verdict *JudgeVerdict, _ time.Duration) {
+			if verdict != nil && verdict.Matched {
+				out[idx] = []Finding{JudgeFinding(*verdict)}
+			}
+		},
+		func(end int) { activity.RecordHeartbeat(ctx, SourceLLMJudge, end) },
+	)
 	return out
 }
 

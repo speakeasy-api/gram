@@ -50,6 +50,10 @@ type Endpoints struct {
 	DeleteRiskExclusion            goa.Endpoint
 	SuggestCustomDetectionRule     goa.Endpoint
 	TestDetectionRule              goa.Endpoint
+	EvaluatePromptGuardrail        goa.Endpoint
+	SaveRiskEvalReview             goa.Endpoint
+	ListRiskEvalReviews            goa.Endpoint
+	DeleteRiskEvalReview           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "risk" service with endpoints.
@@ -91,6 +95,10 @@ func NewEndpoints(s Service) *Endpoints {
 		DeleteRiskExclusion:            NewDeleteRiskExclusionEndpoint(s, a.APIKeyAuth),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
 		TestDetectionRule:              NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
+		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailEndpoint(s, a.APIKeyAuth),
+		SaveRiskEvalReview:             NewSaveRiskEvalReviewEndpoint(s, a.APIKeyAuth),
+		ListRiskEvalReviews:            NewListRiskEvalReviewsEndpoint(s, a.APIKeyAuth),
+		DeleteRiskEvalReview:           NewDeleteRiskEvalReviewEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -130,6 +138,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DeleteRiskExclusion = m(e.DeleteRiskExclusion)
 	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
 	e.TestDetectionRule = m(e.TestDetectionRule)
+	e.EvaluatePromptGuardrail = m(e.EvaluatePromptGuardrail)
+	e.SaveRiskEvalReview = m(e.SaveRiskEvalReview)
+	e.ListRiskEvalReviews = m(e.ListRiskEvalReviews)
+	e.DeleteRiskEvalReview = m(e.DeleteRiskEvalReview)
 }
 
 // NewCreateRiskPolicyEndpoint returns an endpoint function that calls the
@@ -2027,5 +2039,241 @@ func NewTestDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.TestDetectionRule(ctx, p)
+	}
+}
+
+// NewEvaluatePromptGuardrailEndpoint returns an endpoint function that calls
+// the method "evaluatePromptGuardrail" of service "risk".
+func NewEvaluatePromptGuardrailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EvaluatePromptGuardrailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.EvaluatePromptGuardrail(ctx, p)
+	}
+}
+
+// NewSaveRiskEvalReviewEndpoint returns an endpoint function that calls the
+// method "saveRiskEvalReview" of service "risk".
+func NewSaveRiskEvalReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SaveRiskEvalReviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SaveRiskEvalReview(ctx, p)
+	}
+}
+
+// NewListRiskEvalReviewsEndpoint returns an endpoint function that calls the
+// method "listRiskEvalReviews" of service "risk".
+func NewListRiskEvalReviewsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRiskEvalReviewsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRiskEvalReviews(ctx, p)
+	}
+}
+
+// NewDeleteRiskEvalReviewEndpoint returns an endpoint function that calls the
+// method "deleteRiskEvalReview" of service "risk".
+func NewDeleteRiskEvalReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteRiskEvalReviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteRiskEvalReview(ctx, p)
 	}
 }

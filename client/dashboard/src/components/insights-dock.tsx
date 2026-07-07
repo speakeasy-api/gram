@@ -1,6 +1,7 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useListChats } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
@@ -731,6 +732,39 @@ export function InsightsProvider({
     recentChat !== undefined &&
     Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
 
+  // Resolves a chat's creator to a name/email/avatar for Elements' history
+  // list, from the org member list the dashboard already has cached — no
+  // extra request, and avoids the cross-origin auth mismatch a direct fetch
+  // from inside Elements would hit (its request headers are scoped to the
+  // chat API, not `access.listMembers`).
+  const { data: membersData } = useMembers();
+  const resolveCreator = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return undefined;
+      // Chats started from the dashboard itself have no `userId` at capture
+      // time and stash the caller's email in `externalUserId` instead — fall
+      // back to an email match so those still resolve to a member.
+      const member = membersData?.members.find(
+        (m) =>
+          m.id === userId || (!!externalUserId && m.email === externalUserId),
+      );
+      return (
+        member && {
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+        }
+      );
+    },
+    [membersData],
+  );
+
   // Mount the shared runtime only where it's actually used: a chat route (the
   // page owns the chat) or the open dock — and only where the dock is shown.
   // Pages with their own chat runtime (Playground, Elements, assistant
@@ -838,6 +872,7 @@ export function InsightsProvider({
         // framing block (needed for replay, noise for display). Strip it — and
         // drop framing-only turns — before Elements renders the transcript.
         transformChatMessage: stripMessageContextFraming,
+        resolveCreator,
       },
       api: {
         ...mcpConfig.api,
@@ -875,6 +910,7 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      resolveCreator,
     ],
   );
 
